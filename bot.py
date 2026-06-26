@@ -20,6 +20,7 @@ COGS = (
     "cogs.roster",
     "cogs.events",
     "cogs.moderation",
+    "cogs.awards",
 )
 
 

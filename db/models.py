@@ -42,6 +42,9 @@ class Member(Base):
     attendance_records = relationship(
         "AttendanceRecord", back_populates="member", cascade="all, delete-orphan"
     )
+    awards = relationship(
+        "MemberAward", back_populates="member", cascade="all, delete-orphan"
+    )
 
 
 class ServiceHistoryEntry(Base):
@@ -97,6 +100,40 @@ class AttendanceRecord(Base):
 
     event = relationship("Event", back_populates="attendance_records")
     member = relationship("Member", back_populates="attendance_records")
+
+
+class AwardType(Base):
+    """Catalog of award/qualification types. Managed dynamically via
+    /award_type_create rather than config.py, since officers add new
+    courses/medals over time without wanting a code deploy."""
+
+    __tablename__ = "award_types"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    emoji = Column(String, nullable=True)
+    created_by = Column(BigInteger, nullable=False)
+
+    awards = relationship("MemberAward", back_populates="award_type", cascade="all, delete-orphan")
+
+
+class MemberAward(Base):
+    """A member holding an award/qualification. One-time per member per
+    award type -- not a repeatable log of multiple grants."""
+
+    __tablename__ = "member_awards"
+    __table_args__ = (UniqueConstraint("member_id", "award_type_id", name="uq_member_award"),)
+
+    id = Column(Integer, primary_key=True)
+    member_id = Column(BigInteger, ForeignKey("members.discord_id"), nullable=False)
+    award_type_id = Column(Integer, ForeignKey("award_types.id"), nullable=False)
+    date_awarded = Column(DateTime, default=_utcnow)
+    awarded_by = Column(BigInteger, nullable=False)
+    notes = Column(Text, nullable=True)
+
+    member = relationship("Member", back_populates="awards")
+    award_type = relationship("AwardType", back_populates="awards")
 
 
 class Setting(Base):

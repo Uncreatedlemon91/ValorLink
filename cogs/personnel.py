@@ -142,6 +142,7 @@ class Personnel(commands.Cog):
 
             history = sorted(record.service_history, key=lambda e: e.date, reverse=True)[:5]
             discipline = sorted(record.disciplinary_records, key=lambda d: d.date, reverse=True)[:5]
+            awards = sorted(record.awards, key=lambda a: a.date_awarded, reverse=True)
 
             embed = base_embed(title=f"Personnel File: {record.callsign}")
             embed.add_field(name="Rank", value=record.rank, inline=True)
@@ -149,6 +150,17 @@ class Personnel(commands.Cog):
             embed.add_field(name="Status", value=record.status, inline=True)
             embed.add_field(name="Joined", value=record.joined_date.strftime("%Y-%m-%d"), inline=True)
             embed.add_field(name="Last Active", value=record.last_active_date.strftime("%Y-%m-%d"), inline=True)
+
+            if awards:
+                embed.add_field(
+                    name="Awards & Qualifications",
+                    value="\n".join(
+                        f"- {(a.award_type.emoji + ' ') if a.award_type.emoji else ''}{a.award_type.name} "
+                        f"({a.date_awarded.strftime('%Y-%m-%d')})"
+                        for a in awards
+                    ),
+                    inline=False,
+                )
 
             if history:
                 embed.add_field(
