@@ -7,6 +7,7 @@ from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry
 from utils.checks import is_recruiter
 from utils.embeds import base_embed
+from utils.sync import sync_company, sync_rank
 
 
 class InterviewView(discord.ui.View):
@@ -69,6 +70,9 @@ class InterviewView(discord.ui.View):
                 )
             )
             session.commit()
+
+        await sync_rank(applicant, self.callsign, None, config.DEFAULT_RANK)
+        await sync_company(applicant, None, config.DEFAULT_COMPANY)
 
         try:
             from cogs.roster import refresh_roster

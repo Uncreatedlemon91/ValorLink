@@ -8,6 +8,7 @@ from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.sync import sync_rank
 
 
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
@@ -43,6 +44,7 @@ class Personnel(commands.Cog):
                 return await interaction.response.send_message(f"{record.callsign} is already at the top rank.", ephemeral=True)
 
             old_rank = record.rank
+            callsign = record.callsign
             record.rank = new_rank
             session.add(
                 ServiceHistoryEntry(
@@ -53,6 +55,7 @@ class Personnel(commands.Cog):
             )
             session.commit()
 
+        await sync_rank(member, callsign, old_rank, new_rank)
         await self._refresh_roster(interaction.guild)
         await interaction.response.send_message(f"{member.mention} promoted to **{new_rank}**.")
 
@@ -69,6 +72,7 @@ class Personnel(commands.Cog):
                 return await interaction.response.send_message(f"{record.callsign} is already at the lowest rank.", ephemeral=True)
 
             old_rank = record.rank
+            callsign = record.callsign
             record.rank = new_rank
             session.add(
                 ServiceHistoryEntry(
@@ -79,6 +83,7 @@ class Personnel(commands.Cog):
             )
             session.commit()
 
+        await sync_rank(member, callsign, old_rank, new_rank)
         await self._refresh_roster(interaction.guild)
         await interaction.response.send_message(f"{member.mention} demoted to **{new_rank}**.")
 
@@ -97,6 +102,7 @@ class Personnel(commands.Cog):
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
 
             old_rank = record.rank
+            callsign = record.callsign
             record.rank = rank
             session.add(
                 ServiceHistoryEntry(
@@ -107,6 +113,7 @@ class Personnel(commands.Cog):
             )
             session.commit()
 
+        await sync_rank(member, callsign, old_rank, rank)
         await self._refresh_roster(interaction.guild)
         await interaction.response.send_message(f"{member.mention}'s rank set to **{rank}**.")
 

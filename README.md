@@ -47,6 +47,18 @@ server.
    channel → Copy ID). Edit `REGIMENT_NAME`, `REGIMENT_MOTTO`, `RANKS`, and
    `COMPANIES` to match your unit.
 
+   Each entry in `RANKS` and each entry in `COMPANY_ROLES` can optionally
+   carry a Discord role ID (`role_id` for ranks, the dict value for
+   companies). When set, the bot keeps that role in sync automatically:
+   it's swapped on promotion/demotion/`/set_rank`/`/assign_company` and
+   applied on enlistment approval. Leave a `role_id` as `0` to skip role
+   sync for that rank/company. For this to work, the bot's own role must
+   sit above every rank/company role in the server's role list, and the
+   bot needs the **Manage Roles** and **Manage Nicknames** permissions —
+   on rank changes it also rewrites the member's nickname to
+   `[Abbreviation] Callsign`. If permissions or hierarchy aren't right,
+   sync calls silently no-op rather than erroring out commands.
+
 4. **Run database migrations**
 
    ```bash

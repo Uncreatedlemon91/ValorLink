@@ -9,6 +9,7 @@ from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry, Setting
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.sync import sync_company
 
 ROSTER_MESSAGE_KEY = "roster_message_id"
 ACTIVITY_TOUCH_COOLDOWN = timedelta(hours=1)
@@ -114,6 +115,7 @@ class Roster(commands.Cog):
             )
             session.commit()
 
+        await sync_company(member, old_company, company)
         await refresh_roster(interaction.guild)
         await interaction.response.send_message(f"{member.mention} assigned to **{company}**.")
 

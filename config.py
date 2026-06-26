@@ -52,22 +52,30 @@ WELCOME_CHANNEL_ID = 0       # PLACEHOLDER: onboarding welcome message
 # ---------------------------------------------------------------------------
 # Rank ladder -- ordered LOWEST to HIGHEST. Add, remove, rename, or reorder
 # freely. `tier` is for display grouping only; command logic (promote/
-# demote) uses list order.
+# demote) uses list order. `role_id` is the Discord role auto-synced onto a
+# member when they hold that rank -- leave as 0 to skip role sync for a rank.
 # ---------------------------------------------------------------------------
 RANKS = [
-    {"name": "Private", "abbreviation": "Pvt", "tier": "Enlisted"},
-    {"name": "Corporal", "abbreviation": "Cpl", "tier": "NCO"},
-    {"name": "Sergeant", "abbreviation": "Sgt", "tier": "NCO"},
-    {"name": "Lieutenant", "abbreviation": "Lt", "tier": "Officer"},
-    {"name": "Captain", "abbreviation": "Capt", "tier": "Officer"},
+    {"name": "Private", "abbreviation": "Pvt", "tier": "Enlisted", "role_id": 0},
+    {"name": "Corporal", "abbreviation": "Cpl", "tier": "NCO", "role_id": 0},
+    {"name": "Sergeant", "abbreviation": "Sgt", "tier": "NCO", "role_id": 0},
+    {"name": "Lieutenant", "abbreviation": "Lt", "tier": "Officer", "role_id": 0},
+    {"name": "Captain", "abbreviation": "Capt", "tier": "Officer", "role_id": 0},
 ]
 DEFAULT_RANK = RANKS[0]["name"]
 
 # ---------------------------------------------------------------------------
-# Companies / sub-units -- edit to match your regiment's structure
+# Companies / sub-units -- edit to match your regiment's structure.
+# COMPANY_ROLES maps each company to the Discord role auto-synced onto its
+# members; leave a company's value as 0 (or omit it) to skip role sync.
 # ---------------------------------------------------------------------------
 COMPANIES = ["Company A", "Company B", "Headquarters"]
 DEFAULT_COMPANY = "Unassigned"
+COMPANY_ROLES = {
+    "Company A": 0,    # PLACEHOLDER
+    "Company B": 0,    # PLACEHOLDER
+    "Headquarters": 0, # PLACEHOLDER
+}
 
 # ---------------------------------------------------------------------------
 # Behavior tunables
