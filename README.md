@@ -25,6 +25,11 @@ server.
 
 ## Setup
 
+> **New to this project or setting it up for the first time?** See
+> [`SETUP.md`](SETUP.md) for a full walkthrough — Discord application/bot
+> creation, server roles & channels, local testing, and hosting options to
+> keep it running 24/7. The quick version is below.
+
 1. **Install dependencies**
 
    ```bash
