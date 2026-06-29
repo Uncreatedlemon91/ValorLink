@@ -2,7 +2,7 @@
 
 This walks you through everything between "empty Discord server" and "ValorLink
 running 24/7 for your regiment" — creating the bot application, wiring up
-roles/channels, configuring `config.py`, and hosting it so it stays online.
+roles/channels with chat commands, and hosting it so it stays online.
 
 Estimated time: 30–45 minutes for first-time setup.
 
@@ -71,8 +71,10 @@ Advanced → Developer Mode.
 | `#welcome` | onboarding greeting message |
 | A **Forum channel** for personnel dossiers (optional — only needed if you want per-member dossier threads) |
 
-For each role/channel above: right-click it → **Copy ID**. You'll paste
-these into `config.py` in step 4.
+You don't need to copy any IDs by hand — once the bot is running, you'll
+configure all of this in Discord with `/config`, `/rank`, and `/company`
+commands (step 4), which let you pick roles/channels straight from Discord's
+own UI.
 
 ---
 
@@ -102,55 +104,78 @@ DATABASE_URL=sqlite:///valorlink.db   # fine for a single-server bot
 
 ---
 
-## 4. Configure `config.py`
+## 4. Configure ValorLink from Discord
 
-Open `config.py` and replace every `PLACEHOLDER`/`0` value with the real IDs
-you copied in step 2:
+Nothing to edit in source files for this part — everything below is a slash
+command, run once the bot is online (see step 6 for starting it). The very
+first command must come from an account with server **Administrator**
+permission, since no admin role exists yet on a fresh setup; every command
+afterward can use the admin role you configure.
 
-```python
-REGIMENT_NAME = "1st Virginia Regiment"   # your unit's name
-REGIMENT_MOTTO = "Death Before Dishonor"  # shows in embed footers
+**Identity:**
 
-ADMIN_ROLE_ID = 123456789012345678
-OFFICER_ROLE_ID = 123456789012345678
-RECRUITER_ROLE_ID = 123456789012345678
-MEMBER_ROLE_ID = 123456789012345678
-CANDIDATE_ROLE_ID = 123456789012345678
-VISITOR_ROLE_ID = 123456789012345678
-INACTIVE_ROLE_ID = 123456789012345678
-
-RECRUITMENT_CHANNEL_ID = 123456789012345678
-PERSONNEL_FORUM_ID = 123456789012345678     # leave 0 if you skipped the forum
-ROSTER_CHANNEL_ID = 123456789012345678
-MOD_LOG_CHANNEL_ID = 123456789012345678
-ADMIN_LOG_CHANNEL_ID = 123456789012345678
-ANNOUNCEMENTS_CHANNEL_ID = 123456789012345678
-WELCOME_CHANNEL_ID = 123456789012345678
+```
+/config set_name name:1st Virginia Regiment
+/config set_motto motto:Death Before Dishonor
+/config set_color hex_color:#2F3136
+/config set_inactivity_days days:30
 ```
 
-Then edit the rank ladder and companies to match your unit. Add the rank
-role ID for each rank you want auto-synced (leave `0` to skip sync for that
-rank):
+**Roles** — pick the actual role from Discord's UI, no copying IDs:
 
-```python
-RANKS = [
-    {"name": "Private", "abbreviation": "Pvt", "tier": "Enlisted", "role_id": 123456789012345678},
-    {"name": "Corporal", "abbreviation": "Cpl", "tier": "NCO", "role_id": 123456789012345678},
-    # ... add/remove/reorder as needed, lowest to highest
-]
+```
+/config set_role key:admin role:@Admin
+/config set_role key:officer role:@Officer
+/config set_role key:recruiter role:@Recruiter
+/config set_role key:member role:@Member
+/config set_role key:candidate role:@Candidate
+/config set_role key:visitor role:@Visitor
+/config set_role key:inactive role:@Inactive
 ```
 
-```python
-COMPANIES = ["Company A", "Company B", "Headquarters"]
-COMPANY_ROLES = {
-    "Company A": 123456789012345678,
-    "Company B": 123456789012345678,
-    "Headquarters": 123456789012345678,
-}
+**Channels** — same idea, pick the channel:
+
+```
+/config set_channel key:recruitment channel:#recruitment
+/config set_channel key:personnel_forum channel:#personnel-forum   (skip if you didn't create one)
+/config set_channel key:roster channel:#roster
+/config set_channel key:mod_log channel:#mod-log
+/config set_channel key:admin_log channel:#admin-log
+/config set_channel key:announcements channel:#announcements
+/config set_channel key:welcome channel:#welcome
 ```
 
-`INACTIVITY_DAYS_THRESHOLD` controls how many days without a message before
-a member gets auto-flagged inactive (default 30).
+Run `/config show` any time to see the current configuration.
+
+**Rank ladder** — add lowest to highest; each `/rank add` appends to the top:
+
+```
+/rank add name:Private abbreviation:Pvt tier:Enlisted role:@Private
+/rank add name:Corporal abbreviation:Cpl tier:NCO role:@Corporal
+/rank add name:Sergeant abbreviation:Sgt tier:NCO role:@Sergeant
+/rank add name:Lieutenant abbreviation:Lt tier:Officer role:@Lieutenant
+/rank add name:Captain abbreviation:Capt tier:Officer role:@Captain
+```
+
+Binding a role is optional — leave it off to skip role sync for that rank.
+Use `/rank list` to check order, `/rank move` to reorder, `/rank set_role`
+to attach/change a role after the fact, and `/rank remove` to delete one
+(members holding it keep the label until reassigned).
+
+**Companies:**
+
+```
+/company add name:Company A role:@Company A is_default:true
+/company add name:Company B role:@Company B
+/company add name:Headquarters role:@Headquarters
+```
+
+`is_default` marks which company new enlistees get assigned to. Use
+`/company list`, `/company set_role`, `/company set_default`, and
+`/company remove` the same way as ranks.
+
+Every one of these can be changed again later from chat — no restarts, no
+file edits, no redeploys.
 
 ---
 
@@ -174,15 +199,18 @@ python3 bot.py
 You should see log lines for each cog loading, then `<Bot Name> is online
 as <Bot Name>#0000`. In Discord:
 
-1. Run `/setup_recruitment` (as a Recruiter/Officer/Admin) in your
+1. Run through the `/config`, `/rank`, and `/company` commands from step 4
+   (your account needs Administrator permission for the very first
+   `/config set_role key:admin ...` call).
+2. Run `/setup_recruitment` (as a Recruiter/Officer/Admin) in your
    recruitment channel — this posts the persistent Apply button.
-2. Click **Apply to Enlist**, fill out the modal, confirm a private
+3. Click **Apply to Enlist**, fill out the modal, confirm a private
    interview thread is created.
-3. Approve the application from another (recruiter) account and confirm:
+4. Approve the application from another (recruiter) account and confirm:
    - The roster embed appears/updates in your roster channel.
    - The new member's rank role, company role, and nickname (`[Pvt]
      Callsign`) are applied.
-4. Run `/roster` and `/record` to sanity-check the embeds render correctly.
+5. Run `/roster` and `/record` to sanity-check the embeds render correctly.
 
 If commands don't show up in Discord, wait a minute (slash command sync can
 lag) or restart the bot — `bot.py` syncs commands to `GUILD_ID` on every
@@ -274,8 +302,9 @@ python3 bot.py
 - [ ] `/promote`, `/demote`, `/assign_company` swap roles correctly.
 - [ ] `/warn`, `/note`, `/strike` post to `#mod-log`.
 - [ ] `/event_create` posts to `#announcements` and RSVP buttons work.
-- [ ] Inactivity sweep role (`INACTIVE_ROLE_ID`) and threshold are correct
-      for your regiment's activity expectations.
+- [ ] Inactivity sweep role and threshold (`/config set_role key:inactive`,
+      `/config set_inactivity_days`) are correct for your regiment's
+      activity expectations.
 - [ ] You have a backup plan for `valorlink.db` (see below).
 
 ### Back up your database

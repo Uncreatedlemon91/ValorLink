@@ -5,8 +5,9 @@ Nicknames permissions, or these calls silently no-op on discord.HTTPException.
 """
 import discord
 
-from config import COMPANY_ROLES
+from db.base import SessionLocal
 from utils import ranks as rank_utils
+from utils.settings import company_by_name
 
 
 async def _swap_role(member: discord.Member, old_role_id: int, new_role_id: int, reason: str):
@@ -31,11 +32,15 @@ async def _swap_role(member: discord.Member, old_role_id: int, new_role_id: int,
 
 async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None, new_rank: str):
     """Swap the member's rank role and refresh their nickname to "[Abbr] Callsign"."""
-    old_role_id = rank_utils.rank_by_name(old_rank).get("role_id", 0) if old_rank else 0
-    new_role_id = rank_utils.rank_by_name(new_rank).get("role_id", 0)
+    with SessionLocal() as session:
+        old_record = rank_utils.rank_by_name(session, old_rank)
+        new_record = rank_utils.rank_by_name(session, new_rank)
+        old_role_id = (old_record.role_id or 0) if old_record else 0
+        new_role_id = (new_record.role_id or 0) if new_record else 0
+        abbreviation = new_record.abbreviation if new_record else new_rank
+
     await _swap_role(member, old_role_id, new_role_id, reason="Rank sync")
 
-    abbreviation = rank_utils.rank_by_name(new_rank)["abbreviation"]
     try:
         await member.edit(nick=f"[{abbreviation}] {callsign}")
     except discord.HTTPException:
@@ -44,6 +49,10 @@ async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None,
 
 async def sync_company(member: discord.Member, old_company: str | None, new_company: str):
     """Swap the member's company role to match their new company assignment."""
-    old_role_id = COMPANY_ROLES.get(old_company, 0) if old_company else 0
-    new_role_id = COMPANY_ROLES.get(new_company, 0)
+    with SessionLocal() as session:
+        old_record = company_by_name(session, old_company)
+        new_record = company_by_name(session, new_company)
+        old_role_id = (old_record.role_id or 0) if old_record else 0
+        new_role_id = (new_record.role_id or 0) if new_record else 0
+
     await _swap_role(member, old_role_id, new_role_id, reason="Company sync")

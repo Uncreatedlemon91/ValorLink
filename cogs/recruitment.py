@@ -2,11 +2,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import config
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry
+from utils import ranks as rank_utils
 from utils.checks import is_recruiter
 from utils.embeds import base_embed
+from utils.settings import default_company_name, get_config
 from utils.sync import sync_company, sync_rank
 
 
@@ -19,7 +20,9 @@ class InterviewView(discord.ui.View):
         self.callsign = callsign
 
     def _is_recruiter(self, member: discord.Member) -> bool:
-        ids = {config.ADMIN_ROLE_ID, config.OFFICER_ROLE_ID, config.RECRUITER_ROLE_ID}
+        with SessionLocal() as session:
+            cfg = get_config(session)
+        ids = {cfg.admin_role_id, cfg.officer_role_id, cfg.recruiter_role_id}
         return any(r.id in ids for r in member.roles)
 
     @discord.ui.button(label="Approve Enlistment", style=discord.ButtonStyle.green, custom_id="recruit_approve")
@@ -32,8 +35,18 @@ class InterviewView(discord.ui.View):
         if applicant is None:
             return await interaction.edit_original_response(content="Applicant has left the server.", view=None)
 
-        candidate_role = interaction.guild.get_role(config.CANDIDATE_ROLE_ID)
-        member_role = interaction.guild.get_role(config.MEMBER_ROLE_ID)
+        with SessionLocal() as session:
+            cfg = get_config(session)
+            candidate_role_id = cfg.candidate_role_id
+            member_role_id = cfg.member_role_id
+            personnel_forum_id = cfg.personnel_forum_id
+            admin_log_channel_id = cfg.admin_log_channel_id
+            regiment_name = cfg.regiment_name
+            default_rank = rank_utils.default_rank_name(session)
+            default_company = default_company_name(session)
+
+        candidate_role = interaction.guild.get_role(candidate_role_id) if candidate_role_id else None
+        member_role = interaction.guild.get_role(member_role_id) if member_role_id else None
         try:
             if candidate_role:
                 await applicant.remove_roles(candidate_role)
@@ -43,7 +56,7 @@ class InterviewView(discord.ui.View):
             pass
 
         thread_id = None
-        forum = interaction.guild.get_channel(config.PERSONNEL_FORUM_ID)
+        forum = interaction.guild.get_channel(personnel_forum_id) if personnel_forum_id else None
         if isinstance(forum, discord.ForumChannel):
             created = await forum.create_thread(
                 name=f"{self.callsign}",
@@ -56,8 +69,8 @@ class InterviewView(discord.ui.View):
                 Member(
                     discord_id=applicant.id,
                     callsign=self.callsign,
-                    rank=config.DEFAULT_RANK,
-                    company=config.DEFAULT_COMPANY,
+                    rank=default_rank,
+                    company=default_company,
                     status="active",
                     thread_id=thread_id,
                 )
@@ -65,14 +78,14 @@ class InterviewView(discord.ui.View):
             session.add(
                 ServiceHistoryEntry(
                     member_id=applicant.id,
-                    entry=f"Enlisted as {config.DEFAULT_RANK} via recruitment pipeline.",
+                    entry=f"Enlisted as {default_rank} via recruitment pipeline.",
                     recorded_by=interaction.user.id,
                 )
             )
             session.commit()
 
-        await sync_rank(applicant, self.callsign, None, config.DEFAULT_RANK)
-        await sync_company(applicant, None, config.DEFAULT_COMPANY)
+        await sync_rank(applicant, self.callsign, None, default_rank)
+        await sync_company(applicant, None, default_company)
 
         try:
             from cogs.roster import refresh_roster
@@ -81,7 +94,7 @@ class InterviewView(discord.ui.View):
         except Exception:
             pass
 
-        log_channel = interaction.guild.get_channel(config.ADMIN_LOG_CHANNEL_ID)
+        log_channel = interaction.guild.get_channel(admin_log_channel_id) if admin_log_channel_id else None
         if log_channel:
             embed = base_embed(title="Enlistment Approved", color=discord.Color.green().value)
             embed.add_field(name="Applicant", value=applicant.mention)
@@ -91,7 +104,7 @@ class InterviewView(discord.ui.View):
 
         try:
             await applicant.send(
-                f"Your application to **{config.REGIMENT_NAME}** has been approved. Welcome to the regiment!"
+                f"Your application to **{regiment_name}** has been approved. Welcome to the regiment!"
             )
         except discord.Forbidden:
             pass
@@ -108,7 +121,12 @@ class InterviewView(discord.ui.View):
         await interaction.response.defer()
         applicant = interaction.guild.get_member(self.applicant_id)
 
-        log_channel = interaction.guild.get_channel(config.ADMIN_LOG_CHANNEL_ID)
+        with SessionLocal() as session:
+            cfg = get_config(session)
+            admin_log_channel_id = cfg.admin_log_channel_id
+            regiment_name = cfg.regiment_name
+
+        log_channel = interaction.guild.get_channel(admin_log_channel_id) if admin_log_channel_id else None
         if log_channel:
             embed = base_embed(title="Enlistment Denied", color=discord.Color.red().value)
             embed.add_field(name="Applicant", value=applicant.mention if applicant else str(self.applicant_id))
@@ -118,7 +136,7 @@ class InterviewView(discord.ui.View):
         if applicant:
             try:
                 await applicant.send(
-                    f"Your application to **{config.REGIMENT_NAME}** has been denied at this time."
+                    f"Your application to **{regiment_name}** has been denied at this time."
                 )
             except discord.Forbidden:
                 pass
@@ -135,7 +153,12 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        candidate_role = interaction.guild.get_role(config.CANDIDATE_ROLE_ID)
+        with SessionLocal() as session:
+            cfg = get_config(session)
+            candidate_role_id = cfg.candidate_role_id
+            recruiter_role_id = cfg.recruiter_role_id
+
+        candidate_role = interaction.guild.get_role(candidate_role_id) if candidate_role_id else None
         if candidate_role:
             try:
                 await interaction.user.add_roles(candidate_role)
@@ -148,7 +171,7 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
             invitable=False,
         )
 
-        recruiter_role = interaction.guild.get_role(config.RECRUITER_ROLE_ID)
+        recruiter_role = interaction.guild.get_role(recruiter_role_id) if recruiter_role_id else None
         ping = f"{interaction.user.mention} {recruiter_role.mention if recruiter_role else ''}".strip()
 
         embed = base_embed(title="New Application")
@@ -178,8 +201,11 @@ class Recruitment(commands.Cog):
     @app_commands.command(name="setup_recruitment", description="Post the persistent enlistment application button")
     @is_recruiter()
     async def setup_recruitment(self, interaction: discord.Interaction):
+        with SessionLocal() as session:
+            regiment_name = get_config(session).regiment_name
+
         embed = base_embed(
-            title=f"{config.REGIMENT_NAME} Recruitment",
+            title=f"{regiment_name} Recruitment",
             description="Click below to submit your application and begin the enlistment process.",
         )
         await interaction.channel.send(embed=embed, view=JoinButtonView())

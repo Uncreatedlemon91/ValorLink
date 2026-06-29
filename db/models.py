@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -141,3 +142,63 @@ class Setting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=True)
+
+
+class GuildConfig(Base):
+    """Singleton row (id=1) holding everything that used to be hardcoded in
+    config.py. Populated with defaults on first access and edited live via
+    the /config command -- no file edits or restarts required.
+    """
+
+    __tablename__ = "guild_config"
+
+    id = Column(Integer, primary_key=True)
+
+    regiment_name = Column(String, nullable=False, default="Unconfigured Regiment")
+    regiment_motto = Column(String, nullable=True)
+    brand_color = Column(Integer, nullable=False, default=0x2F3136)
+    inactivity_days_threshold = Column(Integer, nullable=False, default=30)
+
+    admin_role_id = Column(BigInteger, nullable=True)
+    officer_role_id = Column(BigInteger, nullable=True)
+    recruiter_role_id = Column(BigInteger, nullable=True)
+    member_role_id = Column(BigInteger, nullable=True)
+    candidate_role_id = Column(BigInteger, nullable=True)
+    visitor_role_id = Column(BigInteger, nullable=True)
+    inactive_role_id = Column(BigInteger, nullable=True)
+
+    recruitment_channel_id = Column(BigInteger, nullable=True)
+    personnel_forum_id = Column(BigInteger, nullable=True)
+    roster_channel_id = Column(BigInteger, nullable=True)
+    mod_log_channel_id = Column(BigInteger, nullable=True)
+    admin_log_channel_id = Column(BigInteger, nullable=True)
+    announcements_channel_id = Column(BigInteger, nullable=True)
+    welcome_channel_id = Column(BigInteger, nullable=True)
+
+
+class Rank(Base):
+    """One rung of the rank ladder, lowest to highest by `position`.
+    Managed via /rank_add, /rank_remove, /rank_move, /rank_set_role.
+    """
+
+    __tablename__ = "ranks"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    abbreviation = Column(String, nullable=False)
+    tier = Column(String, nullable=True)
+    role_id = Column(BigInteger, nullable=True)
+    position = Column(Integer, nullable=False, unique=True)
+
+
+class Company(Base):
+    """A sub-unit members can be assigned to. Managed via /company_add,
+    /company_remove, /company_set_role, /company_set_default.
+    """
+
+    __tablename__ = "companies"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    role_id = Column(BigInteger, nullable=True)
+    is_default = Column(Boolean, nullable=False, default=False)

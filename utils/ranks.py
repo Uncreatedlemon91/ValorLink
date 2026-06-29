@@ -1,36 +1,45 @@
-"""Helpers for working with the configurable rank ladder in config.RANKS."""
-import config
+"""Helpers for working with the rank ladder, stored in the `ranks` table and
+managed live via /rank_add, /rank_remove, /rank_move, /rank_set_role.
+"""
+from db.models import Rank
 
 
-def rank_names() -> list[str]:
-    return [r["name"] for r in config.RANKS]
+def all_ranks(session) -> list[Rank]:
+    return session.query(Rank).order_by(Rank.position).all()
 
 
-def rank_index(name: str) -> int:
-    for i, r in enumerate(config.RANKS):
-        if r["name"].lower() == name.lower():
-            return i
-    raise ValueError(f"Unknown rank: {name}")
+def rank_names(session) -> list[str]:
+    return [r.name for r in all_ranks(session)]
 
 
-def rank_by_name(name: str) -> dict:
-    return config.RANKS[rank_index(name)]
-
-
-def next_rank(name: str) -> str | None:
-    i = rank_index(name)
-    if i + 1 >= len(config.RANKS):
+def rank_by_name(session, name: str) -> Rank | None:
+    if not name:
         return None
-    return config.RANKS[i + 1]["name"]
+    return session.query(Rank).filter(Rank.name == name).one_or_none()
 
 
-def prev_rank(name: str) -> str | None:
-    i = rank_index(name)
-    if i - 1 < 0:
+def lowest_rank_name(session) -> str | None:
+    ranks = all_ranks(session)
+    return ranks[0].name if ranks else None
+
+
+def default_rank_name(session) -> str:
+    """Rank assigned on enlistment -- the lowest rung, or a placeholder if
+    no ranks have been configured yet via /rank_add."""
+    return lowest_rank_name(session) or "Unranked"
+
+
+def next_rank(session, name: str) -> str | None:
+    names = rank_names(session)
+    if name not in names:
         return None
-    return config.RANKS[i - 1]["name"]
+    i = names.index(name)
+    return names[i + 1] if i + 1 < len(names) else None
 
 
-def display(name: str) -> str:
-    """e.g. 'Cpl' for use in nicknames / compact embeds."""
-    return rank_by_name(name)["abbreviation"]
+def prev_rank(session, name: str) -> str | None:
+    names = rank_names(session)
+    if name not in names:
+        return None
+    i = names.index(name)
+    return names[i - 1] if i > 0 else None

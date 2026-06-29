@@ -2,20 +2,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import config
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.settings import get_config
 from utils.sync import sync_rank
 
 
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
+    with SessionLocal() as session:
+        names = rank_utils.rank_names(session)
     return [
-        app_commands.Choice(name=r["name"], value=r["name"])
-        for r in config.RANKS
-        if current.lower() in r["name"].lower()
+        app_commands.Choice(name=name, value=name) for name in names if current.lower() in name.lower()
     ][:25]
 
 
@@ -39,7 +39,7 @@ class Personnel(commands.Cog):
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
 
-            new_rank = rank_utils.next_rank(record.rank)
+            new_rank = rank_utils.next_rank(session, record.rank)
             if new_rank is None:
                 return await interaction.response.send_message(f"{record.callsign} is already at the top rank.", ephemeral=True)
 
@@ -67,7 +67,7 @@ class Personnel(commands.Cog):
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
 
-            new_rank = rank_utils.prev_rank(record.rank)
+            new_rank = rank_utils.prev_rank(session, record.rank)
             if new_rank is None:
                 return await interaction.response.send_message(f"{record.callsign} is already at the lowest rank.", ephemeral=True)
 
@@ -91,12 +91,10 @@ class Personnel(commands.Cog):
     @app_commands.autocomplete(rank=rank_autocomplete)
     @is_officer()
     async def set_rank(self, interaction: discord.Interaction, member: discord.Member, rank: str):
-        try:
-            rank_utils.rank_index(rank)
-        except ValueError:
-            return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
-
         with SessionLocal() as session:
+            if rank_utils.rank_by_name(session, rank) is None:
+                return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
+
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -136,13 +134,13 @@ class Personnel(commands.Cog):
     async def record(self, interaction: discord.Interaction, member: discord.Member | None = None):
         target = member or interaction.user
         is_self = target.id == interaction.user.id
-        is_priv = any(
-            r.id in (config.ADMIN_ROLE_ID, config.OFFICER_ROLE_ID) for r in interaction.user.roles
-        )
-        if not is_self and not is_priv:
-            return await interaction.response.send_message("You can only view your own record.", ephemeral=True)
 
         with SessionLocal() as session:
+            cfg = get_config(session)
+            is_priv = any(r.id in (cfg.admin_role_id, cfg.officer_role_id) for r in interaction.user.roles)
+            if not is_self and not is_priv:
+                return await interaction.response.send_message("You can only view your own record.", ephemeral=True)
+
             record = session.get(Member, target.id)
             if record is None:
                 return await interaction.response.send_message(f"{target.mention} has no personnel record.", ephemeral=True)

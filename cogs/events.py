@@ -4,11 +4,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import config
 from db.base import SessionLocal
 from db.models import AttendanceRecord, Event, Member
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.settings import get_config
 
 EVENT_TYPES = ["Drill", "Battle", "Operation"]
 RSVP_STATUSES = {"accepted": "Accepted", "declined": "Declined", "tentative": "Tentative"}
@@ -125,7 +125,12 @@ class Events(commands.Cog):
                 "Invalid date format. Use `YYYY-MM-DD HH:MM` (UTC), e.g. `2026-07-01 19:00`.", ephemeral=True
             )
 
-        channel = interaction.guild.get_channel(config.ANNOUNCEMENTS_CHANNEL_ID) or interaction.channel
+        with SessionLocal() as session:
+            announcements_channel_id = get_config(session).announcements_channel_id
+        channel = (
+            (interaction.guild.get_channel(announcements_channel_id) if announcements_channel_id else None)
+            or interaction.channel
+        )
 
         with SessionLocal() as session:
             event = Event(
@@ -195,7 +200,9 @@ class Events(commands.Cog):
     @app_commands.command(name="attendance_history", description="View a member's attendance history")
     async def attendance_history(self, interaction: discord.Interaction, member: discord.Member | None = None):
         target = member or interaction.user
-        is_priv = any(r.id in (config.ADMIN_ROLE_ID, config.OFFICER_ROLE_ID) for r in interaction.user.roles)
+        with SessionLocal() as session:
+            cfg = get_config(session)
+        is_priv = any(r.id in (cfg.admin_role_id, cfg.officer_role_id) for r in interaction.user.roles)
         if target.id != interaction.user.id and not is_priv:
             return await interaction.response.send_message("You can only view your own attendance.", ephemeral=True)
 

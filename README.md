@@ -4,9 +4,10 @@ A Discord bot for managing a single War of Rights regiment: recruitment,
 personnel records, rank/company structure, a live roster, drill/battle
 attendance, and disciplinary records.
 
-This bot is wired for **one regiment per deployment** — configuration lives
-in `config.py` as plain constants, not a setup wizard. Fork/copy it per
-server.
+This bot is wired for **one regiment per deployment**, but configuration is
+entirely chat-driven — roles, channels, regiment identity, ranks, and
+companies are all set live with `/config`, `/rank`, and `/company` commands.
+No file edits or restarts required after the bot is online.
 
 ## Features
 
@@ -45,26 +46,7 @@ server.
    Fill in `DISCORD_BOT_TOKEN` and `GUILD_ID`. `DATABASE_URL` defaults to a
    local SQLite file and rarely needs changing for a single-server bot.
 
-3. **Edit `config.py`**
-
-   Replace every `PLACEHOLDER` role/channel ID with the real IDs from your
-   server (enable Developer Mode in Discord, then right-click a role or
-   channel → Copy ID). Edit `REGIMENT_NAME`, `REGIMENT_MOTTO`, `RANKS`, and
-   `COMPANIES` to match your unit.
-
-   Each entry in `RANKS` and each entry in `COMPANY_ROLES` can optionally
-   carry a Discord role ID (`role_id` for ranks, the dict value for
-   companies). When set, the bot keeps that role in sync automatically:
-   it's swapped on promotion/demotion/`/set_rank`/`/assign_company` and
-   applied on enlistment approval. Leave a `role_id` as `0` to skip role
-   sync for that rank/company. For this to work, the bot's own role must
-   sit above every rank/company role in the server's role list, and the
-   bot needs the **Manage Roles** and **Manage Nicknames** permissions —
-   on rank changes it also rewrites the member's nickname to
-   `[Abbreviation] Callsign`. If permissions or hierarchy aren't right,
-   sync calls silently no-op rather than erroring out commands.
-
-4. **Run database migrations**
+3. **Run database migrations**
 
    ```bash
    alembic upgrade head
@@ -74,20 +56,45 @@ server.
    `alembic revision --autogenerate -m "description"` and re-run
    `alembic upgrade head`.
 
-5. **Run the bot**
+4. **Run the bot**
 
    ```bash
    python3 bot.py
    ```
 
+5. **Configure it from Discord**
+
+   Everything else — regiment name/motto/color, admin/officer/recruiter/
+   member/candidate/visitor/inactive roles, recruitment/roster/log/
+   announcement channels, the rank ladder, and companies — is set live with
+   `/config`, `/rank`, and `/company` commands. See
+   [`SETUP.md`](SETUP.md#4-configure-valorlink-from-discord) for the full
+   command list. The very first `/config set_role key:admin ...` call needs
+   server Administrator permission, since no admin role exists yet on a
+   fresh setup; every command after that can use the role you just
+   configured.
+
 ## Permission model
 
-Commands are gated by the role IDs in `config.py`, not Discord's built-in
-admin permission:
+Commands are gated by role IDs stored in the database and set via
+`/config set_role`, not Discord's built-in admin permission (except as a
+bootstrap fallback — see above):
 
-- `ADMIN_ROLE_ID` — full access to every command.
-- `OFFICER_ROLE_ID` — promote/demote/assign/discipline/event commands.
-- `RECRUITER_ROLE_ID` — recruitment commands only.
+- **admin** — full access to every command, including `/config`, `/rank`,
+  and `/company`.
+- **officer** — promote/demote/assign/discipline/event commands.
+- **recruiter** — recruitment commands only.
+
+Each entry in the rank ladder and each company can optionally carry a
+Discord role (`/rank set_role`, `/company set_role`). When set, the bot
+keeps that role in sync automatically: it's swapped on promotion/demotion/
+`/set_rank`/`/assign_company` and applied on enlistment approval. Leave a
+rank/company without a role to skip sync for it. For this to work, the
+bot's own role must sit above every rank/company role in the server's role
+list, and the bot needs the **Manage Roles** and **Manage Nicknames**
+permissions — on rank changes it also rewrites the member's nickname to
+`[Abbreviation] Callsign`. If permissions or hierarchy aren't right, sync
+calls silently no-op rather than erroring out commands.
 
 ## Known limitations
 

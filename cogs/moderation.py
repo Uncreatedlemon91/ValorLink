@@ -2,11 +2,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import config
 from db.base import SessionLocal
 from db.models import DisciplinaryRecord, Member
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.settings import get_config
 
 RECORD_COLORS = {"note": discord.Color.light_grey(), "warn": discord.Color.orange(), "strike": discord.Color.red()}
 
@@ -32,7 +32,9 @@ class Moderation(commands.Cog):
             session.commit()
             strike_count = sum(1 for d in target.disciplinary_records if d.record_type == "strike")
 
-        log_channel = interaction.guild.get_channel(config.MOD_LOG_CHANNEL_ID)
+        with SessionLocal() as session:
+            mod_log_channel_id = get_config(session).mod_log_channel_id
+        log_channel = interaction.guild.get_channel(mod_log_channel_id) if mod_log_channel_id else None
         if log_channel:
             embed = base_embed(
                 title=f"Disciplinary {record_type.capitalize()}",

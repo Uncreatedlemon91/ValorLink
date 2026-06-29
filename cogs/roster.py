@@ -7,8 +7,10 @@ from discord.ext import commands, tasks
 import config
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry, Setting
+from utils import ranks as rank_utils
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.settings import get_config, list_companies
 from utils.sync import sync_company
 
 ROSTER_MESSAGE_KEY = "roster_message_id"
@@ -29,9 +31,10 @@ def _set_setting(session, key: str, value: str):
 
 
 def _build_roster_embed(session) -> discord.Embed:
+    cfg = get_config(session)
     members = session.query(Member).filter(Member.status == "active").all()
     embed = base_embed(
-        title=f"{config.REGIMENT_NAME} Roster",
+        title=f"{cfg.regiment_name} Roster",
         description=f"{len(members)} active member(s)",
     )
 
@@ -39,8 +42,9 @@ def _build_roster_embed(session) -> discord.Embed:
     for m in members:
         by_company.setdefault(m.company, []).append(m)
 
-    rank_order = {r["name"]: i for i, r in enumerate(config.RANKS)}
-    company_order = config.COMPANIES + [c for c in by_company if c not in config.COMPANIES]
+    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+    configured_companies = [c.name for c in list_companies(session)]
+    company_order = configured_companies + [c for c in by_company if c not in configured_companies]
 
     if not members:
         embed.add_field(name="No active members", value="-", inline=False)
@@ -57,11 +61,12 @@ def _build_roster_embed(session) -> discord.Embed:
 
 
 async def refresh_roster(guild: discord.Guild):
-    channel = guild.get_channel(config.ROSTER_CHANNEL_ID)
-    if channel is None:
-        return
-
     with SessionLocal() as session:
+        roster_channel_id = get_config(session).roster_channel_id
+        channel = guild.get_channel(roster_channel_id) if roster_channel_id else None
+        if channel is None:
+            return
+
         embed = _build_roster_embed(session)
         message_id = _get_setting(session, ROSTER_MESSAGE_KEY)
 
@@ -82,8 +87,10 @@ async def refresh_roster(guild: discord.Guild):
 
 
 async def company_autocomplete(interaction: discord.Interaction, current: str):
+    with SessionLocal() as session:
+        names = [c.name for c in list_companies(session)]
     return [
-        app_commands.Choice(name=c, value=c) for c in config.COMPANIES if current.lower() in c.lower()
+        app_commands.Choice(name=c, value=c) for c in names if current.lower() in c.lower()
     ][:25]
 
 
@@ -153,8 +160,9 @@ class Roster(commands.Cog):
         if guild is None:
             return
 
-        threshold = datetime.utcnow() - timedelta(days=config.INACTIVITY_DAYS_THRESHOLD)
         with SessionLocal() as session:
+            cfg = get_config(session)
+            threshold = datetime.utcnow() - timedelta(days=cfg.inactivity_days_threshold)
             stale = (
                 session.query(Member)
                 .filter(Member.status == "active", Member.last_active_date < threshold)
@@ -167,11 +175,14 @@ class Roster(commands.Cog):
                 flagged_callsigns.append(record.callsign)
                 flagged_ids.append(record.discord_id)
             session.commit()
+            inactive_role_id = cfg.inactive_role_id
+            admin_log_channel_id = cfg.admin_log_channel_id
+            inactivity_days_threshold = cfg.inactivity_days_threshold
 
         if not flagged_ids:
             return
 
-        inactive_role = guild.get_role(config.INACTIVE_ROLE_ID)
+        inactive_role = guild.get_role(inactive_role_id) if inactive_role_id else None
         for discord_id in flagged_ids:
             member = guild.get_member(discord_id)
             if member and inactive_role:
@@ -180,12 +191,12 @@ class Roster(commands.Cog):
                 except discord.HTTPException:
                     pass
 
-        log_channel = guild.get_channel(config.ADMIN_LOG_CHANNEL_ID)
+        log_channel = guild.get_channel(admin_log_channel_id) if admin_log_channel_id else None
         if log_channel:
             embed = base_embed(
                 title="Inactivity Review",
                 description=(
-                    f"Flagged inactive (no activity in {config.INACTIVITY_DAYS_THRESHOLD}+ days):\n"
+                    f"Flagged inactive (no activity in {inactivity_days_threshold}+ days):\n"
                     + "\n".join(f"- {name}" for name in flagged_callsigns)
                 ),
             )

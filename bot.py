@@ -14,6 +14,7 @@ INTENTS.members = True
 INTENTS.message_content = True
 
 COGS = (
+    "cogs.settings",
     "cogs.onboarding",
     "cogs.recruitment",
     "cogs.personnel",
@@ -41,7 +42,7 @@ class ValorLink(commands.Bot):
             await self.tree.sync()
 
     async def on_ready(self):
-        log.info("%s is online as %s", config.REGIMENT_NAME or "ValorLink", self.user)
+        log.info("ValorLink is online as %s", self.user)
 
 
 async def main():

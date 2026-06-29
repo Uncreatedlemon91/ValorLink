@@ -2,7 +2,9 @@ import discord
 from discord.ext import commands
 
 import config
+from db.base import SessionLocal
 from utils.embeds import base_embed
+from utils.settings import get_config
 
 
 class Onboarding(commands.Cog):
@@ -21,17 +23,23 @@ class Onboarding(commands.Cog):
         if config.GUILD_ID and member.guild.id != config.GUILD_ID:
             return
 
-        visitor_role = member.guild.get_role(config.VISITOR_ROLE_ID)
+        with SessionLocal() as session:
+            cfg = get_config(session)
+            visitor_role_id = cfg.visitor_role_id
+            welcome_channel_id = cfg.welcome_channel_id
+            regiment_name = cfg.regiment_name
+
+        visitor_role = member.guild.get_role(visitor_role_id) if visitor_role_id else None
         if visitor_role:
             try:
                 await member.add_roles(visitor_role, reason="Onboarding: auto-assigned visitor role")
             except discord.HTTPException:
                 pass
 
-        channel = member.guild.get_channel(config.WELCOME_CHANNEL_ID)
+        channel = member.guild.get_channel(welcome_channel_id) if welcome_channel_id else None
         if channel:
             embed = base_embed(
-                title=f"Welcome to {config.REGIMENT_NAME}",
+                title=f"Welcome to {regiment_name}",
                 description=(
                     f"{member.mention} has joined the server.\n\n"
                     "Check the recruitment channel to apply for enlistment, "
@@ -43,7 +51,7 @@ class Onboarding(commands.Cog):
 
         try:
             await member.send(
-                f"Welcome to **{config.REGIMENT_NAME}**! Head back to the server to find out how to apply."
+                f"Welcome to **{regiment_name}**! Head back to the server to find out how to apply."
             )
         except discord.Forbidden:
             pass
