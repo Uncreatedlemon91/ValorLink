@@ -54,6 +54,12 @@ class Moderation(commands.Cog):
 
         await interaction.response.send_message(f"{record_type.capitalize()} issued to {member.mention}.")
 
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, member.id)
+        except Exception:
+            pass
+
     @app_commands.command(name="note", description="Add an informal note to a member's disciplinary record")
     @is_officer()
     async def note(self, interaction: discord.Interaction, member: discord.Member, reason: str):

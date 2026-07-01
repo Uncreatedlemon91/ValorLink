@@ -89,8 +89,13 @@ class InterviewView(discord.ui.View):
 
         try:
             from cogs.roster import refresh_roster
-
             await refresh_roster(interaction.guild)
+        except Exception:
+            pass
+
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, applicant.id)
         except Exception:
             pass
 
