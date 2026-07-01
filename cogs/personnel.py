@@ -31,66 +31,69 @@ class Personnel(commands.Cog):
         except Exception:
             pass
 
-    @app_commands.command(name="promote", description="Promote a member to the next rank")
-    @is_officer()
-    async def promote(self, interaction: discord.Interaction, member: discord.Member):
-        with SessionLocal() as session:
-            record = session.get(Member, member.id)
-            if record is None:
-                return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
-
-            new_rank = rank_utils.next_rank(session, record.rank)
-            if new_rank is None:
-                return await interaction.response.send_message(f"{record.callsign} is already at the top rank.", ephemeral=True)
-
-            old_rank = record.rank
-            callsign = record.callsign
-            record.rank = new_rank
-            session.add(
-                ServiceHistoryEntry(
-                    member_id=member.id,
-                    entry=f"Promoted from {old_rank} to {new_rank} by {interaction.user.display_name}.",
-                    recorded_by=interaction.user.id,
-                )
-            )
-            session.commit()
-
-        await sync_rank(member, callsign, old_rank, new_rank)
-        await self._refresh_roster(interaction.guild)
-        await interaction.response.send_message(f"{member.mention} promoted to **{new_rank}**.")
-
-    @app_commands.command(name="demote", description="Demote a member to the previous rank")
-    @is_officer()
-    async def demote(self, interaction: discord.Interaction, member: discord.Member):
-        with SessionLocal() as session:
-            record = session.get(Member, member.id)
-            if record is None:
-                return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
-
-            new_rank = rank_utils.prev_rank(session, record.rank)
-            if new_rank is None:
-                return await interaction.response.send_message(f"{record.callsign} is already at the lowest rank.", ephemeral=True)
-
-            old_rank = record.rank
-            callsign = record.callsign
-            record.rank = new_rank
-            session.add(
-                ServiceHistoryEntry(
-                    member_id=member.id,
-                    entry=f"Demoted from {old_rank} to {new_rank} by {interaction.user.display_name}.",
-                    recorded_by=interaction.user.id,
-                )
-            )
-            session.commit()
-
-        await sync_rank(member, callsign, old_rank, new_rank)
-        await self._refresh_roster(interaction.guild)
-        await interaction.response.send_message(f"{member.mention} demoted to **{new_rank}**.")
-
-    @app_commands.command(name="set_rank", description="Set a member's rank directly")
+    @app_commands.command(name="promote", description="Change a member's rank up or down with a citation")
     @app_commands.autocomplete(rank=rank_autocomplete)
     @is_officer()
-    async def set_rank(self, interaction: discord.Interaction, member: discord.Member, rank: str):
+    async def promote(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        rank: str,
+        citation: str = "",
+    ):
+        with SessionLocal() as session:
+            new_record = rank_utils.rank_by_name(session, rank)
+            if new_record is None:
+                return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
+
+            record = session.get(Member, member.id)
+            if record is None:
+                return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
+
+            old_rank = record.rank
+            callsign = record.callsign
+
+            if old_rank == rank:
+                return await interaction.response.send_message(
+                    f"{callsign} already holds **{rank}**.", ephemeral=True
+                )
+
+            old_record = rank_utils.rank_by_name(session, old_rank)
+            old_position = old_record.position if old_record else -1
+            is_promotion = new_record.position > old_position
+
+            record.rank = rank
+            log_verb = "Promoted" if is_promotion else "Stepped down"
+            entry_text = f"{log_verb} from {old_rank} to {rank} by {interaction.user.display_name}."
+            if citation:
+                entry_text += f" Citation: {citation}"
+            session.add(
+                ServiceHistoryEntry(
+                    member_id=member.id,
+                    entry=entry_text,
+                    recorded_by=interaction.user.id,
+                )
+            )
+            session.commit()
+
+        await sync_rank(member, callsign, old_rank, rank)
+        await self._refresh_roster(interaction.guild)
+
+        if is_promotion:
+            msg = f"{callsign} has been promoted to **{rank}**."
+            if citation:
+                msg += f"\nCitation: {citation}"
+        else:
+            msg = f"{callsign} has stepped down from their position as **{old_rank}**."
+            if citation:
+                msg += f" {citation}"
+
+        await interaction.response.send_message(msg)
+
+    @app_commands.command(name="set_rank", description="Silently correct a member's rank (no public announcement)")
+    @app_commands.autocomplete(rank=rank_autocomplete)
+    @is_officer()
+    async def set_rank(self, interaction: discord.Interaction, member: discord.Member, rank: str, citation: str = ""):
         with SessionLocal() as session:
             if rank_utils.rank_by_name(session, rank) is None:
                 return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
@@ -102,10 +105,13 @@ class Personnel(commands.Cog):
             old_rank = record.rank
             callsign = record.callsign
             record.rank = rank
+            entry_text = f"Rank set from {old_rank} to {rank} by {interaction.user.display_name}."
+            if citation:
+                entry_text += f" {citation}"
             session.add(
                 ServiceHistoryEntry(
                     member_id=member.id,
-                    entry=f"Rank set from {old_rank} to {rank} by {interaction.user.display_name}.",
+                    entry=entry_text,
                     recorded_by=interaction.user.id,
                 )
             )
@@ -113,7 +119,7 @@ class Personnel(commands.Cog):
 
         await sync_rank(member, callsign, old_rank, rank)
         await self._refresh_roster(interaction.guild)
-        await interaction.response.send_message(f"{member.mention}'s rank set to **{rank}**.")
+        await interaction.response.send_message(f"{member.mention}'s rank set to **{rank}**.", ephemeral=True)
 
     @app_commands.command(name="service_log", description="Add a service history entry to a member's record")
     @is_officer()
