@@ -31,7 +31,7 @@ async def _swap_role(member: discord.Member, old_role_id: int, new_role_id: int,
 
 
 async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None, new_rank: str):
-    """Swap the member's rank role and refresh their nickname to "[Abbr] Callsign"."""
+    """Swap the member's rank role and refresh their nickname to "Abbr. Callsign"."""
     with SessionLocal() as session:
         old_record = rank_utils.rank_by_name(session, old_rank)
         new_record = rank_utils.rank_by_name(session, new_rank)
@@ -42,7 +42,7 @@ async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None,
     await _swap_role(member, old_role_id, new_role_id, reason="Rank sync")
 
     try:
-        await member.edit(nick=f"[{abbreviation}] {callsign}")
+        await member.edit(nick=f"{abbreviation}. {callsign}")
     except discord.HTTPException:
         pass
 

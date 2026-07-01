@@ -33,6 +33,7 @@ class Member(Base):
     joined_date = Column(DateTime, default=_utcnow)
     last_active_date = Column(DateTime, default=_utcnow)
     thread_id = Column(BigInteger, nullable=True)
+    loa_until = Column(DateTime, nullable=True)
 
     service_history = relationship(
         "ServiceHistoryEntry", back_populates="member", cascade="all, delete-orphan"
@@ -174,6 +175,7 @@ class GuildConfig(Base):
     admin_log_channel_id = Column(BigInteger, nullable=True)
     announcements_channel_id = Column(BigInteger, nullable=True)
     welcome_channel_id = Column(BigInteger, nullable=True)
+    billboard_channel_id = Column(BigInteger, nullable=True)
 
 
 class Rank(Base):
@@ -202,3 +204,16 @@ class Company(Base):
     name = Column(String, nullable=False, unique=True)
     role_id = Column(BigInteger, nullable=True)
     is_default = Column(Boolean, nullable=False, default=False)
+
+
+class Candidacy(Base):
+    """Tracks in-progress recruitment interviews so InterviewView buttons
+    can be re-registered as persistent views after a bot restart."""
+
+    __tablename__ = "candidacies"
+
+    discord_id = Column(BigInteger, primary_key=True)
+    callsign = Column(String, nullable=False)
+    thread_id = Column(BigInteger, nullable=True)
+    message_id = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)

@@ -15,22 +15,35 @@ RSVP_STATUSES = {"accepted": "Accepted", "declined": "Declined", "tentative": "T
 ATTENDANCE_STATUSES = ["present", "absent", "excused"]
 
 
-def _rsvp_counts(session, event_id: int) -> dict[str, int]:
-    counts = {k: 0 for k in RSVP_STATUSES}
+def _rsvp_buckets(session, event_id: int) -> dict[str, list[str]]:
+    buckets: dict[str, list[str]] = {k: [] for k in RSVP_STATUSES}
     for record in session.query(AttendanceRecord).filter(AttendanceRecord.event_id == event_id):
-        if record.status in counts:
-            counts[record.status] += 1
-    return counts
+        if record.status in buckets:
+            member = session.get(Member, record.member_id)
+            buckets[record.status].append(member.callsign if member else f"<@{record.member_id}>")
+    return buckets
 
 
-def _build_event_embed(event: Event, counts: dict[str, int]) -> discord.Embed:
+def _build_event_embed(event: Event, buckets: dict[str, list[str]]) -> discord.Embed:
     embed = base_embed(
         title=f"{event.event_type}: {event.name}",
         description=f"**When:** {event.scheduled_at.strftime('%Y-%m-%d %H:%M UTC')}",
     )
-    embed.add_field(name="Accepted", value=str(counts["accepted"]), inline=True)
-    embed.add_field(name="Tentative", value=str(counts["tentative"]), inline=True)
-    embed.add_field(name="Declined", value=str(counts["declined"]), inline=True)
+    embed.add_field(
+        name=f"Accepted ({len(buckets['accepted'])})",
+        value="\n".join(buckets["accepted"]) or "—",
+        inline=True,
+    )
+    embed.add_field(
+        name=f"Tentative ({len(buckets['tentative'])})",
+        value="\n".join(buckets["tentative"]) or "—",
+        inline=True,
+    )
+    embed.add_field(
+        name=f"Declined ({len(buckets['declined'])})",
+        value="\n".join(buckets["declined"]) or "—",
+        inline=True,
+    )
     return embed
 
 
@@ -65,8 +78,8 @@ class RSVPView(discord.ui.View):
             member.last_active_date = datetime.utcnow()
             session.commit()
 
-            counts = _rsvp_counts(session, self.event_id)
-            embed = _build_event_embed(event, counts)
+            buckets = _rsvp_buckets(session, self.event_id)
+            embed = _build_event_embed(event, buckets)
 
         await interaction.response.edit_message(embed=embed, view=self)
         await interaction.followup.send(f"RSVP recorded: **{RSVP_STATUSES[status]}**.", ephemeral=True)
@@ -144,8 +157,8 @@ class Events(commands.Cog):
             session.commit()
             session.refresh(event)
             event_id = event.id
-            counts = _rsvp_counts(session, event_id)
-            embed = _build_event_embed(event, counts)
+            buckets = _rsvp_buckets(session, event_id)
+            embed = _build_event_embed(event, buckets)
 
         view = RSVPView(event_id)
         message = await channel.send(embed=embed, view=view)
@@ -196,6 +209,24 @@ class Events(commands.Cog):
             session.commit()
 
         await interaction.response.send_message(f"Marked {member.mention} as **{status.value}** for {event_row.name}.")
+
+    @app_commands.command(name="event_roster", description="List everyone who has RSVPed to an event")
+    @app_commands.autocomplete(event=event_name_autocomplete)
+    async def event_roster(self, interaction: discord.Interaction, event: str):
+        try:
+            event_id = int(event)
+        except ValueError:
+            return await interaction.response.send_message("Select an event from the autocomplete list.", ephemeral=True)
+
+        with SessionLocal() as session:
+            event_row = session.get(Event, event_id)
+            if event_row is None:
+                return await interaction.response.send_message("Event not found.", ephemeral=True)
+
+            buckets = _rsvp_buckets(session, event_id)
+
+        embed = _build_event_embed(event_row, buckets)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="attendance_history", description="View a member's attendance history")
     async def attendance_history(self, interaction: discord.Interaction, member: discord.Member | None = None):

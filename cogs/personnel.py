@@ -5,6 +5,7 @@ from discord.ext import commands
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
+from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed
 from utils.settings import get_config
@@ -164,11 +165,18 @@ class Personnel(commands.Cog):
             msg = f"{callsign} has been promoted to **{rank}**."
             if citation:
                 msg += f"\nCitation: {citation}"
+            billboard_msg = f"**{callsign}** has been promoted to **{rank}**."
+            if citation:
+                billboard_msg += f" {citation}"
         else:
             msg = f"{callsign} has stepped down from their position as **{old_rank}**."
             if citation:
                 msg += f" {citation}"
+            billboard_msg = f"**{callsign}** has stepped down from the rank of **{old_rank}**."
+            if citation:
+                billboard_msg += f" {citation}"
 
+        await post_billboard(interaction.guild, billboard_msg)
         await interaction.response.send_message(msg)
 
     @app_commands.command(name="set_rank", description="Silently correct a member's rank (no public announcement)")
