@@ -164,9 +164,9 @@ class Roster(commands.Cog):
         if before.nick == after.nick:
             return
 
-        # Strip the rank prefix the bot writes (e.g. "[Pvt] ") to get the bare callsign.
+        # Strip the rank prefix the bot writes (e.g. "Pvt. ") to get the bare callsign.
         raw = after.nick or after.name
-        callsign = re.sub(r'^\[[^\]]+\]\s*', '', raw).strip()
+        callsign = re.sub(r'^\w+\.\s*', '', raw).strip()
         if not callsign:
             return
 
