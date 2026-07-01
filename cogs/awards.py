@@ -4,6 +4,7 @@ from discord.ext import commands
 
 from db.base import SessionLocal
 from db.models import AwardType, Member, MemberAward
+from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed
 
@@ -99,6 +100,7 @@ class Awards(commands.Cog):
                 )
             )
             session.commit()
+            callsign = target.callsign
             label = f"{(award_row.emoji + ' ') if award_row.emoji else ''}{award_row.name}"
 
         await interaction.response.send_message(f"{member.mention} was awarded **{label}**.")
@@ -108,6 +110,8 @@ class Awards(commands.Cog):
             await refresh_personnel_file(interaction.guild, member.id)
         except Exception:
             pass
+
+        await post_billboard(interaction.guild, f"**{callsign}** has been awarded **{award_row.name}**.")
 
     @app_commands.command(name="award_remove", description="Revoke an award/qualification from a member")
     @app_commands.autocomplete(award_type=award_type_autocomplete)

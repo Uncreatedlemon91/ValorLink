@@ -5,6 +5,7 @@ from discord.ext import commands
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
+from utils.billboard import post_billboard
 from utils.checks import is_recruiter
 from utils.embeds import base_embed
 from utils.settings import default_company_name, get_config
@@ -98,6 +99,8 @@ class InterviewView(discord.ui.View):
             await refresh_personnel_file(interaction.guild, applicant.id)
         except Exception:
             pass
+
+        await post_billboard(interaction.guild, f"**{self.callsign}** has enlisted in the regiment.")
 
         log_channel = interaction.guild.get_channel(admin_log_channel_id) if admin_log_channel_id else None
         if log_channel:

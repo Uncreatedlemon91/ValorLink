@@ -32,6 +32,7 @@ CHANNEL_KEYS = {
     "admin_log": "admin_log_channel_id",
     "announcements": "announcements_channel_id",
     "welcome": "welcome_channel_id",
+    "billboard": "billboard_channel_id",
 }
 
 

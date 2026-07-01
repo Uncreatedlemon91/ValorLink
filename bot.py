@@ -15,6 +15,7 @@ INTENTS.message_content = True
 
 COGS = (
     "cogs.settings",
+    "cogs.lifecycle",
     "cogs.onboarding",
     "cogs.recruitment",
     "cogs.personnel",

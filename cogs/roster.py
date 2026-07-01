@@ -9,6 +9,7 @@ import config
 from db.base import SessionLocal
 from db.models import Member, ServiceHistoryEntry, Setting
 from utils import ranks as rank_utils
+from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed
 from utils.settings import get_config, list_companies
@@ -113,6 +114,7 @@ class Roster(commands.Cog):
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
 
             old_company = record.company
+            callsign = record.callsign
             record.company = company
             session.add(
                 ServiceHistoryEntry(
@@ -132,6 +134,8 @@ class Roster(commands.Cog):
             await refresh_personnel_file(interaction.guild, member.id)
         except Exception:
             pass
+
+        await post_billboard(interaction.guild, f"**{callsign}** has been assigned to **{company}**.")
 
     @app_commands.command(name="roster", description="Force-refresh the live roster embed")
     @is_officer()

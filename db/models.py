@@ -33,6 +33,7 @@ class Member(Base):
     joined_date = Column(DateTime, default=_utcnow)
     last_active_date = Column(DateTime, default=_utcnow)
     thread_id = Column(BigInteger, nullable=True)
+    loa_until = Column(DateTime, nullable=True)
 
     service_history = relationship(
         "ServiceHistoryEntry", back_populates="member", cascade="all, delete-orphan"
@@ -174,6 +175,7 @@ class GuildConfig(Base):
     admin_log_channel_id = Column(BigInteger, nullable=True)
     announcements_channel_id = Column(BigInteger, nullable=True)
     welcome_channel_id = Column(BigInteger, nullable=True)
+    billboard_channel_id = Column(BigInteger, nullable=True)
 
 
 class Rank(Base):
