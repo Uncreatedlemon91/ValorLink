@@ -155,7 +155,7 @@ class Personnel(commands.Cog):
             discipline = sorted(record.disciplinary_records, key=lambda d: d.date, reverse=True)[:5]
             awards = sorted(record.awards, key=lambda a: a.date_awarded, reverse=True)
 
-            embed = base_embed(title=f"Personnel File: {record.callsign}")
+            embed = base_embed(title=f"Personnel File: {target.display_name}")
             embed.add_field(name="Rank", value=record.rank, inline=True)
             embed.add_field(name="Company", value=record.company, inline=True)
             embed.add_field(name="Status", value=record.status, inline=True)

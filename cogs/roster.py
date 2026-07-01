@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta
 
 import discord
@@ -151,6 +152,26 @@ class Roster(commands.Cog):
             if record.status == "inactive":
                 record.status = "active"
             session.commit()
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if before.nick == after.nick:
+            return
+
+        # Strip the rank prefix the bot writes (e.g. "[Pvt] ") to get the bare callsign.
+        raw = after.nick or after.name
+        callsign = re.sub(r'^\[[^\]]+\]\s*', '', raw).strip()
+        if not callsign:
+            return
+
+        with SessionLocal() as session:
+            record = session.get(Member, after.id)
+            if record is None or record.callsign == callsign:
+                return
+            record.callsign = callsign
+            session.commit()
+
+        await refresh_roster(after.guild)
 
     @tasks.loop(hours=24)
     async def inactivity_check(self):
