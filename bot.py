@@ -5,6 +5,8 @@ import discord
 from discord.ext import commands
 
 import config
+from db.base import SessionLocal
+from db.models import Candidacy, Event
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("valorlink")
@@ -35,12 +37,31 @@ class ValorLink(commands.Bot):
             await self.load_extension(cog)
             log.info("Loaded %s", cog)
 
+        self._register_persistent_views()
+
         if config.GUILD_ID:
             guild = discord.Object(id=config.GUILD_ID)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
         else:
             await self.tree.sync()
+
+    def _register_persistent_views(self):
+        from cogs.recruitment import InterviewView
+        from cogs.events import RSVPView
+
+        with SessionLocal() as session:
+            # Re-register each active event's RSVP view tied to its Discord message.
+            events = session.query(Event).filter(Event.message_id.isnot(None)).all()
+            for event in events:
+                self.add_view(RSVPView(event.id), message_id=event.message_id)
+            log.info("Re-registered %d RSVP view(s)", len(events))
+
+            # Re-register interview views for candidates still awaiting a decision.
+            candidacies = session.query(Candidacy).filter(Candidacy.message_id.isnot(None)).all()
+            for c in candidacies:
+                self.add_view(InterviewView(c.discord_id, c.callsign), message_id=c.message_id)
+            log.info("Re-registered %d interview view(s)", len(candidacies))
 
     async def on_ready(self):
         log.info("ValorLink is online as %s", self.user)

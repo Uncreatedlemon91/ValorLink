@@ -218,6 +218,90 @@ class Lifecycle(commands.Cog):
         await post_billboard(interaction.guild, f"**{callsign}** has returned from leave of absence.")
         await interaction.response.send_message(f"{member.mention} is back on active duty.", ephemeral=True)
 
+    # --- /reinstate ---
+
+    @app_commands.command(name="reinstate", description="Reinstate a discharged member back to active duty")
+    @is_officer()
+    async def reinstate(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        reason: str = "",
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        with SessionLocal() as session:
+            record = session.get(Member, member.id)
+            if record is None:
+                return await interaction.followup.send("That member has no personnel record.", ephemeral=True)
+            if record.status != "discharged":
+                return await interaction.followup.send(
+                    f"{record.callsign} is not discharged (current status: {record.status}).", ephemeral=True
+                )
+
+            callsign = record.callsign
+            thread_id = record.thread_id
+            record.status = "active"
+            record.last_active_date = datetime.utcnow()
+            entry = f"Reinstated by {interaction.user.display_name}."
+            if reason:
+                entry += f" Reason: {reason}"
+            session.add(ServiceHistoryEntry(
+                member_id=member.id,
+                entry=entry,
+                recorded_by=interaction.user.id,
+            ))
+            member_role_id = get_config(session).member_role_id
+            admin_log_id = get_config(session).admin_log_channel_id
+            session.commit()
+
+        # Restore member role
+        member_role = interaction.guild.get_role(member_role_id) if member_role_id else None
+        if member_role:
+            try:
+                await member.add_roles(member_role, reason="Reinstated by officer")
+            except discord.HTTPException:
+                pass
+
+        # Re-open dossier thread if it exists
+        if thread_id:
+            thread = interaction.guild.get_channel_or_thread(thread_id)
+            if thread is None:
+                try:
+                    thread = await interaction.guild.fetch_channel(thread_id)
+                except discord.HTTPException:
+                    thread = None
+            if thread:
+                try:
+                    await thread.edit(archived=False, locked=False, reason="Member reinstated")
+                except discord.HTTPException:
+                    pass
+
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, member.id)
+        except Exception:
+            pass
+
+        try:
+            from cogs.roster import refresh_roster
+            await refresh_roster(interaction.guild)
+        except Exception:
+            pass
+
+        # Admin log
+        log_channel = interaction.guild.get_channel(admin_log_id) if admin_log_id else None
+        if log_channel:
+            embed = base_embed(title="Member Reinstated", color=discord.Color.green().value)
+            embed.add_field(name="Member", value=member.mention, inline=True)
+            embed.add_field(name="Reinstated By", value=interaction.user.mention, inline=True)
+            if reason:
+                embed.add_field(name="Reason", value=reason, inline=False)
+            await log_channel.send(embed=embed)
+
+        await post_billboard(interaction.guild, f"**{callsign}** has been reinstated to active duty.")
+        await interaction.followup.send(f"**{callsign}** has been reinstated.", ephemeral=True)
+
     # --- Daily LOA expiry task ---
 
     @tasks.loop(hours=24)

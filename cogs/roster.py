@@ -7,7 +7,7 @@ from discord.ext import commands, tasks
 
 import config
 from db.base import SessionLocal
-from db.models import Member, ServiceHistoryEntry, Setting
+from db.models import AttendanceRecord, Candidacy, DisciplinaryRecord, Event, Member, ServiceHistoryEntry, Setting
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_officer
@@ -238,6 +238,93 @@ class Roster(commands.Cog):
     @inactivity_check.before_loop
     async def before_inactivity_check(self):
         await self.bot.wait_until_ready()
+
+    @app_commands.command(name="stats", description="View regiment health and activity statistics")
+    async def stats(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        with SessionLocal() as session:
+            cfg = get_config(session)
+
+            active_count = session.query(Member).filter(Member.status == "active").count()
+            loa_count = session.query(Member).filter(Member.status == "loa").count()
+            inactive_count = session.query(Member).filter(Member.status == "inactive").count()
+            discharged_count = session.query(Member).filter(Member.status == "discharged").count()
+
+            pending_count = session.query(Candidacy).count()
+
+            thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+            recent_enlistments = (
+                session.query(Member)
+                .filter(Member.joined_date >= thirty_days_ago)
+                .order_by(Member.joined_date.desc())
+                .limit(5)
+                .all()
+            )
+            recent_names = [f"**{m.callsign}** ({m.rank})" for m in recent_enlistments]
+
+            recent_events = (
+                session.query(Event)
+                .filter(Event.scheduled_at >= thirty_days_ago)
+                .all()
+            )
+            event_ids = [e.id for e in recent_events]
+            if event_ids:
+                total_att = (
+                    session.query(AttendanceRecord)
+                    .filter(AttendanceRecord.event_id.in_(event_ids))
+                    .count()
+                )
+                present_att = (
+                    session.query(AttendanceRecord)
+                    .filter(
+                        AttendanceRecord.event_id.in_(event_ids),
+                        AttendanceRecord.status == "present",
+                    )
+                    .count()
+                )
+                att_rate = f"{present_att}/{total_att} present" if total_att else "No attendance data"
+            else:
+                att_rate = "No events in last 30 days"
+
+            strike_count = (
+                session.query(DisciplinaryRecord)
+                .filter(DisciplinaryRecord.record_type == "strike")
+                .count()
+            )
+
+            regiment_name = cfg.regiment_name
+
+        embed = base_embed(title=f"{regiment_name} — Regiment Stats")
+
+        roster_lines = [
+            f"Active: **{active_count}**",
+            f"On Leave: **{loa_count}**",
+            f"Inactive: **{inactive_count}**",
+            f"Discharged: **{discharged_count}**",
+            f"Total Enrolled: **{active_count + loa_count + inactive_count}**",
+        ]
+        embed.add_field(name="Roster", value="\n".join(roster_lines), inline=True)
+
+        pipeline_lines = [
+            f"Pending Applicants: **{pending_count}**",
+            f"Recent Enlistments (30d): **{len(recent_enlistments)}**",
+        ]
+        embed.add_field(name="Pipeline", value="\n".join(pipeline_lines), inline=True)
+
+        embed.add_field(
+            name="30-Day Attendance",
+            value=f"Events: **{len(recent_events)}**\n{att_rate}",
+            inline=True,
+        )
+
+        if recent_names:
+            embed.add_field(name="Recent Enlistments", value="\n".join(recent_names), inline=False)
+
+        embed.add_field(name="Discipline", value=f"Total strikes on record: **{strike_count}**", inline=False)
+
+        embed.set_footer(text=f"As of {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC")
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):

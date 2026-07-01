@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from db.base import SessionLocal
-from db.models import Member, ServiceHistoryEntry
+from db.models import Candidacy, Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_recruiter
@@ -83,6 +83,9 @@ class InterviewView(discord.ui.View):
                     recorded_by=interaction.user.id,
                 )
             )
+            candidacy = session.get(Candidacy, self.applicant_id)
+            if candidacy:
+                session.delete(candidacy)
             session.commit()
 
         await sync_rank(applicant, self.callsign, None, default_rank)
@@ -133,6 +136,10 @@ class InterviewView(discord.ui.View):
             cfg = get_config(session)
             admin_log_channel_id = cfg.admin_log_channel_id
             regiment_name = cfg.regiment_name
+            candidacy = session.get(Candidacy, self.applicant_id)
+            if candidacy:
+                session.delete(candidacy)
+            session.commit()
 
         log_channel = interaction.guild.get_channel(admin_log_channel_id) if admin_log_channel_id else None
         if log_channel:
@@ -189,7 +196,18 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
         embed.add_field(name="Timezone", value=self.timezone.value, inline=True)
         embed.add_field(name="Reason", value=self.reason.value, inline=False)
 
-        await thread.send(content=ping, embed=embed, view=InterviewView(interaction.user.id, self.callsign.value))
+        view = InterviewView(interaction.user.id, self.callsign.value)
+        msg = await thread.send(content=ping, embed=embed, view=view)
+
+        with SessionLocal() as session:
+            session.merge(Candidacy(
+                discord_id=interaction.user.id,
+                callsign=self.callsign.value,
+                thread_id=thread.id,
+                message_id=msg.id,
+            ))
+            session.commit()
+
         await interaction.followup.send(f"Application received. Continue in {thread.mention}.", ephemeral=True)
 
 
