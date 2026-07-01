@@ -127,6 +127,12 @@ class Roster(commands.Cog):
         await refresh_roster(interaction.guild)
         await interaction.response.send_message(f"{member.mention} assigned to **{company}**.")
 
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, member.id)
+        except Exception:
+            pass
+
     @app_commands.command(name="roster", description="Force-refresh the live roster embed")
     @is_officer()
     async def roster_cmd(self, interaction: discord.Interaction):

@@ -103,6 +103,12 @@ class Awards(commands.Cog):
 
         await interaction.response.send_message(f"{member.mention} was awarded **{label}**.")
 
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, member.id)
+        except Exception:
+            pass
+
     @app_commands.command(name="award_remove", description="Revoke an award/qualification from a member")
     @app_commands.autocomplete(award_type=award_type_autocomplete)
     @is_officer()
@@ -126,6 +132,12 @@ class Awards(commands.Cog):
             session.commit()
 
         await interaction.response.send_message(f"Removed **{award_row.name}** from {member.mention}.")
+
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(interaction.guild, member.id)
+        except Exception:
+            pass
 
 
 async def setup(bot: commands.Bot):
