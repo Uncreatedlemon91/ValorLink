@@ -197,6 +197,53 @@ class Events(commands.Cog):
 
         await interaction.response.send_message(f"Marked {member.mention} as **{status.value}** for {event_row.name}.")
 
+    @app_commands.command(name="event_roster", description="List everyone who has RSVPed to an event")
+    @app_commands.autocomplete(event=event_name_autocomplete)
+    async def event_roster(self, interaction: discord.Interaction, event: str):
+        try:
+            event_id = int(event)
+        except ValueError:
+            return await interaction.response.send_message("Select an event from the autocomplete list.", ephemeral=True)
+
+        with SessionLocal() as session:
+            event_row = session.get(Event, event_id)
+            if event_row is None:
+                return await interaction.response.send_message("Event not found.", ephemeral=True)
+
+            records = (
+                session.query(AttendanceRecord)
+                .filter(AttendanceRecord.event_id == event_id)
+                .all()
+            )
+
+            buckets: dict[str, list[str]] = {"accepted": [], "tentative": [], "declined": []}
+            for r in records:
+                if r.status in buckets:
+                    member_row = session.get(Member, r.member_id)
+                    label = member_row.callsign if member_row else f"<@{r.member_id}>"
+                    buckets[r.status].append(label)
+
+        embed = base_embed(
+            title=f"RSVP: {event_row.name}",
+            description=f"{event_row.event_type} — {event_row.scheduled_at.strftime('%Y-%m-%d %H:%M UTC')}",
+        )
+        embed.add_field(
+            name=f"Accepted ({len(buckets['accepted'])})",
+            value="\n".join(buckets["accepted"]) or "—",
+            inline=True,
+        )
+        embed.add_field(
+            name=f"Tentative ({len(buckets['tentative'])})",
+            value="\n".join(buckets["tentative"]) or "—",
+            inline=True,
+        )
+        embed.add_field(
+            name=f"Declined ({len(buckets['declined'])})",
+            value="\n".join(buckets["declined"]) or "—",
+            inline=True,
+        )
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="attendance_history", description="View a member's attendance history")
     async def attendance_history(self, interaction: discord.Interaction, member: discord.Member | None = None):
         target = member or interaction.user
