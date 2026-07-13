@@ -183,6 +183,12 @@ class Roster(commands.Cog):
 
         await refresh_roster(after.guild)
 
+        try:
+            from cogs.personnel import refresh_personnel_file
+            await refresh_personnel_file(after.guild, after.id)
+        except Exception:
+            pass
+
     @tasks.loop(hours=24)
     async def inactivity_check(self):
         if not config.GUILD_ID:
