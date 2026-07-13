@@ -172,6 +172,8 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
             cfg = get_config(session)
             candidate_role_id = cfg.candidate_role_id
             recruiter_role_id = cfg.recruiter_role_id
+            officer_role_id = cfg.officer_role_id
+            admin_role_id = cfg.admin_role_id
 
         candidate_role = interaction.guild.get_role(candidate_role_id) if candidate_role_id else None
         if candidate_role:
@@ -185,6 +187,17 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
             type=discord.ChannelType.private_thread,
             invitable=False,
         )
+
+        # Add all recruiters/officers/admins to the private thread so they can see it.
+        staff_role_ids = {r for r in (recruiter_role_id, officer_role_id, admin_role_id) if r}
+        for guild_member in interaction.guild.members:
+            if guild_member.bot:
+                continue
+            if any(r.id in staff_role_ids for r in guild_member.roles):
+                try:
+                    await thread.add_user(guild_member)
+                except discord.HTTPException:
+                    pass
 
         recruiter_role = interaction.guild.get_role(recruiter_role_id) if recruiter_role_id else None
         ping = f"{interaction.user.mention} {recruiter_role.mention if recruiter_role else ''}".strip()
