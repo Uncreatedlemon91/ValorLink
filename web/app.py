@@ -14,27 +14,61 @@ then visit http://127.0.0.1:8000.
 """
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
 from db.base import SessionLocal
 from db.models import AwardType, Candidacy, Event, Member
 from utils import ranks as rank_utils
 from utils.settings import get_config, list_companies
+from web import auth, services
 
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="ValorLink Regimental Headquarters")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("WEB_SESSION_SECRET", "valorlink-dev-secret-change-me"),
+    same_site="lax",
+    https_only=os.getenv("WEB_HTTPS_ONLY", "").lower() in ("1", "true", "yes"),
+)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.include_router(auth.router)
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["tier_at_least"] = auth.tier_at_least
+templates.env.globals["TIER_RECRUITER"] = auth.TIER_RECRUITER
+templates.env.globals["TIER_OFFICER"] = auth.TIER_OFFICER
+templates.env.globals["TIER_ADMIN"] = auth.TIER_ADMIN
+
+
+@app.exception_handler(auth.NotAuthenticated)
+def _on_unauthenticated(request: Request, exc: auth.NotAuthenticated):
+    return RedirectResponse("/login", status_code=303)
+
+
+@app.exception_handler(auth.NotAuthorized)
+def _on_unauthorized(request: Request, exc: auth.NotAuthorized):
+    with SessionLocal() as session:
+        ctx = _base_context(request, session)
+    ctx["message"] = (
+        f"That action needs the {exc.required} rank or higher. "
+        "You're signed in, but without the standing for it."
+    )
+    return templates.TemplateResponse(request, "not_found.html", ctx, status_code=403)
+
+
+def _flash(request: Request, text: str, level: str = "ok"):
+    request.session.setdefault("flash", []).append({"level": level, "text": text})
 
 
 # --------------------------------------------------------------------------- #
@@ -103,14 +137,21 @@ def get_session():
 
 
 def _base_context(request: Request, session: Session) -> dict:
-    """Context every page needs: regiment identity for the banner + nav."""
+    """Context every page needs: regiment identity for the banner + nav,
+    plus the signed-in officer, a CSRF token, and any flashed messages."""
     cfg = get_config(session)
+    flash = request.session.pop("flash", [])
+    pending_recruits = session.query(Candidacy).count()
     return {
         "request": request,
         "regiment_name": cfg.regiment_name,
         "regiment_motto": cfg.regiment_motto,
         "brand_color": brand_hex(cfg.brand_color),
         "now": datetime.utcnow(),
+        "user": auth.current_user(request),
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": flash,
+        "pending_recruits": pending_recruits,
     }
 
 
@@ -238,6 +279,8 @@ def dossier(request: Request, discord_id: int, session: Session = Depends(get_se
         discipline=discipline,
         awards=awards,
         att_counts=dict(att_counts),
+        rank_options=services.rank_options(session),
+        company_options=services.company_options(session),
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
 
@@ -301,6 +344,181 @@ def honors(request: Request, session: Session = Depends(get_session)):
 
     ctx.update(catalogue=catalogue)
     return templates.TemplateResponse(request, "honors.html", ctx)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login(request: Request, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+    ctx["login_error"] = request.session.pop("login_error", None)
+    ctx["oauth_enabled"] = auth.OAUTH_ENABLED
+    ctx["dev_login_enabled"] = auth.DEV_LOGIN_ENABLED
+    if auth.DEV_LOGIN_ENABLED:
+        ctx["members"] = (
+            session.query(Member).order_by(Member.callsign).limit(50).all()
+        )
+    return templates.TemplateResponse(request, "login.html", ctx)
+
+
+@app.get("/recruits", response_class=HTMLResponse)
+def recruits(request: Request, session: Session = Depends(get_session)):
+    """The recruitment queue — applicants awaiting an approve/deny decision."""
+    ctx = _base_context(request, session)
+    ctx["can_decide"] = auth.tier_at_least(ctx["user"], auth.TIER_RECRUITER)
+    ctx["candidates"] = (
+        session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
+    )
+    return templates.TemplateResponse(request, "recruits.html", ctx)
+
+
+# --------------------------------------------------------------------------- #
+# Write endpoints — each mutates the DB and queues the Discord side-effect.
+# --------------------------------------------------------------------------- #
+
+def _do(request: Request, csrf: str, fn, *args, redirect: str):
+    """Run a service call with CSRF + error handling, then redirect back."""
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(redirect, status_code=303)
+    with SessionLocal() as session:
+        try:
+            message = fn(session, *args)
+            _flash(request, message, "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse(redirect, status_code=303)
+
+
+@app.post("/members/{discord_id}/rank")
+def post_rank(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    rank: str = Form(...),
+    citation: str = Form(""),
+    mode: str = Form("promote"),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    fn = services.set_rank if mode == "set" else services.change_rank
+    return _do(request, csrf, fn, actor, discord_id, rank, citation,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/company")
+def post_company(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    company: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.assign_company, actor, discord_id, company,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/service-log")
+def post_service_log(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    entry: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.service_log, actor, discord_id, entry,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/discipline")
+def post_discipline(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    record_type: str = Form(...),
+    reason: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.discipline, actor, discord_id, record_type, reason,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/discharge")
+def post_discharge(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    discharge_type: str = Form(...),
+    reason: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.discharge, actor, discord_id, discharge_type, reason,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/reinstate")
+def post_reinstate(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    reason: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.reinstate, actor, discord_id, reason,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/loa")
+def post_loa(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    days: int = Form(...),
+    reason: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.loa, actor, discord_id, days, reason,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/loa-end")
+def post_loa_end(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.loa_end, actor, discord_id,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/recruits/{discord_id}/approve")
+def post_approve(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.approve_candidate, actor, discord_id,
+               redirect="/recruits")
+
+
+@app.post("/recruits/{discord_id}/deny")
+def post_deny(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.deny_candidate, actor, discord_id,
+               redirect="/recruits")
 
 
 @app.get("/healthz")

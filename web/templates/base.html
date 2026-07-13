@@ -23,9 +23,25 @@
       <a href="/muster" class="{{ 'active' if path == '/muster' }}">Muster Roll</a>
       <a href="/muster-calls" class="{{ 'active' if path.startswith('/muster-calls') }}">Muster Calls</a>
       <a href="/honors" class="{{ 'active' if path == '/honors' }}">Honors</a>
+      <a href="/recruits" class="{{ 'active' if path == '/recruits' }}">Recruits{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
     </nav>
 
+    <div class="authbar">
+      {% if user %}
+        <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
+        <a href="/logout">Sign out</a>
+      {% else %}
+        <span class="who">Viewing as a visitor</span>
+        <a href="/login">Officer sign-in</a>
+      {% endif %}
+    </div>
+
     <main class="wrap">
+      {% if flash %}
+        <div class="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        </div>
+      {% endif %}
       {% block content %}{% endblock %}
 
       <footer>

@@ -76,15 +76,15 @@ No file edits or restarts required after the bot is online.
 
 ## Web UI — Regimental Headquarters
 
-A read-only companion website renders the same data the bot manages, styled
-as an 1860s regimental order book: the roster, full muster roll, personnel
-dossiers (service history, honors, conduct, attendance), muster calls
-(events) with turnout, and the honors catalogue. It opens the **same
-database** the bot uses (`DATABASE_URL`), so nothing extra needs wiring —
-whatever happens in Discord shows up here. It never writes to the database.
+A companion website styled as an 1860s regimental order book. It renders the
+same data the bot manages — the roster, full muster roll, personnel dossiers
+(service history, honors, conduct, attendance), muster calls with turnout,
+the honors catalogue — and it lets officers **run the regiment from the site
+instead of slash commands**. It opens the **same database** the bot uses
+(`DATABASE_URL`), so the site and Discord stay in lock-step.
 
 ```bash
-pip install -r web/requirements.txt   # fastapi, uvicorn, jinja2
+pip install -r web/requirements.txt   # fastapi, uvicorn, jinja2, ...
 uvicorn web.app:app --reload          # then visit http://127.0.0.1:8000
 ```
 
@@ -94,11 +94,58 @@ that already holds members):
 
 ```bash
 DATABASE_URL=sqlite:///demo.db python -m web.seed_demo
-DATABASE_URL=sqlite:///demo.db uvicorn web.app:app --reload
+DATABASE_URL=sqlite:///demo.db WEB_DEV_LOGIN=1 uvicorn web.app:app --reload
 ```
 
 The site picks up the regiment's name, motto, and brand colour from the
 same `/config` values the bot uses, so the banner matches your Discord.
+
+### Officer actions — the site drives the bot
+
+Signed-in officers see an **Orderly Room** on each dossier and a **Recruits**
+queue. From the web you can promote/step-down, silently correct a rank,
+transfer companies, add a service-log entry, issue notes/reprimands/strikes,
+grant or end leave, discharge and reinstate, and approve or deny applicants.
+
+The web app never touches Discord directly — only the bot can. So each action
+writes the data change to the database (including the same audit trail the
+slash commands write) and enqueues a `pending_actions` row describing the
+Discord side-effect. The bot's **bridge cog** drains that queue every few
+seconds and applies it — swapping roles, rewriting nicknames, refreshing the
+roster and dossier, posting to the billboard, DMing the member — reusing the
+exact helpers the slash commands use. **Both the bot and the web app must be
+running**, pointed at the same `DATABASE_URL`, for web actions to take effect
+in Discord. The slash commands still work; the website is an alternative
+control surface, not a replacement.
+
+Run the migration to create the queue table:
+
+```bash
+alembic upgrade head
+```
+
+### Signing in
+
+Permission tiers (admin > officer > recruiter) come from the same role IDs
+`/config set_role` stores, read from the officer's Discord roles at login.
+
+- **Discord OAuth2** (production). Set these in the environment to enable the
+  "Sign in with Discord" button:
+
+  | Variable | Purpose |
+  |---|---|
+  | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Your Discord application's OAuth2 credentials |
+  | `DISCORD_OAUTH_REDIRECT` | Full callback URL, e.g. `https://hq.example.com/auth/discord/callback` (add it to the app's OAuth redirects) |
+  | `WEB_SESSION_SECRET` | Secret for signing session cookies (set a long random value) |
+  | `WEB_HTTPS_ONLY` | `1` when served over HTTPS, so session cookies are marked secure |
+
+  The callback requests the `identify` and `guilds.members.read` scopes to
+  read the officer's roles in `GUILD_ID`.
+
+- **Dev login** (local only). Set `WEB_DEV_LOGIN=1` to enable an "act as"
+  form for development and testing. Leave it unset in production.
+
+Run the web test suite with `python -m web.tests.test_officer_actions`.
 
 ## Permission model
 

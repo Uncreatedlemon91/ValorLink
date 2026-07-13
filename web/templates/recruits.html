@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Recruitment Queue{% endblock %}
+{% block content %}
+
+<h2 class="section">At the Gate <span class="tally">{{ candidates|length }} awaiting decision</span></h2>
+<p class="lede">Applicants who have submitted an enlistment application in Discord.
+{% if can_decide %}Approve to enlist them — the bot assigns roles, sets their
+nickname, opens a dossier, and welcomes them.{% else %}Sign in as a recruiter to
+approve or deny.{% endif %}</p>
+
+{% if candidates %}
+  <table class="ledger">
+    <thead>
+      <tr><th>Applicant</th><th class="num">Applied</th>{% if can_decide %}<th class="num">Decision</th>{% endif %}</tr>
+    </thead>
+    <tbody>
+    {% for c in candidates %}
+      <tr>
+        <td class="callsign">{{ c.callsign }}</td>
+        <td class="num muted">{{ c.created_at|fmt_date }}</td>
+        {% if can_decide %}
+          <td class="num">
+            <div class="inline-actions">
+              <form method="post" action="/recruits/{{ c.discord_id }}/approve">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <button class="btn btn-approve" type="submit">Approve</button>
+              </form>
+              <form method="post" action="/recruits/{{ c.discord_id }}/deny"
+                    onsubmit="return confirm('Deny {{ c.callsign }}’s application?');">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <button class="btn btn-danger" type="submit">Deny</button>
+              </form>
+            </div>
+          </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="hollow">
+    <div class="mark">✵</div>
+    <h3>No Recruits Await</h3>
+    <p>There are no applications in the queue.</p>
+  </div>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

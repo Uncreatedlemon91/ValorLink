@@ -25,6 +25,7 @@ COGS = (
     "cogs.events",
     "cogs.moderation",
     "cogs.awards",
+    "cogs.bridge",
 )
 
 
