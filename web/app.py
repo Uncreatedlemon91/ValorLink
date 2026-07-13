@@ -34,7 +34,7 @@ from web import auth, services
 
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title="ValorLink Regimental Headquarters")
+app = FastAPI(title="ValorLink")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("WEB_SESSION_SECRET", "valorlink-dev-secret-change-me"),
