@@ -134,6 +134,11 @@ class InterviewView(discord.ui.View):
             content=f"Enlistment complete. {applicant.mention} is now active duty.", view=None
         )
 
+        try:
+            await interaction.channel.delete(reason="Interview concluded — enlistment approved")
+        except discord.HTTPException:
+            pass
+
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="recruit_deny")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self._is_recruiter(interaction.user):
@@ -167,6 +172,11 @@ class InterviewView(discord.ui.View):
                 pass
 
         await interaction.edit_original_response(content="Candidate denied.", view=None)
+
+        try:
+            await interaction.channel.delete(reason="Interview concluded — enlistment denied")
+        except discord.HTTPException:
+            pass
 
 
 class ApplyModal(discord.ui.Modal, title="Regiment Application"):
