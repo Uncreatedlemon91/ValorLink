@@ -105,7 +105,11 @@ same `/config` values the bot uses, so the banner matches your Discord.
 Signed-in officers see an **Orderly Room** on each dossier and a **Recruits**
 queue. From the web you can promote/step-down, silently correct a rank,
 transfer companies, add a service-log entry, issue notes/reprimands/strikes,
-grant or end leave, discharge and reinstate, and approve or deny applicants.
+grant or end leave, discharge and reinstate, approve or deny applicants,
+call musters (which the bot announces with RSVP buttons) and mark turnout,
+and confer or revoke honors. Admins also get a **Command Tent** for
+regiment identity, role/channel bindings, and the rank & company ladders —
+the web equivalent of `/config`, `/rank`, and `/company`.
 
 The web app never touches Discord directly — only the bot can. So each action
 writes the data change to the database (including the same audit trail the

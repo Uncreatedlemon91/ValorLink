@@ -27,9 +27,9 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from db.base import SessionLocal
-from db.models import AwardType, Candidacy, Event, Member
+from db.models import AwardType, Candidacy, Company, Event, Member, Rank
 from utils import ranks as rank_utils
-from utils.settings import get_config, list_companies
+from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
 from web import auth, services
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -281,6 +281,8 @@ def dossier(request: Request, discord_id: int, session: Session = Depends(get_se
         att_counts=dict(att_counts),
         rank_options=services.rank_options(session),
         company_options=services.company_options(session),
+        held_award_ids={a.award_type_id for a in member.awards},
+        award_catalogue=session.query(AwardType).order_by(AwardType.name).all(),
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
 
@@ -301,7 +303,7 @@ def events(request: Request, session: Session = Depends(get_session)):
     upcoming = [summarize(e) for e in reversed(all_events) if e.scheduled_at >= now]
     past = [summarize(e) for e in all_events if e.scheduled_at < now]
 
-    ctx.update(upcoming=upcoming, past=past)
+    ctx.update(upcoming=upcoming, past=past, event_types=services.EVENT_TYPES)
     return templates.TemplateResponse(request, "events.html", ctx)
 
 
@@ -323,7 +325,19 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
     for rec in event.attendance_records:
         counts[rec.status] += 1
 
-    ctx.update(event=event, records=records, counts=dict(counts))
+    active_members = (
+        session.query(Member)
+        .filter(Member.status.in_(("active", "loa")))
+        .order_by(Member.callsign)
+        .all()
+    )
+    ctx.update(
+        event=event,
+        records=records,
+        counts=dict(counts),
+        active_members=active_members,
+        attendance_statuses=services.ATTENDANCE_STATUSES,
+    )
     return templates.TemplateResponse(request, "event_detail.html", ctx)
 
 
@@ -344,6 +358,25 @@ def honors(request: Request, session: Session = Depends(get_session)):
 
     ctx.update(catalogue=catalogue)
     return templates.TemplateResponse(request, "honors.html", ctx)
+
+
+@app.get("/command-tent", response_class=HTMLResponse)
+def command_tent(request: Request, session: Session = Depends(get_session),
+                 user: dict = Depends(auth.require_admin)):
+    """Admin-only configuration: identity, roles, channels, ranks, companies."""
+    ctx = _base_context(request, session)
+    cfg = get_config(session)
+    ctx.update(
+        cfg=cfg,
+        role_keys=ROLE_KEYS,
+        channel_keys=CHANNEL_KEYS,
+        role_values={k: getattr(cfg, col) for k, col in ROLE_KEYS.items()},
+        channel_values={k: getattr(cfg, col) for k, col in CHANNEL_KEYS.items()},
+        brand_hex=brand_hex(cfg.brand_color),
+        ranks=list(reversed(rank_utils.all_ranks(session))),
+        companies=list_companies(session),
+    )
+    return templates.TemplateResponse(request, "command_tent.html", ctx)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -519,6 +552,223 @@ def post_deny(
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.deny_candidate, actor, discord_id,
                redirect="/recruits")
+
+
+# --- Events & attendance -------------------------------------------------- #
+@app.post("/muster-calls/create")
+def post_create_event(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    event_type: str = Form(...),
+    date: str = Form(...),
+    time: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/muster-calls", status_code=303)
+    actor = {"id": user["id"], "name": user["name"]}
+    with SessionLocal() as session:
+        try:
+            event_id = services.create_event(session, actor, name, event_type, f"{date} {time}")
+            _flash(request, f"'{name}' announced.", "ok")
+            return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse("/muster-calls", status_code=303)
+
+
+@app.post("/muster-calls/{event_id}/attendance")
+def post_attendance(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    member_id: int = Form(...),
+    status: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.mark_attendance, actor, event_id, member_id, status,
+               redirect=f"/muster-calls/{event_id}")
+
+
+# --- Awards --------------------------------------------------------------- #
+@app.post("/members/{discord_id}/award")
+def post_award(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    award_type_id: int = Form(...),
+    notes: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.grant_award, actor, discord_id, award_type_id, notes,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/award/{award_type_id}/revoke")
+def post_award_revoke(
+    request: Request,
+    discord_id: int,
+    award_type_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.revoke_award, actor, discord_id, award_type_id,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/honors/award-type")
+def post_award_type(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    emoji: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.create_award_type, actor, name, description, emoji,
+               redirect="/honors")
+
+
+# --- Admin: identity / roles / channels ----------------------------------- #
+@app.post("/admin/identity")
+def post_identity(
+    request: Request,
+    csrf: str = Form(...),
+    regiment_name: str = Form(...),
+    motto: str = Form(""),
+    brand_color: str = Form(...),
+    inactivity_days: int = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.update_identity,
+               regiment_name, motto, brand_color, inactivity_days,
+               redirect="/command-tent")
+
+
+async def _do_form(request: Request, fn, keys, redirect: str):
+    """For the role/channel forms, which submit a dynamic set of fields."""
+    form = await request.form()
+    if not auth.verify_csrf(request, form.get("csrf", "")):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(redirect, status_code=303)
+    values = {k: form.get(k, "") for k in keys}
+    with SessionLocal() as session:
+        try:
+            _flash(request, fn(session, values), "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse(redirect, status_code=303)
+
+
+@app.post("/admin/roles")
+async def post_roles(request: Request, user: dict = Depends(auth.require_admin)):
+    return await _do_form(request, services.set_roles, ROLE_KEYS, "/command-tent")
+
+
+@app.post("/admin/channels")
+async def post_channels(request: Request, user: dict = Depends(auth.require_admin)):
+    return await _do_form(request, services.set_channels, CHANNEL_KEYS, "/command-tent")
+
+
+# --- Admin: ranks --------------------------------------------------------- #
+@app.post("/admin/ranks/add")
+def post_rank_add(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    abbreviation: str = Form(...),
+    tier: str = Form(""),
+    role_id: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.rank_add, name, abbreviation, tier, role_id,
+               redirect="/command-tent")
+
+
+@app.post("/admin/ranks/{rank_id}/update")
+def post_rank_update(
+    request: Request,
+    rank_id: int,
+    csrf: str = Form(...),
+    abbreviation: str = Form(...),
+    tier: str = Form(""),
+    role_id: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.rank_update, rank_id, abbreviation, tier, role_id,
+               redirect="/command-tent")
+
+
+@app.post("/admin/ranks/{rank_id}/move")
+def post_rank_move(
+    request: Request,
+    rank_id: int,
+    csrf: str = Form(...),
+    direction: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.rank_move, rank_id, direction, redirect="/command-tent")
+
+
+@app.post("/admin/ranks/{rank_id}/remove")
+def post_rank_remove(
+    request: Request,
+    rank_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.rank_remove, rank_id, redirect="/command-tent")
+
+
+# --- Admin: companies ----------------------------------------------------- #
+@app.post("/admin/companies/add")
+def post_company_add(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    role_id: str = Form(""),
+    is_default: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.company_add, name, role_id, bool(is_default),
+               redirect="/command-tent")
+
+
+@app.post("/admin/companies/{company_id}/update")
+def post_company_update(
+    request: Request,
+    company_id: int,
+    csrf: str = Form(...),
+    role_id: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.company_update, company_id, role_id, redirect="/command-tent")
+
+
+@app.post("/admin/companies/{company_id}/default")
+def post_company_default(
+    request: Request,
+    company_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.company_set_default, company_id, redirect="/command-tent")
+
+
+@app.post("/admin/companies/{company_id}/remove")
+def post_company_remove(
+    request: Request,
+    company_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.company_remove, company_id, redirect="/command-tent")
 
 
 @app.get("/healthz")

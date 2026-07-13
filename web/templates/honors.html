@@ -5,6 +5,21 @@
 <h2 class="section">Honors &amp; Qualifications <span class="tally">{{ catalogue|length }} in the catalogue</span></h2>
 <p class="lede">Medals, commendations, and courses of instruction, with those who hold them.</p>
 
+{% if tier_at_least(user, TIER_OFFICER) %}
+<div class="order-card" style="max-width:640px; margin-top:14px;">
+  <h3 class="order-title">Institute a New Honor</h3>
+  <form class="orders" method="post" action="/honors/award-type">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field-row">
+      <div class="field" style="flex:3;"><label>Name</label><input name="name" required placeholder="Marksman's Cord"></div>
+      <div class="field" style="flex:1;"><label>Emoji <span class="opt">(opt.)</span></label><input name="emoji" placeholder="🎯"></div>
+    </div>
+    <div class="field"><label>Description <span class="opt">(optional)</span></label><input name="description" placeholder="Awarded for exemplary conduct at the firing line."></div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Add to catalogue</button></div>
+  </form>
+</div>
+{% endif %}
+
 {% if catalogue %}
   {% for row in catalogue %}
     <div class="company-block">

@@ -26,6 +26,30 @@
   {% endfor %}
 </div>
 
+{% if tier_at_least(user, TIER_OFFICER) %}
+<h2 class="section">Mark the Muster <span class="tally">record actual turnout</span></h2>
+<div class="order-card" style="max-width:640px;">
+  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/attendance">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field-row">
+      <div class="field">
+        <label>Member</label>
+        <select name="member_id" required>
+          {% for m in active_members %}<option value="{{ m.discord_id }}">{{ m.callsign }} ({{ m.rank }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Standing</label>
+        <select name="status">
+          {% for s in attendance_statuses %}<option value="{{ s }}">{{ s|attendance_label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Record</button></div>
+  </form>
+</div>
+{% endif %}
+
 <h2 class="section">The Reckoning</h2>
 {% if records %}
   <table class="ledger">

@@ -19,7 +19,7 @@ from discord.ext import commands, tasks
 
 import config
 from db.base import SessionLocal
-from db.models import Company, DisciplinaryRecord, Member, PendingAction, Rank
+from db.models import Company, DisciplinaryRecord, Event, Member, PendingAction, Rank
 from utils import queue
 from utils.billboard import post_billboard
 from utils.embeds import base_embed
@@ -323,6 +323,42 @@ class Bridge(commands.Cog):
         embed.add_field(name="Denied By", value=f"<@{p['actor_id']}>")
         await self._log_embed(guild, "admin_log_channel_id", embed)
         await self._dm(guild, p["discord_id"], p.get("dm", ""))
+
+    async def _do_announce_event(self, guild, p):
+        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets
+
+        with SessionLocal() as session:
+            event = session.get(Event, p["event_id"])
+            if event is None:
+                return
+            channel_id = get_config(session).announcements_channel_id
+            buckets = _rsvp_buckets(session, event.id)
+            embed = _build_event_embed(event, buckets)
+            event_id = event.id
+
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if channel is None:
+            return  # no announcements channel configured; the event still lives on the site
+
+        view = RSVPView(event_id)
+        message = await channel.send(embed=embed, view=view)
+
+        with SessionLocal() as session:
+            row = session.get(Event, event_id)
+            if row:
+                row.message_id = message.id
+                row.channel_id = channel.id
+                session.commit()
+
+        self.bot.add_view(view, message_id=message.id)
+
+    async def _do_award_granted(self, guild, p):
+        await self._refresh(guild, p["discord_id"])
+        if p.get("billboard"):
+            await post_billboard(guild, p["billboard"])
+
+    async def _do_award_revoked(self, guild, p):
+        await self._refresh(guild, p["discord_id"])
 
     async def _strip_managed_roles(self, member: discord.Member):
         with SessionLocal() as session:

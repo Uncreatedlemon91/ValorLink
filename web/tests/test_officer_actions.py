@@ -25,10 +25,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from db.base import Base, SessionLocal, engine  # noqa: E402
 from db.models import (  # noqa: E402
+    AttendanceRecord,
+    AwardType,
     Candidacy,
     Company,
     DisciplinaryRecord,
+    Event,
     Member,
+    MemberAward,
     PendingAction,
     Rank,
     ServiceHistoryEntry,
@@ -50,6 +54,7 @@ def _seed():
         s.add(Company(name="Bravo"))
         s.add(Member(discord_id=MEMBER_ID, callsign="Testman", rank="Private", company="Alpha", status="active"))
         s.add(Candidacy(discord_id=CANDIDATE_ID, callsign="Applicant"))
+        s.add(AwardType(name="Marksman", created_by=1))
         s.commit()
 
 
@@ -246,6 +251,147 @@ def test_bridge_dispatch_applies_discord_side_effects():
         bridge._finish(rid, None, error="boom")
     with SessionLocal() as s:
         assert s.get(PendingAction, rid).status == queue.FAILED
+
+
+def test_officer_can_create_event_and_mark_attendance():
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/muster-calls")
+    r = client.post("/muster-calls/create",
+                    data={"csrf": token, "name": "Regimental Drill", "event_type": "Drill",
+                          "date": "2099-01-02", "time": "19:00"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        ev = s.query(Event).filter_by(name="Regimental Drill").one()
+        event_id = ev.id
+    assert len(_actions(queue.ANNOUNCE_EVENT)) == 1
+
+    # mark attendance for the member
+    token = _csrf(client, f"/muster-calls/{event_id}")
+    client.post(f"/muster-calls/{event_id}/attendance",
+                data={"csrf": token, "member_id": MEMBER_ID, "status": "present"})
+    with SessionLocal() as s:
+        rec = s.query(AttendanceRecord).filter_by(event_id=event_id, member_id=MEMBER_ID).one()
+        assert rec.status == "present"
+
+
+def test_award_grant_and_revoke():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        award_id = s.query(AwardType).filter_by(name="Marksman").one().id
+
+    token = _csrf(client)
+    client.post(f"/members/{MEMBER_ID}/award",
+                data={"csrf": token, "award_type_id": award_id, "notes": "sharp eye"})
+    with SessionLocal() as s:
+        assert s.query(MemberAward).filter_by(member_id=MEMBER_ID, award_type_id=award_id).count() == 1
+    assert len(_actions(queue.AWARD_GRANTED)) == 1
+
+    token = _csrf(client)
+    client.post(f"/members/{MEMBER_ID}/award/{award_id}/revoke", data={"csrf": token})
+    with SessionLocal() as s:
+        assert s.query(MemberAward).filter_by(member_id=MEMBER_ID, award_type_id=award_id).count() == 0
+    assert len(_actions(queue.AWARD_REVOKED)) == 1
+
+
+def test_officer_can_create_award_type():
+    client = TestClient(app)
+    _login(client, "officer")
+    client.post("/honors/award-type",
+                data={"csrf": _csrf(client, "/honors"), "name": "Valor Medal", "emoji": "🎖️",
+                      "description": "For gallantry."})
+    with SessionLocal() as s:
+        assert s.query(AwardType).filter_by(name="Valor Medal").count() == 1
+
+
+def test_admin_updates_identity_roles_and_ladder():
+    client = TestClient(app)
+    _login(client, "admin")
+
+    # identity
+    client.post("/admin/identity",
+                data={"csrf": _csrf(client, "/command-tent"), "regiment_name": "1st Texas",
+                      "motto": "Onward", "brand_color": "#123456", "inactivity_days": "45"})
+    with SessionLocal() as s:
+        cfg = get_config(s)
+        assert cfg.regiment_name == "1st Texas" and cfg.brand_color == 0x123456
+        assert cfg.inactivity_days_threshold == 45
+
+    # roles
+    client.post("/admin/roles",
+                data={"csrf": _csrf(client, "/command-tent"), "admin": "111", "officer": "222"})
+    with SessionLocal() as s:
+        cfg = get_config(s)
+        assert cfg.admin_role_id == 111 and cfg.officer_role_id == 222
+
+    # add a rank, move it, then remove it
+    client.post("/admin/ranks/add",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Colonel", "abbreviation": "Col"})
+    with SessionLocal() as s:
+        rank = s.query(Rank).filter_by(name="Colonel").one()
+        assert rank.position == 3  # top of a 3-rung ladder
+        rid = rank.id
+    client.post(f"/admin/ranks/{rid}/move", data={"csrf": _csrf(client, "/command-tent"), "direction": "down"})
+    with SessionLocal() as s:
+        assert s.query(Rank).filter_by(name="Colonel").one().position == 2
+    client.post(f"/admin/ranks/{rid}/remove", data={"csrf": _csrf(client, "/command-tent")})
+    with SessionLocal() as s:
+        assert s.query(Rank).filter_by(name="Colonel").count() == 0
+
+
+def test_admin_company_default_and_add():
+    client = TestClient(app)
+    _login(client, "admin")
+    with SessionLocal() as s:
+        bravo_id = s.query(Company).filter_by(name="Bravo").one().id
+    client.post(f"/admin/companies/{bravo_id}/default", data={"csrf": _csrf(client, "/command-tent")})
+    with SessionLocal() as s:
+        defaults = [c.name for c in s.query(Company).filter_by(is_default=True).all()]
+        assert defaults == ["Bravo"]
+    client.post("/admin/companies/add",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Skirmishers", "is_default": "1"})
+    with SessionLocal() as s:
+        assert [c.name for c in s.query(Company).filter_by(is_default=True).all()] == ["Skirmishers"]
+
+
+def test_command_tent_is_admin_only():
+    client = TestClient(app)
+    _login(client, "officer")
+    assert client.get("/command-tent", follow_redirects=False).status_code == 403
+    r = client.post("/admin/identity",
+                    data={"csrf": "x", "regiment_name": "X", "brand_color": "#000000", "inactivity_days": "30"},
+                    follow_redirects=False)
+    assert r.status_code == 403
+
+
+def test_bridge_announces_event_to_channel():
+    from cogs.bridge import Bridge
+
+    with SessionLocal() as s:
+        get_config(s).announcements_channel_id = 555
+        ev = Event(name="Battle", event_type="Battle",
+                   scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1)
+        s.add(ev)
+        s.commit()
+        event_id = ev.id
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    guild = MagicMock()
+    channel = AsyncMock()
+    channel.id = 555
+    sent = MagicMock()
+    sent.id = 987654321
+    channel.send.return_value = sent
+    guild.get_channel.return_value = channel
+
+    asyncio.run(bridge._dispatch(guild, queue.ANNOUNCE_EVENT, {"event_id": event_id}))
+
+    channel.send.assert_awaited()
+    bridge.bot.add_view.assert_called()
+    with SessionLocal() as s:
+        assert s.get(Event, event_id).message_id == 987654321
 
 
 def _run_all():

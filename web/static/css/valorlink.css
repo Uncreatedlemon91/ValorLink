@@ -497,6 +497,41 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .inline-actions { display: inline-flex; gap: 8px; justify-content: flex-end; }
 .inline-actions form { display: inline; margin: 0; }
 
+.field-row { display: flex; gap: 12px; }
+.field-row .field { flex: 1; }
+.checkline { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink-soft); }
+.checkline input { width: auto; }
+
+/* Held-honor revoke chips on the dossier */
+.held-honors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.held-honors form { margin: 0; }
+.chip-revoke {
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: rgba(184,147,63,0.14);
+  border: 1px solid var(--brass);
+  border-radius: 1px;
+  padding: 4px 10px;
+}
+.chip-revoke:hover { color: var(--paper); background: var(--oxblood); border-color: var(--oxblood); }
+
+/* Small buttons + inline row-forms (Command Tent tables) */
+.btn-small { padding: 3px 9px; font-size: 10px; letter-spacing: 0.1em; }
+.rowform { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
+.rowform input {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(255,253,246,0.8);
+  border: 1px solid var(--rule-strong);
+  border-radius: 1px;
+  padding: 5px 7px;
+}
+.admin-table td { vertical-align: middle; }
+.admin-table .inline-actions form { margin: 0; }
+
 @media (max-width: 560px) {
   .dossier-head .facts { text-align: left; }
   .ledger { font-size: 14px; }

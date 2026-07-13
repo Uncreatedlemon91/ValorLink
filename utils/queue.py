@@ -24,6 +24,9 @@ LOA_END = "loa_end"                     # billboard
 APPROVE_CANDIDATE = "approve_candidate" # roles + dossier thread + welcome DM
 DENY_CANDIDATE = "deny_candidate"       # admin log + rejection DM
 REFRESH_PERSONNEL = "refresh_personnel" # re-render the dossier embed only
+ANNOUNCE_EVENT = "announce_event"       # post the RSVP announcement + register view
+AWARD_GRANTED = "award_granted"         # refresh dossier + billboard
+AWARD_REVOKED = "award_revoked"         # refresh dossier
 
 # Statuses
 PENDING = "pending"
