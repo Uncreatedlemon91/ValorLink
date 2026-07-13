@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ regiment_name }}{% endblock %} — Regimental Headquarters</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+  <style>:root { --seal: {{ brand_color }}; }</style>
+</head>
+<body>
+  <div class="sheet" style="--seal: {{ brand_color }};">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>{{ regiment_name }}</h1>
+      {% if regiment_motto %}<p class="motto">“{{ regiment_motto }}”</p>{% endif %}
+      <div class="estd">Regimental Headquarters &middot; Order Book</div>
+    </header>
+
+    <nav class="rail">
+      {% set path = request.url.path %}
+      <a href="/" class="{{ 'active' if path == '/' }}">Headquarters</a>
+      <a href="/roster" class="{{ 'active' if path == '/roster' }}">Roster</a>
+      <a href="/muster" class="{{ 'active' if path == '/muster' }}">Muster Roll</a>
+      <a href="/muster-calls" class="{{ 'active' if path.startswith('/muster-calls') }}">Muster Calls</a>
+      <a href="/honors" class="{{ 'active' if path == '/honors' }}">Honors</a>
+    </nav>
+
+    <main class="wrap">
+      {% block content %}{% endblock %}
+
+      <footer>
+        {{ regiment_name }}
+        <span class="fine">Compiled by ValorLink &middot; {{ now.strftime('%d %B %Y') }} &middot; all times reckoned in U.T.C.</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

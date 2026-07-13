@@ -1,0 +1,374 @@
+/* =========================================================================
+   ValorLink Regimental Headquarters — 1860s field-office aesthetic.
+   Aged paper, iron-gall ink, brass and oxblood. No external assets: the
+   parchment is painted with gradients so the site is fully self-contained.
+   ========================================================================= */
+
+:root {
+  --paper:        #f2e7cf;
+  --paper-2:      #e8d9b5;
+  --paper-edge:   #d8c39a;
+  --ink:          #2b2117;
+  --ink-soft:     #5a4a35;
+  --ink-faint:    #877258;
+  --rule:         #c3ab7e;
+  --rule-strong:  #9c8253;
+  --oxblood:      #7c1f2b;
+  --union:        #1f3a5f;
+  --brass:        #9c7a33;
+  --brass-bright: #b8933f;
+  --seal:         var(--oxblood);      /* overridden per-regiment inline */
+
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+           "URW Palladio L", Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--serif);
+  color: var(--ink);
+  line-height: 1.55;
+  background-color: #cdb78f;
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(255,250,235,0.55), transparent 60%),
+    radial-gradient(140% 120% at 50% 120%, rgba(60,40,20,0.22), transparent 55%),
+    repeating-linear-gradient(0deg, rgba(120,90,50,0.035) 0 2px, transparent 2px 4px);
+}
+
+a { color: var(--oxblood); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.sheet {
+  max-width: 1040px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background:
+    radial-gradient(90% 60% at 20% 0%, rgba(255,252,240,0.6), transparent 55%),
+    radial-gradient(80% 70% at 100% 100%, rgba(150,110,60,0.16), transparent 55%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+  box-shadow: 0 0 2px rgba(0,0,0,0.4), 0 24px 60px rgba(40,25,10,0.45);
+  border-left: 1px solid var(--paper-edge);
+  border-right: 1px solid var(--paper-edge);
+  position: relative;
+}
+
+/* aged vignette on the paper edges */
+.sheet::before {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(80,55,25,0.28), inset 0 0 14px rgba(70,45,20,0.35);
+  z-index: 5;
+}
+
+.wrap { padding: 0 clamp(18px, 5vw, 56px) 64px; position: relative; z-index: 6; }
+
+/* ---- Banner ------------------------------------------------------------- */
+
+.banner {
+  text-align: center;
+  padding: 34px 24px 22px;
+  border-bottom: 3px double var(--rule-strong);
+  position: relative;
+  z-index: 6;
+}
+
+.banner .crest {
+  font-size: 30px;
+  color: var(--seal);
+  letter-spacing: 0.5em;
+  margin-left: 0.5em;
+}
+
+.banner h1 {
+  font-size: clamp(28px, 5vw, 46px);
+  margin: 8px 0 4px;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255,250,235,0.5);
+}
+
+.banner .motto {
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: clamp(14px, 2.4vw, 18px);
+  margin: 2px 0 0;
+}
+
+.banner .estd {
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ---- Navigation --------------------------------------------------------- */
+
+nav.rail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 0;
+  padding: 12px 0 0;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+  z-index: 6;
+}
+nav.rail a {
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  padding: 8px 16px;
+  border-bottom: 2px solid transparent;
+}
+nav.rail a:hover { color: var(--ink); text-decoration: none; }
+nav.rail a.active {
+  color: var(--oxblood);
+  border-bottom-color: var(--seal);
+}
+
+/* ---- Typography scaffolding -------------------------------------------- */
+
+h2.section {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 40px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+h2.section::before { content: "❧"; color: var(--seal); font-size: 15px; }
+h2.section .tally {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
+}
+
+.lede { color: var(--ink-soft); font-style: italic; margin: 6px 0 0; }
+
+.ornament {
+  text-align: center;
+  color: var(--rule-strong);
+  letter-spacing: 0.6em;
+  margin: 40px 0 8px;
+  font-size: 14px;
+}
+
+/* ---- Stat medallions ---------------------------------------------------- */
+
+.tally-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+.medallion {
+  text-align: center;
+  padding: 18px 10px 14px;
+  border: 1px solid var(--rule-strong);
+  background: linear-gradient(180deg, rgba(255,252,242,0.5), rgba(210,185,140,0.22));
+  box-shadow: inset 0 0 0 3px rgba(255,250,238,0.35);
+}
+.medallion .num {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1;
+}
+.medallion .lbl {
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.medallion.seal .num { color: var(--seal); }
+
+/* ---- Cards / columns ---------------------------------------------------- */
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+@media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+
+.card {
+  border: 1px solid var(--rule);
+  padding: 4px 18px 14px;
+  background: rgba(255,251,240,0.32);
+}
+
+/* ---- Ledger tables ------------------------------------------------------ */
+
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: 15px;
+}
+.ledger caption {
+  caption-side: top;
+  text-align: left;
+  font-style: italic;
+  color: var(--ink-faint);
+  padding: 6px 0;
+}
+.ledger th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1.5px solid var(--rule-strong);
+  white-space: nowrap;
+}
+.ledger td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.ledger tbody tr:hover { background: rgba(156,122,51,0.09); }
+.ledger td.num, .ledger th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ledger .callsign { font-weight: 700; }
+.ledger .muted { color: var(--ink-faint); }
+
+.company-block { margin-top: 26px; }
+.company-block > .company-name {
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--union);
+  margin: 0 0 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.company-block .company-name .count { color: var(--ink-faint); font-size: 12px; letter-spacing: 0.1em; }
+
+/* ---- Badges ------------------------------------------------------------- */
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 1px;
+  white-space: nowrap;
+}
+.badge.abbr { border-style: solid; color: var(--brass); font-weight: 700; }
+.s-active    { color: #3f6b3a; }
+.s-loa       { color: var(--brass); }
+.s-inactive  { color: var(--ink-faint); }
+.s-discharged{ color: var(--oxblood); }
+
+.rec-note   { color: var(--union); }
+.rec-warn   { color: var(--brass); }
+.rec-strike { color: var(--oxblood); }
+
+/* ---- Dossier ------------------------------------------------------------ */
+
+.dossier-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-bottom: 3px double var(--rule-strong);
+  padding-bottom: 16px;
+  margin-top: 12px;
+}
+.dossier-head .name { flex: 1 1 260px; }
+.dossier-head .name .rank {
+  font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-faint);
+}
+.dossier-head .name h1 {
+  font-size: clamp(26px, 5vw, 40px);
+  margin: 4px 0 6px;
+  letter-spacing: 0.03em;
+}
+.dossier-head .facts { text-align: right; font-size: 13px; color: var(--ink-soft); }
+.dossier-head .facts div { margin: 2px 0; }
+.dossier-head .facts .k { color: var(--ink-faint); letter-spacing: 0.1em; font-size: 10px; text-transform: uppercase; }
+
+.entry-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.entry-list li {
+  padding: 10px 0 10px 18px;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+.entry-list li::before {
+  content: "•"; color: var(--seal); position: absolute; left: 0; top: 9px;
+}
+.entry-list .date {
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  display: block; margin-bottom: 2px;
+}
+.empty { color: var(--ink-faint); font-style: italic; padding: 12px 0; }
+
+.medal-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.medal {
+  border: 1px solid var(--brass);
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(184,147,63,0.14), rgba(255,250,235,0.2));
+  min-width: 120px;
+}
+.medal .m-name { font-weight: 700; }
+.medal .m-date { font-size: 11px; color: var(--ink-faint); }
+
+/* ---- Buttons / links ---------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  padding: 6px 14px;
+  background: rgba(255,251,240,0.4);
+}
+.btn:hover { background: rgba(156,122,51,0.14); text-decoration: none; }
+.backlink { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+
+/* ---- Footer ------------------------------------------------------------- */
+
+footer {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 3px double var(--rule-strong);
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+footer .fine { display: block; margin-top: 6px; font-size: 10px; letter-spacing: 0.1em; }
+
+/* ---- Empty state -------------------------------------------------------- */
+
+.hollow {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-soft);
+}
+.hollow .mark { font-size: 40px; color: var(--rule-strong); }
+.hollow h3 { letter-spacing: 0.1em; text-transform: uppercase; font-size: 15px; margin: 12px 0 6px; }
+
+@media (max-width: 560px) {
+  .dossier-head .facts { text-align: left; }
+  .ledger { font-size: 14px; }
+  .ledger th, .ledger td { padding: 7px 6px; }
+}

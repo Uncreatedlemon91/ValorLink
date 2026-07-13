@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Roster{% endblock %}
+{% block content %}
+
+<h2 class="section">Roster of the Present <span class="tally">{{ active_total }} present for duty</span></h2>
+<p class="lede">Ordered by company, and within each by seniority of rank.</p>
+
+{% if companies %}
+  {% for company in companies %}
+    <div class="company-block">
+      <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
+      <table class="ledger">
+        <thead>
+          <tr><th>Rank</th><th>Callsign</th><th class="num">Enrolled</th></tr>
+        </thead>
+        <tbody>
+        {% for m in company.members %}
+          <tr>
+            <td>{{ m.rank }}</td>
+            <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+            <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="hollow">
+    <div class="mark">✶</div>
+    <h3>The Roster Stands Empty</h3>
+    <p>No soul is presently borne on the rolls as fit for duty.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

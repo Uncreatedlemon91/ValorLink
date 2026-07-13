@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Headquarters{% endblock %}
+{% block content %}
+
+<div class="tally-row">
+  <div class="medallion seal">
+    <div class="num">{{ counts.active }}</div>
+    <div class="lbl">Present for Duty</div>
+  </div>
+  <div class="medallion">
+    <div class="num">{{ counts.enrolled }}</div>
+    <div class="lbl">Total Enrolled</div>
+  </div>
+  <div class="medallion">
+    <div class="num">{{ counts.loa }}</div>
+    <div class="lbl">On Furlough</div>
+  </div>
+  <div class="medallion">
+    <div class="num">{{ counts.inactive }}</div>
+    <div class="lbl">Absent</div>
+  </div>
+  <div class="medallion">
+    <div class="num">{{ pending|length }}</div>
+    <div class="lbl">At the Gate</div>
+  </div>
+  <div class="medallion">
+    <div class="num">{{ company_count }}</div>
+    <div class="lbl">Companies</div>
+  </div>
+</div>
+
+<div class="cols" style="margin-top: 34px;">
+  <section>
+    <h2 class="section">Next Muster Calls</h2>
+    {% if upcoming %}
+      <table class="ledger">
+        <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th></tr></thead>
+        <tbody>
+        {% for ev in upcoming %}
+          <tr>
+            <td class="callsign"><a href="/muster-calls/{{ ev.id }}">{{ ev.name }}</a></td>
+            <td class="muted">{{ ev.event_type }}</td>
+            <td class="num">{{ ev.scheduled_at|fmt_date(true) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No calls are presently on the books.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="section">At the Gate</h2>
+    {% if pending %}
+      <table class="ledger">
+        <thead><tr><th>Applicant</th><th class="num">Applied</th></tr></thead>
+        <tbody>
+        {% for c in pending %}
+          <tr>
+            <td class="callsign">{{ c.callsign }}</td>
+            <td class="num muted">{{ c.created_at|fmt_date }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No recruits await interview.</p>
+    {% endif %}
+  </section>
+</div>
+
+<h2 class="section">Lately Enlisted <span class="tally">past thirty days</span></h2>
+{% if recent_enlistments %}
+  <table class="ledger">
+    <thead><tr><th>Callsign</th><th>Rank</th><th>Company</th><th class="num">Enrolled</th></tr></thead>
+    <tbody>
+    {% for m in recent_enlistments %}
+      <tr>
+        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+        <td>{{ m.rank }}</td>
+        <td class="muted">{{ m.company }}</td>
+        <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="empty">No new enlistments have been mustered this month.</p>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+{% endblock %}

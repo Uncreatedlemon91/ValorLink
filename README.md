@@ -74,6 +74,32 @@ No file edits or restarts required after the bot is online.
    fresh setup; every command after that can use the role you just
    configured.
 
+## Web UI — Regimental Headquarters
+
+A read-only companion website renders the same data the bot manages, styled
+as an 1860s regimental order book: the roster, full muster roll, personnel
+dossiers (service history, honors, conduct, attendance), muster calls
+(events) with turnout, and the honors catalogue. It opens the **same
+database** the bot uses (`DATABASE_URL`), so nothing extra needs wiring —
+whatever happens in Discord shows up here. It never writes to the database.
+
+```bash
+pip install -r web/requirements.txt   # fastapi, uvicorn, jinja2
+uvicorn web.app:app --reload          # then visit http://127.0.0.1:8000
+```
+
+Want to preview it without a live server behind it? Seed a throwaway
+database with a plausible regiment first (it refuses to touch a database
+that already holds members):
+
+```bash
+DATABASE_URL=sqlite:///demo.db python -m web.seed_demo
+DATABASE_URL=sqlite:///demo.db uvicorn web.app:app --reload
+```
+
+The site picks up the regiment's name, motto, and brand colour from the
+same `/config` values the bot uses, so the banner matches your Discord.
+
 ## Permission model
 
 Commands are gated by role IDs stored in the database and set via

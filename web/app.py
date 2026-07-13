@@ -1,0 +1,308 @@
+"""ValorLink Regimental Headquarters — a period-styled web UI over the same
+database the Discord bot uses.
+
+This is a read-only companion to the bot. It opens the very same SQLite
+database (``DATABASE_URL``, default ``sqlite:///valorlink.db``) through the
+bot's own SQLAlchemy models, so whatever the regiment does in Discord is
+reflected here with no extra wiring. Nothing here writes to the database.
+
+Run it with::
+
+    uvicorn web.app:app --reload
+
+then visit http://127.0.0.1:8000.
+"""
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from db.base import SessionLocal
+from db.models import AwardType, Candidacy, Event, Member
+from utils import ranks as rank_utils
+from utils.settings import get_config, list_companies
+
+BASE_DIR = Path(__file__).resolve().parent
+
+app = FastAPI(title="ValorLink Regimental Headquarters")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+# --------------------------------------------------------------------------- #
+# Presentation helpers
+# --------------------------------------------------------------------------- #
+
+STATUS_LABELS = {
+    "active": "Present for Duty",
+    "loa": "On Furlough",
+    "inactive": "Absent",
+    "discharged": "Discharged",
+}
+
+RECORD_LABELS = {"note": "Note", "warn": "Reprimand", "strike": "Strike"}
+
+ATTENDANCE_LABELS = {
+    "accepted": "Answered the Call",
+    "tentative": "Uncertain",
+    "declined": "Sends Regrets",
+    "present": "Mustered",
+    "absent": "Absent",
+    "excused": "Excused",
+    "pending": "Awaiting Reply",
+}
+
+EVENT_TYPE_LABELS = {"Drill": "Drill", "Battle": "Battle", "Operation": "Operation"}
+
+
+def status_label(status: str) -> str:
+    return STATUS_LABELS.get(status, status.title() if status else "Unknown")
+
+
+def record_label(kind: str) -> str:
+    return RECORD_LABELS.get(kind, kind.title() if kind else "Record")
+
+
+def attendance_label(status: str) -> str:
+    return ATTENDANCE_LABELS.get(status, status.title() if status else "—")
+
+
+def brand_hex(color: int | None) -> str:
+    """The regiment's stored brand colour (an int) as a CSS hex string."""
+    if not color:
+        return "#7c1f2b"
+    return f"#{color & 0xFFFFFF:06x}"
+
+
+def fmt_date(value: datetime | None, with_time: bool = False) -> str:
+    if not value:
+        return "—"
+    return value.strftime("%d %b %Y" + (" · %H:%M" if with_time else ""))
+
+
+templates.env.filters["status_label"] = status_label
+templates.env.filters["record_label"] = record_label
+templates.env.filters["attendance_label"] = attendance_label
+templates.env.filters["fmt_date"] = fmt_date
+
+
+def get_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def _base_context(request: Request, session: Session) -> dict:
+    """Context every page needs: regiment identity for the banner + nav."""
+    cfg = get_config(session)
+    return {
+        "request": request,
+        "regiment_name": cfg.regiment_name,
+        "regiment_motto": cfg.regiment_motto,
+        "brand_color": brand_hex(cfg.brand_color),
+        "now": datetime.utcnow(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Routes
+# --------------------------------------------------------------------------- #
+
+
+@app.get("/", response_class=HTMLResponse)
+def headquarters(request: Request, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+
+    counts = {
+        "active": session.query(Member).filter(Member.status == "active").count(),
+        "loa": session.query(Member).filter(Member.status == "loa").count(),
+        "inactive": session.query(Member).filter(Member.status == "inactive").count(),
+        "discharged": session.query(Member).filter(Member.status == "discharged").count(),
+    }
+    counts["enrolled"] = counts["active"] + counts["loa"] + counts["inactive"]
+
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    recent_enlistments = (
+        session.query(Member)
+        .filter(Member.joined_date >= thirty_days_ago)
+        .order_by(Member.joined_date.desc())
+        .limit(6)
+        .all()
+    )
+
+    upcoming = (
+        session.query(Event)
+        .filter(Event.scheduled_at >= datetime.utcnow())
+        .order_by(Event.scheduled_at.asc())
+        .limit(4)
+        .all()
+    )
+
+    pending = session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
+
+    companies = list_companies(session)
+    ranks = rank_utils.all_ranks(session)
+
+    ctx.update(
+        counts=counts,
+        recent_enlistments=recent_enlistments,
+        upcoming=upcoming,
+        pending=pending,
+        company_count=len(companies),
+        rank_count=len(ranks),
+    )
+    return templates.TemplateResponse(request, "headquarters.html", ctx)
+
+
+@app.get("/roster", response_class=HTMLResponse)
+def roster(request: Request, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+
+    members = session.query(Member).filter(Member.status == "active").all()
+    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+
+    by_company: dict[str, list[Member]] = defaultdict(list)
+    for m in members:
+        by_company[m.company].append(m)
+
+    configured = [c.name for c in list_companies(session)]
+    order = configured + [c for c in by_company if c not in configured]
+
+    companies = []
+    for name in order:
+        roster_members = by_company.get(name)
+        if not roster_members:
+            continue
+        roster_members.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
+        companies.append({"name": name, "members": roster_members})
+
+    ctx.update(companies=companies, active_total=len(members))
+    return templates.TemplateResponse(request, "roster.html", ctx)
+
+
+@app.get("/muster", response_class=HTMLResponse)
+def muster(request: Request, session: Session = Depends(get_session)):
+    """The full muster roll — every enrolled soul, whatever their standing."""
+    ctx = _base_context(request, session)
+
+    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+    status_rank = {"active": 0, "loa": 1, "inactive": 2, "discharged": 3}
+    members = session.query(Member).all()
+    members.sort(
+        key=lambda m: (
+            status_rank.get(m.status, 9),
+            -rank_order.get(m.rank, -1),
+            m.callsign.lower(),
+        )
+    )
+
+    ctx.update(members=members, total=len(members))
+    return templates.TemplateResponse(request, "muster.html", ctx)
+
+
+@app.get("/dossier/{discord_id}", response_class=HTMLResponse)
+def dossier(request: Request, discord_id: int, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+
+    member = session.get(Member, discord_id)
+    if member is None:
+        ctx["message"] = "No personnel record bears that number."
+        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
+
+    service = sorted(member.service_history, key=lambda e: e.date or datetime.min, reverse=True)
+    discipline = sorted(
+        member.disciplinary_records, key=lambda r: r.date or datetime.min, reverse=True
+    )
+    awards = sorted(member.awards, key=lambda a: a.date_awarded or datetime.min, reverse=True)
+
+    att_counts: dict[str, int] = defaultdict(int)
+    for rec in member.attendance_records:
+        att_counts[rec.status] += 1
+
+    rank = rank_utils.rank_by_name(session, member.rank)
+
+    ctx.update(
+        member=member,
+        rank=rank,
+        service=service,
+        discipline=discipline,
+        awards=awards,
+        att_counts=dict(att_counts),
+    )
+    return templates.TemplateResponse(request, "dossier.html", ctx)
+
+
+@app.get("/muster-calls", response_class=HTMLResponse)
+def events(request: Request, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+    now = datetime.utcnow()
+
+    all_events = session.query(Event).order_by(Event.scheduled_at.desc()).all()
+
+    def summarize(ev: Event) -> dict:
+        counts: dict[str, int] = defaultdict(int)
+        for rec in ev.attendance_records:
+            counts[rec.status] += 1
+        return {"event": ev, "counts": dict(counts), "total": len(ev.attendance_records)}
+
+    upcoming = [summarize(e) for e in reversed(all_events) if e.scheduled_at >= now]
+    past = [summarize(e) for e in all_events if e.scheduled_at < now]
+
+    ctx.update(upcoming=upcoming, past=past)
+    return templates.TemplateResponse(request, "events.html", ctx)
+
+
+@app.get("/muster-calls/{event_id}", response_class=HTMLResponse)
+def event_detail(request: Request, event_id: int, session: Session = Depends(get_session)):
+    ctx = _base_context(request, session)
+
+    event = session.get(Event, event_id)
+    if event is None:
+        ctx["message"] = "No such muster call is recorded."
+        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
+
+    records = []
+    for rec in event.attendance_records:
+        records.append({"record": rec, "member": session.get(Member, rec.member_id)})
+    records.sort(key=lambda r: (r["member"].callsign.lower() if r["member"] else "~"))
+
+    counts: dict[str, int] = defaultdict(int)
+    for rec in event.attendance_records:
+        counts[rec.status] += 1
+
+    ctx.update(event=event, records=records, counts=dict(counts))
+    return templates.TemplateResponse(request, "event_detail.html", ctx)
+
+
+@app.get("/honors", response_class=HTMLResponse)
+def honors(request: Request, session: Session = Depends(get_session)):
+    """Awards & qualifications catalogue with their recipients."""
+    ctx = _base_context(request, session)
+
+    award_types = session.query(AwardType).order_by(AwardType.name).all()
+    catalogue = []
+    for at in award_types:
+        holders = []
+        for grant in at.awards:
+            member = session.get(Member, grant.member_id)
+            holders.append({"grant": grant, "member": member})
+        holders.sort(key=lambda h: (h["member"].callsign.lower() if h["member"] else "~"))
+        catalogue.append({"award": at, "holders": holders})
+
+    ctx.update(catalogue=catalogue)
+    return templates.TemplateResponse(request, "honors.html", ctx)
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}

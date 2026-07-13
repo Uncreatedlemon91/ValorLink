@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ member.callsign }}{% endblock %}
+{% block content %}
+
+<p style="margin-top:16px;"><a class="backlink" href="/muster">‹ back to the muster roll</a></p>
+
+<div class="dossier-head">
+  <div class="name">
+    <div class="rank">{{ member.rank }}{% if rank and rank.abbreviation %} &middot; {{ rank.abbreviation }}{% endif %}</div>
+    <h1>{{ member.callsign }}</h1>
+    <span class="badge s-{{ member.status }}">{{ member.status|status_label }}</span>
+  </div>
+  <div class="facts">
+    <div><span class="k">Company</span><br>{{ member.company }}</div>
+    <div><span class="k">Enrolled</span><br>{{ member.joined_date|fmt_date }}</div>
+    <div><span class="k">Last Seen</span><br>{{ member.last_active_date|fmt_date }}</div>
+    {% if member.loa_until %}<div><span class="k">Furlough Until</span><br>{{ member.loa_until|fmt_date }}</div>{% endif %}
+  </div>
+</div>
+
+<div class="cols" style="margin-top: 10px;">
+  <section>
+    <h2 class="section">Honors &amp; Qualifications</h2>
+    {% if awards %}
+      <div class="medal-row">
+        {% for a in awards %}
+          <div class="medal">
+            <div class="m-name">{% if a.award_type.emoji %}{{ a.award_type.emoji }} {% endif %}{{ a.award_type.name }}</div>
+            <div class="m-date">{{ a.date_awarded|fmt_date }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">No honors yet recorded.</p>
+    {% endif %}
+
+    <h2 class="section">Attendance</h2>
+    {% if att_counts %}
+      <table class="ledger">
+        <tbody>
+        {% for status, n in att_counts.items() %}
+          <tr><td>{{ status|attendance_label }}</td><td class="num">{{ n }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">Has answered no muster call.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="section">Service History</h2>
+    {% if service %}
+      <ul class="entry-list">
+        {% for e in service %}
+          <li><span class="date">{{ e.date|fmt_date }}</span>{{ e.entry }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">No entries in the service book.</p>
+    {% endif %}
+
+    <h2 class="section">Conduct Record</h2>
+    {% if discipline %}
+      <ul class="entry-list">
+        {% for r in discipline %}
+          <li>
+            <span class="date">{{ r.date|fmt_date }} &middot;
+              <span class="badge rec-{{ r.record_type }}">{{ r.record_type|record_label }}</span>
+            </span>{{ r.reason }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Conduct unblemished.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+{% endblock %}
