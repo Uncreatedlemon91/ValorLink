@@ -57,13 +57,15 @@ class InterviewView(discord.ui.View):
             pass
 
         thread_id = None
+        dossier_thread = None
         forum = interaction.guild.get_channel(personnel_forum_id) if personnel_forum_id else None
         if isinstance(forum, discord.ForumChannel):
             created = await forum.create_thread(
-                name=f"{self.callsign}",
+                name=self.callsign,
                 content=f"**Personnel Dossier: {self.callsign}**\nEnlisted by {interaction.user.mention}.",
             )
-            thread_id = created.thread.id
+            dossier_thread = created.thread
+            thread_id = dossier_thread.id
 
         with SessionLocal() as session:
             session.merge(
@@ -90,6 +92,14 @@ class InterviewView(discord.ui.View):
 
         await sync_rank(applicant, self.callsign, None, default_rank)
         await sync_company(applicant, None, default_company)
+
+        # Rename the dossier thread to match the nickname the bot just set (e.g. "Pvt. Smith").
+        if dossier_thread is not None:
+            nick = applicant.nick or applicant.display_name
+            try:
+                await dossier_thread.edit(name=nick)
+            except discord.HTTPException:
+                pass
 
         try:
             from cogs.roster import refresh_roster
