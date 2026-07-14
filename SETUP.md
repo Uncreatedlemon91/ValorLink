@@ -225,6 +225,12 @@ Stop the test run with `Ctrl+C` once you're satisfied.
 A bot process running in your terminal dies when you close the terminal or
 your machine sleeps. Pick one of these to keep it running continuously.
 
+> **Running the web UI too?** [`deploy/`](deploy/README.md) has a complete,
+> copy-paste **DigitalOcean** walkthrough that runs the bot **and** the web
+> UI on one ~$6/mo droplet (shared SQLite, Caddy for HTTPS) — ready-made
+> systemd units, a `Caddyfile`, a production env template, and an
+> `install.sh`. The options below cover the bot on its own.
+
 ### Option A — VPS with systemd (recommended, full control)
 
 Any small VPS (DigitalOcean, Hetzner, a home server, etc.) works. After
