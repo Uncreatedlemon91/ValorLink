@@ -112,12 +112,16 @@ rewrite.
   and `Host`/`guild_id` resolvers. A management CLI to create/list units. The
   existing regiment is representable as the default tenant. **Not yet wired
   into the web or bot**, so the live single-tenant deployment is unaffected.
-- **Phase 2 — subdomain portals**: the web app resolves the tenant per
-  request and serves each unit's portal at its subdomain; wildcard TLS.
-- **Phase 3 — public directory + apply**: the apex directory/top bar, per-unit
-  public pages, global sign-up, and the cross-unit apply flow.
+- **Phase 2 — subdomain portals** *(done)*: the web app resolves the tenant
+  per request and serves each unit's portal at its subdomain; wildcard TLS.
+- **Phase 3 — public directory + apply** *(done)*: in platform mode the apex
+  serves a public directory of listed units; signed-in users apply to a unit
+  (a candidacy in that unit's database); unit admins edit their public listing
+  from the Command Tent; a top-bar link ties portals back to the directory.
 - **Phase 4 — multi-guild bot + self-serve provisioning**: the bot resolves
-  the unit per guild, and a "register your unit" flow provisions everything.
+  the unit per guild (so web actions in *any* unit reach Discord), and a
+  "register your unit" flow provisions everything. Until this lands, the bot
+  applies Discord side-effects for the default unit only.
 
 Each phase is backward compatible: the single regiment keeps working
 throughout.

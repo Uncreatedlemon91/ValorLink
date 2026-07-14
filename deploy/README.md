@@ -213,7 +213,11 @@ the architecture; the operational steps are:
    ```
    The cookie domain lets a sign-in on a unit's subdomain work (the OAuth
    callback stays on the apex). Register the apex callback URL
-   (`https://valorlink.co/auth/discord/callback`) in Discord as before.
+   (`https://valorlink.co/auth/discord/callback`) in Discord as before. With
+   platform mode on, the **apex becomes the public directory** (units live on
+   their subdomains); people browse it, sign in with Discord, and apply to any
+   recruiting unit. Each unit's admins set their public name/motto/blurb and
+   recruiting status from the **Command Tent → Public Listing**.
 
 4. **Create a unit**:
    ```bash

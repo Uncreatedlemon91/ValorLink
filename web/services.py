@@ -618,6 +618,20 @@ def company_remove(session, company_id: int) -> str:
     return f"Company '{name}' removed. Members assigned to it keep the label until reassigned."
 
 
+# --- Public applications (cross-unit) ------------------------------------ #
+def submit_application(session, discord_id: int, callsign: str) -> str:
+    """Record a public application against a unit (its own database session).
+    Deduplicates against existing members and pending candidacies."""
+    callsign = (callsign or "").strip() or "Applicant"
+    if session.get(Member, discord_id) is not None:
+        raise ActionError("You already have a record with this unit.")
+    if session.get(Candidacy, discord_id) is not None:
+        raise ActionError("Your application to this unit is already pending.")
+    session.add(Candidacy(discord_id=discord_id, callsign=callsign))
+    session.commit()
+    return "Application submitted — the unit's recruiters will review it."
+
+
 # --- Option sources for the UI ------------------------------------------ #
 def rank_options(session) -> list[str]:
     return rank_utils.rank_names(session)

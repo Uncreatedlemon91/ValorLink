@@ -43,6 +43,16 @@ def tenant_by_guild(session, guild_id: int) -> Tenant | None:
     return session.query(Tenant).filter(Tenant.discord_guild_id == guild_id).one_or_none()
 
 
+def listed_tenants(session) -> list[Tenant]:
+    """Units that opt in to the public directory."""
+    return (
+        session.query(Tenant)
+        .filter(Tenant.listed.is_(True))
+        .order_by(Tenant.name)
+        .all()
+    )
+
+
 def default_tenant(session) -> Tenant | None:
     """The apex / legacy unit — what the bare domain serves and what a
     single-tenant deployment resolves to."""

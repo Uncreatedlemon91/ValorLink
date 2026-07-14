@@ -27,11 +27,20 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from db.models import AwardType, Candidacy, Company, Event, Member, Rank
+from tenancy.registry import registry_session
+from tenancy.resolve import listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
 from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
 from web import auth, services
-from web.tenant import TenantCtx, TenantNotFound, ensure_ready, get_tenant, resolve_tenant
+from web.tenant import (
+    TenantCtx,
+    TenantNotFound,
+    ensure_ready,
+    get_tenant,
+    resolve_tenant,
+    tenant_by_slug_ctx,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -182,7 +191,43 @@ def _base_context(request: Request, session: Session) -> dict:
         "flash": flash,
         "pending_recruits": pending_recruits,
         "tenant": tenant,
+        "platform_base": os.getenv("PLATFORM_BASE_DOMAIN"),
     }
+
+
+def directory_mode(request: Request) -> bool:
+    """True when this request should show the public directory: platform mode
+    is on and the Host is the apex (not a unit subdomain)."""
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        return False
+    return slug_from_host(request.headers.get("host", "")) is None
+
+
+def _render_directory(request: Request):
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    with registry_session() as rs:
+        units = [
+            {
+                "slug": t.slug,
+                "name": t.name,
+                "motto": t.motto,
+                "blurb": t.blurb,
+                "brand_color": brand_hex(t.brand_color),
+                "recruiting": t.recruiting_open,
+                "url": f"https://{t.slug}.{base_domain}/",
+            }
+            for t in listed_tenants(rs)
+        ]
+    ctx = {
+        "request": request,
+        "units": units,
+        "base_domain": base_domain,
+        "user": auth.current_user(request),
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "now": datetime.utcnow(),
+    }
+    return templates.TemplateResponse(request, "directory.html", ctx)
 
 
 # --------------------------------------------------------------------------- #
@@ -192,6 +237,9 @@ def _base_context(request: Request, session: Session) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 def headquarters(request: Request, session: Session = Depends(get_session)):
+    if directory_mode(request):
+        return _render_directory(request)
+
     ctx = _base_context(request, session)
 
     counts = {
@@ -396,6 +444,22 @@ def command_tent(request: Request, session: Session = Depends(get_session),
     """Admin-only configuration: identity, roles, channels, ranks, companies."""
     ctx = _base_context(request, session)
     cfg = get_config(session)
+    # This unit's public directory listing (registry), when platform mode is on.
+    listing = None
+    if os.getenv("PLATFORM_BASE_DOMAIN"):
+        tenant = resolve_tenant(request)
+        with registry_session() as rs:
+            row = tenant_by_slug(rs, tenant.slug)
+            if row is not None:
+                listing = {
+                    "name": row.name,
+                    "motto": row.motto or "",
+                    "blurb": row.blurb or "",
+                    "recruiting_open": row.recruiting_open,
+                    "listed": row.listed,
+                    "url": f"https://{row.slug}.{os.getenv('PLATFORM_BASE_DOMAIN')}/",
+                }
+
     ctx.update(
         cfg=cfg,
         role_keys=ROLE_KEYS,
@@ -405,6 +469,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         brand_hex=brand_hex(cfg.brand_color),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),
+        listing=listing,
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
 
@@ -804,6 +869,64 @@ def post_company_remove(
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.company_remove, company_id, redirect="/command-tent")
+
+
+# --- Public directory: apply to a unit ------------------------------------ #
+@app.post("/apply/{slug}")
+def post_apply(request: Request, slug: str, csrf: str = Form(...)):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/", status_code=303)
+    ctx = tenant_by_slug_ctx(slug)
+    if ctx is None:
+        raise TenantNotFound(slug)
+    with sessionmaker_for(ctx.db_url)() as session:
+        try:
+            msg = services.submit_application(
+                session, int(user["id"]), user.get("name", "Applicant")
+            )
+            _flash(request, msg, "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse("/", status_code=303)
+
+
+# --- Admin: this unit's public listing (registry) ------------------------- #
+@app.post("/admin/listing")
+def post_listing(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    motto: str = Form(""),
+    blurb: str = Form(""),
+    recruiting_open: str = Form(""),
+    listed: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    tenant = resolve_tenant(request)
+    name = name.strip()
+    if not name:
+        _flash(request, "The public name can't be empty.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    with registry_session() as rs:
+        row = tenant_by_slug(rs, tenant.slug)
+        if row is not None:
+            row.name = name
+            row.motto = motto.strip() or None
+            row.blurb = blurb.strip() or None
+            row.recruiting_open = bool(recruiting_open)
+            row.listed = bool(listed)
+            rs.commit()
+            _flash(request, "Public listing updated.", "ok")
+        else:
+            _flash(request, "This unit isn't in the registry.", "error")
+    return RedirectResponse("/command-tent", status_code=303)
 
 
 @app.get("/healthz")
