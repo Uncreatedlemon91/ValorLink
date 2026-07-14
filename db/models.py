@@ -206,6 +206,31 @@ class Company(Base):
     is_default = Column(Boolean, nullable=False, default=False)
 
 
+class PendingAction(Base):
+    """A unit of Discord work requested by the web UI and applied by the bot.
+
+    The web app is the source of truth for regiment *data* (it writes members,
+    ranks, records directly to this database), but it can't touch Discord --
+    only the bot holds the gateway connection. So a web action commits its
+    data change and enqueues one of these rows describing the Discord
+    side-effect (swap a role, rewrite a nickname, refresh the roster embed,
+    post to the billboard). The bot's bridge cog drains the queue and applies
+    each one, reusing the same sync helpers the slash commands use.
+    """
+
+    __tablename__ = "pending_actions"
+
+    id = Column(Integer, primary_key=True)
+    action = Column(String, nullable=False)          # see utils/queue.py
+    payload = Column(Text, nullable=False, default="{}")  # JSON
+    status = Column(String, nullable=False, default="pending")  # pending|done|failed
+    attempts = Column(Integer, nullable=False, default=0)
+    actor_id = Column(BigInteger, nullable=True)     # Discord id of the officer who triggered it
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    processed_at = Column(DateTime, nullable=True)
+
+
 class Candidacy(Base):
     """Tracks in-progress recruitment interviews so InterviewView buttons
     can be re-registered as persistent views after a bot restart."""

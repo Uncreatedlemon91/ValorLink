@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Muster Roll{% endblock %}
+{% block content %}
+
+<h2 class="section">Complete Muster Roll <span class="tally">{{ total }} enrolled</span></h2>
+<p class="lede">Every soul borne on the books, whatever their present standing.</p>
+
+{% if members %}
+  <table class="ledger">
+    <thead>
+      <tr>
+        <th>Callsign</th><th>Rank</th><th>Company</th>
+        <th>Standing</th><th class="num">Enrolled</th><th class="num">Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for m in members %}
+      <tr>
+        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+        <td>{{ m.rank }}</td>
+        <td class="muted">{{ m.company }}</td>
+        <td><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
+        <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+        <td class="num muted">{{ m.last_active_date|fmt_date }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="hollow">
+    <div class="mark">✶</div>
+    <h3>No Names on the Books</h3>
+    <p>The muster roll has yet to receive its first enlistment.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

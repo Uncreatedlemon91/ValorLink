@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Muster Calls{% endblock %}
+{% block content %}
+
+{% if tier_at_least(user, TIER_OFFICER) %}
+<h2 class="section">Call a Muster</h2>
+<div class="order-card" style="max-width:640px;">
+  <form class="orders" method="post" action="/muster-calls/create">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field"><label>Occasion</label><input name="name" required placeholder="Regimental Drill"></div>
+    <div class="field">
+      <label>Kind</label>
+      <select name="event_type">
+        {% for t in event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Date (UTC)</label><input name="date" type="date" required></div>
+      <div class="field"><label>Time (UTC)</label><input name="time" type="time" required value="19:00"></div>
+    </div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Post the call</button></div>
+  </form>
+  <p class="order-note">The bot posts the announcement with Accept / Tentative / Decline buttons to the
+  announcements channel.</p>
+</div>
+{% endif %}
+
+<h2 class="section">Muster Calls to Come <span class="tally">{{ upcoming|length }} on the books</span></h2>
+{% if upcoming %}
+  <table class="ledger">
+    <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Answered</th></tr></thead>
+    <tbody>
+    {% for row in upcoming %}
+      <tr>
+        <td class="callsign"><a href="/muster-calls/{{ row.event.id }}">{{ row.event.name }}</a></td>
+        <td class="muted">{{ row.event.event_type }}</td>
+        <td class="num">{{ row.event.scheduled_at|fmt_date(true) }}</td>
+        <td class="num">{{ row.counts.get('accepted', 0) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="empty">No calls are presently on the books.</p>
+{% endif %}
+
+<h2 class="section">Calls Past <span class="tally">{{ past|length }} on record</span></h2>
+{% if past %}
+  <table class="ledger">
+    <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Mustered</th></tr></thead>
+    <tbody>
+    {% for row in past %}
+      <tr>
+        <td class="callsign"><a href="/muster-calls/{{ row.event.id }}">{{ row.event.name }}</a></td>
+        <td class="muted">{{ row.event.event_type }}</td>
+        <td class="num muted">{{ row.event.scheduled_at|fmt_date(true) }}</td>
+        <td class="num">{{ row.counts.get('present', 0) }} / {{ row.total }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="empty">No calls have yet been recorded.</p>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+{% endblock %}

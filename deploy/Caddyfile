@@ -1,0 +1,12 @@
+# ValorLink reverse proxy. Caddy fetches and renews a free Let's Encrypt
+# certificate automatically, then proxies HTTPS traffic to the web app,
+# which listens only on localhost.
+#
+# Replace hq.example.com with your domain (its A record must point at the
+# droplet's IP). Put this file at /etc/caddy/Caddyfile, then:
+#   sudo systemctl reload caddy
+
+hq.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}

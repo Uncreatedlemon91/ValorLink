@@ -1,0 +1,21 @@
+[Unit]
+Description=ValorLink web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink
+EnvironmentFile=/opt/valorlink/.env
+# Binds to localhost only; Caddy terminates TLS and proxies to it on :443.
+# --proxy-headers/--forwarded-allow-ips let uvicorn trust Caddy's X-Forwarded-*.
+ExecStart=/opt/valorlink/.venv/bin/uvicorn web.app:app \
+    --host 127.0.0.1 --port 8000 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

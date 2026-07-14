@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Officer Sign-In{% endblock %}
+{% block content %}
+
+<h2 class="section">Officer Sign-In</h2>
+<p class="lede">Signing in identifies you and unlocks the orders you're entitled to
+give. Your standing — recruiter, officer, or admin — is read from your Discord
+roles.</p>
+
+{% if login_error %}<div class="flash flash-error">{{ login_error }}</div>{% endif %}
+
+{% if oauth_enabled %}
+  <div class="card" style="margin-top:18px;">
+    <p style="margin:14px 0;">Sign in with your Discord account. The site checks
+    your roles in the regiment's server to determine what you may do.</p>
+    <a class="btn btn-strong" href="/auth/discord/login">Sign in with Discord</a>
+  </div>
+{% else %}
+  <div class="card" style="margin-top:18px;">
+    <p class="empty">Discord sign-in isn't configured on this deployment. Set
+    <code>DISCORD_CLIENT_ID</code>, <code>DISCORD_CLIENT_SECRET</code>, and
+    <code>DISCORD_OAUTH_REDIRECT</code> to enable it.</p>
+  </div>
+{% endif %}
+
+{% if dev_login_enabled %}
+  <h2 class="section">Development Sign-In <span class="tally">local only</span></h2>
+  <p class="lede">This shortcut is enabled by <code>WEB_DEV_LOGIN</code> and is
+  meant for local development. Act as any member, at any standing.</p>
+  <form class="orders" method="post" action="/auth/dev">
+    <div class="field">
+      <label>Act as</label>
+      <select name="preset" onchange="var o=this.options[this.selectedIndex]; if(o.value){document.querySelector('[name=discord_id]').value=o.value; document.querySelector('[name=name]').value=o.dataset.name;}">
+        <option value="">— pick a member —</option>
+        {% for m in members %}
+          <option value="{{ m.discord_id }}" data-name="{{ m.callsign }}">{{ m.callsign }} ({{ m.rank }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>Discord ID</label><input name="discord_id" required inputmode="numeric" value="1"></div>
+    <div class="field"><label>Display name</label><input name="name" required value="Test Officer"></div>
+    <div class="field">
+      <label>Standing</label>
+      <select name="tier">
+        <option value="admin">admin</option>
+        <option value="officer" selected>officer</option>
+        <option value="recruiter">recruiter</option>
+        <option value="none">none</option>
+      </select>
+    </div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Sign in</button></div>
+  </form>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — {% block title %}{{ regiment_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+  <style>:root { --seal: {{ brand_color }}; }</style>
+</head>
+<body>
+  <div class="sheet" style="--seal: {{ brand_color }};">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>{{ regiment_name }}</h1>
+      {% if regiment_motto %}<p class="motto">“{{ regiment_motto }}”</p>{% endif %}
+      <div class="estd">Regimental Headquarters &middot; Order Book</div>
+    </header>
+
+    <nav class="rail">
+      {% set path = request.url.path %}
+      <a href="/" class="{{ 'active' if path == '/' }}">Headquarters</a>
+      <a href="/roster" class="{{ 'active' if path == '/roster' }}">Roster</a>
+      <a href="/muster" class="{{ 'active' if path == '/muster' }}">Muster Roll</a>
+      <a href="/muster-calls" class="{{ 'active' if path.startswith('/muster-calls') }}">Muster Calls</a>
+      <a href="/honors" class="{{ 'active' if path == '/honors' }}">Honors</a>
+      <a href="/recruits" class="{{ 'active' if path == '/recruits' }}">Recruits{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
+      {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'active' if path == '/command-tent' }}">Command Tent</a>{% endif %}
+    </nav>
+
+    <div class="authbar">
+      {% if user %}
+        <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
+        <a href="/logout">Sign out</a>
+      {% else %}
+        <span class="who">Viewing as a visitor</span>
+        <a href="/login">Officer sign-in</a>
+      {% endif %}
+    </div>
+
+    <main class="wrap">
+      {% if flash %}
+        <div class="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+
+      <footer>
+        {{ regiment_name }}
+        <span class="fine">Compiled by ValorLink &middot; {{ now.strftime('%d %B %Y') }} &middot; all times reckoned in U.T.C.</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
