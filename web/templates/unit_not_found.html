@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Unknown Unit</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+</head>
+<body>
+  <div class="sheet" style="--seal:#7c1f2b;">
+    <main class="wrap">
+      <div class="hollow" style="padding-top:80px;">
+        <div class="mark">✵</div>
+        <h3>No Such Unit</h3>
+        {% if slug %}
+          <p>There is no unit at <b>{{ slug }}</b> on ValorLink.</p>
+        {% else %}
+          <p>This address doesn't correspond to a unit on ValorLink.</p>
+        {% endif %}
+        {% if base_domain %}
+          <p style="margin-top:18px;"><a class="btn" href="https://{{ base_domain }}/">Go to ValorLink</a></p>
+        {% endif %}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

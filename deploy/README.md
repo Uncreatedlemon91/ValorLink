@@ -167,6 +167,70 @@ sudo -u valorlink .venv/bin/alembic upgrade head
 sudo systemctl restart valorlink-bot valorlink-web
 ```
 
+## Hosting multiple units (multi-tenant)
+
+The platform can host many units on this one droplet, each at its own
+subdomain (`5thva.valorlink.co`) with its own database, plus one central bot
+they invite. This is opt-in — leave the variables below unset and you stay in
+single-unit mode. See [`docs/MULTI_TENANT.md`](../../docs/MULTI_TENANT.md) for
+the architecture; the operational steps are:
+
+1. **Wildcard DNS** — add an A record for `*.valorlink.co` pointing at the
+   droplet (alongside the apex record), so every unit subdomain resolves here.
+
+2. **Wildcard TLS via Caddy on-demand.** A wildcard cert would need DNS-01;
+   the simpler path is Caddy's on-demand TLS, which issues a cert per
+   subdomain as it's first visited. Replace the Caddyfile with:
+
+   ```
+   {
+       on_demand_tls {
+           # only issue for hosts the app recognises as a unit
+           ask http://127.0.0.1:8000/tls-allow
+       }
+   }
+
+   valorlink.co, www.valorlink.co {
+       encode zstd gzip
+       reverse_proxy 127.0.0.1:8000
+   }
+
+   *.valorlink.co {
+       tls { on_demand }
+       encode zstd gzip
+       reverse_proxy 127.0.0.1:8000
+   }
+   ```
+
+   (The `ask` endpoint keeps Caddy from minting certs for random hostnames;
+   it's added in a later phase — until then you can drop the `on_demand_tls`
+   block and Caddy will issue for any subdomain that gets hit.)
+
+3. **Environment** — in `.env`, set:
+   ```
+   PLATFORM_BASE_DOMAIN=valorlink.co
+   SESSION_COOKIE_DOMAIN=.valorlink.co
+   ```
+   The cookie domain lets a sign-in on a unit's subdomain work (the OAuth
+   callback stays on the apex). Register the apex callback URL
+   (`https://valorlink.co/auth/discord/callback`) in Discord as before.
+
+4. **Create a unit**:
+   ```bash
+   cd /opt/valorlink
+   sudo -u valorlink .venv/bin/python -m tenancy.manage create \
+       --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id>
+   sudo systemctl restart valorlink-web
+   ```
+   The unit is now live at `https://5thva.valorlink.co`. Its officers invite
+   the bot and configure roles/channels from their portal's Command Tent.
+
+> **Current limitation (until Phase 4):** the bot still applies Discord
+> side-effects (role/nickname sync, roster embeds) only for the **default**
+> unit. New units' web actions are saved to their database but won't reflect
+> in Discord until the multi-guild bot lands. Your original regiment (the
+> default unit) is unaffected.
+
 ## Troubleshooting
 
 - **Web up but "sign in" fails** — the `DISCORD_OAUTH_REDIRECT` in `.env`

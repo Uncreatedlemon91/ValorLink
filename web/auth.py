@@ -24,9 +24,9 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
 import config
-from db.base import SessionLocal
-from db.models import Member
+from tenancy.units import sessionmaker_for
 from utils.settings import get_config
+from web.tenant import get_tenant, resolve_tenant, tenant_by_slug_ctx
 
 # --- Permission tiers ---------------------------------------------------- #
 TIER_NONE = "none"
@@ -56,7 +56,23 @@ def tier_from_role_ids(session, role_ids: set[int]) -> str:
 
 # --- Session helpers ----------------------------------------------------- #
 def current_user(request: Request) -> dict | None:
+    """The raw session user, regardless of which unit they signed into."""
     return request.session.get("user")
+
+
+def effective_user(request: Request, tenant_slug: str | None = None) -> dict | None:
+    """The signed-in user, but only when they're viewing the unit they signed
+    into. Signing into one unit grants nothing on another."""
+    user = request.session.get("user")
+    if not user:
+        return None
+    if tenant_slug is None:
+        ctx = getattr(request.state, "tenant", None)
+        tenant_slug = ctx.slug if ctx else None
+    user_tenant = user.get("tenant")
+    if user_tenant is not None and tenant_slug is not None and user_tenant != tenant_slug:
+        return None
+    return user
 
 
 class NotAuthenticated(Exception):
@@ -69,8 +85,8 @@ class NotAuthorized(Exception):
 
 
 def _require(required: str):
-    def dep(request: Request) -> dict:
-        user = current_user(request)
+    def dep(request: Request, tenant=Depends(get_tenant)) -> dict:
+        user = effective_user(request, tenant.slug)
         if not user:
             raise NotAuthenticated()
         if not tier_at_least(user, required):
@@ -132,17 +148,27 @@ def dev_login(
         return RedirectResponse("/login", status_code=303)
     if tier not in _ORDER:
         tier = TIER_NONE
-    request.session["user"] = {"id": discord_id, "name": name, "tier": tier, "via": "dev"}
+    slug = resolve_tenant(request).slug
+    request.session["user"] = {
+        "id": discord_id, "name": name, "tier": tier, "via": "dev", "tenant": slug
+    }
     return RedirectResponse("/", status_code=303)
 
 
 # --- Discord OAuth2 ------------------------------------------------------ #
+# One central callback (OAUTH_REDIRECT, registered once with Discord) serves
+# every unit. The unit the user is signing into, and the URL to send them back
+# to, ride along in the session (shared across subdomains via
+# SESSION_COOKIE_DOMAIN) rather than in per-subdomain redirect URIs.
 @router.get("/auth/discord/login")
 def discord_login(request: Request):
     if not OAUTH_ENABLED:
         return RedirectResponse("/login", status_code=303)
+    tenant = resolve_tenant(request)
     state = secrets.token_urlsafe(24)
     request.session["oauth_state"] = state
+    request.session["oauth_tenant"] = tenant.slug
+    request.session["oauth_origin"] = str(request.base_url).rstrip("/")
     params = {
         "client_id": OAUTH_CLIENT_ID,
         "redirect_uri": OAUTH_REDIRECT,
@@ -163,6 +189,11 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
     if not code or not state or state != request.session.pop("oauth_state", None):
         return _login_error(request, "The sign-in response could not be verified. Please try again.")
 
+    tenant_slug = request.session.pop("oauth_tenant", None)
+    origin = request.session.pop("oauth_origin", None) or "/"
+    tenant = tenant_by_slug_ctx(tenant_slug) if tenant_slug else None
+    guild_id = tenant.guild_id if tenant else config.GUILD_ID
+
     import httpx
 
     token_data = {
@@ -181,25 +212,27 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
             )
             tok.raise_for_status()
             access_token = tok.json()["access_token"]
-            auth = {"Authorization": f"Bearer {access_token}"}
+            bearer = {"Authorization": f"Bearer {access_token}"}
 
-            me = client.get(f"{_DISCORD_API}/users/@me", headers=auth)
+            me = client.get(f"{_DISCORD_API}/users/@me", headers=bearer)
             me.raise_for_status()
             me = me.json()
 
             role_ids: set[int] = set()
-            if config.GUILD_ID:
+            if guild_id:
                 gm = client.get(
-                    f"{_DISCORD_API}/users/@me/guilds/{config.GUILD_ID}/member",
-                    headers=auth,
+                    f"{_DISCORD_API}/users/@me/guilds/{guild_id}/member",
+                    headers=bearer,
                 )
                 if gm.status_code == 200:
                     role_ids = {int(r) for r in gm.json().get("roles", [])}
     except Exception:
         return _login_error(request, "We couldn't reach Discord to sign you in. Please try again.")
 
-    with SessionLocal() as session:
-        tier = tier_from_role_ids(session, role_ids)
+    tier = TIER_NONE
+    if tenant:
+        with sessionmaker_for(tenant.db_url)() as session:
+            tier = tier_from_role_ids(session, role_ids)
 
     display = me.get("global_name") or me.get("username") or "Officer"
     request.session["user"] = {
@@ -207,8 +240,9 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
         "name": display,
         "tier": tier,
         "via": "discord",
+        "tenant": tenant.slug if tenant else tenant_slug,
     }
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(origin, status_code=303)
 
 
 def _login_error(request: Request, message: str):

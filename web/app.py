@@ -26,23 +26,38 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from db.base import SessionLocal
 from db.models import AwardType, Candidacy, Company, Event, Member, Rank
+from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
 from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
 from web import auth, services
+from web.tenant import TenantCtx, TenantNotFound, ensure_ready, get_tenant, resolve_tenant
 
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="ValorLink")
+
+_session_cookie_kwargs = {}
+_cookie_domain = os.getenv("SESSION_COOKIE_DOMAIN")
+if _cookie_domain:
+    # Share the login cookie across all unit subdomains (e.g. ".valorlink.co").
+    _session_cookie_kwargs["domain"] = _cookie_domain
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("WEB_SESSION_SECRET", "valorlink-dev-secret-change-me"),
     same_site="lax",
     https_only=os.getenv("WEB_HTTPS_ONLY", "").lower() in ("1", "true", "yes"),
+    **_session_cookie_kwargs,
 )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.include_router(auth.router)
+
+
+@app.on_event("startup")
+def _startup():
+    # Create the registry and represent this deployment as the default unit.
+    ensure_ready()
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["tier_at_least"] = auth.tier_at_least
@@ -58,13 +73,24 @@ def _on_unauthenticated(request: Request, exc: auth.NotAuthenticated):
 
 @app.exception_handler(auth.NotAuthorized)
 def _on_unauthorized(request: Request, exc: auth.NotAuthorized):
-    with SessionLocal() as session:
+    tenant = resolve_tenant(request)
+    with sessionmaker_for(tenant.db_url)() as session:
         ctx = _base_context(request, session)
     ctx["message"] = (
         f"That action needs the {exc.required} rank or higher. "
         "You're signed in, but without the standing for it."
     )
     return templates.TemplateResponse(request, "not_found.html", ctx, status_code=403)
+
+
+@app.exception_handler(TenantNotFound)
+def _on_tenant_not_found(request: Request, exc: TenantNotFound):
+    return templates.TemplateResponse(
+        request,
+        "unit_not_found.html",
+        {"request": request, "slug": exc.slug, "base_domain": os.getenv("PLATFORM_BASE_DOMAIN")},
+        status_code=404,
+    )
 
 
 def _flash(request: Request, text: str, level: str = "ok"):
@@ -128,8 +154,9 @@ templates.env.filters["attendance_label"] = attendance_label
 templates.env.filters["fmt_date"] = fmt_date
 
 
-def get_session():
-    session = SessionLocal()
+def get_session(tenant: TenantCtx = Depends(get_tenant)):
+    """A database session scoped to the unit resolved for this request."""
+    session = sessionmaker_for(tenant.db_url)()
     try:
         yield session
     finally:
@@ -142,16 +169,19 @@ def _base_context(request: Request, session: Session) -> dict:
     cfg = get_config(session)
     flash = request.session.pop("flash", [])
     pending_recruits = session.query(Candidacy).count()
+    tenant = resolve_tenant(request)
     return {
         "request": request,
         "regiment_name": cfg.regiment_name,
         "regiment_motto": cfg.regiment_motto,
         "brand_color": brand_hex(cfg.brand_color),
         "now": datetime.utcnow(),
-        "user": auth.current_user(request),
+        # Honor the signed-in user only on the unit they signed into.
+        "user": auth.effective_user(request, tenant.slug),
         "csrf_token": auth.get_csrf_token(request),
         "flash": flash,
         "pending_recruits": pending_recruits,
+        "tenant": tenant,
     }
 
 
@@ -407,12 +437,17 @@ def recruits(request: Request, session: Session = Depends(get_session)):
 # Write endpoints — each mutates the DB and queues the Discord side-effect.
 # --------------------------------------------------------------------------- #
 
+def _tenant_session(request: Request):
+    """A session on the current request's unit database."""
+    return sessionmaker_for(resolve_tenant(request).db_url)()
+
+
 def _do(request: Request, csrf: str, fn, *args, redirect: str):
     """Run a service call with CSRF + error handling, then redirect back."""
     if not auth.verify_csrf(request, csrf):
         _flash(request, "Your session expired. Please try that again.", "error")
         return RedirectResponse(redirect, status_code=303)
-    with SessionLocal() as session:
+    with _tenant_session(request) as session:
         try:
             message = fn(session, *args)
             _flash(request, message, "ok")
@@ -569,7 +604,7 @@ def post_create_event(
         _flash(request, "Your session expired. Please try that again.", "error")
         return RedirectResponse("/muster-calls", status_code=303)
     actor = {"id": user["id"], "name": user["name"]}
-    with SessionLocal() as session:
+    with _tenant_session(request) as session:
         try:
             event_id = services.create_event(session, actor, name, event_type, f"{date} {time}")
             _flash(request, f"'{name}' announced.", "ok")
@@ -658,7 +693,7 @@ async def _do_form(request: Request, fn, keys, redirect: str):
         _flash(request, "Your session expired. Please try that again.", "error")
         return RedirectResponse(redirect, status_code=303)
     values = {k: form.get(k, "") for k in keys}
-    with SessionLocal() as session:
+    with _tenant_session(request) as session:
         try:
             _flash(request, fn(session, values), "ok")
         except services.ActionError as exc:
