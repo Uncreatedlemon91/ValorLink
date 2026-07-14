@@ -4,8 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import AttendanceRecord, Event, Member
+from tenancy.routing import bind_guild
 from utils.checks import is_officer
 from utils.embeds import base_embed
 from utils.settings import get_config
@@ -53,7 +54,8 @@ class RSVPView(discord.ui.View):
         self.event_id = event_id
 
     async def _set_rsvp(self, interaction: discord.Interaction, status: str):
-        with SessionLocal() as session:
+        bind_guild(interaction.guild_id)
+        with db_session() as session:
             event = session.get(Event, self.event_id)
             if event is None:
                 return await interaction.response.send_message("This event no longer exists.", ephemeral=True)
@@ -102,7 +104,7 @@ async def event_type_autocomplete(interaction: discord.Interaction, current: str
 
 
 async def event_name_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         events = (
             session.query(Event)
             .filter(Event.scheduled_at >= datetime.utcnow() - timedelta(days=30))
@@ -138,14 +140,14 @@ class Events(commands.Cog):
                 "Invalid date format. Use `YYYY-MM-DD HH:MM` (UTC), e.g. `2026-07-01 19:00`.", ephemeral=True
             )
 
-        with SessionLocal() as session:
+        with db_session() as session:
             announcements_channel_id = get_config(session).announcements_channel_id
         channel = (
             (interaction.guild.get_channel(announcements_channel_id) if announcements_channel_id else None)
             or interaction.channel
         )
 
-        with SessionLocal() as session:
+        with db_session() as session:
             event = Event(
                 name=name,
                 event_type=event_type,
@@ -163,7 +165,7 @@ class Events(commands.Cog):
         view = RSVPView(event_id)
         message = await channel.send(embed=embed, view=view)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             event = session.get(Event, event_id)
             event.message_id = message.id
             session.commit()
@@ -186,7 +188,7 @@ class Events(commands.Cog):
         except ValueError:
             return await interaction.response.send_message("Select an event from the autocomplete list.", ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             event_row = session.get(Event, event_id)
             if event_row is None:
                 return await interaction.response.send_message("Event not found.", ephemeral=True)
@@ -218,7 +220,7 @@ class Events(commands.Cog):
         except ValueError:
             return await interaction.response.send_message("Select an event from the autocomplete list.", ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             event_row = session.get(Event, event_id)
             if event_row is None:
                 return await interaction.response.send_message("Event not found.", ephemeral=True)
@@ -231,13 +233,13 @@ class Events(commands.Cog):
     @app_commands.command(name="attendance_history", description="View a member's attendance history")
     async def attendance_history(self, interaction: discord.Interaction, member: discord.Member | None = None):
         target = member or interaction.user
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         is_priv = any(r.id in (cfg.admin_role_id, cfg.officer_role_id) for r in interaction.user.roles)
         if target.id != interaction.user.id and not is_priv:
             return await interaction.response.send_message("You can only view your own attendance.", ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             records = (
                 session.query(AttendanceRecord)
                 .filter(AttendanceRecord.member_id == target.id)

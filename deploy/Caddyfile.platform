@@ -1,0 +1,28 @@
+# ValorLink — PLATFORM (multi-unit) reverse proxy.
+# Copy to /etc/caddy/Caddyfile, replace valorlink.co with your domain, then:
+#   sudo systemctl reload caddy
+#
+# Requires a wildcard DNS record (*.valorlink.co -> droplet) alongside the
+# apex A record. Caddy issues a certificate per unit subdomain on first visit;
+# the /tls-allow endpoint restricts that to the apex and registered units.
+
+{
+    on_demand_tls {
+        ask http://127.0.0.1:8000/tls-allow
+    }
+}
+
+# The public directory (apex + www).
+valorlink.co, www.valorlink.co {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}
+
+# Every unit portal, e.g. hq.valorlink.co, 5thva.valorlink.co …
+*.valorlink.co {
+    tls {
+        on_demand
+    }
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}

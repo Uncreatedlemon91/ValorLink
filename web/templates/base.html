@@ -28,6 +28,7 @@
     </nav>
 
     <div class="authbar">
+      {% if platform_base %}<a href="https://{{ platform_base }}/" class="who">‹ All units</a>{% endif %}
       {% if user %}
         <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
         <a href="/logout">Sign out</a>

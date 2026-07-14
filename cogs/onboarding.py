@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
 
-import config
-from db.base import SessionLocal
+from db.base import db_session
+from tenancy.routing import bind_guild, db_url_for_guild
 from utils.embeds import base_embed
 from utils.settings import get_config
 
@@ -20,10 +20,12 @@ class Onboarding(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        if config.GUILD_ID and member.guild.id != config.GUILD_ID:
+        # Only greet in guilds that map to a unit.
+        if db_url_for_guild(member.guild.id) is None:
             return
+        bind_guild(member.guild.id)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             visitor_role_id = cfg.visitor_role_id
             welcome_channel_id = cfg.welcome_channel_id

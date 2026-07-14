@@ -77,9 +77,9 @@ apt update && apt install -y caddy
 ## 5. Create the app user and clone the repo
 
 ```bash
-adduser --system --group --home /opt/valorlink valorlink
-cd /opt
-git clone https://github.com/Uncreatedlemon91/ValorLink.git valorlink
+# Clone first, then create the service user and hand it ownership.
+git clone https://github.com/Uncreatedlemon91/ValorLink.git /opt/valorlink
+useradd --system --home-dir /opt/valorlink --shell /usr/sbin/nologin valorlink
 chown -R valorlink:valorlink /opt/valorlink
 ```
 
@@ -166,6 +166,79 @@ sudo -u valorlink .venv/bin/pip install -r requirements.txt -r web/requirements.
 sudo -u valorlink .venv/bin/alembic upgrade head
 sudo systemctl restart valorlink-bot valorlink-web
 ```
+
+## Hosting multiple units (multi-tenant)
+
+The platform can host many units on this one droplet, each at its own
+subdomain (`5thva.valorlink.co`) with its own database, plus one central bot
+they invite. This is opt-in — leave the variables below unset and you stay in
+single-unit mode. See [`docs/MULTI_TENANT.md`](../../docs/MULTI_TENANT.md) for
+the architecture; the operational steps are:
+
+1. **Wildcard DNS** — add an A record for `*.valorlink.co` pointing at the
+   droplet (alongside the apex record), so every unit subdomain resolves here.
+
+2. **Wildcard TLS via Caddy on-demand.** A wildcard cert would need DNS-01;
+   the simpler path is Caddy's on-demand TLS, which issues a cert per
+   subdomain as it's first visited. Replace the Caddyfile with:
+
+   ```
+   {
+       on_demand_tls {
+           # only issue for hosts the app recognises as a unit
+           ask http://127.0.0.1:8000/tls-allow
+       }
+   }
+
+   valorlink.co, www.valorlink.co {
+       encode zstd gzip
+       reverse_proxy 127.0.0.1:8000
+   }
+
+   *.valorlink.co {
+       tls { on_demand }
+       encode zstd gzip
+       reverse_proxy 127.0.0.1:8000
+   }
+   ```
+
+   (The `ask` endpoint — `GET /tls-allow?domain=…` — answers 200 only for the
+   apex and registered unit subdomains, so Caddy won't mint certs for random
+   hostnames.)
+
+3. **Environment** — in `.env`, set:
+   ```
+   PLATFORM_BASE_DOMAIN=valorlink.co
+   SESSION_COOKIE_DOMAIN=.valorlink.co
+   ```
+   The cookie domain lets a sign-in on a unit's subdomain work (the OAuth
+   callback stays on the apex). Register the apex callback URL
+   (`https://valorlink.co/auth/discord/callback`) in Discord as before. With
+   platform mode on, the **apex becomes the public directory** (units live on
+   their subdomains); people browse it, sign in with Discord, and apply to any
+   recruiting unit. Each unit's admins set their public name/motto/blurb and
+   recruiting status from the **Command Tent → Public Listing**.
+
+4. **Create units — two ways:**
+   - **Self-serve:** signed-in users open **Raise a unit** on the directory
+     (`/register`), name it, link their Discord server, and get the bot invite
+     link. To restrict who may register, set `PLATFORM_ADMIN_IDS` in `.env` to
+     a comma-separated list of Discord user IDs (unset = open registration).
+   - **CLI:**
+     ```bash
+     cd /opt/valorlink
+     sudo -u valorlink .venv/bin/python -m tenancy.manage create \
+         --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id>
+     ```
+   A new unit is live at `https://5thva.valorlink.co`. Its owner invites the
+   **one** ValorLink bot to their Discord server, then configures roles and
+   channels from the portal's Command Tent (the first `/config set_role
+   key:admin` in Discord bootstraps admin access).
+
+The one bot serves every unit's Discord: it drains each unit's action queue
+against that unit's guild, so web actions reach Discord for **all** units.
+(New units are picked up on the next bot restart, when it syncs commands to
+their guild — `sudo systemctl restart valorlink-bot`.)
 
 ## Troubleshooting
 

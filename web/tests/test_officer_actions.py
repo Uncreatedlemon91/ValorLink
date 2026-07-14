@@ -15,6 +15,8 @@ from unittest.mock import AsyncMock, MagicMock
 # A throwaway database, wired up before any app/db import reads DATABASE_URL.
 _TMP = tempfile.mkdtemp(prefix="valorlink-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
+os.environ["REGISTRY_DATABASE_URL"] = f"sqlite:///{_TMP}/registry.db"
+os.environ.pop("PLATFORM_BASE_DOMAIN", None)   # single-tenant: everything resolves to default
 os.environ["WEB_DEV_LOGIN"] = "1"
 os.environ["WEB_SESSION_SECRET"] = "test-secret"
 

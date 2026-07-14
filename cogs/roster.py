@@ -5,9 +5,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-import config
-from db.base import SessionLocal
+from db.base import db_session
+from db.context import reset_current_db_url, set_current_db_url
 from db.models import AttendanceRecord, Candidacy, DisciplinaryRecord, Event, Member, ServiceHistoryEntry, Setting
+from tenancy.registry import registry_session
+from tenancy.resolve import all_tenants
+from tenancy.routing import bind_guild
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_officer
@@ -63,7 +66,7 @@ def _build_roster_embed(session) -> discord.Embed:
 
 
 async def refresh_roster(guild: discord.Guild):
-    with SessionLocal() as session:
+    with db_session() as session:
         roster_channel_id = get_config(session).roster_channel_id
         channel = guild.get_channel(roster_channel_id) if roster_channel_id else None
         if channel is None:
@@ -89,7 +92,7 @@ async def refresh_roster(guild: discord.Guild):
 
 
 async def company_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         names = [c.name for c in list_companies(session)]
     return [
         app_commands.Choice(name=c, value=c) for c in names if current.lower() in c.lower()
@@ -108,7 +111,7 @@ class Roster(commands.Cog):
     @app_commands.autocomplete(company=company_autocomplete)
     @is_officer()
     async def assign_company(self, interaction: discord.Interaction, member: discord.Member, company: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -148,8 +151,9 @@ class Roster(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None:
             return
+        bind_guild(message.guild.id)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, message.author.id)
             if record is None:
                 return
@@ -167,6 +171,7 @@ class Roster(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if before.nick == after.nick:
             return
+        bind_guild(after.guild.id)
 
         # Strip the rank prefix the bot writes (e.g. "Pvt. ") to get the bare callsign.
         raw = after.nick or after.name
@@ -174,7 +179,7 @@ class Roster(commands.Cog):
         if not callsign:
             return
 
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, after.id)
             if record is None or record.callsign == callsign:
                 return
@@ -185,13 +190,20 @@ class Roster(commands.Cog):
 
     @tasks.loop(hours=24)
     async def inactivity_check(self):
-        if not config.GUILD_ID:
-            return
-        guild = self.bot.get_guild(config.GUILD_ID)
-        if guild is None:
-            return
+        with registry_session() as rs:
+            units = [(t.discord_guild_id, t.db_url) for t in all_tenants(rs)]
+        for guild_id, db_url in units:
+            guild = self.bot.get_guild(guild_id) if guild_id else None
+            if guild is None:
+                continue
+            token = set_current_db_url(db_url)
+            try:
+                await self._inactivity_check_unit(guild)
+            finally:
+                reset_current_db_url(token)
 
-        with SessionLocal() as session:
+    async def _inactivity_check_unit(self, guild: discord.Guild):
+        with db_session() as session:
             cfg = get_config(session)
             threshold = datetime.utcnow() - timedelta(days=cfg.inactivity_days_threshold)
             stale = (
@@ -243,7 +255,7 @@ class Roster(commands.Cog):
     async def stats(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
 
             active_count = session.query(Member).filter(Member.status == "active").count()

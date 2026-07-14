@@ -2,8 +2,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import Candidacy, Member, ServiceHistoryEntry
+from tenancy.routing import bind_guild
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_recruiter
@@ -21,13 +22,14 @@ class InterviewView(discord.ui.View):
         self.callsign = callsign
 
     def _is_recruiter(self, member: discord.Member) -> bool:
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         ids = {cfg.admin_role_id, cfg.officer_role_id, cfg.recruiter_role_id}
         return any(r.id in ids for r in member.roles)
 
     @discord.ui.button(label="Approve Enlistment", style=discord.ButtonStyle.green, custom_id="recruit_approve")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        bind_guild(interaction.guild_id)
         if not self._is_recruiter(interaction.user):
             return await interaction.response.send_message("You're not authorized to do that.", ephemeral=True)
 
@@ -36,7 +38,7 @@ class InterviewView(discord.ui.View):
         if applicant is None:
             return await interaction.edit_original_response(content="Applicant has left the server.", view=None)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             candidate_role_id = cfg.candidate_role_id
             member_role_id = cfg.member_role_id
@@ -65,7 +67,7 @@ class InterviewView(discord.ui.View):
             )
             thread_id = created.thread.id
 
-        with SessionLocal() as session:
+        with db_session() as session:
             session.merge(
                 Member(
                     discord_id=applicant.id,
@@ -126,13 +128,14 @@ class InterviewView(discord.ui.View):
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="recruit_deny")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        bind_guild(interaction.guild_id)
         if not self._is_recruiter(interaction.user):
             return await interaction.response.send_message("You're not authorized to do that.", ephemeral=True)
 
         await interaction.response.defer()
         applicant = interaction.guild.get_member(self.applicant_id)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             admin_log_channel_id = cfg.admin_log_channel_id
             regiment_name = cfg.regiment_name
@@ -166,9 +169,10 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
     reason = discord.ui.TextInput(label="Why do you want to join?", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction: discord.Interaction):
+        bind_guild(interaction.guild_id)
         await interaction.response.defer(ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             candidate_role_id = cfg.candidate_role_id
             recruiter_role_id = cfg.recruiter_role_id
@@ -199,7 +203,7 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
         view = InterviewView(interaction.user.id, self.callsign.value)
         msg = await thread.send(content=ping, embed=embed, view=view)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             session.merge(Candidacy(
                 discord_id=interaction.user.id,
                 callsign=self.callsign.value,
@@ -217,6 +221,7 @@ class JoinButtonView(discord.ui.View):
 
     @discord.ui.button(label="Apply to Enlist", style=discord.ButtonStyle.primary, custom_id="recruit_apply")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button):
+        bind_guild(interaction.guild_id)
         await interaction.response.send_modal(ApplyModal())
 
 
@@ -227,7 +232,7 @@ class Recruitment(commands.Cog):
     @app_commands.command(name="setup_recruitment", description="Post the persistent enlistment application button")
     @is_recruiter()
     async def setup_recruitment(self, interaction: discord.Interaction):
-        with SessionLocal() as session:
+        with db_session() as session:
             regiment_name = get_config(session).regiment_name
 
         embed = base_embed(

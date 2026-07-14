@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import DisciplinaryRecord, Member
 from utils.checks import is_officer
 from utils.embeds import base_embed
@@ -16,7 +16,7 @@ class Moderation(commands.Cog):
         self.bot = bot
 
     async def _issue(self, interaction: discord.Interaction, member: discord.Member, record_type: str, reason: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             target = session.get(Member, member.id)
             if target is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -32,7 +32,7 @@ class Moderation(commands.Cog):
             session.commit()
             strike_count = sum(1 for d in target.disciplinary_records if d.record_type == "strike")
 
-        with SessionLocal() as session:
+        with db_session() as session:
             mod_log_channel_id = get_config(session).mod_log_channel_id
         log_channel = interaction.guild.get_channel(mod_log_channel_id) if mod_log_channel_id else None
         if log_channel:

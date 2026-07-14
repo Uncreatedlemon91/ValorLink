@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import Company, Rank
 from utils.checks import is_bot_admin, is_officer
 from utils.embeds import base_embed
@@ -22,13 +22,13 @@ async def channel_key_autocomplete(interaction: discord.Interaction, current: st
 
 
 async def rank_name_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         names = [r.name for r in session.query(Rank).order_by(Rank.position).all()]
     return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
 
 
 async def company_name_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         names = [c.name for c in session.query(Company).order_by(Company.name).all()]
     return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
 
@@ -51,7 +51,7 @@ class Settings(commands.Cog):
             return await interaction.response.send_message(
                 f"Unknown role key `{key}`. Valid keys: {', '.join(ROLE_KEYS)}", ephemeral=True
             )
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             setattr(cfg, ROLE_KEYS[key], role.id)
             session.commit()
@@ -70,7 +70,7 @@ class Settings(commands.Cog):
             return await interaction.response.send_message(
                 f"Unknown channel key `{key}`. Valid keys: {', '.join(CHANNEL_KEYS)}", ephemeral=True
             )
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             setattr(cfg, CHANNEL_KEYS[key], channel.id)
             session.commit()
@@ -79,7 +79,7 @@ class Settings(commands.Cog):
     @config_group.command(name="set_name", description="Set the regiment's display name")
     @is_bot_admin()
     async def config_set_name(self, interaction: discord.Interaction, name: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             cfg.regiment_name = name
             session.commit()
@@ -88,7 +88,7 @@ class Settings(commands.Cog):
     @config_group.command(name="set_motto", description="Set the regiment's motto (shown in embed footers)")
     @is_bot_admin()
     async def config_set_motto(self, interaction: discord.Interaction, motto: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             cfg.regiment_motto = motto
             session.commit()
@@ -103,7 +103,7 @@ class Settings(commands.Cog):
             return await interaction.response.send_message(
                 "Invalid hex color. Use a format like `#2F3136`.", ephemeral=True
             )
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             cfg.brand_color = value
             session.commit()
@@ -112,7 +112,7 @@ class Settings(commands.Cog):
     @config_group.command(name="set_inactivity_days", description="Days of inactivity before a member is auto-flagged")
     @is_bot_admin()
     async def config_set_inactivity_days(self, interaction: discord.Interaction, days: app_commands.Range[int, 1, 365]):
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             cfg.inactivity_days_threshold = days
             session.commit()
@@ -121,7 +121,7 @@ class Settings(commands.Cog):
     @config_group.command(name="show", description="View ValorLink's current configuration")
     @is_officer()
     async def config_show(self, interaction: discord.Interaction):
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             embed = base_embed(title=f"{cfg.regiment_name} -- ValorLink Configuration")
             embed.add_field(name="Motto", value=cfg.regiment_motto or "*not set*", inline=False)
@@ -154,7 +154,7 @@ class Settings(commands.Cog):
         tier: str | None = None,
         role: discord.Role | None = None,
     ):
-        with SessionLocal() as session:
+        with db_session() as session:
             if session.query(Rank).filter(Rank.name == name).one_or_none():
                 return await interaction.response.send_message(f"Rank **{name}** already exists.", ephemeral=True)
             top = session.query(Rank).order_by(Rank.position.desc()).first()
@@ -175,7 +175,7 @@ class Settings(commands.Cog):
     @app_commands.autocomplete(name=rank_name_autocomplete)
     @is_bot_admin()
     async def rank_remove(self, interaction: discord.Interaction, name: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Rank).filter(Rank.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown rank: {name}", ephemeral=True)
@@ -189,7 +189,7 @@ class Settings(commands.Cog):
     @app_commands.autocomplete(name=rank_name_autocomplete)
     @is_bot_admin()
     async def rank_set_role(self, interaction: discord.Interaction, name: str, role: discord.Role | None = None):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Rank).filter(Rank.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown rank: {name}", ephemeral=True)
@@ -206,7 +206,7 @@ class Settings(commands.Cog):
     )
     @is_bot_admin()
     async def rank_move(self, interaction: discord.Interaction, name: str, direction: app_commands.Choice[str]):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Rank).filter(Rank.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown rank: {name}", ephemeral=True)
@@ -237,7 +237,7 @@ class Settings(commands.Cog):
 
     @rank_group.command(name="list", description="View the rank ladder")
     async def rank_list(self, interaction: discord.Interaction):
-        with SessionLocal() as session:
+        with db_session() as session:
             ranks = session.query(Rank).order_by(Rank.position).all()
             embed = base_embed(title="Rank Ladder")
             if not ranks:
@@ -262,7 +262,7 @@ class Settings(commands.Cog):
         role: discord.Role | None = None,
         is_default: bool = False,
     ):
-        with SessionLocal() as session:
+        with db_session() as session:
             if session.query(Company).filter(Company.name == name).one_or_none():
                 return await interaction.response.send_message(f"Company **{name}** already exists.", ephemeral=True)
             if is_default:
@@ -275,7 +275,7 @@ class Settings(commands.Cog):
     @app_commands.autocomplete(name=company_name_autocomplete)
     @is_bot_admin()
     async def company_remove(self, interaction: discord.Interaction, name: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Company).filter(Company.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown company: {name}", ephemeral=True)
@@ -289,7 +289,7 @@ class Settings(commands.Cog):
     @app_commands.autocomplete(name=company_name_autocomplete)
     @is_bot_admin()
     async def company_set_role(self, interaction: discord.Interaction, name: str, role: discord.Role | None = None):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Company).filter(Company.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown company: {name}", ephemeral=True)
@@ -303,7 +303,7 @@ class Settings(commands.Cog):
     @app_commands.autocomplete(name=company_name_autocomplete)
     @is_bot_admin()
     async def company_set_default(self, interaction: discord.Interaction, name: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.query(Company).filter(Company.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown company: {name}", ephemeral=True)
@@ -314,7 +314,7 @@ class Settings(commands.Cog):
 
     @company_group.command(name="list", description="View configured companies")
     async def company_list(self, interaction: discord.Interaction):
-        with SessionLocal() as session:
+        with db_session() as session:
             companies = session.query(Company).order_by(Company.name).all()
             embed = base_embed(title="Companies")
             if not companies:

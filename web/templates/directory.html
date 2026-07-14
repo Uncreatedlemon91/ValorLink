@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Muster Grounds</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+  <style>:root { --seal: #7c1f2b; }</style>
+</head>
+<body>
+  <div class="sheet" style="--seal:#7c1f2b;">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>ValorLink</h1>
+      <p class="motto">The Muster Grounds</p>
+      <div class="estd">A directory of units in the field</div>
+    </header>
+
+    <div class="authbar">
+      {% if user %}
+        <span class="who">Signed in as <b>{{ user.name }}</b></span>
+        <a href="/logout">Sign out</a>
+      {% else %}
+        <span class="who">Browsing as a visitor</span>
+        <a href="/login">Sign in with Discord</a>
+      {% endif %}
+    </div>
+
+    <main class="wrap">
+      {% if flash %}
+        <div class="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+      <h2 class="section">Units in the Field <span class="tally">{{ units|length }} listed</span></h2>
+      <p class="lede">Browse the regiments and companies mustering on ValorLink.
+      Sign in with Discord to apply to any that are recruiting.
+      {% if user %}Leading your own outfit? <a href="/register">Raise a unit ›</a>{% endif %}</p>
+
+      {% if units %}
+        <div class="orders-grid" style="margin-top:22px;">
+          {% for u in units %}
+            <div class="order-card" style="--seal: {{ u.brand_color }};">
+              <h3 class="order-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
+              {% if u.motto %}<p class="motto" style="font-size:14px;margin:2px 0 8px;">“{{ u.motto }}”</p>{% endif %}
+              {% if u.blurb %}<p style="margin:6px 0 12px;">{{ u.blurb }}</p>{% endif %}
+              <p style="margin:6px 0 12px;">
+                {% if u.recruiting %}<span class="badge s-active">Recruiting</span>
+                {% else %}<span class="badge s-inactive">Not recruiting</span>{% endif %}
+              </p>
+              <div class="inline-actions" style="justify-content:flex-start;gap:10px;">
+                <a class="btn" href="{{ u.url }}">Visit portal</a>
+                {% if u.recruiting %}
+                  {% if user %}
+                    <form method="post" action="/apply/{{ u.slug }}">
+                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                      <button class="btn btn-strong" type="submit">Apply</button>
+                    </form>
+                  {% else %}
+                    <a class="btn btn-strong" href="/login">Sign in to apply</a>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="hollow">
+          <div class="mark">✵</div>
+          <h3>No Units Yet</h3>
+          <p>No units are listed on ValorLink at present.</p>
+        </div>
+      {% endif %}
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+      <footer>
+        ValorLink
+        <span class="fine">The Muster Grounds &middot; {{ now.strftime('%d %B %Y') }}</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

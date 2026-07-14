@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Unit Raised</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+</head>
+<body>
+  <div class="sheet" style="--seal:#3f6b3a;">
+    <header class="banner">
+      <div class="crest" style="color:#3f6b3a;">★ ✶ ★</div>
+      <h1>Unit Raised</h1>
+      <p class="motto">Your regiment has been mustered</p>
+    </header>
+    <main class="wrap">
+      <h2 class="section">Next Steps</h2>
+      <ol class="entry-list" style="list-style:none;">
+        <li><span class="date">Step One — Invite the bot</span>
+          {% if invite_url %}
+            Add the ValorLink bot to your Discord server so it can manage roles,
+            nicknames, and announcements:<br>
+            <a class="btn btn-strong" style="margin-top:8px;" href="{{ invite_url }}">Invite the bot to Discord</a>
+          {% else %}
+            Ask the platform administrator for the bot invite link.
+          {% endif %}
+        </li>
+        <li><span class="date">Step Two — Open your portal</span>
+          Your unit's headquarters is live at:<br>
+          <a class="btn" style="margin-top:8px;" href="{{ portal_url }}">{{ portal_url }}</a>
+        </li>
+        <li><span class="date">Step Three — Configure from the Command Tent</span>
+          Sign in on your portal (you'll need the admin role you set with
+          <code>/config set_role key:admin</code> in Discord), then set roles,
+          channels, ranks, and companies from the Command Tent.
+        </li>
+      </ol>
+      <p style="margin-top:20px;"><a class="backlink" href="/">‹ back to the Muster Grounds</a></p>
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

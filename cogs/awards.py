@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import AwardType, Member, MemberAward
 from utils.billboard import post_billboard
 from utils.checks import is_officer
@@ -10,7 +10,7 @@ from utils.embeds import base_embed
 
 
 async def award_type_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         types = session.query(AwardType).filter(AwardType.name.ilike(f"%{current}%")).limit(25).all()
         return [app_commands.Choice(name=t.name, value=t.name) for t in types]
 
@@ -28,7 +28,7 @@ class Awards(commands.Cog):
         description: str = "",
         emoji: str = "",
     ):
-        with SessionLocal() as session:
+        with db_session() as session:
             existing = session.query(AwardType).filter(AwardType.name.ilike(name)).one_or_none()
             if existing:
                 return await interaction.response.send_message(f"`{name}` already exists in the catalog.", ephemeral=True)
@@ -47,7 +47,7 @@ class Awards(commands.Cog):
 
     @app_commands.command(name="award_type_list", description="List the award/qualification catalog")
     async def award_type_list(self, interaction: discord.Interaction):
-        with SessionLocal() as session:
+        with db_session() as session:
             types = session.query(AwardType).order_by(AwardType.name).all()
 
         embed = base_embed(title="Award / Qualification Catalog")
@@ -70,7 +70,7 @@ class Awards(commands.Cog):
         award_type: str,
         notes: str = "",
     ):
-        with SessionLocal() as session:
+        with db_session() as session:
             target = session.get(Member, member.id)
             if target is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -117,7 +117,7 @@ class Awards(commands.Cog):
     @app_commands.autocomplete(award_type=award_type_autocomplete)
     @is_officer()
     async def award_remove(self, interaction: discord.Interaction, member: discord.Member, award_type: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             award_row = session.query(AwardType).filter(AwardType.name.ilike(award_type)).one_or_none()
             if award_row is None:
                 return await interaction.response.send_message(f"`{award_type}` isn't in the catalog.", ephemeral=True)
