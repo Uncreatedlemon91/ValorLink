@@ -4,9 +4,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-import config
-from db.base import SessionLocal
+from db.base import db_session
+from db.context import reset_current_db_url, set_current_db_url
 from db.models import Company, Member, Rank, ServiceHistoryEntry
+from tenancy.registry import registry_session
+from tenancy.resolve import all_tenants
 from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed
@@ -23,7 +25,7 @@ class Lifecycle(commands.Cog):
 
     async def _strip_managed_roles(self, member: discord.Member):
         """Remove every bot-managed role from a discharged member."""
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             managed_ids = {cfg.member_role_id, cfg.candidate_role_id, cfg.inactive_role_id}
             for r in session.query(Rank).all():
@@ -57,7 +59,7 @@ class Lifecycle(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.followup.send("That member has no personnel record.", ephemeral=True)
@@ -101,7 +103,7 @@ class Lifecycle(commands.Cog):
                     pass
 
         # Admin log
-        with SessionLocal() as session:
+        with db_session() as session:
             admin_log_id = get_config(session).admin_log_channel_id
         log_channel = interaction.guild.get_channel(admin_log_id) if admin_log_id else None
         if log_channel:
@@ -141,7 +143,7 @@ class Lifecycle(commands.Cog):
     ):
         loa_until = datetime.utcnow() + timedelta(days=days)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -189,7 +191,7 @@ class Lifecycle(commands.Cog):
     @app_commands.command(name="loa_end", description="End a member's leave of absence early and return them to active duty")
     @is_officer()
     async def loa_end(self, interaction: discord.Interaction, member: discord.Member):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -230,7 +232,7 @@ class Lifecycle(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.followup.send("That member has no personnel record.", ephemeral=True)
@@ -306,13 +308,20 @@ class Lifecycle(commands.Cog):
 
     @tasks.loop(hours=24)
     async def loa_expiry_check(self):
-        if not config.GUILD_ID:
-            return
-        guild = self.bot.get_guild(config.GUILD_ID)
-        if guild is None:
-            return
+        with registry_session() as rs:
+            units = [(t.discord_guild_id, t.db_url) for t in all_tenants(rs)]
+        for guild_id, db_url in units:
+            guild = self.bot.get_guild(guild_id) if guild_id else None
+            if guild is None:
+                continue
+            token = set_current_db_url(db_url)
+            try:
+                await self._loa_expiry_unit(guild)
+            finally:
+                reset_current_db_url(token)
 
-        with SessionLocal() as session:
+    async def _loa_expiry_unit(self, guild: discord.Guild):
+        with db_session() as session:
             expired = (
                 session.query(Member)
                 .filter(Member.status == "loa", Member.loa_until <= datetime.utcnow())

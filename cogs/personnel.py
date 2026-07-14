@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
@@ -13,7 +13,7 @@ from utils.sync import sync_rank
 
 
 async def rank_autocomplete(interaction: discord.Interaction, current: str):
-    with SessionLocal() as session:
+    with db_session() as session:
         names = rank_utils.rank_names(session)
     return [
         app_commands.Choice(name=name, value=name) for name in names if current.lower() in name.lower()
@@ -75,7 +75,7 @@ async def refresh_personnel_file(guild: discord.Guild, discord_id: int):
     discord_member = guild.get_member(discord_id)
     display_name = discord_member.display_name if discord_member else None
 
-    with SessionLocal() as session:
+    with db_session() as session:
         record = session.get(Member, discord_id)
         if record is None or not record.thread_id:
             return
@@ -122,7 +122,7 @@ class Personnel(commands.Cog):
         rank: str,
         citation: str = "",
     ):
-        with SessionLocal() as session:
+        with db_session() as session:
             new_record = rank_utils.rank_by_name(session, rank)
             if new_record is None:
                 return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
@@ -183,7 +183,7 @@ class Personnel(commands.Cog):
     @app_commands.autocomplete(rank=rank_autocomplete)
     @is_officer()
     async def set_rank(self, interaction: discord.Interaction, member: discord.Member, rank: str, citation: str = ""):
-        with SessionLocal() as session:
+        with db_session() as session:
             if rank_utils.rank_by_name(session, rank) is None:
                 return await interaction.response.send_message(f"Unknown rank: {rank}", ephemeral=True)
 
@@ -214,7 +214,7 @@ class Personnel(commands.Cog):
     @app_commands.command(name="service_log", description="Add a service history entry to a member's record")
     @is_officer()
     async def service_log(self, interaction: discord.Interaction, member: discord.Member, entry: str):
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, member.id)
             if record is None:
                 return await interaction.response.send_message("That member has no personnel record.", ephemeral=True)
@@ -232,7 +232,7 @@ class Personnel(commands.Cog):
         target = member or interaction.user
         is_self = target.id == interaction.user.id
 
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             is_priv = any(r.id in (cfg.admin_role_id, cfg.officer_role_id) for r in interaction.user.roles)
             if not is_self and not is_priv:

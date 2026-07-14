@@ -24,25 +24,19 @@ def cmd_init(_args):
 
 def cmd_create(args):
     init_registry()
-    with registry_session() as session:
-        if tenant_by_slug(session, args.slug):
-            sys.exit(f"A unit with slug '{args.slug}' already exists.")
-        db_url = args.db_url or unit_db_url_for_slug(args.slug)
-        provision_unit_db(db_url)
-        tenant = Tenant(
-            slug=args.slug,
-            name=args.name,
-            motto=args.motto,
-            blurb=args.blurb,
-            discord_guild_id=args.guild or None,
-            db_url=db_url,
+    from tenancy.provision import ProvisionError, create_unit
+
+    try:
+        db_url = create_unit(
+            args.slug, args.name, guild_id=args.guild,
+            motto=args.motto, blurb=args.blurb, db_url=args.db_url,
         )
-        session.add(tenant)
-        session.commit()
-        print(f"Created unit '{args.slug}' ({args.name})")
-        print(f"  database: {db_url}")
-        if args.guild:
-            print(f"  guild:    {args.guild}")
+    except ProvisionError as exc:
+        sys.exit(str(exc))
+    print(f"Created unit '{args.slug}' ({args.name})")
+    print(f"  database: {db_url}")
+    if args.guild:
+        print(f"  guild:    {args.guild}")
 
 
 def cmd_list(_args):

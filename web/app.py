@@ -871,6 +871,124 @@ def post_company_remove(
     return _do(request, csrf, services.company_remove, company_id, redirect="/command-tent")
 
 
+# Bot invite permissions: manage roles/nicknames/threads, send/embed, history.
+_BOT_PERMS = (
+    1024 | 2048 | 8192 | 16384 | 65536 | 134217728 | 268435456
+    | 17179869184 | 34359738368 | 274877906944
+)
+
+
+def _bot_invite_url() -> str | None:
+    cid = os.getenv("DISCORD_CLIENT_ID")
+    if not cid:
+        return None
+    return (
+        f"https://discord.com/oauth2/authorize?client_id={cid}"
+        f"&permissions={_BOT_PERMS}&scope=bot%20applications.commands"
+    )
+
+
+def _can_register(user: dict | None) -> bool:
+    if not user:
+        return False
+    allow = os.getenv("PLATFORM_ADMIN_IDS", "").replace(" ", "")
+    if not allow:
+        return True  # open registration
+    ids = {a for a in allow.split(",") if a}
+    return str(user.get("id")) in ids
+
+
+# --- Self-serve: register a unit ------------------------------------------ #
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request):
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        raise TenantNotFound(None)
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    ctx = {
+        "request": request,
+        "user": user,
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "base_domain": os.getenv("PLATFORM_BASE_DOMAIN"),
+        "can_register": _can_register(user),
+        "now": datetime.utcnow(),
+    }
+    return templates.TemplateResponse(request, "register.html", ctx)
+
+
+@app.post("/register")
+def register_submit(
+    request: Request,
+    csrf: str = Form(...),
+    slug: str = Form(...),
+    name: str = Form(...),
+    guild_id: str = Form(""),
+    motto: str = Form(""),
+    blurb: str = Form(""),
+):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _can_register(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/register", status_code=303)
+
+    from tenancy.provision import ProvisionError, create_unit
+
+    gid = None
+    if guild_id.strip():
+        try:
+            gid = int(guild_id.strip())
+        except ValueError:
+            _flash(request, "The Discord server ID must be all digits.", "error")
+            return RedirectResponse("/register", status_code=303)
+    try:
+        create_unit(slug, name, guild_id=gid, motto=motto, blurb=blurb)
+    except ProvisionError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/register", status_code=303)
+
+    from tenancy.provision import normalize_slug
+
+    request.session["registered_slug"] = normalize_slug(slug)
+    return RedirectResponse("/registered", status_code=303)
+
+
+@app.get("/registered", response_class=HTMLResponse)
+def registered(request: Request):
+    slug = request.session.pop("registered_slug", None)
+    if not slug:
+        return RedirectResponse("/", status_code=303)
+    base = os.getenv("PLATFORM_BASE_DOMAIN")
+    ctx = {
+        "request": request,
+        "slug": slug,
+        "portal_url": f"https://{slug}.{base}/",
+        "invite_url": _bot_invite_url(),
+        "now": datetime.utcnow(),
+    }
+    return templates.TemplateResponse(request, "registered.html", ctx)
+
+
+@app.get("/tls-allow")
+def tls_allow(domain: str = ""):
+    """Caddy on-demand TLS ask endpoint: 200 to issue a cert, 404 to refuse."""
+    from fastapi import Response
+
+    base = os.getenv("PLATFORM_BASE_DOMAIN")
+    d = (domain or "").strip().lower().rstrip(".")
+    if not base or d in (base, f"www.{base}"):
+        return Response(status_code=200)
+    slug = slug_from_host(d)
+    if slug and tenant_by_slug_ctx(slug):
+        return Response(status_code=200)
+    return Response(status_code=404)
+
+
 # --- Public directory: apply to a unit ------------------------------------ #
 @app.post("/apply/{slug}")
 def post_apply(request: Request, slug: str, csrf: str = Form(...)):

@@ -8,7 +8,7 @@ admin status.
 import discord
 from discord import app_commands
 
-from db.base import SessionLocal
+from db.base import db_session
 from utils.settings import get_config
 
 
@@ -20,7 +20,7 @@ def _has_role(interaction: discord.Interaction, role_id: int | None) -> bool:
 
 def is_admin():
     async def predicate(interaction: discord.Interaction) -> bool:
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         if _has_role(interaction, cfg.admin_role_id):
             return True
@@ -31,7 +31,7 @@ def is_admin():
 
 def is_officer():
     async def predicate(interaction: discord.Interaction) -> bool:
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         if _has_role(interaction, cfg.admin_role_id) or _has_role(interaction, cfg.officer_role_id):
             return True
@@ -42,7 +42,7 @@ def is_officer():
 
 def is_recruiter():
     async def predicate(interaction: discord.Interaction) -> bool:
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         if (
             _has_role(interaction, cfg.admin_role_id)
@@ -65,7 +65,7 @@ def is_bot_admin():
     async def predicate(interaction: discord.Interaction) -> bool:
         if interaction.user.guild_permissions.administrator:
             return True
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
         if _has_role(interaction, cfg.admin_role_id):
             return True

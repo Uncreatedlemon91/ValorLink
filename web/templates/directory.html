@@ -35,7 +35,8 @@
 
       <h2 class="section">Units in the Field <span class="tally">{{ units|length }} listed</span></h2>
       <p class="lede">Browse the regiments and companies mustering on ValorLink.
-      Sign in with Discord to apply to any that are recruiting.</p>
+      Sign in with Discord to apply to any that are recruiting.
+      {% if user %}Leading your own outfit? <a href="/register">Raise a unit ›</a>{% endif %}</p>
 
       {% if units %}
         <div class="orders-grid" style="margin-top:22px;">

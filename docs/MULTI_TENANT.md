@@ -118,10 +118,13 @@ rewrite.
   serves a public directory of listed units; signed-in users apply to a unit
   (a candidacy in that unit's database); unit admins edit their public listing
   from the Command Tent; a top-bar link ties portals back to the directory.
-- **Phase 4 — multi-guild bot + self-serve provisioning**: the bot resolves
-  the unit per guild (so web actions in *any* unit reach Discord), and a
-  "register your unit" flow provisions everything. Until this lands, the bot
-  applies Discord side-effects for the default unit only.
+- **Phase 4 — multi-guild bot + self-serve provisioning** *(done)*: a context
+  variable (`db.context`) holds the current guild's unit database; `db_session()`
+  follows it, so the one bot serves every guild. The bridge and background
+  loops iterate all units; app commands bind via the tree check and component
+  callbacks bind their own guild. A "Raise a unit" web flow (or the CLI)
+  provisions a unit and hands back the bot invite link, and `/tls-allow` gates
+  Caddy's on-demand certificates.
 
 Each phase is backward compatible: the single regiment keeps working
 throughout.

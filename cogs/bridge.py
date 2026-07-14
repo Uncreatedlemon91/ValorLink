@@ -17,9 +17,11 @@ from datetime import datetime
 import discord
 from discord.ext import commands, tasks
 
-import config
-from db.base import SessionLocal
+from db.base import db_session
+from db.context import reset_current_db_url, set_current_db_url
 from db.models import Company, DisciplinaryRecord, Event, Member, PendingAction, Rank
+from tenancy.registry import registry_session
+from tenancy.resolve import all_tenants
 from utils import queue
 from utils.billboard import post_billboard
 from utils.embeds import base_embed
@@ -57,13 +59,24 @@ class Bridge(commands.Cog):
 
     @tasks.loop(seconds=4.0)
     async def drain_queue(self):
-        if not config.GUILD_ID:
-            return
-        guild = self.bot.get_guild(config.GUILD_ID)
-        if guild is None:
-            return
+        # One bot, many units: drain each unit's queue against its own guild.
+        with registry_session() as rs:
+            units = [(t.discord_guild_id, t.db_url) for t in all_tenants(rs)]
 
-        with SessionLocal() as session:
+        for guild_id, db_url in units:
+            guild = self.bot.get_guild(guild_id) if guild_id else None
+            if guild is None:
+                continue  # bot isn't in this unit's server (yet)
+            token = set_current_db_url(db_url)
+            try:
+                await self._drain_unit(guild)
+            finally:
+                reset_current_db_url(token)
+
+    async def _drain_unit(self, guild: discord.Guild):
+        """Process a batch of one unit's queue. The current-DB context is
+        already bound to this unit, so db_session() reads its database."""
+        with db_session() as session:
             rows = (
                 session.query(PendingAction)
                 .filter(PendingAction.status == queue.PENDING)
@@ -86,7 +99,7 @@ class Bridge(commands.Cog):
         await self.bot.wait_until_ready()
 
     def _finish(self, action_id: int, status: str | None, error: str | None = None):
-        with SessionLocal() as session:
+        with db_session() as session:
             row = session.get(PendingAction, action_id)
             if row is None:
                 return
@@ -112,7 +125,7 @@ class Bridge(commands.Cog):
 
     # --- helpers ------------------------------------------------------- #
     def _thread_id(self, discord_id: int) -> int | None:
-        with SessionLocal() as session:
+        with db_session() as session:
             record = session.get(Member, discord_id)
             return record.thread_id if record else None
 
@@ -131,7 +144,7 @@ class Bridge(commands.Cog):
             pass
 
     async def _log_embed(self, guild: discord.Guild, channel_attr: str, embed: discord.Embed):
-        with SessionLocal() as session:
+        with db_session() as session:
             channel_id = getattr(get_config(session), channel_attr)
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel:
@@ -182,7 +195,7 @@ class Bridge(commands.Cog):
     async def _do_discipline(self, guild, p):
         member = guild.get_member(p["discord_id"])
         record_type = p["record_type"]
-        with SessionLocal() as session:
+        with db_session() as session:
             strike_count = (
                 session.query(DisciplinaryRecord)
                 .filter(
@@ -226,7 +239,7 @@ class Bridge(commands.Cog):
 
     async def _do_reinstate(self, guild, p):
         member = guild.get_member(p["discord_id"])
-        with SessionLocal() as session:
+        with db_session() as session:
             member_role_id = get_config(session).member_role_id
         if member and member_role_id:
             role = guild.get_role(member_role_id)
@@ -261,7 +274,7 @@ class Bridge(commands.Cog):
 
     async def _do_approve_candidate(self, guild, p):
         applicant = guild.get_member(p["discord_id"])
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             candidate_role_id = cfg.candidate_role_id
             member_role_id = cfg.member_role_id
@@ -293,7 +306,7 @@ class Bridge(commands.Cog):
             except discord.HTTPException:
                 thread_id = None
         if thread_id:
-            with SessionLocal() as session:
+            with db_session() as session:
                 record = session.get(Member, p["discord_id"])
                 if record:
                     record.thread_id = thread_id
@@ -327,7 +340,7 @@ class Bridge(commands.Cog):
     async def _do_announce_event(self, guild, p):
         from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets
 
-        with SessionLocal() as session:
+        with db_session() as session:
             event = session.get(Event, p["event_id"])
             if event is None:
                 return
@@ -343,7 +356,7 @@ class Bridge(commands.Cog):
         view = RSVPView(event_id)
         message = await channel.send(embed=embed, view=view)
 
-        with SessionLocal() as session:
+        with db_session() as session:
             row = session.get(Event, event_id)
             if row:
                 row.message_id = message.id
@@ -361,7 +374,7 @@ class Bridge(commands.Cog):
         await self._refresh(guild, p["discord_id"])
 
     async def _strip_managed_roles(self, member: discord.Member):
-        with SessionLocal() as session:
+        with db_session() as session:
             cfg = get_config(session)
             managed_ids = {cfg.member_role_id, cfg.candidate_role_id, cfg.inactive_role_id}
             for r in session.query(Rank).all():

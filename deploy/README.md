@@ -202,9 +202,9 @@ the architecture; the operational steps are:
    }
    ```
 
-   (The `ask` endpoint keeps Caddy from minting certs for random hostnames;
-   it's added in a later phase — until then you can drop the `on_demand_tls`
-   block and Caddy will issue for any subdomain that gets hit.)
+   (The `ask` endpoint — `GET /tls-allow?domain=…` — answers 200 only for the
+   apex and registered unit subdomains, so Caddy won't mint certs for random
+   hostnames.)
 
 3. **Environment** — in `.env`, set:
    ```
@@ -219,21 +219,26 @@ the architecture; the operational steps are:
    recruiting unit. Each unit's admins set their public name/motto/blurb and
    recruiting status from the **Command Tent → Public Listing**.
 
-4. **Create a unit**:
-   ```bash
-   cd /opt/valorlink
-   sudo -u valorlink .venv/bin/python -m tenancy.manage create \
-       --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id>
-   sudo systemctl restart valorlink-web
-   ```
-   The unit is now live at `https://5thva.valorlink.co`. Its officers invite
-   the bot and configure roles/channels from their portal's Command Tent.
+4. **Create units — two ways:**
+   - **Self-serve:** signed-in users open **Raise a unit** on the directory
+     (`/register`), name it, link their Discord server, and get the bot invite
+     link. To restrict who may register, set `PLATFORM_ADMIN_IDS` in `.env` to
+     a comma-separated list of Discord user IDs (unset = open registration).
+   - **CLI:**
+     ```bash
+     cd /opt/valorlink
+     sudo -u valorlink .venv/bin/python -m tenancy.manage create \
+         --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id>
+     ```
+   A new unit is live at `https://5thva.valorlink.co`. Its owner invites the
+   **one** ValorLink bot to their Discord server, then configures roles and
+   channels from the portal's Command Tent (the first `/config set_role
+   key:admin` in Discord bootstraps admin access).
 
-> **Current limitation (until Phase 4):** the bot still applies Discord
-> side-effects (role/nickname sync, roster embeds) only for the **default**
-> unit. New units' web actions are saved to their database but won't reflect
-> in Discord until the multi-guild bot lands. Your original regiment (the
-> default unit) is unaffected.
+The one bot serves every unit's Discord: it drains each unit's action queue
+against that unit's guild, so web actions reach Discord for **all** units.
+(New units are picked up on the next bot restart, when it syncs commands to
+their guild — `sudo systemctl restart valorlink-bot`.)
 
 ## Troubleshooting
 

@@ -43,6 +43,10 @@ def tenant_by_guild(session, guild_id: int) -> Tenant | None:
     return session.query(Tenant).filter(Tenant.discord_guild_id == guild_id).one_or_none()
 
 
+def all_tenants(session) -> list[Tenant]:
+    return session.query(Tenant).all()
+
+
 def listed_tenants(session) -> list[Tenant]:
     """Units that opt in to the public directory."""
     return (

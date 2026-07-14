@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Register a Unit</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+</head>
+<body>
+  <div class="sheet" style="--seal:#7c1f2b;">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>Raise a Unit</h1>
+      <p class="motto">Muster your own regiment on ValorLink</p>
+    </header>
+    <div class="authbar"><a href="/" class="who">‹ The Muster Grounds</a></div>
+    <main class="wrap">
+      {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
+
+      {% if not can_register %}
+        <div class="hollow"><div class="mark">✵</div><h3>Registration Closed</h3>
+        <p>New units are added by the platform's administrators.</p></div>
+      {% else %}
+      <h2 class="section">New Unit</h2>
+      <p class="lede">Pick a short handle for your subdomain, name your unit, and
+      link your Discord server. You can invite the bot on the next step.</p>
+      <div class="order-card" style="max-width:640px;">
+        <form class="orders" method="post" action="/register">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <div class="field">
+            <label>Handle <span class="opt">(your subdomain)</span></label>
+            <input name="slug" required pattern="[a-z0-9-]{2,30}" placeholder="5thva">
+            <span class="order-note">Your portal will be <b>handle.{{ base_domain }}</b> — lowercase letters, numbers, hyphens.</span>
+          </div>
+          <div class="field"><label>Unit name</label><input name="name" required placeholder="5th Virginia Volunteers"></div>
+          <div class="field"><label>Discord server ID</label><input name="guild_id" inputmode="numeric" placeholder="e.g. 112233445566778899">
+            <span class="order-note">In Discord: enable Developer Mode, right-click your server → Copy Server ID.</span>
+          </div>
+          <div class="field"><label>Motto <span class="opt">(optional)</span></label><input name="motto"></div>
+          <div class="field"><label>Blurb <span class="opt">(optional)</span></label><textarea name="blurb" rows="2"></textarea></div>
+          <div class="field field-actions"><button class="btn btn-strong" type="submit">Raise the unit</button></div>
+        </form>
+      </div>
+      {% endif %}
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

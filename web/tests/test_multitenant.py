@@ -136,6 +136,26 @@ def test_admin_edits_public_listing():
         assert row.recruiting_open is False and row.listed is True
 
 
+def test_register_flow_and_tls_allow():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+    assert c.get("/register", headers={"host": APEX}).status_code == 200
+    token = _csrf(c, "/register", {"host": APEX})
+    r = c.post("/register",
+               data={"csrf": token, "slug": "newco", "name": "New Company", "guild_id": "999"},
+               headers={"host": APEX})
+    assert r.status_code == 200 and "Unit Raised" in r.text
+    with registry_session() as s:
+        row = tenant_by_slug(s, "newco")
+        assert row is not None and row.discord_guild_id == 999
+
+    # Caddy on-demand TLS gate
+    assert c.get("/tls-allow", params={"domain": "newco.valorlink.co"}).status_code == 200
+    assert c.get("/tls-allow", params={"domain": "valorlink.co"}).status_code == 200
+    assert c.get("/tls-allow", params={"domain": "ghost.valorlink.co"}).status_code == 404
+
+
 import re  # noqa: E402
 
 

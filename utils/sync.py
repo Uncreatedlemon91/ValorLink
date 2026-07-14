@@ -5,7 +5,7 @@ Nicknames permissions, or these calls silently no-op on discord.HTTPException.
 """
 import discord
 
-from db.base import SessionLocal
+from db.base import db_session
 from utils import ranks as rank_utils
 from utils.settings import company_by_name
 
@@ -32,7 +32,7 @@ async def _swap_role(member: discord.Member, old_role_id: int, new_role_id: int,
 
 async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None, new_rank: str):
     """Swap the member's rank role and refresh their nickname to "Abbr. Callsign"."""
-    with SessionLocal() as session:
+    with db_session() as session:
         old_record = rank_utils.rank_by_name(session, old_rank)
         new_record = rank_utils.rank_by_name(session, new_rank)
         old_role_id = (old_record.role_id or 0) if old_record else 0
@@ -49,7 +49,7 @@ async def sync_rank(member: discord.Member, callsign: str, old_rank: str | None,
 
 async def sync_company(member: discord.Member, old_company: str | None, new_company: str):
     """Swap the member's company role to match their new company assignment."""
-    with SessionLocal() as session:
+    with db_session() as session:
         old_record = company_by_name(session, old_company)
         new_record = company_by_name(session, new_company)
         old_role_id = (old_record.role_id or 0) if old_record else 0
