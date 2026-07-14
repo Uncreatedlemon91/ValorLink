@@ -77,9 +77,9 @@ apt update && apt install -y caddy
 ## 5. Create the app user and clone the repo
 
 ```bash
-adduser --system --group --home /opt/valorlink valorlink
-cd /opt
-git clone https://github.com/Uncreatedlemon91/ValorLink.git valorlink
+# Clone first, then create the service user and hand it ownership.
+git clone https://github.com/Uncreatedlemon91/ValorLink.git /opt/valorlink
+useradd --system --home-dir /opt/valorlink --shell /usr/sbin/nologin valorlink
 chown -R valorlink:valorlink /opt/valorlink
 ```
 
