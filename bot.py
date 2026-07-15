@@ -100,6 +100,19 @@ class ValorLink(commands.Bot):
             total_events, total_interviews, len(units),
         )
 
+    async def on_guild_join(self, guild: discord.Guild):
+        """When invited to a new unit's server, sync commands immediately so
+        they appear without waiting for a bot restart."""
+        from tenancy.routing import invalidate
+
+        invalidate()  # a new unit may have just been registered for this guild
+        try:
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
+            log.info("Synced commands to newly joined guild %s (%s)", guild.name, guild.id)
+        except discord.HTTPException:
+            log.exception("Failed to sync commands to guild %s", guild.id)
+
     async def on_ready(self):
         log.info("ValorLink is online as %s", self.user)
 
