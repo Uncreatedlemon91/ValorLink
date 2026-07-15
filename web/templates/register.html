@@ -42,6 +42,31 @@
         </form>
       </div>
       {% endif %}
+
+      {% if is_platform_admin and existing_units %}
+      <h2 class="section">Existing Units <span class="tally">{{ existing_units|length }}</span></h2>
+      <p class="lede">Removing a unit takes it off the platform and directory.
+      Its database is archived on the server (not deleted), so it can be recovered.</p>
+      <table class="ledger admin-table">
+        <thead><tr><th>Unit</th><th>Handle</th><th></th></tr></thead>
+        <tbody>
+        {% for u in existing_units %}
+          <tr>
+            <td class="callsign">{{ u.name }}</td>
+            <td class="muted">{{ u.slug }}.{{ base_domain }}</td>
+            <td class="num">
+              <form method="post" action="/admin/units/{{ u.slug }}/delete"
+                    onsubmit="return confirm('Remove {{ u.name }} from the platform? Its data is archived, not destroyed.');">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <button class="btn btn-small btn-danger" type="submit">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
     </main>
   </div>

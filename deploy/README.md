@@ -235,6 +235,17 @@ the architecture; the operational steps are:
    channels from the portal's Command Tent (the first `/config set_role
    key:admin` in Discord bootstraps admin access).
 
+**Removing a unit:** platform admins (`PLATFORM_ADMIN_IDS`) get a **Remove**
+control under **Raise a unit** (`/register`), or use the CLI:
+```bash
+sudo -u valorlink .venv/bin/python -m tenancy.manage remove --slug 5thva
+# add --purge to delete its database instead of archiving it
+```
+Removing takes the unit off the directory and stops it resolving; its database
+is **archived on the server** (renamed `*.removed-<timestamp>`), not destroyed,
+unless you `--purge`. Afterwards, kick the bot from that Discord server (or
+restart `valorlink-bot`) so it drops the stale guild mapping.
+
 The one bot serves every unit's Discord: it drains each unit's action queue
 against that unit's guild, so web actions reach Discord for **all** units.
 (New units are picked up on the next bot restart, when it syncs commands to

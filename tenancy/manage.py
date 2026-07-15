@@ -39,6 +39,23 @@ def cmd_create(args):
         print(f"  guild:    {args.guild}")
 
 
+def cmd_remove(args):
+    init_registry()
+    from tenancy.provision import ProvisionError, delete_unit
+
+    try:
+        result = delete_unit(args.slug, purge=args.purge)
+    except ProvisionError as exc:
+        sys.exit(str(exc))
+    print(f"Removed unit '{result['slug']}' ({result['name']}).")
+    if result["purged"]:
+        print("  database deleted.")
+    elif result["archived_to"]:
+        print(f"  database archived to: {result['archived_to']}")
+    else:
+        print(f"  database left in place: {result['db_url']}")
+
+
 def cmd_list(_args):
     init_registry()
     with registry_session() as session:
@@ -82,6 +99,11 @@ def main(argv=None):
     c.add_argument("--blurb", help="public directory description")
     c.add_argument("--db-url", help="override the unit database URL")
     c.set_defaults(func=cmd_create)
+
+    r = sub.add_parser("remove", help="remove a unit (keeps its database unless --purge)")
+    r.add_argument("--slug", required=True, help="the unit's subdomain handle")
+    r.add_argument("--purge", action="store_true", help="also delete the unit's database file")
+    r.set_defaults(func=cmd_remove)
 
     sub.add_parser("list", help="list registered units").set_defaults(func=cmd_list)
 
