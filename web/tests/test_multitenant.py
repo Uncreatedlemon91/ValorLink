@@ -17,6 +17,7 @@ os.environ["PLATFORM_BASE_DOMAIN"] = "valorlink.co"
 os.environ["PLATFORM_DEFAULT_SLUG"] = "hq"
 os.environ["WEB_DEV_LOGIN"] = "1"
 os.environ["WEB_SESSION_SECRET"] = "test-secret"
+os.environ["PLATFORM_OPEN_REGISTRATION"] = "1"
 
 import config  # noqa: E402
 config.DATABASE_URL = os.environ["DATABASE_URL"]
@@ -154,6 +155,51 @@ def test_register_flow_and_tls_allow():
     assert c.get("/tls-allow", params={"domain": "newco.valorlink.co"}).status_code == 200
     assert c.get("/tls-allow", params={"domain": "valorlink.co"}).status_code == 200
     assert c.get("/tls-allow", params={"domain": "ghost.valorlink.co"}).status_code == 404
+
+
+def test_register_check_reports_availability():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+    # a taken handle is unavailable
+    d = c.get("/register/check", params={"slug": "5thva"}, headers={"host": APEX}).json()
+    assert d["available"] is False
+    # a free, valid handle is available
+    d = c.get("/register/check", params={"slug": "freeco"}, headers={"host": APEX}).json()
+    assert d["available"] is True
+    # a malformed handle (underscore) is rejected with a reason
+    d = c.get("/register/check", params={"slug": "bad_slug"}, headers={"host": APEX}).json()
+    assert d["available"] is False and d["reason"]
+    # a reserved handle is rejected
+    d = c.get("/register/check", params={"slug": "admin"}, headers={"host": APEX}).json()
+    assert d["available"] is False
+    # unauthenticated callers are refused
+    assert TestClient(app).get("/register/check", params={"slug": "freeco"},
+                               headers={"host": APEX},
+                               follow_redirects=False).status_code in (302, 303, 401)
+
+
+def test_registration_closed_by_default():
+    """With neither PLATFORM_ADMIN_IDS nor PLATFORM_OPEN_REGISTRATION set,
+    registration is closed even to signed-in users."""
+    import web.app as web_app
+    old = os.environ.pop("PLATFORM_OPEN_REGISTRATION", None)
+    try:
+        c = TestClient(app)
+        c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},
+               headers={"host": APEX}, follow_redirects=False)
+        assert "Registration Closed" in c.get("/register", headers={"host": APEX}).text
+        token_html = c.get("/register", headers={"host": APEX}).text
+        # a POST is refused too
+        r = c.post("/register",
+                   data={"csrf": "x", "slug": "sneaky", "name": "Sneaky", "guild_id": "1"},
+                   headers={"host": APEX}, follow_redirects=False)
+        assert r.status_code in (302, 303, 403)
+        with registry_session() as s:
+            assert tenant_by_slug(s, "sneaky") is None
+    finally:
+        if old is not None:
+            os.environ["PLATFORM_OPEN_REGISTRATION"] = old
 
 
 import re  # noqa: E402

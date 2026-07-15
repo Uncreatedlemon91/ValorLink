@@ -10,7 +10,7 @@ from db.context import reset_current_db_url, set_current_db_url
 from db.models import AttendanceRecord, Candidacy, DisciplinaryRecord, Event, Member, ServiceHistoryEntry, Setting
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants
-from tenancy.routing import bind_guild
+from tenancy.routing import bind_guild, db_url_for_guild
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_officer
@@ -151,6 +151,8 @@ class Roster(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None:
             return
+        if db_url_for_guild(message.guild.id) is None:
+            return  # not a registered unit
         bind_guild(message.guild.id)
 
         with db_session() as session:
@@ -171,6 +173,8 @@ class Roster(commands.Cog):
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if before.nick == after.nick:
             return
+        if db_url_for_guild(after.guild.id) is None:
+            return  # not a registered unit
         bind_guild(after.guild.id)
 
         # Strip the rank prefix the bot writes (e.g. "Pvt. ") to get the bare callsign.
