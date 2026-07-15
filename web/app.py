@@ -482,12 +482,41 @@ def honors(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "honors.html", ctx)
 
 
+def _setup_checklist(session: Session, cfg) -> list[dict]:
+    """First-run setup steps for a new unit, each with a done flag and a link
+    to the Command Tent section that satisfies it. Drives the onboarding card."""
+    rank_count = len(rank_utils.all_ranks(session))
+    company_count = len(list_companies(session))
+    steps = [
+        ("Name your regiment", cfg.regiment_name not in ("", "Unconfigured Regiment"),
+         "#identity", "So the banner and directory show your unit, not a placeholder."),
+        ("Set the Admin role", bool(cfg.admin_role_id),
+         "#roles", "Grants full control here and in Discord."),
+        ("Set the Officer role", bool(cfg.officer_role_id),
+         "#roles", "Officers manage the roster, events, and discipline."),
+        ("Set the Recruiter role", bool(cfg.recruiter_role_id),
+         "#roles", "Recruiters approve or deny applicants."),
+        ("Set the Roster channel", bool(cfg.roster_channel_id),
+         "#channels", "Where the live roster embed is posted and kept current."),
+        ("Set the Recruitment channel", bool(cfg.recruitment_channel_id),
+         "#channels", "Where enlistment applications land for review."),
+        ("Build the rank ladder", rank_count >= 2,
+         "#ranks", "You need ranks before you can promote anyone."),
+        ("Add a company", company_count >= 1,
+         "#companies", "Members are assigned to a company on the roster."),
+    ]
+    return [{"label": s[0], "done": s[1], "anchor": s[2], "hint": s[3]} for s in steps]
+
+
 @app.get("/command-tent", response_class=HTMLResponse)
 def command_tent(request: Request, session: Session = Depends(get_session),
                  user: dict = Depends(auth.require_admin)):
     """Admin-only configuration: identity, roles, channels, ranks, companies."""
     ctx = _base_context(request, session)
     cfg = get_config(session)
+    checklist = _setup_checklist(session, cfg)
+    ctx["checklist"] = checklist
+    ctx["checklist_done"] = sum(1 for s in checklist if s["done"])
     # This unit's public directory listing (registry), when platform mode is on.
     listing = None
     if os.getenv("PLATFORM_BASE_DOMAIN"):

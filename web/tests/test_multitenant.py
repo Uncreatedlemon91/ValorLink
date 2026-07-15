@@ -137,6 +137,17 @@ def test_admin_edits_public_listing():
         assert row.recruiting_open is False and row.listed is True
 
 
+def test_command_tent_shows_setup_checklist():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen. Test", "tier": "admin"},
+           headers=_host("2ndus"), follow_redirects=False)
+    html = c.get("/command-tent", headers=_host("2ndus")).text
+    assert "Getting Started" in html and "setup-card" in html
+    assert "/ 8 done" in html
+    # a fresh unit has its name set (via _add_unit) but no roles/channels yet
+    assert "Set the Admin role" in html and "Build the rank ladder" in html
+
+
 def test_admin_edits_discord_server_id():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 7, "name": "Gen. Test", "tier": "admin"},

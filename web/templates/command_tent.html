@@ -7,9 +7,34 @@
 <code>/company</code> commands manage. Roles and channels are given as Discord IDs
 (enable Developer Mode in Discord, then right-click → Copy ID).</p>
 
+{% if checklist %}
+{% set total = checklist|length %}
+<details class="setup-card" {{ 'open' if checklist_done < total }}>
+  <summary>
+    <span class="setup-title">Getting Started</span>
+    <span class="setup-progress {{ 'is-complete' if checklist_done == total }}">{{ checklist_done }} / {{ total }} done</span>
+  </summary>
+  {% if checklist_done == total %}
+    <p class="order-note">Everything's configured — your unit is ready. This list stays here if you ever change your setup.</p>
+  {% else %}
+    <p class="order-note">Finish these to get your unit fully operational. Each links to the section that handles it.</p>
+  {% endif %}
+  <ul class="checklist">
+    {% for step in checklist %}
+      <li class="{{ 'done' if step.done }}">
+        <span class="check">{{ '✓' if step.done else '○' }}</span>
+        {% if step.done %}<span class="step-label">{{ step.label }}</span>
+        {% else %}<a class="step-label" href="{{ step.anchor }}">{{ step.label }}</a>
+        <span class="step-hint">{{ step.hint }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
 <div class="orders-grid">
   <div class="order-card">
-    <h3 class="order-title">Regiment Identity</h3>
+    <h3 class="order-title" id="identity">Regiment Identity</h3>
     <form class="orders" method="post" action="/admin/identity">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <div class="field"><label>Name</label><input name="regiment_name" required value="{{ cfg.regiment_name }}"></div>
@@ -23,7 +48,7 @@
   </div>
 
   <div class="order-card">
-    <h3 class="order-title">Role Bindings</h3>
+    <h3 class="order-title" id="roles">Role Bindings</h3>
     <form class="orders" method="post" action="/admin/roles">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       {% for key, col in role_keys.items() %}
@@ -34,7 +59,7 @@
   </div>
 
   <div class="order-card">
-    <h3 class="order-title">Channel Bindings</h3>
+    <h3 class="order-title" id="channels">Channel Bindings</h3>
     <form class="orders" method="post" action="/admin/channels">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       {% for key, col in channel_keys.items() %}
@@ -75,7 +100,7 @@
 </div>
 {% endif %}
 
-<h2 class="section">Rank Ladder <span class="tally">highest first</span></h2>
+<h2 class="section" id="ranks">Rank Ladder <span class="tally">highest first</span></h2>
 <table class="ledger admin-table">
   <thead><tr><th>Rank</th><th>Abbr.</th><th>Tier</th><th>Role ID</th><th class="num">Order</th><th></th></tr></thead>
   <tbody>
@@ -123,7 +148,7 @@
   </form>
 </div>
 
-<h2 class="section">Companies</h2>
+<h2 class="section" id="companies">Companies</h2>
 <table class="ledger admin-table">
   <thead><tr><th>Company</th><th>Role ID</th><th>Default</th><th></th></tr></thead>
   <tbody>

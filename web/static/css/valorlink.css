@@ -537,6 +537,43 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .admin-table td { vertical-align: middle; }
 .admin-table .inline-actions form { margin: 0; }
 
+/* First-run setup checklist */
+.setup-card {
+  border: 1px solid var(--rule-strong);
+  border-left: 4px solid var(--seal);
+  background: rgba(255,253,246,0.6);
+  border-radius: 2px;
+  padding: 12px 16px;
+  margin: 0 0 24px;
+}
+.setup-card summary {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; cursor: pointer; list-style: none;
+}
+.setup-card summary::-webkit-details-marker { display: none; }
+.setup-title {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  letter-spacing: 0.04em; color: var(--seal);
+}
+.setup-progress {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.setup-progress.is-complete { color: #3f6b3a; }
+.checklist { list-style: none; margin: 10px 0 2px; padding: 0; }
+.checklist li {
+  display: grid; grid-template-columns: 22px 1fr; align-items: baseline;
+  gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--rule);
+}
+.checklist li:first-child { border-top: none; }
+.checklist .check { font-size: 15px; color: var(--ink-faint); }
+.checklist li.done .check { color: #3f6b3a; }
+.checklist li.done .step-label { color: var(--ink-faint); text-decoration: line-through; }
+.checklist .step-label { font-weight: 600; }
+.checklist .step-hint {
+  grid-column: 2; font-size: 12px; color: var(--ink-faint); font-style: italic;
+}
+
 @media (max-width: 560px) {
   .dossier-head .facts { text-align: left; }
   .ledger { font-size: 14px; }
