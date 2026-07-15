@@ -537,6 +537,20 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .admin-table td { vertical-align: middle; }
 .admin-table .inline-actions form { margin: 0; }
 
+/* Announcements composer (Headquarters) */
+.announce-card {
+  border: 1px solid var(--rule-strong); border-left: 4px solid var(--seal);
+  background: rgba(255,253,246,0.6); border-radius: 2px;
+  padding: 10px 16px; margin: 0 0 8px;
+}
+.announce-card summary {
+  cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px;
+}
+.announce-card summary::-webkit-details-marker { display: none; }
+.announce-title { font-family: var(--serif); font-weight: 700; letter-spacing: 0.04em; color: var(--seal); font-size: 15px; }
+.announce-sub { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+.announce-card .orders { margin-top: 10px; }
+
 /* Recruitment pipeline board */
 .pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 8px 0 4px; }
 .pipe-col {

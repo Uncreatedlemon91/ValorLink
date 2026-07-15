@@ -289,8 +289,22 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         pending=pending,
         company_count=len(companies),
         rank_count=len(ranks),
+        can_announce=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+        announce_ready=bool(get_config(session).announcements_channel_id),
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
+
+
+@app.post("/announce")
+def post_announce(
+    request: Request,
+    csrf: str = Form(...),
+    title: str = Form(""),
+    body: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.post_announcement, actor, title, body, redirect="/")
 
 
 @app.get("/roster", response_class=HTMLResponse)
@@ -1404,6 +1418,18 @@ def post_listing(
         else:
             _flash(request, "This unit isn't in the registry.", "error")
     return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/import-roster")
+def post_import_roster(
+    request: Request,
+    csrf: str = Form(...),
+    role_id: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.import_roster, actor, role_id,
+               redirect="/command-tent")
 
 
 @app.post("/admin/discord-link")

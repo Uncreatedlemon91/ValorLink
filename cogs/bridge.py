@@ -12,7 +12,7 @@ the web side and is the source of truth.
 """
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import discord
 from discord.ext import commands, tasks
@@ -372,6 +372,59 @@ class Bridge(commands.Cog):
 
     async def _do_award_revoked(self, guild, p):
         await self._refresh(guild, p["discord_id"])
+
+    async def _do_post_announcement(self, guild, p):
+        with db_session() as session:
+            channel_id = get_config(session).announcements_channel_id
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if channel is None:
+            raise ValueError("No announcements channel configured")
+        embed = base_embed(title=p.get("title") or "Regimental Announcement",
+                           description=p["body"])
+        embed.set_footer(text=f"Posted by {p.get('actor_name', 'an officer')}")
+        embed.timestamp = datetime.now(timezone.utc)
+        await channel.send(embed=embed)
+
+    async def _do_import_roster(self, guild, p):
+        default_rank = p["default_rank"]
+        default_company = p["default_company"]
+        role_id = p.get("role_id")
+        role = guild.get_role(role_id) if role_id else None
+
+        # Snapshot the ids already on the books so we only add newcomers.
+        with db_session() as session:
+            existing = {m.discord_id for m in session.query(Member.discord_id).all()}
+
+        added = 0
+        async for member in guild.fetch_members(limit=None):
+            if member.bot or member.id in existing:
+                continue
+            if role is not None and role not in member.roles:
+                continue
+            callsign = (member.nick or member.display_name or member.name).strip()
+            with db_session() as session:
+                if session.get(Member, member.id) is not None:
+                    continue
+                session.add(Member(
+                    discord_id=member.id,
+                    callsign=callsign or member.name,
+                    rank=default_rank,
+                    company=default_company,
+                    status="active",
+                ))
+                session.commit()
+            added += 1
+
+        if added:
+            try:
+                await _roster_refresh()(guild)
+            except Exception:
+                pass
+        embed = base_embed(title="Roster Import", description=f"Added **{added}** member(s) to the roster.")
+        embed.add_field(name="By", value=f"<@{p['actor_id']}>", inline=True)
+        if role is not None:
+            embed.add_field(name="Filtered to role", value=role.mention, inline=True)
+        await self._log_embed(guild, "admin_log_channel_id", embed)
 
     async def _strip_managed_roles(self, member: discord.Member):
         with db_session() as session:
