@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -14,7 +14,7 @@ from tenancy.routing import bind_guild
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_officer
-from utils.embeds import base_embed
+from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config, list_companies
 from utils.sync import sync_company
 
@@ -335,7 +335,8 @@ class Roster(commands.Cog):
 
         embed.add_field(name="Discipline", value=f"Total strikes on record: **{strike_count}**", inline=False)
 
-        embed.set_footer(text=f"As of {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC")
+        embed.set_footer(text="Regiment statistics")
+        embed.timestamp = datetime.now(timezone.utc)
         await interaction.followup.send(embed=embed)
 
 

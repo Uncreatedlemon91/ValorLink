@@ -343,16 +343,24 @@ def deny_candidate(session, actor: dict, discord_id: int) -> str:
 
 
 # --- Events & attendance ------------------------------------------------- #
-def create_event(session, actor: dict, name: str, event_type: str, when: str) -> int:
+def create_event(session, actor: dict, name: str, event_type: str, when: str,
+                 tz_offset: str | int = 0) -> int:
     name = name.strip()
     if not name:
         raise ActionError("The muster call needs a name.")
     if event_type not in EVENT_TYPES:
         raise ActionError("Choose a drill, battle, or operation.")
     try:
-        scheduled_at = datetime.strptime(when.strip(), "%Y-%m-%d %H:%M")
+        local = datetime.strptime(when.strip(), "%Y-%m-%d %H:%M")
     except ValueError:
         raise ActionError("Enter a valid date and time.")
+    # The officer entered the time in their own timezone; JS sent the offset
+    # (minutes) such that UTC = local + offset. Store naive UTC.
+    try:
+        offset = int(tz_offset)
+    except (TypeError, ValueError):
+        offset = 0
+    scheduled_at = local + timedelta(minutes=offset)
     event = Event(
         name=name, event_type=event_type, scheduled_at=scheduled_at, created_by=actor["id"]
     )
