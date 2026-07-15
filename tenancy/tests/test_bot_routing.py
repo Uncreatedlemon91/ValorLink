@@ -198,6 +198,36 @@ def test_bot_removal_retires_unit_but_spares_default():
     asyncio.run(inst.on_guild_remove(g3))
 
 
+def test_reconcile_retires_orphaned_units_on_startup():
+    from datetime import datetime, timedelta
+
+    from bot import ValorLink
+    from tenancy.registry import Tenant
+
+    provision.create_unit("stillin", "Still In", guild_id=1001)
+    provision.create_unit("kickedoff", "Kicked Off", guild_id=1002)
+    provision.create_unit("brandnew", "Brand New", guild_id=1003)
+    with registry_session() as s:
+        # age the first two past the grace period; leave brandnew recent
+        for slug in ("stillin", "kickedoff"):
+            tenant_by_slug(s, slug).created_at = datetime.utcnow() - timedelta(days=2)
+        s.add(Tenant(slug="hqreconcile", name="HQ", discord_guild_id=1000,
+                     db_url="sqlite:///:memory:", is_default=True,
+                     created_at=datetime.utcnow() - timedelta(days=2)))
+        s.commit()
+
+    inst = object.__new__(ValorLink)
+    # The bot is only in the HQ guild and "stillin"; it was kicked from the rest.
+    asyncio.run(inst._reconcile_units({1000, 1001}))
+    invalidate()
+
+    with registry_session() as s:
+        assert tenant_by_slug(s, "stillin") is not None      # bot still present
+        assert tenant_by_slug(s, "kickedoff") is None        # orphaned → retired
+        assert tenant_by_slug(s, "brandnew") is not None     # too new → spared
+        assert tenant_by_slug(s, "hqreconcile") is not None  # default → spared
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
