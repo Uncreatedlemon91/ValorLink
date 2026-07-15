@@ -28,7 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from db.models import AwardType, Candidacy, Company, Event, Member, Rank
 from tenancy.registry import registry_session
-from tenancy.resolve import listed_tenants, slug_from_host, tenant_by_slug
+from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
 from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
@@ -966,6 +966,17 @@ def _can_register(user: dict | None) -> bool:
     return str(user.get("id")) in ids
 
 
+def _is_platform_admin(user: dict | None) -> bool:
+    """Deleting units is destructive, so it always requires an explicit
+    PLATFORM_ADMIN_IDS allowlist (never available under open registration)."""
+    if not user:
+        return False
+    allow = os.getenv("PLATFORM_ADMIN_IDS", "").replace(" ", "")
+    if not allow:
+        return False
+    return str(user.get("id")) in {a for a in allow.split(",") if a}
+
+
 # --- Self-serve: register a unit ------------------------------------------ #
 @app.get("/register", response_class=HTMLResponse)
 def register_form(request: Request):
@@ -974,6 +985,15 @@ def register_form(request: Request):
     user = auth.current_user(request)
     if not user:
         raise auth.NotAuthenticated()
+    is_admin = _is_platform_admin(user)
+    existing = []
+    if is_admin:
+        with registry_session() as rs:
+            existing = [
+                {"slug": t.slug, "name": t.name, "is_default": t.is_default}
+                for t in all_tenants(rs) if not t.is_default
+            ]
+            existing.sort(key=lambda u: u["slug"])
     ctx = {
         "request": request,
         "user": user,
@@ -981,9 +1001,31 @@ def register_form(request: Request):
         "flash": request.session.pop("flash", []),
         "base_domain": os.getenv("PLATFORM_BASE_DOMAIN"),
         "can_register": _can_register(user),
+        "is_platform_admin": is_admin,
+        "existing_units": existing,
         "now": datetime.utcnow(),
     }
     return templates.TemplateResponse(request, "register.html", ctx)
+
+
+@app.post("/admin/units/{slug}/delete")
+def post_delete_unit(request: Request, slug: str, csrf: str = Form(...)):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _is_platform_admin(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/register", status_code=303)
+    from tenancy.provision import ProvisionError, delete_unit
+
+    try:
+        result = delete_unit(slug)
+        _flash(request, f"Removed unit '{result['name']}'. Its data was archived.", "ok")
+    except ProvisionError as exc:
+        _flash(request, str(exc), "error")
+    return RedirectResponse("/register", status_code=303)
 
 
 @app.post("/register")

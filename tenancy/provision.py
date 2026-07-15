@@ -2,7 +2,9 @@
 
 Shared by the management CLI and the web "register your unit" flow.
 """
+import os
 import re
+from datetime import datetime
 
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$")
 RESERVED_SLUGS = {"www", "api", "static", "auth", "admin", "app", "help", "status"}
@@ -54,3 +56,47 @@ def create_unit(slug: str, name: str, guild_id: int | None = None,
 
     invalidate()
     return url
+
+
+def delete_unit(slug: str, purge: bool = False) -> dict:
+    """Remove a unit from the platform: delete its registry row (so it leaves
+    the directory and stops resolving). The private database file is kept by
+    default (archived name if purge is off) so the data is recoverable; pass
+    purge=True to delete it outright. The default unit cannot be deleted.
+    """
+    from tenancy.registry import registry_session
+    from tenancy.resolve import tenant_by_slug
+    from tenancy.routing import invalidate
+
+    slug = (slug or "").strip().lower()
+    with registry_session() as session:
+        tenant = tenant_by_slug(session, slug)
+        if tenant is None:
+            raise ProvisionError(f"No unit '{slug}' exists.")
+        if tenant.is_default:
+            raise ProvisionError("The default unit can't be deleted.")
+        db_url = tenant.db_url
+        name = tenant.name
+        session.delete(tenant)
+        session.commit()
+
+    invalidate()
+
+    archived_to = None
+    if db_url.startswith("sqlite:///"):
+        path = db_url[len("sqlite:///"):]
+        if os.path.exists(path):
+            if purge:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            else:
+                archived_to = f"{path}.removed-{datetime.utcnow():%Y%m%d%H%M%S}"
+                try:
+                    os.rename(path, archived_to)
+                except OSError:
+                    archived_to = None
+
+    return {"slug": slug, "name": name, "db_url": db_url,
+            "purged": purge, "archived_to": archived_to}

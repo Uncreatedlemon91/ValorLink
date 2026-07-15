@@ -98,6 +98,33 @@ def test_bridge_drains_each_units_queue_against_its_guild():
             assert row.status == queue.DONE
 
 
+def test_delete_unit_removes_from_registry_and_protects_default():
+    provision.create_unit("golf", "Golf", guild_id=777)
+    with registry_session() as s:
+        assert tenant_by_slug(s, "golf") is not None
+    result = provision.delete_unit("golf")   # archives db by default
+    assert result["name"] == "Golf" and result["purged"] is False
+    with registry_session() as s:
+        assert tenant_by_slug(s, "golf") is None
+    # deleting a non-existent unit errors
+    try:
+        provision.delete_unit("golf")
+        assert False
+    except provision.ProvisionError:
+        pass
+    # the default unit is protected
+    from tenancy.resolve import ensure_default_tenant
+    with registry_session() as s:
+        ensure_default_tenant(s, name="HQ")
+        s.commit()
+        default_slug = __import__("tenancy.resolve", fromlist=["default_tenant"]).default_tenant(s).slug
+    try:
+        provision.delete_unit(default_slug)
+        assert False
+    except provision.ProvisionError:
+        pass
+
+
 def test_create_unit_rejects_bad_and_duplicate_slugs():
     provision.create_unit("foxtrot", "Foxtrot", guild_id=666)
     for bad in ("foxtrot", "WWW", "a b", "-x", "www"):
