@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the ValorLink database backup daily
+
+[Timer]
+# Every day at 03:30, plus a catch-up run if the box was off at that time.
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

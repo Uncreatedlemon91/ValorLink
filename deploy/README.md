@@ -261,6 +261,49 @@ their guild — `sudo systemctl restart valorlink-bot`.)
   the same `DATABASE_URL` (`journalctl -u valorlink-bot`).
 - **Certificate errors** — DNS must resolve to the droplet before Caddy can
   issue a cert; give it a few minutes, then `systemctl reload caddy`.
-- **Backups** — the whole regiment lives in `/opt/valorlink/valorlink.db`.
-  Copy it somewhere safe periodically (DigitalOcean weekly droplet backups,
-  a cron `cp`, or `rsync` off-box).
+
+---
+
+## Backups
+
+Everything a regiment owns lives in SQLite files under `/opt/valorlink`: the
+default `valorlink.db`, and — in multi-unit mode — `registry.db` plus one
+database per unit under `units/`. `install.sh` sets up a **daily** backup that
+snapshots all of them into one compressed archive and keeps the last 14.
+
+It uses SQLite's online `.backup`, so it's safe to run while the bot and web
+app are live (a plain `cp` of a database mid-write can capture a torn file;
+this doesn't). Each snapshot is integrity-checked before it's kept.
+
+**What runs it.** The `valorlink-backup.timer` fires `deploy/backup.sh` at
+03:30 daily (with a catch-up run if the droplet was off). Check and drive it:
+
+```bash
+systemctl list-timers valorlink-backup.timer      # when it last/next runs
+sudo -u valorlink bash deploy/backup.sh           # run one right now
+ls -lh /opt/valorlink/backups                      # the archives
+journalctl -u valorlink-backup                     # backup run logs
+```
+
+Archives are named `valorlink-<UTC-timestamp>.tar.gz`.
+
+**Tune it** in `/opt/valorlink/.env` (see `.env.production.example`):
+`BACKUP_RETENTION` (how many to keep), `BACKUP_DIR` (where they go), and
+`BACKUP_REMOTE` — an [rclone](https://rclone.org/) target such as a
+DigitalOcean Spaces or S3 bucket. If `BACKUP_REMOTE` is set and `rclone` is
+installed (`apt install -y rclone` + `rclone config`), every archive is also
+copied off-box, so a lost droplet doesn't take the backups with it. Keeping at
+least one copy off the droplet is strongly recommended.
+
+**Restore** with `deploy/restore.sh` (stops the services, moves the current
+databases aside as `*.pre-restore-*`, lays the snapshot back, restarts):
+
+```bash
+sudo bash deploy/restore.sh --list                 # available archives
+sudo bash deploy/restore.sh --latest               # restore the newest
+sudo bash deploy/restore.sh /opt/valorlink/backups/valorlink-20260715-033000.tar.gz
+```
+
+DigitalOcean's own weekly droplet backups (a paid add-on in the panel) are a
+fine belt-and-suspenders layer on top of this, but they're weekly and
+whole-disk; the script above is daily, per-database, and restorable in place.
