@@ -141,6 +141,36 @@ class ValorLink(commands.Bot):
         except discord.HTTPException:
             log.exception("Failed to sync commands to guild %s", guild.id)
 
+    async def on_guild_remove(self, guild: discord.Guild):
+        """When the bot is removed from a unit's server, retire that unit: take
+        it off the platform (registry row → subdomain + directory stop) and
+        archive its database so it's recoverable. The default/HQ unit is never
+        retired this way."""
+        from tenancy.provision import ProvisionError, delete_unit
+        from tenancy.registry import registry_session
+        from tenancy.resolve import tenant_by_guild
+
+        with registry_session() as session:
+            tenant = tenant_by_guild(session, guild.id)
+            if tenant is None:
+                return  # not a registered unit; nothing to retire
+            if tenant.is_default:
+                log.warning(
+                    "Removed from the default unit's guild %s; leaving it registered.",
+                    guild.id,
+                )
+                return
+            slug = tenant.slug
+
+        try:
+            result = delete_unit(slug)  # archives the DB + invalidates the cache
+            log.info(
+                "Retired unit '%s' after removal from guild %s (database archived to %s)",
+                slug, guild.id, result.get("archived_to"),
+            )
+        except ProvisionError as exc:
+            log.warning("Could not retire unit for guild %s: %s", guild.id, exc)
+
     async def on_ready(self):
         log.info("ValorLink is online as %s", self.user)
 

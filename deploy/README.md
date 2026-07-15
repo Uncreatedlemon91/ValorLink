@@ -254,8 +254,14 @@ sudo -u valorlink .venv/bin/python -m tenancy.manage remove --slug 5thva
 ```
 Removing takes the unit off the directory and stops it resolving; its database
 is **archived on the server** (renamed `*.removed-<timestamp>`), not destroyed,
-unless you `--purge`. Afterwards, kick the bot from that Discord server (or
-restart `valorlink-bot`) so it drops the stale guild mapping.
+unless you `--purge`.
+
+**Kicking the bot auto-retires the unit.** When the bot is removed from a unit's
+Discord server, it retires that unit automatically — the registry row is deleted
+(so its subdomain and directory listing stop) and its database is archived, the
+same as a manual remove. The default/HQ unit is never retired this way. So for a
+unit that has invited the bot, simply kicking the bot is enough; the CLI/web
+remove is for units the bot never joined, or to `--purge` the database.
 
 **Re-pointing a unit's Discord server:** a unit admin can change (or clear)
 the linked server from **Command Tent → Discord Server** — useful if the unit

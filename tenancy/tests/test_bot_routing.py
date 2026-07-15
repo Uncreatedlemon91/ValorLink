@@ -166,6 +166,38 @@ def test_command_sync_survives_a_forbidden_guild():
         bot_module.config.GUILD_ID = old_guild
 
 
+def test_bot_removal_retires_unit_but_spares_default():
+    from bot import ValorLink
+    from tenancy.registry import Tenant
+
+    provision.create_unit("kickme", "Kick Me", guild_id=909)
+    # a protected default unit bound to its own guild
+    with registry_session() as s:
+        s.add(Tenant(slug="hqdefault", name="HQ", discord_guild_id=800,
+                     db_url="sqlite:///:memory:", is_default=True))
+        s.commit()
+
+    inst = object.__new__(ValorLink)
+
+    # kicked from a normal unit's server → it's retired
+    g1 = MagicMock(); g1.id = 909; g1.name = "Kick Me"
+    asyncio.run(inst.on_guild_remove(g1))
+    invalidate()
+    with registry_session() as s:
+        assert tenant_by_slug(s, "kickme") is None
+    assert db_url_for_guild(909) is None
+
+    # kicked from the default unit's server → left registered
+    g2 = MagicMock(); g2.id = 800; g2.name = "HQ"
+    asyncio.run(inst.on_guild_remove(g2))
+    with registry_session() as s:
+        assert tenant_by_slug(s, "hqdefault") is not None
+
+    # an unregistered guild is a no-op
+    g3 = MagicMock(); g3.id = 404404; g3.name = "Stranger"
+    asyncio.run(inst.on_guild_remove(g3))
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
