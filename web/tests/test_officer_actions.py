@@ -227,6 +227,33 @@ def test_recruit_pipeline_stage_and_notes():
     assert "At the Gate" in html and "In Interview" in html and "Awaiting Decision" in html
 
 
+def test_promotion_board_flags_eligible_and_promotes():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    _login(client, "officer")
+    now = datetime.utcnow()
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)          # Private, eligible after time in rank
+        m.rank_since = now - timedelta(days=40)
+        s.add(Member(discord_id=600, callsign="Fresh", rank="Private", company="Alpha",
+                     status="active", rank_since=now))   # too new to be ready
+        s.commit()
+
+    html = client.get("/promotions").text
+    assert "Promotion Board" in html and "1 ready" in html  # only Testman is ready
+    assert "Testman" in html and "Fresh" in html
+
+    # promote Testman to the next rank from the board
+    token = _csrf(client, "/promotions")
+    r = client.post(f"/members/{MEMBER_ID}/rank",
+                    data={"csrf": token, "rank": "Corporal", "mode": "promote"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)
+        assert m.rank == "Corporal"
+        assert m.rank_since >= now - timedelta(seconds=5)  # reset on promotion
+
+
 def test_insufficient_tier_is_forbidden():
     client = TestClient(app)
     _login(client, "none")

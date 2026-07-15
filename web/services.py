@@ -76,6 +76,7 @@ def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: 
     is_promotion = new_record.position > old_position
 
     record.rank = new_rank
+    record.rank_since = datetime.utcnow()
     verb = "Promoted" if is_promotion else "Stepped down"
     entry = f"{verb} from {old_rank} to {new_rank} by {actor['name']}."
     if citation:
@@ -108,6 +109,7 @@ def set_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str
     old_rank = record.rank
     callsign = record.callsign
     record.rank = new_rank
+    record.rank_since = datetime.utcnow()
     entry = f"Rank set from {old_rank} to {new_rank} by {actor['name']}."
     if citation:
         entry += f" {citation}"

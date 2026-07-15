@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Promotion Board{% endblock %}
+{% block content %}
+
+<h2 class="section">Promotion Board <span class="tally">{{ eligible_count }} ready</span></h2>
+<p class="lede">Active members with a rank still to earn, ordered by readiness. A member is
+flagged <b>ready</b> once they've held their rank at least {{ min_days }} days and kept
+turnout at or above {{ min_att_pct }}% (members with no muster history yet aren't held back).
+This is a shortlist for your judgement, not an automatic promotion.</p>
+
+{% if rows %}
+<table class="ledger">
+  <thead>
+    <tr>
+      <th>Callsign</th><th>Rank</th><th>Next</th>
+      <th class="num">In rank</th><th class="num">Turnout</th><th class="num">Awards</th>
+      {% if can_promote %}<th class="num">Action</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="{{ 'promo-ready' if r.eligible }}">
+      <td class="callsign"><a href="/dossier/{{ r.member.discord_id }}">{{ r.member.callsign }}</a>
+        {% if r.eligible %}<span class="promo-badge">ready</span>{% endif %}</td>
+      <td>{{ r.member.rank }}</td>
+      <td class="promo-next">{{ r.next_rank }}</td>
+      <td class="num {{ '' if r.meets_time else 'promo-short' }}">{{ r.days_in_rank }}d</td>
+      <td class="num {{ '' if r.meets_att else 'promo-short' }}">
+        {% if r.attendance.pct is not none %}{{ r.attendance.pct }}%{% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td class="num muted">{{ r.awards or '—' }}</td>
+      {% if can_promote %}
+      <td class="num">
+        <form method="post" action="/members/{{ r.member.discord_id }}/rank"
+              onsubmit="return confirm('Promote {{ r.member.callsign }} to {{ r.next_rank }}?');">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="rank" value="{{ r.next_rank }}">
+          <input type="hidden" name="mode" value="promote">
+          <button class="btn btn-small {{ 'btn-approve' if r.eligible else 'btn-ghost' }}" type="submit">Promote</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="order-note">Time-in-rank and turnout that fall short of the bar are shown in
+red — you can still promote anyone; the flags are guidance.</p>
+{% else %}
+  <div class="hollow">
+    <div class="mark">✶</div>
+    <h3>No One Awaiting Advancement</h3>
+    <p>Every active member is either at the top of the ladder or newly enrolled.</p>
+  </div>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

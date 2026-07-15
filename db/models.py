@@ -32,6 +32,7 @@ class Member(Base):
     status = Column(String, nullable=False, default="active")  # active | inactive | discharged
     joined_date = Column(DateTime, default=_utcnow)
     last_active_date = Column(DateTime, default=_utcnow)
+    rank_since = Column(DateTime, default=_utcnow)  # when they took their current rank
     thread_id = Column(BigInteger, nullable=True)
     loa_until = Column(DateTime, nullable=True)
 

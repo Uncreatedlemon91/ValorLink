@@ -503,16 +503,13 @@ AT_RISK_RATE = 0.5      # below this counts as at-risk
 AT_RISK_MIN_EVENTS = 2  # ...but only once someone's had a fair sample
 
 
-@app.get("/attendance", response_class=HTMLResponse)
-def attendance(request: Request, session: Session = Depends(get_session)):
-    """Attendance analytics: per-member turnout over recent events, an at-risk
-    list, and a per-event summary. A member's denominator only counts events
-    held after they enrolled, and excused absences are set aside — so the rate
-    reflects the muster calls they were actually expected at."""
-    ctx = _base_context(request, session)
+def _attendance_index(session: Session, window_days: int = ATTENDANCE_WINDOW_DAYS):
+    """Return (events, status_by_member, rate_for) for muster calls in the
+    window. ``rate_for(member)`` gives that member's turnout, counting only
+    calls held after they enrolled and setting excused absences aside. Shared
+    by the attendance analytics page and the promotion board."""
     now = datetime.utcnow()
-    window_start = now - timedelta(days=ATTENDANCE_WINDOW_DAYS)
-
+    window_start = now - timedelta(days=window_days)
     events = (
         session.query(Event)
         .filter(Event.scheduled_at <= now, Event.scheduled_at >= window_start)
@@ -521,7 +518,6 @@ def attendance(request: Request, session: Session = Depends(get_session)):
     )
     event_ids = [e.id for e in events]
 
-    # member_id -> {event_id: status}
     status_by_member: dict[int, dict[int, str]] = defaultdict(dict)
     if event_ids:
         for rec in (
@@ -531,30 +527,39 @@ def attendance(request: Request, session: Session = Depends(get_session)):
         ):
             status_by_member[rec.member_id][rec.event_id] = rec.status
 
+    def rate_for(member: Member) -> dict:
+        joined = member.joined_date or datetime.min
+        eligible = [e for e in events if e.scheduled_at >= joined]
+        statuses = status_by_member.get(member.discord_id, {})
+        present = sum(1 for e in eligible if statuses.get(e.id) == "present")
+        excused = sum(1 for e in eligible if statuses.get(e.id) == "excused")
+        counted = len(eligible) - excused
+        rate = (present / counted) if counted else None
+        return {
+            "present": present, "counted": counted, "excused": excused,
+            "missed": (counted - present) if counted else 0,
+            "rate": rate, "pct": round(rate * 100) if rate is not None else None,
+        }
+
+    return events, status_by_member, rate_for
+
+
+@app.get("/attendance", response_class=HTMLResponse)
+def attendance(request: Request, session: Session = Depends(get_session)):
+    """Attendance analytics: per-member turnout over recent events, an at-risk
+    list, and a per-event summary. A member's denominator only counts events
+    held after they enrolled, and excused absences are set aside — so the rate
+    reflects the muster calls they were actually expected at."""
+    ctx = _base_context(request, session)
+    events, status_by_member, rate_for = _attendance_index(session)
+
     members = (
         session.query(Member)
         .filter(Member.status.in_(("active", "loa", "inactive")))
         .all()
     )
 
-    rows = []
-    for m in members:
-        joined = m.joined_date or datetime.min
-        eligible = [e for e in events if e.scheduled_at >= joined]
-        statuses = status_by_member.get(m.discord_id, {})
-        present = sum(1 for e in eligible if statuses.get(e.id) == "present")
-        excused = sum(1 for e in eligible if statuses.get(e.id) == "excused")
-        counted = len(eligible) - excused
-        rate = (present / counted) if counted else None
-        rows.append({
-            "member": m,
-            "present": present,
-            "counted": counted,
-            "excused": excused,
-            "missed": (counted - present) if counted else 0,
-            "rate": rate,
-            "pct": round(rate * 100) if rate is not None else None,
-        })
+    rows = [{"member": m, **rate_for(m)} for m in members]
 
     # Full table: those with a rate first (best turnout first), then the rest.
     ranked = sorted(
@@ -587,6 +592,55 @@ def attendance(request: Request, session: Session = Depends(get_session)):
         at_risk_pct=round(AT_RISK_RATE * 100),
     )
     return templates.TemplateResponse(request, "attendance.html", ctx)
+
+
+PROMOTION_MIN_DAYS_IN_RANK = 30
+PROMOTION_MIN_ATTENDANCE = 0.5
+
+
+@app.get("/promotions", response_class=HTMLResponse)
+def promotions(request: Request, session: Session = Depends(get_session)):
+    """A promotion board: active members who have a next rank to earn, ranked
+    by readiness (time in rank + turnout). It's a shortlist for officers to act
+    on, not automation — the criteria are shown so the judgement stays human."""
+    ctx = _base_context(request, session)
+    now = datetime.utcnow()
+    _events, _sbm, rate_for = _attendance_index(session)
+
+    members = session.query(Member).filter(Member.status == "active").all()
+    rows = []
+    for m in members:
+        next_rank = rank_utils.next_rank(session, m.rank)
+        if not next_rank:
+            continue  # already at the top of the ladder
+        since = m.rank_since or m.joined_date or now
+        days_in_rank = max((now - since).days, 0)
+        att = rate_for(m)
+        awards_held = len(m.awards)
+        meets_time = days_in_rank >= PROMOTION_MIN_DAYS_IN_RANK
+        # Attendance only blocks when there's a rate to judge and it's too low.
+        meets_att = att["rate"] is None or att["rate"] >= PROMOTION_MIN_ATTENDANCE
+        rows.append({
+            "member": m,
+            "next_rank": next_rank,
+            "days_in_rank": days_in_rank,
+            "attendance": att,
+            "awards": awards_held,
+            "eligible": meets_time and meets_att,
+            "meets_time": meets_time,
+            "meets_att": meets_att,
+        })
+
+    rows.sort(key=lambda r: (not r["eligible"], -r["days_in_rank"], r["member"].callsign.lower()))
+    eligible_count = sum(1 for r in rows if r["eligible"])
+    ctx.update(
+        rows=rows,
+        eligible_count=eligible_count,
+        min_days=PROMOTION_MIN_DAYS_IN_RANK,
+        min_att_pct=round(PROMOTION_MIN_ATTENDANCE * 100),
+        can_promote=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+    )
+    return templates.TemplateResponse(request, "promotions.html", ctx)
 
 
 @app.get("/muster-calls/{event_id}", response_class=HTMLResponse)
