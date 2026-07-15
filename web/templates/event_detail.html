@@ -10,7 +10,7 @@
     <h1>{{ event.name }}</h1>
   </div>
   <div class="facts">
-    <div><span class="k">When</span><br>{{ event.scheduled_at|fmt_date(true) }} U.T.C.</div>
+    <div><span class="k">When</span><br>{{ event.scheduled_at|fmt_date(true) }}</div>
     <div><span class="k">Replies</span><br>{{ records|length }}</div>
   </div>
 </div>

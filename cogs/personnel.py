@@ -7,7 +7,7 @@ from db.models import Member, ServiceHistoryEntry
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
 from utils.checks import is_officer
-from utils.embeds import base_embed
+from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config
 from utils.sync import sync_rank
 
@@ -32,15 +32,15 @@ def _build_personnel_embed(record: Member, display_name: str) -> discord.Embed:
     embed.add_field(name="Rank", value=record.rank, inline=True)
     embed.add_field(name="Company", value=record.company, inline=True)
     embed.add_field(name="Status", value=record.status, inline=True)
-    embed.add_field(name="Joined", value=record.joined_date.strftime("%Y-%m-%d"), inline=True)
-    embed.add_field(name="Last Active", value=record.last_active_date.strftime("%Y-%m-%d"), inline=True)
+    embed.add_field(name="Joined", value=discord_ts(record.joined_date, 'd'), inline=True)
+    embed.add_field(name="Last Active", value=discord_ts(record.last_active_date, 'd'), inline=True)
 
     if awards:
         embed.add_field(
             name="Awards & Qualifications",
             value="\n".join(
                 f"- {(a.award_type.emoji + ' ') if a.award_type.emoji else ''}{a.award_type.name} "
-                f"({a.date_awarded.strftime('%Y-%m-%d')})"
+                f"({discord_ts(a.date_awarded, 'd')})"
                 for a in awards
             ),
             inline=False,
@@ -49,7 +49,7 @@ def _build_personnel_embed(record: Member, display_name: str) -> discord.Embed:
     if history:
         embed.add_field(
             name="Recent Service History",
-            value="\n".join(f"- {h.date.strftime('%Y-%m-%d')}: {h.entry}" for h in history),
+            value="\n".join(f"- {discord_ts(h.date, 'd')}: {h.entry}" for h in history),
             inline=False,
         )
 
@@ -57,7 +57,7 @@ def _build_personnel_embed(record: Member, display_name: str) -> discord.Embed:
         embed.add_field(
             name="Recent Disciplinary Records",
             value="\n".join(
-                f"- {d.date.strftime('%Y-%m-%d')} [{d.record_type.upper()}]: {d.reason}" for d in discipline
+                f"- {discord_ts(d.date, 'd')} [{d.record_type.upper()}]: {d.reason}" for d in discipline
             ),
             inline=False,
         )

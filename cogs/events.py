@@ -8,7 +8,7 @@ from db.base import db_session
 from db.models import AttendanceRecord, Event, Member
 from tenancy.routing import bind_guild
 from utils.checks import is_officer
-from utils.embeds import base_embed
+from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config
 
 EVENT_TYPES = ["Drill", "Battle", "Operation"]
@@ -28,7 +28,7 @@ def _rsvp_buckets(session, event_id: int) -> dict[str, list[str]]:
 def _build_event_embed(event: Event, buckets: dict[str, list[str]]) -> discord.Embed:
     embed = base_embed(
         title=f"{event.event_type}: {event.name}",
-        description=f"**When:** {event.scheduled_at.strftime('%Y-%m-%d %H:%M UTC')}",
+        description=f"**When:** {discord_ts(event.scheduled_at, 'F')} ({discord_ts(event.scheduled_at, 'R')})",
     )
     embed.add_field(
         name=f"Accepted ({len(buckets['accepted'])})",
@@ -251,7 +251,7 @@ class Events(commands.Cog):
             for r in records:
                 event = session.get(Event, r.event_id)
                 if event:
-                    lines.append(f"- {event.scheduled_at.strftime('%Y-%m-%d')} {event.name}: **{r.status}**")
+                    lines.append(f"- {discord_ts(event.scheduled_at, 'd')} {event.name}: **{r.status}**")
 
         embed = base_embed(title=f"Attendance History: {target.display_name}")
         embed.description = "\n".join(lines) if lines else "No attendance records yet."

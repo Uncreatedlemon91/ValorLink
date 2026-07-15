@@ -151,10 +151,20 @@ def brand_hex(color: int | None) -> str:
     return f"#{color & 0xFFFFFF:06x}"
 
 
-def fmt_date(value: datetime | None, with_time: bool = False) -> str:
+def fmt_date(value: datetime | None, with_time: bool = False):
+    """Render a stored (naive UTC) datetime as a <time> element that the
+    browser localizes to the viewer's own timezone. Falls back to a UTC
+    string if JavaScript is off."""
+    from markupsafe import Markup, escape
+
     if not value:
         return "—"
-    return value.strftime("%d %b %Y" + (" · %H:%M" if with_time else ""))
+    iso = value.strftime("%Y-%m-%dT%H:%M:%SZ")
+    fallback = value.strftime("%d %b %Y" + (" · %H:%M" if with_time else ""))
+    kind = "datetime" if with_time else "date"
+    return Markup(
+        f'<time datetime="{iso}" data-local data-fmt="{kind}">{escape(fallback)}</time>'
+    )
 
 
 templates.env.filters["status_label"] = status_label
@@ -663,6 +673,7 @@ def post_create_event(
     event_type: str = Form(...),
     date: str = Form(...),
     time: str = Form(...),
+    tz_offset: str = Form("0"),
     user: dict = Depends(auth.require_officer),
 ):
     if not auth.verify_csrf(request, csrf):
@@ -671,7 +682,9 @@ def post_create_event(
     actor = {"id": user["id"], "name": user["name"]}
     with _tenant_session(request) as session:
         try:
-            event_id = services.create_event(session, actor, name, event_type, f"{date} {time}")
+            event_id = services.create_event(
+                session, actor, name, event_type, f"{date} {time}", tz_offset=tz_offset
+            )
             _flash(request, f"'{name}' announced.", "ok")
             return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
         except services.ActionError as exc:
