@@ -22,6 +22,7 @@
       <a href="/roster" class="{{ 'active' if path == '/roster' }}">Roster</a>
       <a href="/muster" class="{{ 'active' if path == '/muster' }}">Muster Roll</a>
       <a href="/muster-calls" class="{{ 'active' if path.startswith('/muster-calls') }}">Muster Calls</a>
+      <a href="/attendance" class="{{ 'active' if path == '/attendance' }}">Attendance</a>
       <a href="/honors" class="{{ 'active' if path == '/honors' }}">Honors</a>
       <a href="/recruits" class="{{ 'active' if path == '/recruits' }}">Recruits{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
       {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'active' if path == '/command-tent' }}">Command Tent</a>{% endif %}

@@ -537,6 +537,26 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .admin-table td { vertical-align: middle; }
 .admin-table .inline-actions form { margin: 0; }
 
+/* Attendance analytics */
+.stat-strip { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 26px; }
+.stat {
+  flex: 1 1 120px; text-align: center;
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
+  background: rgba(255,253,246,0.6); border-radius: 2px; padding: 12px 8px;
+}
+.stat-num { display: block; font-family: var(--serif); font-size: 28px; font-weight: 700; color: var(--seal); }
+.stat-cap { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-top: 3px; }
+.meter {
+  display: inline-block; width: 84px; height: 8px; vertical-align: middle;
+  background: var(--paper-2); border: 1px solid var(--rule-strong); border-radius: 6px;
+  overflow: hidden; margin-right: 8px;
+}
+.meter-fill { display: block; height: 100%; }
+.meter-fill.rate-ok { background: #3f6b3a; }
+.meter-fill.rate-low { background: var(--oxblood); }
+.rate { font-variant-numeric: tabular-nums; font-weight: 600; }
+.rate.rate-low { color: var(--oxblood); }
+
 /* First-run setup checklist */
 .setup-card {
   border: 1px solid var(--rule-strong);

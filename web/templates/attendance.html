@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Attendance{% endblock %}
+{% block content %}
+
+<h2 class="section">Attendance <span class="tally">last {{ window_days }} days</span></h2>
+<p class="lede">Turnout across muster calls held in the last {{ window_days }} days.
+A member's rate counts only calls held after they enrolled, and sets excused
+absences aside — so it reflects the musters they were actually expected at.</p>
+
+<div class="stat-strip">
+  <div class="stat"><span class="stat-num">{{ event_count }}</span><span class="stat-cap">calls held</span></div>
+  <div class="stat"><span class="stat-num">{% if avg_pct is not none %}{{ avg_pct }}%{% else %}—{% endif %}</span><span class="stat-cap">avg turnout</span></div>
+  <div class="stat"><span class="stat-num">{{ at_risk|length }}</span><span class="stat-cap">at risk</span></div>
+</div>
+
+{% if event_count == 0 %}
+  <div class="hollow"><div class="mark">✶</div><h3>No Calls Yet</h3>
+  <p>No muster calls have been held in this window. Attendance figures appear once calls are on record.</p></div>
+{% else %}
+
+{% if at_risk %}
+<h2 class="section">At Risk <span class="tally">below {{ at_risk_pct }}% turnout</span></h2>
+<p class="lede">Active members who have missed more musters than they've made (with at
+least a couple of eligible calls). Worth a check-in.</p>
+<table class="ledger">
+  <thead><tr><th>Callsign</th><th>Rank</th><th>Company</th><th class="num">Turnout</th><th class="num">Made</th></tr></thead>
+  <tbody>
+  {% for r in at_risk %}
+    <tr>
+      <td class="callsign"><a href="/dossier/{{ r.member.discord_id }}">{{ r.member.callsign }}</a></td>
+      <td>{{ r.member.rank }}</td>
+      <td class="muted">{{ r.member.company }}</td>
+      <td class="num"><span class="rate rate-low">{{ r.pct }}%</span></td>
+      <td class="num muted">{{ r.present }} / {{ r.counted }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="section">By Member <span class="tally">{{ rows|length }} on the books</span></h2>
+<table class="ledger" id="attendance-table">
+  <thead>
+    <tr>
+      <th>Callsign</th><th>Rank</th><th>Company</th>
+      <th class="num">Turnout</th><th class="num">Made</th><th class="num">Excused</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="callsign"><a href="/dossier/{{ r.member.discord_id }}">{{ r.member.callsign }}</a></td>
+      <td>{{ r.member.rank }}</td>
+      <td class="muted">{{ r.member.company }}</td>
+      <td class="num">
+        {% if r.pct is not none %}
+          <span class="meter"><span class="meter-fill {{ 'rate-low' if r.pct < at_risk_pct else 'rate-ok' }}" style="width:{{ r.pct }}%"></span></span>
+          <span class="rate">{{ r.pct }}%</span>
+        {% else %}
+          <span class="muted">no eligible calls</span>
+        {% endif %}
+      </td>
+      <td class="num muted">{{ r.present }} / {{ r.counted }}</td>
+      <td class="num muted">{{ r.excused or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 class="section">By Call <span class="tally">{{ event_summary|length }} calls</span></h2>
+<table class="ledger">
+  <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Present</th><th class="num">Answered</th></tr></thead>
+  <tbody>
+  {% for s in event_summary %}
+    <tr>
+      <td class="callsign"><a href="/muster-calls/{{ s.event.id }}">{{ s.event.name }}</a></td>
+      <td class="muted">{{ s.event.event_type }}</td>
+      <td class="num muted">{{ s.event.scheduled_at|fmt_date(true) }}</td>
+      <td class="num">{{ s.present }}</td>
+      <td class="num muted">{{ s.responses }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

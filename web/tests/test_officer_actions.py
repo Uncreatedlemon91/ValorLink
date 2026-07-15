@@ -309,6 +309,38 @@ def test_officer_can_create_event_and_mark_attendance():
         assert rec.status == "present"
 
 
+def test_attendance_analytics_rate_and_at_risk():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    now = datetime.utcnow()
+    with SessionLocal() as s:
+        # member enrolled well before the calls so they're all eligible
+        m = s.get(Member, MEMBER_ID)
+        m.joined_date = now - timedelta(days=30)
+        # a low-turnout second member to land in the at-risk list
+        s.add(Member(discord_id=300, callsign="Slacker", rank="Private",
+                     company="Alpha", status="active", joined_date=now - timedelta(days=30)))
+        past = []
+        for d in (20, 15, 10):
+            e = Event(name=f"Past Drill {d}", event_type="Drill",
+                      scheduled_at=now - timedelta(days=d), created_by=1)
+            s.add(e); past.append(e)
+        s.flush()
+        for e in past:
+            s.add(AttendanceRecord(event_id=e.id, member_id=MEMBER_ID, status="present"))
+        # Slacker: present once, absent twice -> 33% -> at risk
+        s.add(AttendanceRecord(event_id=past[0].id, member_id=300, status="present"))
+        s.add(AttendanceRecord(event_id=past[1].id, member_id=300, status="absent"))
+        s.add(AttendanceRecord(event_id=past[2].id, member_id=300, status="absent"))
+        s.commit()
+
+    html = client.get("/attendance").text
+    assert "calls held" in html and "100%" in html          # Testman perfect turnout
+    at_risk_block = html.split("By Member")[0]
+    assert "Slacker" in at_risk_block                        # flagged at risk
+    assert "Testman" not in at_risk_block                    # perfect turnout not flagged
+
+
 def test_award_grant_and_revoke():
     client = TestClient(app)
     _login(client, "officer")

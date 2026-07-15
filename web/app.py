@@ -26,7 +26,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from db.models import AwardType, Candidacy, Company, Event, Member, Rank
+from db.models import AttendanceRecord, AwardType, Candidacy, Company, Event, Member, Rank
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -413,6 +413,97 @@ def events(request: Request, session: Session = Depends(get_session)):
 
     ctx.update(upcoming=upcoming, past=past, event_types=services.EVENT_TYPES)
     return templates.TemplateResponse(request, "events.html", ctx)
+
+
+ATTENDANCE_WINDOW_DAYS = 90
+AT_RISK_RATE = 0.5      # below this counts as at-risk
+AT_RISK_MIN_EVENTS = 2  # ...but only once someone's had a fair sample
+
+
+@app.get("/attendance", response_class=HTMLResponse)
+def attendance(request: Request, session: Session = Depends(get_session)):
+    """Attendance analytics: per-member turnout over recent events, an at-risk
+    list, and a per-event summary. A member's denominator only counts events
+    held after they enrolled, and excused absences are set aside — so the rate
+    reflects the muster calls they were actually expected at."""
+    ctx = _base_context(request, session)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=ATTENDANCE_WINDOW_DAYS)
+
+    events = (
+        session.query(Event)
+        .filter(Event.scheduled_at <= now, Event.scheduled_at >= window_start)
+        .order_by(Event.scheduled_at.desc())
+        .all()
+    )
+    event_ids = [e.id for e in events]
+
+    # member_id -> {event_id: status}
+    status_by_member: dict[int, dict[int, str]] = defaultdict(dict)
+    if event_ids:
+        for rec in (
+            session.query(AttendanceRecord)
+            .filter(AttendanceRecord.event_id.in_(event_ids))
+            .all()
+        ):
+            status_by_member[rec.member_id][rec.event_id] = rec.status
+
+    members = (
+        session.query(Member)
+        .filter(Member.status.in_(("active", "loa", "inactive")))
+        .all()
+    )
+
+    rows = []
+    for m in members:
+        joined = m.joined_date or datetime.min
+        eligible = [e for e in events if e.scheduled_at >= joined]
+        statuses = status_by_member.get(m.discord_id, {})
+        present = sum(1 for e in eligible if statuses.get(e.id) == "present")
+        excused = sum(1 for e in eligible if statuses.get(e.id) == "excused")
+        counted = len(eligible) - excused
+        rate = (present / counted) if counted else None
+        rows.append({
+            "member": m,
+            "present": present,
+            "counted": counted,
+            "excused": excused,
+            "missed": (counted - present) if counted else 0,
+            "rate": rate,
+            "pct": round(rate * 100) if rate is not None else None,
+        })
+
+    # Full table: those with a rate first (best turnout first), then the rest.
+    ranked = sorted(
+        rows,
+        key=lambda r: (r["rate"] is None, -(r["rate"] or 0), r["member"].callsign.lower()),
+    )
+    at_risk = sorted(
+        (r for r in ranked
+         if r["rate"] is not None and r["counted"] >= AT_RISK_MIN_EVENTS
+         and r["rate"] < AT_RISK_RATE and r["member"].status == "active"),
+        key=lambda r: r["rate"],
+    )
+
+    # Per-event turnout summary.
+    event_summary = []
+    for e in events:
+        present = sum(1 for s in status_by_member.values() if s.get(e.id) == "present")
+        responses = sum(1 for s in status_by_member.values() if e.id in s)
+        event_summary.append({"event": e, "present": present, "responses": responses})
+
+    overall_present = sum(r["present"] for r in rows)
+    overall_counted = sum(r["counted"] for r in rows)
+    ctx.update(
+        rows=ranked,
+        at_risk=at_risk,
+        event_summary=event_summary,
+        window_days=ATTENDANCE_WINDOW_DAYS,
+        event_count=len(events),
+        avg_pct=round(overall_present / overall_counted * 100) if overall_counted else None,
+        at_risk_pct=round(AT_RISK_RATE * 100),
+    )
+    return templates.TemplateResponse(request, "attendance.html", ctx)
 
 
 @app.get("/muster-calls/{event_id}", response_class=HTMLResponse)
