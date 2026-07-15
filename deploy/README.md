@@ -263,6 +263,12 @@ same as a manual remove. The default/HQ unit is never retired this way. So for a
 unit that has invited the bot, simply kicking the bot is enough; the CLI/web
 remove is for units the bot never joined, or to `--purge` the database.
 
+The live event only arrives while the bot is running, so a unit kicked **while
+the bot was offline** isn't caught then. To cover that, the bot also reconciles
+on startup: it retires any unit whose server it's no longer in. Units registered
+in the last 24 hours are spared (their owner may not have invited the bot yet),
+as is the default unit. So a restart cleans up anything kicked during downtime.
+
 **Re-pointing a unit's Discord server:** a unit admin can change (or clear)
 the linked server from **Command Tent → Discord Server** — useful if the unit
 rebuilds its server or the ID was entered wrong. The platform refuses a server

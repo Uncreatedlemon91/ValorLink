@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta
 
 import discord
 from discord.ext import commands
@@ -33,9 +34,16 @@ COGS = (
 )
 
 
+# A unit registered more recently than this whose server the bot isn't in is
+# assumed to be awaiting its bot invite, not kicked — so startup reconciliation
+# leaves it alone.
+RECONCILE_GRACE = timedelta(hours=24)
+
+
 class ValorLink(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=commands.when_mentioned, intents=INTENTS)
+        self._reconciled = False
 
     async def setup_hook(self):
         # Make sure the registry exists and this deployment is the default unit,
@@ -171,8 +179,38 @@ class ValorLink(commands.Bot):
         except ProvisionError as exc:
             log.warning("Could not retire unit for guild %s: %s", guild.id, exc)
 
+    async def _reconcile_units(self, present_guild_ids: set[int]):
+        """Retire units whose Discord server the bot is no longer in. This
+        catches units that kicked the bot while it was offline — the live
+        on_guild_remove event isn't replayed on reconnect. Units younger than
+        RECONCILE_GRACE are spared (their owner may not have invited the bot
+        yet), as is the default unit; retired units' databases are archived."""
+        from tenancy.provision import ProvisionError, delete_unit
+
+        cutoff = datetime.utcnow() - RECONCILE_GRACE
+        orphaned = []
+        with registry_session() as session:
+            for tenant in all_tenants(session):
+                if tenant.is_default or not tenant.discord_guild_id:
+                    continue
+                if tenant.discord_guild_id in present_guild_ids:
+                    continue
+                if tenant.created_at and tenant.created_at > cutoff:
+                    continue  # too new — likely awaiting its bot invite
+                orphaned.append(tenant.slug)
+
+        for slug in orphaned:
+            try:
+                delete_unit(slug)  # archives the DB + invalidates the cache
+                log.info("Reconcile: retired '%s' — bot is no longer in its server.", slug)
+            except ProvisionError as exc:
+                log.warning("Reconcile: could not retire '%s': %s", slug, exc)
+
     async def on_ready(self):
         log.info("ValorLink is online as %s", self.user)
+        if not self._reconciled:
+            self._reconciled = True
+            await self._reconcile_units({g.id for g in self.guilds})
 
 
 async def main():
