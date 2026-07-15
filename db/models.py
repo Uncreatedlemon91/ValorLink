@@ -242,3 +242,6 @@ class Candidacy(Base):
     thread_id = Column(BigInteger, nullable=True)
     message_id = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+    # Recruitment pipeline stage: applied | interviewing | decision.
+    stage = Column(String, nullable=False, default="applied", server_default="applied")
+    notes = Column(Text, nullable=True)

@@ -537,6 +537,132 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .admin-table td { vertical-align: middle; }
 .admin-table .inline-actions form { margin: 0; }
 
+/* Recruitment pipeline board */
+.pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 8px 0 4px; }
+.pipe-col {
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
+  background: rgba(255,253,246,0.5); border-radius: 2px; padding: 10px 12px;
+}
+.pipe-head { display: flex; align-items: baseline; justify-content: space-between; }
+.pipe-title { font-family: var(--serif); font-weight: 700; letter-spacing: 0.04em; color: var(--seal); font-size: 15px; }
+.pipe-tally {
+  font-size: 11px; min-width: 20px; text-align: center; color: var(--paper);
+  background: var(--seal); border-radius: 10px; padding: 1px 7px;
+}
+.pipe-hint { font-size: 11px; color: var(--ink-faint); font-style: italic; margin: 2px 0 10px; }
+.pipe-empty { text-align: center; color: var(--rule-strong); margin: 8px 0; }
+.recruit-card {
+  border: 1px solid var(--rule); background: rgba(255,253,246,0.92);
+  border-radius: 2px; padding: 9px 10px; margin-bottom: 9px;
+}
+.recruit-name { font-weight: 700; color: var(--ink); }
+.recruit-meta { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+.recruit-notes {
+  font-size: 12px; color: var(--ink-soft); margin: 7px 0; padding: 6px 8px;
+  background: rgba(195,171,126,0.14); border-left: 2px solid var(--rule-strong); border-radius: 1px;
+  white-space: pre-wrap;
+}
+.recruit-notes-edit summary { font-size: 11px; color: var(--oxblood); cursor: pointer; margin: 4px 0; }
+.recruit-notes-edit textarea {
+  width: 100%; box-sizing: border-box; font-family: var(--serif); font-size: 12px;
+  color: var(--ink); background: rgba(255,253,246,0.9);
+  border: 1px solid var(--rule-strong); border-radius: 2px; padding: 5px 6px; margin: 3px 0;
+}
+.recruit-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 6px; }
+.recruit-actions form, .recruit-decide form { margin: 0; }
+.recruit-decide { display: flex; gap: 6px; border-top: 1px solid var(--rule); padding-top: 7px; }
+.btn-ghost {
+  background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong);
+}
+.btn-ghost:hover { color: var(--paper); background: var(--rule-strong); }
+@media (max-width: 720px) {
+  .pipeline { grid-template-columns: 1fr; }
+}
+
+/* Roster tools: search / filter / bulk */
+.roster-tools {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 0 0 14px;
+}
+.roster-tools input[type="search"], .roster-tools select {
+  font-family: var(--serif); font-size: 13px; color: var(--ink);
+  background: rgba(255,253,246,0.85); border: 1px solid var(--rule-strong);
+  border-radius: 2px; padding: 6px 8px;
+}
+.roster-tools input[type="search"] { flex: 1 1 180px; min-width: 140px; }
+.roster-count { font-size: 12px; color: var(--ink-faint); margin-left: auto; letter-spacing: 0.06em; }
+.bulk-bar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  padding: 10px 14px; margin: 0 0 10px;
+  border: 1px solid var(--rule-strong); border-left: 4px solid var(--seal);
+  background: rgba(255,253,246,0.7); border-radius: 2px;
+}
+.bulk-count { font-weight: 700; color: var(--seal); font-size: 13px; letter-spacing: 0.04em; }
+.bulk-group { display: inline-flex; gap: 6px; align-items: center; }
+.bulk-group select, .bulk-group input {
+  font-family: var(--serif); font-size: 13px; color: var(--ink);
+  background: rgba(255,253,246,0.9); border: 1px solid var(--rule-strong);
+  border-radius: 2px; padding: 5px 7px;
+}
+.ledger th.pick, .ledger td.pick { width: 28px; text-align: center; }
+
+/* Attendance analytics */
+.stat-strip { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 26px; }
+.stat {
+  flex: 1 1 120px; text-align: center;
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
+  background: rgba(255,253,246,0.6); border-radius: 2px; padding: 12px 8px;
+}
+.stat-num { display: block; font-family: var(--serif); font-size: 28px; font-weight: 700; color: var(--seal); }
+.stat-cap { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-top: 3px; }
+.meter {
+  display: inline-block; width: 84px; height: 8px; vertical-align: middle;
+  background: var(--paper-2); border: 1px solid var(--rule-strong); border-radius: 6px;
+  overflow: hidden; margin-right: 8px;
+}
+.meter-fill { display: block; height: 100%; }
+.meter-fill.rate-ok { background: #3f6b3a; }
+.meter-fill.rate-low { background: var(--oxblood); }
+.rate { font-variant-numeric: tabular-nums; font-weight: 600; }
+.rate.rate-low { color: var(--oxblood); }
+
+/* First-run setup checklist */
+.setup-card {
+  border: 1px solid var(--rule-strong);
+  border-left: 4px solid var(--seal);
+  background: rgba(255,253,246,0.6);
+  border-radius: 2px;
+  padding: 12px 16px;
+  margin: 0 0 24px;
+}
+.setup-card summary {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; cursor: pointer; list-style: none;
+}
+.setup-card summary::-webkit-details-marker { display: none; }
+.setup-title {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  letter-spacing: 0.04em; color: var(--seal);
+}
+.setup-progress {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.setup-progress.is-complete { color: #3f6b3a; }
+.checklist { list-style: none; margin: 10px 0 2px; padding: 0; }
+.checklist li {
+  display: grid; grid-template-columns: 22px 1fr; align-items: baseline;
+  gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--rule);
+}
+.checklist li:first-child { border-top: none; }
+.checklist .check { font-size: 15px; color: var(--ink-faint); }
+.checklist li.done .check { color: #3f6b3a; }
+.checklist li.done .step-label { color: var(--ink-faint); text-decoration: line-through; }
+.checklist .step-label { font-weight: 600; }
+.checklist .step-hint {
+  grid-column: 2; font-size: 12px; color: var(--ink-faint); font-style: italic;
+}
+
 @media (max-width: 560px) {
   .dossier-head .facts { text-align: left; }
   .ledger { font-size: 14px; }

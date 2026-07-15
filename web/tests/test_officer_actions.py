@@ -202,6 +202,31 @@ def test_recruiter_can_approve_candidate():
     assert len(_actions(queue.APPROVE_CANDIDATE)) == 1
 
 
+def test_recruit_pipeline_stage_and_notes():
+    client = TestClient(app)
+    _login(client, "recruiter")
+    # move the seeded applicant along the pipeline
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/stage",
+                data={"csrf": token, "stage": "interviewing"})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).stage == "interviewing"
+    # add recruiter notes
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/notes",
+                data={"csrf": token, "notes": "Strong applicant, plays evenings."})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).notes == "Strong applicant, plays evenings."
+    # a bad stage is rejected, leaving the value unchanged
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/stage", data={"csrf": token, "stage": "bogus"})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).stage == "interviewing"
+    # the board renders the three columns
+    html = client.get("/recruits").text
+    assert "At the Gate" in html and "In Interview" in html and "Awaiting Decision" in html
+
+
 def test_insufficient_tier_is_forbidden():
     client = TestClient(app)
     _login(client, "none")
@@ -307,6 +332,77 @@ def test_officer_can_create_event_and_mark_attendance():
     with SessionLocal() as s:
         rec = s.query(AttendanceRecord).filter_by(event_id=event_id, member_id=MEMBER_ID).one()
         assert rec.status == "present"
+
+
+def test_bulk_company_transfer_and_note():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        s.add(Member(discord_id=400, callsign="Bulk1", rank="Private", company="Alpha", status="active"))
+        s.add(Member(discord_id=401, callsign="Bulk2", rank="Private", company="Alpha", status="active"))
+        s.commit()
+    token = _csrf(client, "/muster")
+    # bulk transfer both to Bravo
+    r = client.post("/muster/bulk",
+                    data={"csrf": token, "action": "company", "company": "Bravo",
+                          "ids": ["400", "401"]})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Member, 400).company == "Bravo"
+        assert s.get(Member, 401).company == "Bravo"
+    assert len(_actions(queue.SYNC_COMPANY)) == 2
+
+    # bulk service note
+    token = _csrf(client, "/muster")
+    client.post("/muster/bulk",
+                data={"csrf": token, "action": "note", "entry": "Reviewed at muster.",
+                      "ids": ["400", "401"]})
+    with SessionLocal() as s:
+        for mid in (400, 401):
+            notes = s.query(ServiceHistoryEntry).filter_by(member_id=mid).count()
+            assert notes >= 1
+
+
+def test_bulk_action_requires_officer():
+    client = TestClient(app)
+    _login(client, "none", discord_id=9, name="Nobody")
+    r = client.post("/muster/bulk",
+                    data={"csrf": _csrf(client, "/muster"), "action": "company",
+                          "company": "Bravo", "ids": ["400"]},
+                    follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+
+def test_attendance_analytics_rate_and_at_risk():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    now = datetime.utcnow()
+    with SessionLocal() as s:
+        # member enrolled well before the calls so they're all eligible
+        m = s.get(Member, MEMBER_ID)
+        m.joined_date = now - timedelta(days=30)
+        # a low-turnout second member to land in the at-risk list
+        s.add(Member(discord_id=300, callsign="Slacker", rank="Private",
+                     company="Alpha", status="active", joined_date=now - timedelta(days=30)))
+        past = []
+        for d in (20, 15, 10):
+            e = Event(name=f"Past Drill {d}", event_type="Drill",
+                      scheduled_at=now - timedelta(days=d), created_by=1)
+            s.add(e); past.append(e)
+        s.flush()
+        for e in past:
+            s.add(AttendanceRecord(event_id=e.id, member_id=MEMBER_ID, status="present"))
+        # Slacker: present once, absent twice -> 33% -> at risk
+        s.add(AttendanceRecord(event_id=past[0].id, member_id=300, status="present"))
+        s.add(AttendanceRecord(event_id=past[1].id, member_id=300, status="absent"))
+        s.add(AttendanceRecord(event_id=past[2].id, member_id=300, status="absent"))
+        s.commit()
+
+    html = client.get("/attendance").text
+    assert "calls held" in html and "100%" in html          # Testman perfect turnout
+    at_risk_block = html.split("By Member")[0]
+    assert "Slacker" in at_risk_block                        # flagged at risk
+    assert "Testman" not in at_risk_block                    # perfect turnout not flagged
 
 
 def test_award_grant_and_revoke():

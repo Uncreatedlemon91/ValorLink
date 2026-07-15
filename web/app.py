@@ -26,7 +26,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from db.models import AwardType, Candidacy, Company, Event, Member, Rank
+from db.models import AttendanceRecord, AwardType, Candidacy, Company, Event, Member, Rank
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -335,8 +335,77 @@ def muster(request: Request, session: Session = Depends(get_session)):
         )
     )
 
-    ctx.update(members=members, total=len(members))
+    companies_present = sorted({m.company for m in members})
+    ranks_present = [r for r in rank_utils.rank_names(session) if any(m.rank == r for m in members)]
+    statuses_present = sorted({m.status for m in members}, key=lambda s: status_rank.get(s, 9))
+    ctx.update(
+        members=members,
+        total=len(members),
+        filter_companies=companies_present,
+        filter_ranks=ranks_present,
+        filter_statuses=statuses_present,
+        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+        company_options=services.company_options(session),
+    )
     return templates.TemplateResponse(request, "muster.html", ctx)
+
+
+@app.post("/muster/bulk")
+def post_muster_bulk(
+    request: Request,
+    csrf: str = Form(...),
+    action: str = Form(...),
+    ids: list[str] = Form(default=[]),
+    company: str = Form(""),
+    entry: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    """Apply one action to several members at once. Each member is handled by
+    the same service the single-member forms use (so Discord side-effects are
+    queued identically); a per-member failure is counted, not fatal."""
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/muster", status_code=303)
+
+    member_ids = []
+    for raw in ids:
+        try:
+            member_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not member_ids:
+        _flash(request, "No members were selected.", "error")
+        return RedirectResponse("/muster", status_code=303)
+
+    actor = {"id": user["id"], "name": user["name"]}
+    done, skipped = 0, 0
+    errors: list[str] = []
+    with _tenant_session(request) as session:
+        for mid in member_ids:
+            try:
+                if action == "company":
+                    services.assign_company(session, actor, mid, company)
+                elif action == "note":
+                    services.service_log(session, actor, mid, entry)
+                else:
+                    _flash(request, "Unknown bulk action.", "error")
+                    return RedirectResponse("/muster", status_code=303)
+                done += 1
+            except services.ActionError as exc:
+                # "already in X" / empty note etc. — expected, non-fatal.
+                skipped += 1
+                if len(errors) < 3 and "already" not in str(exc):
+                    errors.append(str(exc))
+
+    verb = "Transferred" if action == "company" else "Logged a note for"
+    target = f" to {company}" if action == "company" else ""
+    msg = f"{verb} {done} member(s){target}."
+    if skipped:
+        msg += f" {skipped} skipped."
+    if errors:
+        msg += " " + " ".join(errors)
+    _flash(request, msg, "ok" if done else "error")
+    return RedirectResponse("/muster", status_code=303)
 
 
 def _render_dossier(request: Request, session: Session, member: Member, is_self: bool = False):
@@ -415,6 +484,97 @@ def events(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "events.html", ctx)
 
 
+ATTENDANCE_WINDOW_DAYS = 90
+AT_RISK_RATE = 0.5      # below this counts as at-risk
+AT_RISK_MIN_EVENTS = 2  # ...but only once someone's had a fair sample
+
+
+@app.get("/attendance", response_class=HTMLResponse)
+def attendance(request: Request, session: Session = Depends(get_session)):
+    """Attendance analytics: per-member turnout over recent events, an at-risk
+    list, and a per-event summary. A member's denominator only counts events
+    held after they enrolled, and excused absences are set aside — so the rate
+    reflects the muster calls they were actually expected at."""
+    ctx = _base_context(request, session)
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=ATTENDANCE_WINDOW_DAYS)
+
+    events = (
+        session.query(Event)
+        .filter(Event.scheduled_at <= now, Event.scheduled_at >= window_start)
+        .order_by(Event.scheduled_at.desc())
+        .all()
+    )
+    event_ids = [e.id for e in events]
+
+    # member_id -> {event_id: status}
+    status_by_member: dict[int, dict[int, str]] = defaultdict(dict)
+    if event_ids:
+        for rec in (
+            session.query(AttendanceRecord)
+            .filter(AttendanceRecord.event_id.in_(event_ids))
+            .all()
+        ):
+            status_by_member[rec.member_id][rec.event_id] = rec.status
+
+    members = (
+        session.query(Member)
+        .filter(Member.status.in_(("active", "loa", "inactive")))
+        .all()
+    )
+
+    rows = []
+    for m in members:
+        joined = m.joined_date or datetime.min
+        eligible = [e for e in events if e.scheduled_at >= joined]
+        statuses = status_by_member.get(m.discord_id, {})
+        present = sum(1 for e in eligible if statuses.get(e.id) == "present")
+        excused = sum(1 for e in eligible if statuses.get(e.id) == "excused")
+        counted = len(eligible) - excused
+        rate = (present / counted) if counted else None
+        rows.append({
+            "member": m,
+            "present": present,
+            "counted": counted,
+            "excused": excused,
+            "missed": (counted - present) if counted else 0,
+            "rate": rate,
+            "pct": round(rate * 100) if rate is not None else None,
+        })
+
+    # Full table: those with a rate first (best turnout first), then the rest.
+    ranked = sorted(
+        rows,
+        key=lambda r: (r["rate"] is None, -(r["rate"] or 0), r["member"].callsign.lower()),
+    )
+    at_risk = sorted(
+        (r for r in ranked
+         if r["rate"] is not None and r["counted"] >= AT_RISK_MIN_EVENTS
+         and r["rate"] < AT_RISK_RATE and r["member"].status == "active"),
+        key=lambda r: r["rate"],
+    )
+
+    # Per-event turnout summary.
+    event_summary = []
+    for e in events:
+        present = sum(1 for s in status_by_member.values() if s.get(e.id) == "present")
+        responses = sum(1 for s in status_by_member.values() if e.id in s)
+        event_summary.append({"event": e, "present": present, "responses": responses})
+
+    overall_present = sum(r["present"] for r in rows)
+    overall_counted = sum(r["counted"] for r in rows)
+    ctx.update(
+        rows=ranked,
+        at_risk=at_risk,
+        event_summary=event_summary,
+        window_days=ATTENDANCE_WINDOW_DAYS,
+        event_count=len(events),
+        avg_pct=round(overall_present / overall_counted * 100) if overall_counted else None,
+        at_risk_pct=round(AT_RISK_RATE * 100),
+    )
+    return templates.TemplateResponse(request, "attendance.html", ctx)
+
+
 @app.get("/muster-calls/{event_id}", response_class=HTMLResponse)
 def event_detail(request: Request, event_id: int, session: Session = Depends(get_session)):
     ctx = _base_context(request, session)
@@ -482,12 +642,41 @@ def honors(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "honors.html", ctx)
 
 
+def _setup_checklist(session: Session, cfg) -> list[dict]:
+    """First-run setup steps for a new unit, each with a done flag and a link
+    to the Command Tent section that satisfies it. Drives the onboarding card."""
+    rank_count = len(rank_utils.all_ranks(session))
+    company_count = len(list_companies(session))
+    steps = [
+        ("Name your regiment", cfg.regiment_name not in ("", "Unconfigured Regiment"),
+         "#identity", "So the banner and directory show your unit, not a placeholder."),
+        ("Set the Admin role", bool(cfg.admin_role_id),
+         "#roles", "Grants full control here and in Discord."),
+        ("Set the Officer role", bool(cfg.officer_role_id),
+         "#roles", "Officers manage the roster, events, and discipline."),
+        ("Set the Recruiter role", bool(cfg.recruiter_role_id),
+         "#roles", "Recruiters approve or deny applicants."),
+        ("Set the Roster channel", bool(cfg.roster_channel_id),
+         "#channels", "Where the live roster embed is posted and kept current."),
+        ("Set the Recruitment channel", bool(cfg.recruitment_channel_id),
+         "#channels", "Where enlistment applications land for review."),
+        ("Build the rank ladder", rank_count >= 2,
+         "#ranks", "You need ranks before you can promote anyone."),
+        ("Add a company", company_count >= 1,
+         "#companies", "Members are assigned to a company on the roster."),
+    ]
+    return [{"label": s[0], "done": s[1], "anchor": s[2], "hint": s[3]} for s in steps]
+
+
 @app.get("/command-tent", response_class=HTMLResponse)
 def command_tent(request: Request, session: Session = Depends(get_session),
                  user: dict = Depends(auth.require_admin)):
     """Admin-only configuration: identity, roles, channels, ranks, companies."""
     ctx = _base_context(request, session)
     cfg = get_config(session)
+    checklist = _setup_checklist(session, cfg)
+    ctx["checklist"] = checklist
+    ctx["checklist_done"] = sum(1 for s in checklist if s["done"])
     # This unit's public directory listing (registry), when platform mode is on.
     listing = None
     if os.getenv("PLATFORM_BASE_DOMAIN"):
@@ -532,15 +721,59 @@ def login(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "login.html", ctx)
 
 
+RECRUIT_COLUMNS = [
+    ("applied", "At the Gate", "New applications awaiting first contact."),
+    ("interviewing", "In Interview", "Being spoken with by a recruiter."),
+    ("decision", "Awaiting Decision", "Ready to be approved or denied."),
+]
+
+
 @app.get("/recruits", response_class=HTMLResponse)
 def recruits(request: Request, session: Session = Depends(get_session)):
-    """The recruitment queue — applicants awaiting an approve/deny decision."""
+    """The recruitment pipeline — a board of applicants by stage."""
     ctx = _base_context(request, session)
     ctx["can_decide"] = auth.tier_at_least(ctx["user"], auth.TIER_RECRUITER)
-    ctx["candidates"] = (
-        session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
-    )
+    candidates = session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
+
+    by_stage: dict[str, list] = {key: [] for key, _, _ in RECRUIT_COLUMNS}
+    for c in candidates:
+        # Anything with a missing/unknown stage falls back to the first column.
+        by_stage.get(c.stage, by_stage["applied"]).append(c)
+
+    columns = [
+        {"key": key, "label": label, "hint": hint, "cards": by_stage.get(key, [])}
+        for key, label, hint in RECRUIT_COLUMNS
+    ]
+    ctx["columns"] = columns
+    ctx["total"] = len(candidates)
+    ctx["stages"] = services.RECRUIT_STAGES
     return templates.TemplateResponse(request, "recruits.html", ctx)
+
+
+@app.post("/recruits/{discord_id}/stage")
+def post_recruit_stage(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    stage: str = Form(...),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.set_candidate_stage, actor, discord_id, stage,
+               redirect="/recruits")
+
+
+@app.post("/recruits/{discord_id}/notes")
+def post_recruit_notes(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    notes: str = Form(""),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.set_candidate_notes, actor, discord_id, notes,
+               redirect="/recruits")
 
 
 # --------------------------------------------------------------------------- #
