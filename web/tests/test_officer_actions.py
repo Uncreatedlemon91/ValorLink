@@ -385,6 +385,49 @@ def test_bridge_import_roster_creates_new_members_only():
         assert s.query(Member).filter_by(discord_id=999).count() == 0  # bot skipped
 
 
+def test_discord_name_change_updates_callsign():
+    import cogs.roster as roster_mod
+    from cogs.roster import Roster
+
+    url = os.environ["DATABASE_URL"]
+    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster)
+    roster_mod.db_url_for_guild = lambda gid: url
+    roster_mod.bind_guild = lambda gid: roster_mod.set_current_db_url(url)
+    roster_mod.refresh_roster = AsyncMock()
+    try:
+        cog = object.__new__(Roster)
+        cog.bot = MagicMock()
+        guild = MagicMock(); guild.id = 1
+
+        # server nickname change → callsign follows (rank prefix stripped)
+        before, after = MagicMock(), MagicMock()
+        before.nick = "Pvt. Testman"; after.nick = "Pvt. Renamed"
+        after.name = "testman_user"; after.id = MEMBER_ID; after.guild = guild
+        asyncio.run(cog.on_member_update(before, after))
+        with SessionLocal() as s:
+            assert s.get(Member, MEMBER_ID).callsign == "Renamed"
+
+        # global username change, no server nickname → callsign follows
+        member = MagicMock(); member.nick = None
+        guild.get_member.return_value = member
+        cog.bot.guilds = [guild]
+        ub, ua = MagicMock(), MagicMock()
+        ub.name = "old"; ua.name = "NewUser"; ua.id = MEMBER_ID
+        asyncio.run(cog.on_user_update(ub, ua))
+        with SessionLocal() as s:
+            assert s.get(Member, MEMBER_ID).callsign == "NewUser"
+
+        # username change is ignored when a server nickname is set (nick wins)
+        member.nick = "Pvt. KeepThis"
+        ub2, ua2 = MagicMock(), MagicMock()
+        ub2.name = "NewUser"; ua2.name = "Ignored"; ua2.id = MEMBER_ID
+        asyncio.run(cog.on_user_update(ub2, ua2))
+        with SessionLocal() as s:
+            assert s.get(Member, MEMBER_ID).callsign == "NewUser"  # unchanged
+    finally:
+        (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster) = saved
+
+
 def test_member_can_rsvp_from_the_web():
     from datetime import datetime
     client = TestClient(app)

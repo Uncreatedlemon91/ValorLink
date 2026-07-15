@@ -169,28 +169,48 @@ class Roster(commands.Cog):
                 record.status = "active"
             session.commit()
 
-    @commands.Cog.listener()
-    async def on_member_update(self, before: discord.Member, after: discord.Member):
-        if before.nick == after.nick:
-            return
-        if db_url_for_guild(after.guild.id) is None:
+    async def _apply_display_name(self, guild: discord.Guild, member_id: int, raw: str):
+        """Update a member's callsign from a Discord display name (server nick
+        or username), if it changed. Strips the rank prefix the bot writes
+        (e.g. "Pvt. ") so a bot-driven nickname edit round-trips to the same
+        callsign and doesn't loop."""
+        if db_url_for_guild(guild.id) is None:
             return  # not a registered unit
-        bind_guild(after.guild.id)
-
-        # Strip the rank prefix the bot writes (e.g. "Pvt. ") to get the bare callsign.
-        raw = after.nick or after.name
-        callsign = re.sub(r'^\w+\.\s*', '', raw).strip()
+        callsign = re.sub(r'^\w+\.\s*', '', raw or '').strip()
         if not callsign:
             return
+        token = bind_guild(guild.id)
+        try:
+            with db_session() as session:
+                record = session.get(Member, member_id)
+                if record is None or record.callsign == callsign:
+                    return
+                record.callsign = callsign
+                session.commit()
+            await refresh_roster(guild)
+        finally:
+            reset_current_db_url(token)
 
-        with db_session() as session:
-            record = session.get(Member, after.id)
-            if record is None or record.callsign == callsign:
-                return
-            record.callsign = callsign
-            session.commit()
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        # A server nickname change (set by the member, or cleared back to their
+        # username) updates their callsign.
+        if before.nick == after.nick:
+            return
+        await self._apply_display_name(after.guild, after.id, after.nick or after.name)
 
-        await refresh_roster(after.guild)
+    @commands.Cog.listener()
+    async def on_user_update(self, before: discord.User, after: discord.User):
+        # A global username change updates the callsign in every registered unit
+        # the member is in — but only where they have no server nickname, since
+        # a nickname takes precedence over the username.
+        if before.name == after.name:
+            return
+        for guild in self.bot.guilds:
+            member = guild.get_member(after.id)
+            if member is None or member.nick:
+                continue
+            await self._apply_display_name(guild, after.id, after.name)
 
     @tasks.loop(hours=24)
     async def inactivity_check(self):
