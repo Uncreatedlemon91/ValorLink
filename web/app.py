@@ -339,15 +339,8 @@ def muster(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "muster.html", ctx)
 
 
-@app.get("/dossier/{discord_id}", response_class=HTMLResponse)
-def dossier(request: Request, discord_id: int, session: Session = Depends(get_session)):
+def _render_dossier(request: Request, session: Session, member: Member, is_self: bool = False):
     ctx = _base_context(request, session)
-
-    member = session.get(Member, discord_id)
-    if member is None:
-        ctx["message"] = "No personnel record bears that number."
-        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
-
     service = sorted(member.service_history, key=lambda e: e.date or datetime.min, reverse=True)
     discipline = sorted(
         member.disciplinary_records, key=lambda r: r.date or datetime.min, reverse=True
@@ -358,11 +351,9 @@ def dossier(request: Request, discord_id: int, session: Session = Depends(get_se
     for rec in member.attendance_records:
         att_counts[rec.status] += 1
 
-    rank = rank_utils.rank_by_name(session, member.rank)
-
     ctx.update(
         member=member,
-        rank=rank,
+        rank=rank_utils.rank_by_name(session, member.rank),
         service=service,
         discipline=discipline,
         awards=awards,
@@ -371,8 +362,37 @@ def dossier(request: Request, discord_id: int, session: Session = Depends(get_se
         company_options=services.company_options(session),
         held_award_ids={a.award_type_id for a in member.awards},
         award_catalogue=session.query(AwardType).order_by(AwardType.name).all(),
+        is_self=is_self,
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
+
+
+@app.get("/dossier/{discord_id}", response_class=HTMLResponse)
+def dossier(request: Request, discord_id: int, session: Session = Depends(get_session)):
+    member = session.get(Member, discord_id)
+    if member is None:
+        ctx = _base_context(request, session)
+        ctx["message"] = "No personnel record bears that number."
+        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
+    viewer = auth.effective_user(request, resolve_tenant(request).slug)
+    is_self = bool(viewer and int(viewer["id"]) == member.discord_id)
+    return _render_dossier(request, session, member, is_self=is_self)
+
+
+@app.get("/my-record", response_class=HTMLResponse)
+def my_record(request: Request, session: Session = Depends(get_session)):
+    user = auth.effective_user(request, resolve_tenant(request).slug)
+    if not user:
+        raise auth.NotAuthenticated()
+    member = session.get(Member, int(user["id"]))
+    if member is None:
+        ctx = _base_context(request, session)
+        ctx["message"] = (
+            "You don't have a record with this unit yet. If it's recruiting, "
+            "apply from the directory and an officer will enlist you."
+        )
+        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
+    return _render_dossier(request, session, member, is_self=True)
 
 
 @app.get("/muster-calls", response_class=HTMLResponse)
@@ -419,12 +439,26 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
         .order_by(Member.callsign)
         .all()
     )
+
+    # The signed-in member's own RSVP, so they can set it from the web.
+    viewer = ctx["user"]
+    my_rsvp = None
+    can_rsvp = False
+    if viewer:
+        me = session.get(Member, int(viewer["id"]))
+        if me is not None:
+            can_rsvp = True
+            mine = next((r for r in event.attendance_records if r.member_id == me.discord_id), None)
+            my_rsvp = mine.status if mine else None
+
     ctx.update(
         event=event,
         records=records,
         counts=dict(counts),
         active_members=active_members,
         attendance_statuses=services.ATTENDANCE_STATUSES,
+        can_rsvp=can_rsvp,
+        my_rsvp=my_rsvp,
     )
     return templates.TemplateResponse(request, "event_detail.html", ctx)
 
@@ -690,6 +724,27 @@ def post_create_event(
         except services.ActionError as exc:
             _flash(request, str(exc), "error")
     return RedirectResponse("/muster-calls", status_code=303)
+
+
+@app.post("/muster-calls/{event_id}/rsvp")
+def post_rsvp(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    status: str = Form(...),
+):
+    user = auth.effective_user(request, resolve_tenant(request).slug)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+    with _tenant_session(request) as session:
+        try:
+            _flash(request, services.rsvp(session, event_id, int(user["id"]), status), "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
 
 
 @app.post("/muster-calls/{event_id}/attendance")

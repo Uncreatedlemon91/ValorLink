@@ -39,6 +39,8 @@ from utils.settings import (
 
 EVENT_TYPES = ["Drill", "Battle", "Operation"]
 ATTENDANCE_STATUSES = ["present", "absent", "excused"]
+RSVP_STATUSES = {"accepted": "answered the call", "tentative": "marked tentative",
+                 "declined": "sent regrets"}
 
 
 class ActionError(Exception):
@@ -624,6 +626,34 @@ def company_remove(session, company_id: int) -> str:
     session.delete(company)
     session.commit()
     return f"Company '{name}' removed. Members assigned to it keep the label until reassigned."
+
+
+# --- Member self-service: RSVP ------------------------------------------- #
+def rsvp(session, event_id: int, discord_id: int, status: str) -> str:
+    """A member's own RSVP to a muster call, from the web (mirrors the Discord
+    RSVP buttons)."""
+    if status not in RSVP_STATUSES:
+        raise ActionError("Choose accept, tentative, or decline.")
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That muster call no longer exists.")
+    member = session.get(Member, discord_id)
+    if member is None:
+        raise ActionError("Only enlisted members of this unit can RSVP.")
+
+    record = (
+        session.query(AttendanceRecord)
+        .filter(AttendanceRecord.event_id == event_id, AttendanceRecord.member_id == discord_id)
+        .one_or_none()
+    )
+    if record:
+        record.status = status
+        record.responded_at = datetime.utcnow()
+    else:
+        session.add(AttendanceRecord(event_id=event_id, member_id=discord_id, status=status))
+    member.last_active_date = datetime.utcnow()
+    session.commit()
+    return f"You {RSVP_STATUSES[status]}."
 
 
 # --- Public applications (cross-unit) ------------------------------------ #

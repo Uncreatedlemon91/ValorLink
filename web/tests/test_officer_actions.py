@@ -255,6 +255,38 @@ def test_bridge_dispatch_applies_discord_side_effects():
         assert s.get(PendingAction, rid).status == queue.FAILED
 
 
+def test_member_can_rsvp_from_the_web():
+    from datetime import datetime
+    client = TestClient(app)
+    with SessionLocal() as s:
+        ev = Event(name="Evening Drill", event_type="Drill",
+                   scheduled_at=datetime(2099, 1, 1), created_by=1)
+        s.add(ev); s.commit(); eid = ev.id
+    # the member (MEMBER_ID) signs in and answers the call
+    _login(client, "none", discord_id=MEMBER_ID, name="Testman")
+    client.post(f"/muster-calls/{eid}/rsvp",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "accepted"})
+    with SessionLocal() as s:
+        rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=MEMBER_ID).one()
+        assert rec.status == "accepted"
+    # changing the reply updates in place (no duplicate)
+    client.post(f"/muster-calls/{eid}/rsvp",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "declined"})
+    with SessionLocal() as s:
+        recs = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=MEMBER_ID).all()
+        assert len(recs) == 1 and recs[0].status == "declined"
+
+
+def test_my_record_shows_own_dossier():
+    client = TestClient(app)
+    _login(client, "none", discord_id=MEMBER_ID, name="Testman")
+    r = client.get("/my-record")
+    assert r.status_code == 200 and "Testman" in r.text
+    # someone without a record here gets a friendly 404
+    _login(client, "none", discord_id=987654, name="Nobody")
+    assert client.get("/my-record").status_code == 404
+
+
 def test_officer_can_create_event_and_mark_attendance():
     client = TestClient(app)
     _login(client, "officer")
