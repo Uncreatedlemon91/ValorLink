@@ -227,6 +227,33 @@ def test_recruit_pipeline_stage_and_notes():
     assert "At the Gate" in html and "In Interview" in html and "Awaiting Decision" in html
 
 
+def test_promotion_board_flags_eligible_and_promotes():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    _login(client, "officer")
+    now = datetime.utcnow()
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)          # Private, eligible after time in rank
+        m.rank_since = now - timedelta(days=40)
+        s.add(Member(discord_id=600, callsign="Fresh", rank="Private", company="Alpha",
+                     status="active", rank_since=now))   # too new to be ready
+        s.commit()
+
+    html = client.get("/promotions").text
+    assert "Promotion Board" in html and "1 ready" in html  # only Testman is ready
+    assert "Testman" in html and "Fresh" in html
+
+    # promote Testman to the next rank from the board
+    token = _csrf(client, "/promotions")
+    r = client.post(f"/members/{MEMBER_ID}/rank",
+                    data={"csrf": token, "rank": "Corporal", "mode": "promote"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)
+        assert m.rank == "Corporal"
+        assert m.rank_since >= now - timedelta(seconds=5)  # reset on promotion
+
+
 def test_insufficient_tier_is_forbidden():
     client = TestClient(app)
     _login(client, "none")
@@ -278,6 +305,84 @@ def test_bridge_dispatch_applies_discord_side_effects():
         bridge._finish(rid, None, error="boom")
     with SessionLocal() as s:
         assert s.get(PendingAction, rid).status == queue.FAILED
+
+
+def test_officer_posts_announcement():
+    client = TestClient(app)
+    _login(client, "officer")
+    # without an announcements channel, it's refused and nothing is queued
+    token = _csrf(client, "/muster-calls")
+    client.post("/announce", data={"csrf": token, "title": "Orders", "body": "Muster up."})
+    assert len(_actions(queue.POST_ANNOUNCEMENT)) == 0
+    # once a channel is configured, the announcement is queued
+    with SessionLocal() as s:
+        get_config(s).announcements_channel_id = 555
+        s.commit()
+    token = _csrf(client, "/muster-calls")
+    r = client.post("/announce", data={"csrf": token, "title": "Orders", "body": "Muster Saturday."})
+    assert r.status_code == 200
+    assert len(_actions(queue.POST_ANNOUNCEMENT)) == 1
+
+
+def test_bridge_posts_announcement():
+    from cogs.bridge import Bridge
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    guild = MagicMock()
+    channel = AsyncMock()
+    guild.get_channel.return_value = channel
+    with SessionLocal() as s:
+        get_config(s).announcements_channel_id = 555
+        s.commit()
+
+    async def run():
+        await bridge._dispatch(guild, queue.POST_ANNOUNCEMENT,
+                               {"title": "T", "body": "B", "actor_id": 1, "actor_name": "Off"})
+    asyncio.run(run())
+    channel.send.assert_awaited()
+
+
+def test_admin_imports_roster_enqueues():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    r = client.post("/admin/import-roster", data={"csrf": token, "role_id": ""})
+    assert r.status_code == 200
+    assert len(_actions(queue.IMPORT_ROSTER)) == 1
+
+
+def test_bridge_import_roster_creates_new_members_only():
+    from cogs.bridge import Bridge
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+
+    def mk(uid, name, is_bot=False):
+        m = MagicMock()
+        m.id = uid; m.bot = is_bot; m.name = name; m.nick = None
+        m.display_name = name; m.roles = []
+        return m
+
+    people = [mk(999, "BotGuy", is_bot=True), mk(MEMBER_ID, "Testman"), mk(500, "Newbie")]
+
+    async def fake_fetch(limit=None):
+        for m in people:
+            yield m
+
+    guild = MagicMock()
+    guild.fetch_members = fake_fetch
+    guild.get_role.return_value = None
+    guild.get_channel.return_value = None
+
+    async def run():
+        await bridge._dispatch(guild, queue.IMPORT_ROSTER,
+                               {"actor_id": 1, "role_id": None,
+                                "default_rank": "Private", "default_company": "Alpha"})
+    asyncio.run(run())
+
+    with SessionLocal() as s:
+        newcomer = s.get(Member, 500)
+        assert newcomer is not None and newcomer.rank == "Private" and newcomer.company == "Alpha"
+        assert s.query(Member).filter_by(discord_id=999).count() == 0  # bot skipped
 
 
 def test_member_can_rsvp_from_the_web():

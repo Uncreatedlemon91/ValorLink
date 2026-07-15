@@ -27,6 +27,8 @@ REFRESH_PERSONNEL = "refresh_personnel" # re-render the dossier embed only
 ANNOUNCE_EVENT = "announce_event"       # post the RSVP announcement + register view
 AWARD_GRANTED = "award_granted"         # refresh dossier + billboard
 AWARD_REVOKED = "award_revoked"         # refresh dossier
+POST_ANNOUNCEMENT = "post_announcement" # post an officer's announcement embed
+IMPORT_ROSTER = "import_roster"         # create records for current Discord members
 
 # Statuses
 PENDING = "pending"

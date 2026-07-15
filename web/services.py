@@ -76,6 +76,7 @@ def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: 
     is_promotion = new_record.position > old_position
 
     record.rank = new_rank
+    record.rank_since = datetime.utcnow()
     verb = "Promoted" if is_promotion else "Stepped down"
     entry = f"{verb} from {old_rank} to {new_rank} by {actor['name']}."
     if citation:
@@ -108,6 +109,7 @@ def set_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str
     old_rank = record.rank
     callsign = record.callsign
     record.rank = new_rank
+    record.rank_since = datetime.utcnow()
     entry = f"Rank set from {old_rank} to {new_rank} by {actor['name']}."
     if citation:
         entry += f" {citation}"
@@ -367,6 +369,48 @@ def set_candidate_notes(session, actor: dict, discord_id: int, notes: str) -> st
     candidacy.notes = notes.strip() or None
     session.commit()
     return f"Notes saved for {candidacy.callsign}."
+
+
+# --- Announcements ------------------------------------------------------- #
+def post_announcement(session, actor: dict, title: str, body: str) -> str:
+    title = title.strip()
+    body = body.strip()
+    if not body:
+        raise ActionError("The announcement needs a message.")
+    if not get_config(session).announcements_channel_id:
+        raise ActionError("Set an announcements channel in the Command Tent first.")
+    queue.enqueue(
+        session,
+        queue.POST_ANNOUNCEMENT,
+        {"title": title, "body": body, "actor_id": actor["id"], "actor_name": actor["name"]},
+        actor_id=actor["id"],
+    )
+    session.commit()
+    return "Announcement queued — the bot is posting it now."
+
+
+# --- Roster import ------------------------------------------------------- #
+def import_roster(session, actor: dict, role_id: str = "") -> str:
+    """Queue a pull of the current Discord members into the roster. The bot,
+    which holds the member list, creates a record for anyone not already on
+    the books (default rank + company); it changes no roles or nicknames."""
+    if not rank_utils.all_ranks(session):
+        raise ActionError("Add at least one rank in the Command Tent first.")
+    if not list_companies(session):
+        raise ActionError("Add at least one company in the Command Tent first.")
+    default_rank = rank_utils.default_rank_name(session)
+    default_company = default_company_name(session)
+    rid = _parse_id(role_id)
+    queue.enqueue(
+        session,
+        queue.IMPORT_ROSTER,
+        {"actor_id": actor["id"], "role_id": rid,
+         "default_rank": default_rank, "default_company": default_company},
+        actor_id=actor["id"],
+    )
+    session.commit()
+    scope = "members with that role" if rid else "all non-bot members"
+    return f"Import queued — the bot is adding {scope} not already on the roster."
 
 
 # --- Events & attendance ------------------------------------------------- #
