@@ -135,6 +135,37 @@ def test_create_unit_rejects_bad_and_duplicate_slugs():
             pass
 
 
+def test_command_sync_survives_a_forbidden_guild():
+    """One guild the bot lacks command access in must not crash startup — it's
+    skipped so every other unit still comes online."""
+    import discord
+
+    import bot as bot_module
+    from bot import ValorLink
+
+    inst = object.__new__(ValorLink)
+    tree = MagicMock()
+    tree.copy_global_to = MagicMock()
+
+    resp = MagicMock(); resp.status = 403; resp.reason = "Forbidden"
+
+    async def fake_sync(*, guild):
+        if guild.id == 222:                       # the misconfigured unit
+            raise discord.Forbidden(resp, {"code": 50001, "message": "Missing Access"})
+    tree.sync = fake_sync
+    inst._BotBase__tree = tree                    # commands.Bot.tree is read-only
+
+    saved = bot_module.registered_guild_ids
+    bot_module.registered_guild_ids = lambda: [111, 222]
+    old_guild = bot_module.config.GUILD_ID
+    bot_module.config.GUILD_ID = None
+    try:
+        asyncio.run(inst._sync_commands())        # must not raise
+    finally:
+        bot_module.registered_guild_ids = saved
+        bot_module.config.GUILD_ID = old_guild
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:
