@@ -497,6 +497,11 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .inline-actions { display: inline-flex; gap: 8px; justify-content: flex-end; }
 .inline-actions form { display: inline; margin: 0; }
 
+/* Member RSVP buttons on the event page */
+.rsvp-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.rsvp-row form { margin: 0; }
+.rsvp-current { outline: 2px solid var(--brass); outline-offset: 2px; font-weight: 700; }
+
 .field-row { display: flex; gap: 12px; }
 .field-row .field { flex: 1; }
 .checkline { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink-soft); }
