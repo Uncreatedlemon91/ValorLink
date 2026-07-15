@@ -501,6 +501,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
                     "blurb": row.blurb or "",
                     "recruiting_open": row.recruiting_open,
                     "listed": row.listed,
+                    "discord_guild_id": row.discord_guild_id or "",
                     "url": f"https://{row.slug}.{os.getenv('PLATFORM_BASE_DOMAIN')}/",
                 }
 
@@ -1169,6 +1170,54 @@ def post_listing(
             _flash(request, "Public listing updated.", "ok")
         else:
             _flash(request, "This unit isn't in the registry.", "error")
+    return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/discord-link")
+def post_discord_link(
+    request: Request,
+    csrf: str = Form(...),
+    guild_id: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    """Re-point this unit at a different Discord server (or unlink it).
+    Changing this remaps which server the bot manages for the unit, so it
+    validates the id and rejects a server already claimed by another unit."""
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+
+    gid = None
+    raw = guild_id.strip()
+    if raw:
+        if not raw.isdigit():
+            _flash(request, "The Discord server ID must be all digits.", "error")
+            return RedirectResponse("/command-tent", status_code=303)
+        gid = int(raw)
+
+    tenant = resolve_tenant(request)
+    from tenancy.resolve import tenant_by_guild
+    from tenancy.routing import invalidate
+
+    with registry_session() as rs:
+        row = tenant_by_slug(rs, tenant.slug)
+        if row is None:
+            _flash(request, "This unit isn't in the registry.", "error")
+            return RedirectResponse("/command-tent", status_code=303)
+        if gid is not None:
+            other = tenant_by_guild(rs, gid)
+            if other is not None and other.slug != tenant.slug:
+                _flash(request, "That Discord server is already linked to another unit.", "error")
+                return RedirectResponse("/command-tent", status_code=303)
+        row.discord_guild_id = gid
+        rs.commit()
+
+    invalidate()  # drop the bot's cached guild → database mapping
+    if gid is None:
+        _flash(request, "Discord server unlinked. The bot no longer manages a server for this unit.", "ok")
+    else:
+        _flash(request, "Discord server updated. Invite the bot to that server (or "
+                        "restart it) so it syncs commands there.", "ok")
     return RedirectResponse("/command-tent", status_code=303)
 
 

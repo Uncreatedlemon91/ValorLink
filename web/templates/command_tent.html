@@ -59,6 +59,20 @@
   </form>
   <p class="order-note">Your portal: <a href="{{ listing.url }}">{{ listing.url }}</a></p>
 </div>
+
+<h2 class="section">Discord Server <span class="tally">which server the bot manages</span></h2>
+<div class="order-card" style="max-width:640px;">
+  <form class="orders" method="post" action="/admin/discord-link">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field">
+      <label>Discord server ID</label>
+      <input name="guild_id" inputmode="numeric" value="{{ listing.discord_guild_id }}" placeholder="e.g. 112233445566778899">
+      <span class="order-note">Enable Developer Mode in Discord, then right-click your server → Copy Server ID. Leave blank to unlink.</span>
+    </div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Save server</button></div>
+  </form>
+  <p class="order-note">After changing this, invite the bot to the new server (or restart it) so slash commands appear there.</p>
+</div>
 {% endif %}
 
 <h2 class="section">Rank Ladder <span class="tally">highest first</span></h2>
