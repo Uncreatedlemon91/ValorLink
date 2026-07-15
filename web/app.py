@@ -335,8 +335,77 @@ def muster(request: Request, session: Session = Depends(get_session)):
         )
     )
 
-    ctx.update(members=members, total=len(members))
+    companies_present = sorted({m.company for m in members})
+    ranks_present = [r for r in rank_utils.rank_names(session) if any(m.rank == r for m in members)]
+    statuses_present = sorted({m.status for m in members}, key=lambda s: status_rank.get(s, 9))
+    ctx.update(
+        members=members,
+        total=len(members),
+        filter_companies=companies_present,
+        filter_ranks=ranks_present,
+        filter_statuses=statuses_present,
+        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+        company_options=services.company_options(session),
+    )
     return templates.TemplateResponse(request, "muster.html", ctx)
+
+
+@app.post("/muster/bulk")
+def post_muster_bulk(
+    request: Request,
+    csrf: str = Form(...),
+    action: str = Form(...),
+    ids: list[str] = Form(default=[]),
+    company: str = Form(""),
+    entry: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    """Apply one action to several members at once. Each member is handled by
+    the same service the single-member forms use (so Discord side-effects are
+    queued identically); a per-member failure is counted, not fatal."""
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/muster", status_code=303)
+
+    member_ids = []
+    for raw in ids:
+        try:
+            member_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not member_ids:
+        _flash(request, "No members were selected.", "error")
+        return RedirectResponse("/muster", status_code=303)
+
+    actor = {"id": user["id"], "name": user["name"]}
+    done, skipped = 0, 0
+    errors: list[str] = []
+    with _tenant_session(request) as session:
+        for mid in member_ids:
+            try:
+                if action == "company":
+                    services.assign_company(session, actor, mid, company)
+                elif action == "note":
+                    services.service_log(session, actor, mid, entry)
+                else:
+                    _flash(request, "Unknown bulk action.", "error")
+                    return RedirectResponse("/muster", status_code=303)
+                done += 1
+            except services.ActionError as exc:
+                # "already in X" / empty note etc. — expected, non-fatal.
+                skipped += 1
+                if len(errors) < 3 and "already" not in str(exc):
+                    errors.append(str(exc))
+
+    verb = "Transferred" if action == "company" else "Logged a note for"
+    target = f" to {company}" if action == "company" else ""
+    msg = f"{verb} {done} member(s){target}."
+    if skipped:
+        msg += f" {skipped} skipped."
+    if errors:
+        msg += " " + " ".join(errors)
+    _flash(request, msg, "ok" if done else "error")
+    return RedirectResponse("/muster", status_code=303)
 
 
 def _render_dossier(request: Request, session: Session, member: Member, is_self: bool = False):

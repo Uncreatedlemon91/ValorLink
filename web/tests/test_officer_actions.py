@@ -309,6 +309,45 @@ def test_officer_can_create_event_and_mark_attendance():
         assert rec.status == "present"
 
 
+def test_bulk_company_transfer_and_note():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        s.add(Member(discord_id=400, callsign="Bulk1", rank="Private", company="Alpha", status="active"))
+        s.add(Member(discord_id=401, callsign="Bulk2", rank="Private", company="Alpha", status="active"))
+        s.commit()
+    token = _csrf(client, "/muster")
+    # bulk transfer both to Bravo
+    r = client.post("/muster/bulk",
+                    data={"csrf": token, "action": "company", "company": "Bravo",
+                          "ids": ["400", "401"]})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Member, 400).company == "Bravo"
+        assert s.get(Member, 401).company == "Bravo"
+    assert len(_actions(queue.SYNC_COMPANY)) == 2
+
+    # bulk service note
+    token = _csrf(client, "/muster")
+    client.post("/muster/bulk",
+                data={"csrf": token, "action": "note", "entry": "Reviewed at muster.",
+                      "ids": ["400", "401"]})
+    with SessionLocal() as s:
+        for mid in (400, 401):
+            notes = s.query(ServiceHistoryEntry).filter_by(member_id=mid).count()
+            assert notes >= 1
+
+
+def test_bulk_action_requires_officer():
+    client = TestClient(app)
+    _login(client, "none", discord_id=9, name="Nobody")
+    r = client.post("/muster/bulk",
+                    data={"csrf": _csrf(client, "/muster"), "action": "company",
+                          "company": "Bravo", "ids": ["400"]},
+                    follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+
 def test_attendance_analytics_rate_and_at_risk():
     from datetime import datetime, timedelta
     client = TestClient(app)

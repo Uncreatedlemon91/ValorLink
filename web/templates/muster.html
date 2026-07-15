@@ -6,26 +6,137 @@
 <p class="lede">Every soul borne on the books, whatever their present standing.</p>
 
 {% if members %}
-  <table class="ledger">
-    <thead>
-      <tr>
-        <th>Callsign</th><th>Rank</th><th>Company</th>
-        <th>Standing</th><th class="num">Enrolled</th><th class="num">Last Seen</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for m in members %}
-      <tr>
-        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
-        <td>{{ m.rank }}</td>
-        <td class="muted">{{ m.company }}</td>
-        <td><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
-        <td class="num muted">{{ m.joined_date|fmt_date }}</td>
-        <td class="num muted">{{ m.last_active_date|fmt_date }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="roster-tools">
+    <input type="search" id="roster-search" placeholder="Search callsign…" autocomplete="off">
+    <select id="filter-company">
+      <option value="">All companies</option>
+      {% for c in filter_companies %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+    </select>
+    <select id="filter-rank">
+      <option value="">All ranks</option>
+      {% for r in filter_ranks %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+    <select id="filter-status">
+      <option value="">All standings</option>
+      {% for s in filter_statuses %}<option value="{{ s }}">{{ s|status_label }}</option>{% endfor %}
+    </select>
+    <span class="roster-count" id="roster-count"></span>
+  </div>
+
+  <form method="post" action="/muster/bulk" id="bulk-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    {% if can_manage %}
+    <div class="bulk-bar" id="bulk-bar" hidden>
+      <span class="bulk-count" id="bulk-count">0 selected</span>
+      <span class="bulk-group">
+        <select name="company">
+          {% for c in company_options %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-small" type="submit" name="action" value="company">Transfer</button>
+      </span>
+      <span class="bulk-group">
+        <input name="entry" placeholder="Service note…" maxlength="300">
+        <button class="btn btn-small" type="submit" name="action" value="note">Add note</button>
+      </span>
+    </div>
+    {% endif %}
+
+    <table class="ledger" id="roster-table">
+      <thead>
+        <tr>
+          {% if can_manage %}<th class="pick"><input type="checkbox" id="pick-all" title="Select all shown"></th>{% endif %}
+          <th>Callsign</th><th>Rank</th><th>Company</th>
+          <th>Standing</th><th class="num">Enrolled</th><th class="num">Last Seen</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in members %}
+        <tr data-callsign="{{ m.callsign|lower }}" data-company="{{ m.company }}"
+            data-rank="{{ m.rank }}" data-status="{{ m.status }}">
+          {% if can_manage %}<td class="pick"><input type="checkbox" name="ids" value="{{ m.discord_id }}" class="row-pick"></td>{% endif %}
+          <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+          <td>{{ m.rank }}</td>
+          <td class="muted">{{ m.company }}</td>
+          <td><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
+          <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+          <td class="num muted">{{ m.last_active_date|fmt_date }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </form>
+
+  <div class="hollow" id="roster-empty" hidden>
+    <div class="mark">✵</div><h3>No Matches</h3><p>No members match those filters.</p>
+  </div>
+
+  <script>
+    (function () {
+      var search = document.getElementById('roster-search');
+      var fCompany = document.getElementById('filter-company');
+      var fRank = document.getElementById('filter-rank');
+      var fStatus = document.getElementById('filter-status');
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-table tbody tr'));
+      var count = document.getElementById('roster-count');
+      var empty = document.getElementById('roster-empty');
+      var pickAll = document.getElementById('pick-all');
+      var bar = document.getElementById('bulk-bar');
+      var barCount = document.getElementById('bulk-count');
+
+      function visibleRows() { return rows.filter(function (r) { return !r.hidden; }); }
+      function checkedRows() {
+        return rows.filter(function (r) {
+          var b = r.querySelector('.row-pick'); return b && b.checked;
+        });
+      }
+      function refreshBulk() {
+        if (!bar) return;
+        var n = checkedRows().length;
+        bar.hidden = n === 0;
+        barCount.textContent = n + ' selected';
+        if (pickAll) {
+          var vis = visibleRows().filter(function (r) { return r.querySelector('.row-pick'); });
+          var pickedVis = vis.filter(function (r) { return r.querySelector('.row-pick').checked; });
+          pickAll.checked = vis.length > 0 && pickedVis.length === vis.length;
+          pickAll.indeterminate = pickedVis.length > 0 && pickedVis.length < vis.length;
+        }
+      }
+      function apply() {
+        var q = (search.value || '').trim().toLowerCase();
+        var co = fCompany.value, rk = fRank.value, st = fStatus.value;
+        var shown = 0;
+        rows.forEach(function (r) {
+          var ok = (!q || r.getAttribute('data-callsign').indexOf(q) !== -1)
+            && (!co || r.getAttribute('data-company') === co)
+            && (!rk || r.getAttribute('data-rank') === rk)
+            && (!st || r.getAttribute('data-status') === st);
+          r.hidden = !ok;
+          if (ok) shown++;
+        });
+        count.textContent = 'Showing ' + shown + ' of ' + rows.length;
+        if (empty) empty.hidden = shown !== 0;
+        refreshBulk();
+      }
+      [search, fCompany, fRank, fStatus].forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('input', apply);
+        el.addEventListener('change', apply);
+      });
+      if (pickAll) {
+        pickAll.addEventListener('change', function () {
+          visibleRows().forEach(function (r) {
+            var b = r.querySelector('.row-pick'); if (b) b.checked = pickAll.checked;
+          });
+          refreshBulk();
+        });
+      }
+      rows.forEach(function (r) {
+        var b = r.querySelector('.row-pick');
+        if (b) b.addEventListener('change', refreshBulk);
+      });
+      apply();
+    })();
+  </script>
 {% else %}
   <div class="hollow">
     <div class="mark">✶</div>
