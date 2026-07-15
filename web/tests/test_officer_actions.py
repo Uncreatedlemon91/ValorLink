@@ -202,6 +202,31 @@ def test_recruiter_can_approve_candidate():
     assert len(_actions(queue.APPROVE_CANDIDATE)) == 1
 
 
+def test_recruit_pipeline_stage_and_notes():
+    client = TestClient(app)
+    _login(client, "recruiter")
+    # move the seeded applicant along the pipeline
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/stage",
+                data={"csrf": token, "stage": "interviewing"})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).stage == "interviewing"
+    # add recruiter notes
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/notes",
+                data={"csrf": token, "notes": "Strong applicant, plays evenings."})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).notes == "Strong applicant, plays evenings."
+    # a bad stage is rejected, leaving the value unchanged
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/stage", data={"csrf": token, "stage": "bogus"})
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID).stage == "interviewing"
+    # the board renders the three columns
+    html = client.get("/recruits").text
+    assert "At the Gate" in html and "In Interview" in html and "Awaiting Decision" in html
+
+
 def test_insufficient_tier_is_forbidden():
     client = TestClient(app)
     _login(client, "none")

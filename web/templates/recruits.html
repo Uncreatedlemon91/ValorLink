@@ -1,47 +1,78 @@
 {% extends "base.html" %}
-{% block title %}Recruitment Queue{% endblock %}
+{% block title %}Recruitment{% endblock %}
 {% block content %}
 
-<h2 class="section">At the Gate <span class="tally">{{ candidates|length }} awaiting decision</span></h2>
-<p class="lede">Applicants who have submitted an enlistment application in Discord.
-{% if can_decide %}Approve to enlist them — the bot assigns roles, sets their
-nickname, opens a dossier, and welcomes them.{% else %}Sign in as a recruiter to
-approve or deny.{% endif %}</p>
+<h2 class="section">Recruitment Pipeline <span class="tally">{{ total }} in the pipeline</span></h2>
+<p class="lede">Applicants who have submitted an enlistment application, tracked from
+first contact to decision.
+{% if can_decide %}Move a card along as you speak with them; approve to enlist
+(the bot assigns roles, sets their nickname, opens a dossier, and welcomes them).
+{% else %}Sign in as a recruiter to move applicants along, add notes, or decide.{% endif %}</p>
 
-{% if candidates %}
-  <table class="ledger">
-    <thead>
-      <tr><th>Applicant</th><th class="num">Applied</th>{% if can_decide %}<th class="num">Decision</th>{% endif %}</tr>
-    </thead>
-    <tbody>
-    {% for c in candidates %}
-      <tr>
-        <td class="callsign">{{ c.callsign }}</td>
-        <td class="num muted">{{ c.created_at|fmt_date }}</td>
-        {% if can_decide %}
-          <td class="num">
-            <div class="inline-actions">
-              <form method="post" action="/recruits/{{ c.discord_id }}/approve">
-                <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                <button class="btn btn-approve" type="submit">Approve</button>
-              </form>
-              <form method="post" action="/recruits/{{ c.discord_id }}/deny"
-                    onsubmit="return confirm('Deny {{ c.callsign }}’s application?');">
-                <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                <button class="btn btn-danger" type="submit">Deny</button>
-              </form>
-            </div>
-          </td>
-        {% endif %}
-      </tr>
+{% if total %}
+<div class="pipeline">
+  {% for col in columns %}
+  <section class="pipe-col">
+    <header class="pipe-head">
+      <span class="pipe-title">{{ col.label }}</span>
+      <span class="pipe-tally">{{ col.cards|length }}</span>
+    </header>
+    <p class="pipe-hint">{{ col.hint }}</p>
+
+    {% for c in col.cards %}
+    <article class="recruit-card">
+      <div class="recruit-name">{{ c.callsign }}</div>
+      <div class="recruit-meta">Applied {{ c.created_at|fmt_date }}</div>
+
+      {% if can_decide %}
+        {% if c.notes %}<div class="recruit-notes">{{ c.notes }}</div>{% endif %}
+        <details class="recruit-notes-edit">
+          <summary>{{ 'Edit notes' if c.notes else 'Add notes' }}</summary>
+          <form method="post" action="/recruits/{{ c.discord_id }}/notes">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <textarea name="notes" rows="2" placeholder="Interview notes, availability, references…">{{ c.notes or '' }}</textarea>
+            <button class="btn btn-small" type="submit">Save</button>
+          </form>
+        </details>
+
+        <div class="recruit-actions">
+          {% for s in stages %}
+            {% if s != c.stage %}
+            <form method="post" action="/recruits/{{ c.discord_id }}/stage">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="stage" value="{{ s }}">
+              <button class="btn btn-small btn-ghost" type="submit">
+                {{ {'applied':'← Gate','interviewing':'Interview','decision':'Decision →'}[s] }}
+              </button>
+            </form>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <div class="recruit-decide">
+          <form method="post" action="/recruits/{{ c.discord_id }}/approve">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-approve btn-small" type="submit">Approve</button>
+          </form>
+          <form method="post" action="/recruits/{{ c.discord_id }}/deny"
+                onsubmit="return confirm('Deny {{ c.callsign }}’s application?');">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-danger btn-small" type="submit">Deny</button>
+          </form>
+        </div>
+      {% endif %}
+    </article>
+    {% else %}
+      <p class="pipe-empty">—</p>
     {% endfor %}
-    </tbody>
-  </table>
+  </section>
+  {% endfor %}
+</div>
 {% else %}
   <div class="hollow">
     <div class="mark">✵</div>
     <h3>No Recruits Await</h3>
-    <p>There are no applications in the queue.</p>
+    <p>There are no applications in the pipeline.</p>
   </div>
 {% endif %}
 

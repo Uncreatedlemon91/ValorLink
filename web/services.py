@@ -344,6 +344,31 @@ def deny_candidate(session, actor: dict, discord_id: int) -> str:
     return f"{callsign}'s application was denied."
 
 
+RECRUIT_STAGES = ("applied", "interviewing", "decision")
+
+
+def set_candidate_stage(session, actor: dict, discord_id: int, stage: str) -> str:
+    if stage not in RECRUIT_STAGES:
+        raise ActionError("Unknown recruitment stage.")
+    candidacy = session.get(Candidacy, discord_id)
+    if candidacy is None:
+        raise ActionError("That applicant is no longer in the recruitment queue.")
+    candidacy.stage = stage
+    session.commit()
+    labels = {"applied": "At the Gate", "interviewing": "In Interview",
+              "decision": "Awaiting Decision"}
+    return f"{candidacy.callsign} moved to {labels[stage]}."
+
+
+def set_candidate_notes(session, actor: dict, discord_id: int, notes: str) -> str:
+    candidacy = session.get(Candidacy, discord_id)
+    if candidacy is None:
+        raise ActionError("That applicant is no longer in the recruitment queue.")
+    candidacy.notes = notes.strip() or None
+    session.commit()
+    return f"Notes saved for {candidacy.callsign}."
+
+
 # --- Events & attendance ------------------------------------------------- #
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
                  tz_offset: str | int = 0) -> int:

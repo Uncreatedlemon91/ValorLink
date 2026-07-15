@@ -537,6 +537,48 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .admin-table td { vertical-align: middle; }
 .admin-table .inline-actions form { margin: 0; }
 
+/* Recruitment pipeline board */
+.pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 8px 0 4px; }
+.pipe-col {
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
+  background: rgba(255,253,246,0.5); border-radius: 2px; padding: 10px 12px;
+}
+.pipe-head { display: flex; align-items: baseline; justify-content: space-between; }
+.pipe-title { font-family: var(--serif); font-weight: 700; letter-spacing: 0.04em; color: var(--seal); font-size: 15px; }
+.pipe-tally {
+  font-size: 11px; min-width: 20px; text-align: center; color: var(--paper);
+  background: var(--seal); border-radius: 10px; padding: 1px 7px;
+}
+.pipe-hint { font-size: 11px; color: var(--ink-faint); font-style: italic; margin: 2px 0 10px; }
+.pipe-empty { text-align: center; color: var(--rule-strong); margin: 8px 0; }
+.recruit-card {
+  border: 1px solid var(--rule); background: rgba(255,253,246,0.92);
+  border-radius: 2px; padding: 9px 10px; margin-bottom: 9px;
+}
+.recruit-name { font-weight: 700; color: var(--ink); }
+.recruit-meta { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+.recruit-notes {
+  font-size: 12px; color: var(--ink-soft); margin: 7px 0; padding: 6px 8px;
+  background: rgba(195,171,126,0.14); border-left: 2px solid var(--rule-strong); border-radius: 1px;
+  white-space: pre-wrap;
+}
+.recruit-notes-edit summary { font-size: 11px; color: var(--oxblood); cursor: pointer; margin: 4px 0; }
+.recruit-notes-edit textarea {
+  width: 100%; box-sizing: border-box; font-family: var(--serif); font-size: 12px;
+  color: var(--ink); background: rgba(255,253,246,0.9);
+  border: 1px solid var(--rule-strong); border-radius: 2px; padding: 5px 6px; margin: 3px 0;
+}
+.recruit-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 6px; }
+.recruit-actions form, .recruit-decide form { margin: 0; }
+.recruit-decide { display: flex; gap: 6px; border-top: 1px solid var(--rule); padding-top: 7px; }
+.btn-ghost {
+  background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong);
+}
+.btn-ghost:hover { color: var(--paper); background: var(--rule-strong); }
+@media (max-width: 720px) {
+  .pipeline { grid-template-columns: 1fr; }
+}
+
 /* Roster tools: search / filter / bulk */
 .roster-tools {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;

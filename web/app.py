@@ -721,15 +721,59 @@ def login(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "login.html", ctx)
 
 
+RECRUIT_COLUMNS = [
+    ("applied", "At the Gate", "New applications awaiting first contact."),
+    ("interviewing", "In Interview", "Being spoken with by a recruiter."),
+    ("decision", "Awaiting Decision", "Ready to be approved or denied."),
+]
+
+
 @app.get("/recruits", response_class=HTMLResponse)
 def recruits(request: Request, session: Session = Depends(get_session)):
-    """The recruitment queue — applicants awaiting an approve/deny decision."""
+    """The recruitment pipeline — a board of applicants by stage."""
     ctx = _base_context(request, session)
     ctx["can_decide"] = auth.tier_at_least(ctx["user"], auth.TIER_RECRUITER)
-    ctx["candidates"] = (
-        session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
-    )
+    candidates = session.query(Candidacy).order_by(Candidacy.created_at.desc()).all()
+
+    by_stage: dict[str, list] = {key: [] for key, _, _ in RECRUIT_COLUMNS}
+    for c in candidates:
+        # Anything with a missing/unknown stage falls back to the first column.
+        by_stage.get(c.stage, by_stage["applied"]).append(c)
+
+    columns = [
+        {"key": key, "label": label, "hint": hint, "cards": by_stage.get(key, [])}
+        for key, label, hint in RECRUIT_COLUMNS
+    ]
+    ctx["columns"] = columns
+    ctx["total"] = len(candidates)
+    ctx["stages"] = services.RECRUIT_STAGES
     return templates.TemplateResponse(request, "recruits.html", ctx)
+
+
+@app.post("/recruits/{discord_id}/stage")
+def post_recruit_stage(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    stage: str = Form(...),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.set_candidate_stage, actor, discord_id, stage,
+               redirect="/recruits")
+
+
+@app.post("/recruits/{discord_id}/notes")
+def post_recruit_notes(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    notes: str = Form(""),
+    user: dict = Depends(auth.require_recruiter),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.set_candidate_notes, actor, discord_id, notes,
+               redirect="/recruits")
 
 
 # --------------------------------------------------------------------------- #
