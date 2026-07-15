@@ -80,11 +80,25 @@ class ValorLink(commands.Bot):
         if not guild_ids:
             await self.tree.sync()
             return
+        synced = 0
         for gid in guild_ids:
             obj = discord.Object(id=gid)
-            self.tree.copy_global_to(guild=obj)
-            await self.tree.sync(guild=obj)
-        log.info("Synced commands to %d guild(s)", len(guild_ids))
+            try:
+                self.tree.copy_global_to(guild=obj)
+                await self.tree.sync(guild=obj)
+                synced += 1
+            except discord.Forbidden:
+                # The bot is in this guild without the applications.commands
+                # scope, or the guild id is wrong. Skip it — one misconfigured
+                # unit must not take the whole bot (and every other unit) down.
+                log.warning(
+                    "Skipping command sync for guild %s: missing access. Re-invite "
+                    "the bot with the applications.commands scope, or fix the unit's "
+                    "server id.", gid,
+                )
+            except discord.HTTPException:
+                log.exception("Failed to sync commands to guild %s", gid)
+        log.info("Synced commands to %d of %d guild(s)", synced, len(guild_ids))
 
     def _register_persistent_views(self):
         """Re-register interactive views for every unit, reading each unit's
