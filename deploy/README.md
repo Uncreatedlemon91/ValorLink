@@ -167,6 +167,17 @@ sudo -u valorlink .venv/bin/alembic upgrade head
 sudo systemctl restart valorlink-bot valorlink-web
 ```
 
+**Multi-unit deployments:** `alembic upgrade head` only migrates the default
+database. Each unit has its own database, so after a schema change run:
+
+```bash
+sudo -u valorlink .venv/bin/python -m tenancy.manage migrate
+```
+
+which upgrades every unit's database (and the default) to the current schema.
+Add `--slug <handle>` to migrate just one. Do this before restarting the
+services so the app never queries a column a unit's database doesn't have yet.
+
 ## Hosting multiple units (multi-tenant)
 
 The platform can host many units on this one droplet, each at its own

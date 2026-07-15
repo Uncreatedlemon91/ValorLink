@@ -85,6 +85,48 @@ def cmd_adopt_default(args):
         print(f"Default unit is '{tenant.slug}' ({tenant.name}) -> {tenant.db_url}")
 
 
+def cmd_migrate(args):
+    """Run `alembic upgrade head` against every unit database (and the default
+    deployment DB), so a schema change reaches all tenants, not just one.
+
+    env.py reads the live ``config.DATABASE_URL`` when a migration runs, so we
+    point it at each unit in turn and upgrade that database."""
+    import config as app_config
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    init_registry()
+
+    targets: list[tuple[str, str]] = [("default (DATABASE_URL)", app_config.DATABASE_URL)]
+    if not args.slug:
+        with registry_session() as session:
+            for t in session.query(Tenant).order_by(Tenant.slug).all():
+                targets.append((t.slug, t.db_url))
+    else:
+        with registry_session() as session:
+            t = tenant_by_slug(session, args.slug)
+            if t is None:
+                sys.exit(f"No unit with handle '{args.slug}'.")
+            targets = [(t.slug, t.db_url)]
+
+    # De-duplicate by URL (adopt-default can point the default at a unit DB).
+    seen: set[str] = set()
+    unique = [(label, url) for label, url in targets if not (url in seen or seen.add(url))]
+
+    cfg = Config(str(Path(__file__).resolve().parent.parent / "alembic.ini"))
+    original = app_config.DATABASE_URL
+    try:
+        for label, url in unique:
+            print(f"→ migrating {label}: {url}")
+            app_config.DATABASE_URL = url
+            command.upgrade(cfg, "head")
+    finally:
+        app_config.DATABASE_URL = original
+    print(f"Done. Upgraded {len(unique)} database(s) to head.")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Manage ValorLink units (tenants).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -110,6 +152,10 @@ def main(argv=None):
     a = sub.add_parser("adopt-default", help="register the current deployment as the default unit")
     a.add_argument("--name", default="Headquarters")
     a.set_defaults(func=cmd_adopt_default)
+
+    m = sub.add_parser("migrate", help="run alembic upgrade head on every unit database")
+    m.add_argument("--slug", help="migrate only this unit (default: all units + the default DB)")
+    m.set_defaults(func=cmd_migrate)
 
     args = parser.parse_args(argv)
     args.func(args)
