@@ -137,6 +137,39 @@ def test_admin_edits_public_listing():
         assert row.recruiting_open is False and row.listed is True
 
 
+def test_admin_edits_discord_server_id():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen. Test", "tier": "admin"},
+           headers=_host("2ndus"), follow_redirects=False)
+    token = _csrf(c, "/command-tent", _host("2ndus"))
+    # change to a fresh, unclaimed server id
+    c.post("/admin/discord-link", data={"csrf": token, "guild_id": "777000111"},
+           headers=_host("2ndus"))
+    with registry_session() as s:
+        assert tenant_by_slug(s, "2ndus").discord_guild_id == 777000111
+    # a server already linked to another unit (5thva) is refused
+    fifth = None
+    with registry_session() as s:
+        fifth = tenant_by_slug(s, "5thva").discord_guild_id
+    token = _csrf(c, "/command-tent", _host("2ndus"))
+    c.post("/admin/discord-link", data={"csrf": token, "guild_id": str(fifth)},
+           headers=_host("2ndus"))
+    with registry_session() as s:
+        assert tenant_by_slug(s, "2ndus").discord_guild_id == 777000111  # unchanged
+    # non-digits are rejected
+    token = _csrf(c, "/command-tent", _host("2ndus"))
+    c.post("/admin/discord-link", data={"csrf": token, "guild_id": "not-a-number"},
+           headers=_host("2ndus"))
+    with registry_session() as s:
+        assert tenant_by_slug(s, "2ndus").discord_guild_id == 777000111  # unchanged
+    # blank unlinks
+    token = _csrf(c, "/command-tent", _host("2ndus"))
+    c.post("/admin/discord-link", data={"csrf": token, "guild_id": ""},
+           headers=_host("2ndus"))
+    with registry_session() as s:
+        assert tenant_by_slug(s, "2ndus").discord_guild_id is None
+
+
 def test_register_flow_and_tls_allow():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},

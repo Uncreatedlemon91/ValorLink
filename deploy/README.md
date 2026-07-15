@@ -246,6 +246,12 @@ is **archived on the server** (renamed `*.removed-<timestamp>`), not destroyed,
 unless you `--purge`. Afterwards, kick the bot from that Discord server (or
 restart `valorlink-bot`) so it drops the stale guild mapping.
 
+**Re-pointing a unit's Discord server:** a unit admin can change (or clear)
+the linked server from **Command Tent → Discord Server** — useful if the unit
+rebuilds its server or the ID was entered wrong. The platform refuses a server
+already linked to another unit. After a change, invite the bot to the new
+server (or restart `valorlink-bot`) so slash commands sync there.
+
 The one bot serves every unit's Discord: it drains each unit's action queue
 against that unit's guild, so web actions reach Discord for **all** units.
 (New units are picked up on the next bot restart, when it syncs commands to
