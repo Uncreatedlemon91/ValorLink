@@ -957,13 +957,15 @@ def _bot_invite_url() -> str | None:
 
 
 def _can_register(user: dict | None) -> bool:
+    """Who may create a unit. Secure by default: with a PLATFORM_ADMIN_IDS
+    allowlist, only those admins; otherwise registration is closed unless
+    PLATFORM_OPEN_REGISTRATION is explicitly enabled."""
     if not user:
         return False
     allow = os.getenv("PLATFORM_ADMIN_IDS", "").replace(" ", "")
-    if not allow:
-        return True  # open registration
-    ids = {a for a in allow.split(",") if a}
-    return str(user.get("id")) in ids
+    if allow:
+        return str(user.get("id")) in {a for a in allow.split(",") if a}
+    return os.getenv("PLATFORM_OPEN_REGISTRATION", "").lower() in ("1", "true", "yes")
 
 
 def _is_platform_admin(user: dict | None) -> bool:
@@ -1006,6 +1008,19 @@ def register_form(request: Request):
         "now": datetime.utcnow(),
     }
     return templates.TemplateResponse(request, "register.html", ctx)
+
+
+@app.get("/register/check")
+def register_check(request: Request, slug: str = ""):
+    """Live 'is this handle free?' check for the register form."""
+    from fastapi.responses import JSONResponse
+
+    from tenancy.provision import slug_available
+
+    if not auth.current_user(request):
+        raise auth.NotAuthenticated()
+    available, reason = slug_available(slug)
+    return JSONResponse({"available": available, "reason": reason})
 
 
 @app.post("/admin/units/{slug}/delete")

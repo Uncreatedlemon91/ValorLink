@@ -39,9 +39,11 @@ def create_unit(slug: str, name: str, guild_id: int | None = None,
     if not name:
         raise ProvisionError("The unit needs a display name.")
 
+    from sqlalchemy.exc import IntegrityError
+
     with registry_session() as session:
         if tenant_by_slug(session, slug):
-            raise ProvisionError(f"A unit '{slug}' already exists.")
+            raise ProvisionError(f"The handle '{slug}' is already taken.")
         if guild_id and tenant_by_guild(session, guild_id):
             raise ProvisionError("That Discord server is already linked to a unit.")
 
@@ -52,10 +54,30 @@ def create_unit(slug: str, name: str, guild_id: int | None = None,
             motto=(motto or "").strip() or None, blurb=(blurb or "").strip() or None,
             db_url=url,
         ))
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            # Lost a race for the same handle (the slug column is UNIQUE).
+            session.rollback()
+            raise ProvisionError(f"The handle '{slug}' is already taken.")
 
     invalidate()
     return url
+
+
+def slug_available(slug: str) -> tuple[bool, str]:
+    """Whether a handle is free to use, for a live check on the form."""
+    from tenancy.registry import registry_session
+    from tenancy.resolve import tenant_by_slug
+
+    try:
+        slug = normalize_slug(slug)
+    except ProvisionError as exc:
+        return False, str(exc)
+    with registry_session() as session:
+        if tenant_by_slug(session, slug):
+            return False, "That handle is already taken."
+    return True, "Available."
 
 
 def delete_unit(slug: str, purge: bool = False) -> dict:

@@ -10,7 +10,7 @@ from db.context import reset_current_db_url, set_current_db_url
 from db.models import Candidacy, Event
 from tenancy.registry import init_registry, registry_session
 from tenancy.resolve import all_tenants, ensure_default_tenant
-from tenancy.routing import bind_guild, registered_guild_ids
+from tenancy.routing import registered_guild_ids
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("valorlink")
@@ -55,7 +55,21 @@ class ValorLink(commands.Bot):
         await self._sync_commands()
 
     async def _bind_interaction(self, interaction: discord.Interaction) -> bool:
-        bind_guild(interaction.guild_id)
+        from db.context import set_current_db_url
+        from tenancy.routing import db_url_for_guild
+
+        url = db_url_for_guild(interaction.guild_id)
+        if url is None:
+            # Not a registered unit — refuse rather than touch another unit's data.
+            try:
+                if interaction.type == discord.InteractionType.application_command:
+                    await interaction.response.send_message(
+                        "This server isn't a registered ValorLink unit.", ephemeral=True
+                    )
+            except discord.HTTPException:
+                pass
+            return False
+        set_current_db_url(url)
         return True
 
     async def _sync_commands(self):

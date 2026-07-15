@@ -7,19 +7,20 @@ the right unit. Results are cached because the registry changes rarely; call
 """
 from db.context import set_current_db_url
 from tenancy.registry import registry_session
-from tenancy.resolve import all_tenants, default_tenant, tenant_by_guild
+from tenancy.resolve import all_tenants, tenant_by_guild
 
 _guild_cache: dict[int, str | None] = {}
 
 
 def db_url_for_guild(guild_id: int | None) -> str | None:
-    """The unit database URL for a guild, falling back to the default unit."""
+    """The unit database URL for a guild, or None if the guild is not a
+    registered unit. There is deliberately NO fallback to the default unit:
+    the bot must not touch one unit's data on behalf of an unrelated server.
+    """
     if guild_id in _guild_cache:
         return _guild_cache[guild_id]
     with registry_session() as session:
         tenant = tenant_by_guild(session, guild_id) if guild_id else None
-        if tenant is None:
-            tenant = default_tenant(session)
         url = tenant.db_url if tenant else None
     _guild_cache[guild_id] = url
     return url

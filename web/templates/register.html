@@ -29,8 +29,8 @@
           <input type="hidden" name="csrf" value="{{ csrf_token }}">
           <div class="field">
             <label>Handle <span class="opt">(your subdomain)</span></label>
-            <input name="slug" required pattern="[a-z0-9-]{2,30}" placeholder="5thva">
-            <span class="order-note">Your portal will be <b>handle.{{ base_domain }}</b> — lowercase letters, numbers, hyphens.</span>
+            <input name="slug" id="slug-input" required pattern="[a-z0-9-]{2,30}" placeholder="5thva" autocomplete="off">
+            <span class="order-note">Your portal will be <b><span id="slug-preview">handle</span>.{{ base_domain }}</b> — lowercase letters, numbers, hyphens. <span id="slug-status"></span></span>
           </div>
           <div class="field"><label>Unit name</label><input name="name" required placeholder="5th Virginia Volunteers"></div>
           <div class="field"><label>Discord server ID</label><input name="guild_id" inputmode="numeric" placeholder="e.g. 112233445566778899">
@@ -41,7 +41,32 @@
           <div class="field field-actions"><button class="btn btn-strong" type="submit">Raise the unit</button></div>
         </form>
       </div>
-      {% endif %}
+      <script>
+        (function () {
+          var input = document.getElementById('slug-input');
+          if (!input) return;
+          var preview = document.getElementById('slug-preview');
+          var status = document.getElementById('slug-status');
+          var timer = null, submitBtn = input.closest('form').querySelector('button[type=submit]');
+          function check() {
+            var v = input.value.trim().toLowerCase();
+            preview.textContent = v || 'handle';
+            if (!v) { status.textContent = ''; return; }
+            fetch('/register/check?slug=' + encodeURIComponent(v))
+              .then(function (r) { return r.json(); })
+              .then(function (d) {
+                status.textContent = d.available ? '✓ ' + d.reason : '✕ ' + d.reason;
+                status.style.color = d.available ? '#3f6b3a' : '#7c1f2b';
+                if (submitBtn) submitBtn.disabled = !d.available;
+              })
+              .catch(function () { status.textContent = ''; });
+          }
+          input.addEventListener('input', function () {
+            clearTimeout(timer);
+            timer = setTimeout(check, 300);
+          });
+        })();
+      </script>
 
       {% if is_platform_admin and existing_units %}
       <h2 class="section">Existing Units <span class="tally">{{ existing_units|length }}</span></h2>
@@ -65,6 +90,7 @@
         {% endfor %}
         </tbody>
       </table>
+      {% endif %}
       {% endif %}
 
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
