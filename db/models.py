@@ -258,3 +258,19 @@ class Candidacy(Base):
     # Recruitment pipeline stage: applied | interviewing | decision.
     stage = Column(String, nullable=False, default="applied", server_default="applied")
     notes = Column(Text, nullable=True)
+    # Snapshot of the applicant's answers to the unit's recruitment questions,
+    # as JSON [{"q": prompt, "a": answer}, ...]. Captured at apply time.
+    answers = Column(Text, nullable=True)
+
+
+class RecruitmentQuestion(Base):
+    """A question a unit asks applicants during enlistment. Managed from the
+    Command Tent; presented on the web apply form and in the Discord modal."""
+
+    __tablename__ = "recruitment_questions"
+
+    id = Column(Integer, primary_key=True)
+    prompt = Column(String, nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    required = Column(Boolean, nullable=False, default=True)
+    enabled = Column(Boolean, nullable=False, default=True)

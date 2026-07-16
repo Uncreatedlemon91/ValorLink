@@ -54,10 +54,7 @@
                 <a class="btn" href="{{ u.join_url }}">Learn more</a>
                 {% if u.recruiting %}
                   {% if user %}
-                    <form method="post" action="/apply/{{ u.slug }}">
-                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                      <button class="btn btn-strong" type="submit">Apply</button>
-                    </form>
+                    <a class="btn btn-strong" href="{{ u.apply_url }}">Apply</a>
                   {% else %}
                     <a class="btn btn-strong" href="/login">Sign in to apply</a>
                   {% endif %}

@@ -208,5 +208,47 @@
   </form>
 </div>
 
+<h2 class="section" id="questions">Recruitment Questions <span class="tally">asked when applicants enlist</span></h2>
+<p class="lede">Applicants answer these on your Join page and in the Discord application.
+Hidden questions aren't asked; drag order with the arrows.</p>
+{% if questions %}
+<table class="ledger admin-table">
+  <thead><tr><th>Question</th><th>Required</th><th>Shown</th><th></th></tr></thead>
+  <tbody>
+  {% for q in questions %}
+    <tr class="{{ '' if q.enabled else 'muted' }}">
+      <td class="callsign">{{ q.prompt }}</td>
+      <td>{% if q.required %}<span class="badge abbr">Required</span>{% else %}<span class="muted">Optional</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/admin/questions/{{ q.id }}/toggle">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <button class="btn btn-small" type="submit">{{ 'Hide' if q.enabled else 'Show' }}</button>
+        </form>
+      </td>
+      <td class="num">
+        <div class="inline-actions">
+          <form method="post" action="/admin/questions/{{ q.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><button class="btn btn-small" type="submit" title="Move up">↑</button></form>
+          <form method="post" action="/admin/questions/{{ q.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><button class="btn btn-small" type="submit" title="Move down">↓</button></form>
+          <form method="post" action="/admin/questions/{{ q.id }}/remove" onsubmit="return confirm('Remove this question?');"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small btn-danger" type="submit">Remove</button></form>
+        </div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No questions yet — applicants just confirm their enlistment. Add one below.</p>
+{% endif %}
+<div class="order-card" style="max-width:640px; margin-top:14px;">
+  <h3 class="order-title">Add a Question</h3>
+  <form class="orders" method="post" action="/admin/questions/add">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field"><label>Question</label><input name="prompt" required maxlength="200" placeholder="What's your War of Rights experience?"></div>
+    <div class="field"><label class="checkline"><input type="checkbox" name="required" value="1" checked> Required</label></div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Add question</button></div>
+  </form>
+  <p class="order-note">The Discord application shows the first four questions (its form limit); the web Join page shows them all.</p>
+</div>
+
 <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
 {% endblock %}

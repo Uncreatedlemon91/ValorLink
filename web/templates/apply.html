@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Apply to {{ unit_name }}{% endblock %}
+{% block content %}
+
+<p style="margin-top:16px;"><a class="backlink" href="/join">‹ back</a></p>
+<h2 class="section">Enlist with {{ unit_name }}</h2>
+
+{% if is_member %}
+  <p class="lede">You're already enrolled with this unit. <a href="/my-record">View your record ›</a></p>
+{% elif not recruiting %}
+  <p class="lede">This unit isn't accepting applications right now.</p>
+{% elif already_applied %}
+  <p class="lede">Your application is already in — an officer will be in touch.</p>
+{% elif not user %}
+  <p class="lede">Sign in with Discord to apply.</p>
+  <a class="btn btn-strong btn-lg" href="/login">Sign in with Discord</a>
+{% else %}
+  <p class="lede">Applying as <b>{{ user.name }}</b>. A recruiter reviews every application.</p>
+  <div class="order-card" style="max-width:640px;">
+    <form class="orders" method="post" action="/apply">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      {% for q in questions %}
+        <div class="field">
+          <label>{{ q.prompt }}{% if not q.required %} <span class="opt">(optional)</span>{% endif %}</label>
+          <textarea name="q_{{ q.id }}" rows="2" maxlength="1000" {{ 'required' if q.required }}></textarea>
+        </div>
+      {% endfor %}
+      <div class="field field-actions">
+        <button class="btn btn-strong btn-lg" type="submit">
+          {{ 'Submit application' if questions else 'Apply to enlist' }}
+        </button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

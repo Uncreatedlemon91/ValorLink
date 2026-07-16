@@ -109,17 +109,45 @@ def test_login_is_scoped_across_units():
 
 def test_apply_creates_candidacy_and_dedupes():
     c = TestClient(app)
-    # sign in globally (identity) on the directory
+    # sign in on the unit and apply through its application form
     c.post("/auth/dev", data={"discord_id": 42, "name": "Recruit Rowe", "tier": "none"},
-           headers={"host": APEX}, follow_redirects=False)
-    token = _csrf(c, "/", {"host": APEX})
-    c.post("/apply/5thva", data={"csrf": token}, headers={"host": APEX})
+           headers=_host("5thva"), follow_redirects=False)
+    token = _csrf(c, "/apply", _host("5thva"))  # session-stable token
+    c.post("/apply", data={"csrf": token}, headers=_host("5thva"))
     with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
         assert s.query(Candidacy).filter_by(discord_id=42).count() == 1
-    # applying again does not duplicate
-    c.post("/apply/5thva", data={"csrf": _csrf(c, "/", {"host": APEX})}, headers={"host": APEX})
+    # applying again does not duplicate (reuse the same session token)
+    c.post("/apply", data={"csrf": token}, headers=_host("5thva"))
     with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
         assert s.query(Candidacy).filter_by(discord_id=42).count() == 1
+
+
+def test_recruitment_questions_collected_on_apply():
+    c = TestClient(app)
+    # admin adds a required question
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    c.post("/admin/questions/add",
+           data={"csrf": _csrf(c, "/command-tent", _host("5thva")),
+                 "prompt": "WoR experience?", "required": "1"}, headers=_host("5thva"))
+    # a fresh applicant answers it
+    c2 = TestClient(app)
+    c2.post("/auth/dev", data={"discord_id": 55, "name": "Rec", "tier": "none"},
+            headers=_host("5thva"), follow_redirects=False)
+    form = c2.get("/apply", headers=_host("5thva")).text
+    assert "WoR experience?" in form
+    qid = re.search(r'name="q_(\d+)"', form).group(1)
+    token = re.search(r'name="csrf" value="([^"]+)"', form).group(1)
+    # missing a required answer is rejected
+    c2.post("/apply", data={"csrf": token}, headers=_host("5thva"))
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        assert s.query(Candidacy).filter_by(discord_id=55).count() == 0
+    # answering it records the answer
+    c2.post("/apply", data={"csrf": token, f"q_{qid}": "Two years, line infantry."},
+            headers=_host("5thva"))
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        cand = s.query(Candidacy).filter_by(discord_id=55).one()
+        assert "Two years" in (cand.answers or "")
 
 
 def test_admin_edits_public_listing():
