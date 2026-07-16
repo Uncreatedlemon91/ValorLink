@@ -735,3 +735,85 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   .ledger th, .ledger td { padding: 7px 6px; }
   .authbar { justify-content: space-between; }
 }
+
+/* =========================================================================
+   Theme: Modern (dark) — a flat, tactical skin. Selected per unit via
+   body.theme-modern. Overrides the design tokens and the parchment surfaces;
+   the per-unit --seal (brand colour) still flows through as the accent.
+   ========================================================================= */
+body.theme-modern {
+  --paper:        #1c2025;
+  --paper-2:      #14171b;
+  --paper-edge:   #2b3138;
+  --ink:          #e7e9ec;
+  --ink-soft:     #b3bcc5;
+  --ink-faint:    #808a94;
+  --rule:         #2e353d;
+  --rule-strong:  #454f59;
+  --oxblood:      #d24d60;
+  --brass:        #c69a4a;
+  --brass-bright: #d8ab52;
+  --serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+           "Helvetica Neue", Arial, sans-serif;
+  background-color: #0e1113;
+  background-image: none;
+}
+body.theme-modern .sheet {
+  background: linear-gradient(180deg, #1c2025 0%, #14171b 100%);
+  box-shadow: 0 0 0 1px #2b3138, 0 20px 50px rgba(0,0,0,0.55);
+}
+body.theme-modern .sheet::before { box-shadow: none; }   /* drop the aged vignette */
+body.theme-modern .banner { border-bottom: 2px solid var(--rule-strong); }
+body.theme-modern .crest { filter: saturate(0.6); }
+
+/* Surfaces that were painted with translucent parchment */
+body.theme-modern .order-card,
+body.theme-modern .stat,
+body.theme-modern .setup-card,
+body.theme-modern .pipe-col,
+body.theme-modern .announce-card,
+body.theme-modern .recruit-card,
+body.theme-modern .bulk-bar,
+body.theme-modern .medallion,
+body.theme-modern .recruit-notes,
+body.theme-modern .dossier-bio,
+body.theme-modern .day-chip {
+  background: rgba(255,255,255,0.035);
+  border-color: var(--rule-strong);
+}
+body.theme-modern .medallion.seal { background: rgba(210,77,96,0.10); }
+
+/* Form controls */
+body.theme-modern input,
+body.theme-modern select,
+body.theme-modern textarea,
+body.theme-modern .rowform input,
+body.theme-modern .roster-tools input,
+body.theme-modern .roster-tools select,
+body.theme-modern .bulk-group select,
+body.theme-modern .bulk-group input {
+  background: #0f1316;
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+body.theme-modern option { background: #14171b; color: var(--ink); }
+
+/* Tables + zebra */
+body.theme-modern .ledger th { border-bottom-color: var(--rule-strong); }
+body.theme-modern .ledger td { border-bottom-color: var(--rule); }
+body.theme-modern .ledger tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+/* Buttons: plain buttons go outline-on-dark; strong/accent keep --seal */
+body.theme-modern .btn {
+  background: rgba(255,255,255,0.05);
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+body.theme-modern .btn:hover { background: rgba(255,255,255,0.10); }
+body.theme-modern .btn-strong { color: #fff; }
+
+/* Flash + meter tweaks for contrast */
+body.theme-modern .flash { background: rgba(255,255,255,0.04); }
+body.theme-modern .flash-ok { background: rgba(63,107,58,0.18); }
+body.theme-modern .flash-error { background: rgba(210,77,96,0.15); }
+body.theme-modern .meter { background: #0f1316; }

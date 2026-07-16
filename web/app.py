@@ -206,6 +206,7 @@ def _base_context(request: Request, session: Session) -> dict:
         "platform_base": os.getenv("PLATFORM_BASE_DOMAIN"),
         # Per-unit vocabulary; templates reference `terms.<key>`.
         "terms": terminology.get_terms(cfg.terminology),
+        "theme": cfg.theme or terminology.DEFAULT_THEME,
     }
 
 
@@ -919,6 +920,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         companies=list_companies(session),
         questions=services.list_recruitment_questions(session),
         terminology_choices=terminology.PRESET_CHOICES,
+        theme_choices=terminology.THEME_CHOICES,
         listing=listing,
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
@@ -1370,10 +1372,11 @@ def post_identity(
     brand_color: str = Form(...),
     inactivity_days: int = Form(...),
     terminology: str = Form(""),
+    theme: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.update_identity,
-               regiment_name, motto, brand_color, inactivity_days, terminology,
+               regiment_name, motto, brand_color, inactivity_days, terminology, theme,
                redirect="/command-tent")
 
 
