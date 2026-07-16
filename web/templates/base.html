@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="/static/css/valorlink.css">
   <style>:root { --seal: {{ brand_color }}; }</style>
 </head>
-<body>
+<body class="theme-{{ theme|default('parchment') }}">
   <div class="sheet" style="--seal: {{ brand_color }};">
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
       <h1>{{ regiment_name }}</h1>
       {% if regiment_motto %}<p class="motto">“{{ regiment_motto }}”</p>{% endif %}
-      <div class="estd">Regimental Headquarters &middot; Order Book</div>
+      <div class="estd">{{ terms.tagline }}</div>
     </header>
 
     <nav class="rail">

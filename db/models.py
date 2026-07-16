@@ -174,6 +174,8 @@ class GuildConfig(Base):
     inactivity_days_threshold = Column(Integer, nullable=False, default=30)
     # Vocabulary preset (see utils/terminology.py): "wor", "modern", …
     terminology = Column(String, nullable=False, default="wor", server_default="wor")
+    # Visual theme (CSS skin): "parchment", "modern".
+    theme = Column(String, nullable=False, default="parchment", server_default="parchment")
 
     admin_role_id = Column(BigInteger, nullable=True)
     officer_role_id = Column(BigInteger, nullable=True)

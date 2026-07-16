@@ -655,8 +655,8 @@ def _parse_id(value: str) -> int | None:
 
 
 def update_identity(session, name: str, motto: str, brand_hex: str,
-                    inactivity_days: int, terminology: str = "") -> str:
-    from utils.terminology import PRESETS
+                    inactivity_days: int, terminology: str = "", theme: str = "") -> str:
+    from utils.terminology import PRESETS, THEMES
     cfg = get_config(session)
     name = name.strip()
     if not name:
@@ -673,6 +673,8 @@ def update_identity(session, name: str, motto: str, brand_hex: str,
     cfg.inactivity_days_threshold = inactivity_days
     if terminology and terminology in PRESETS:
         cfg.terminology = terminology
+    if theme and theme in THEMES:
+        cfg.theme = theme
     session.commit()
     return "Identity updated."
 
