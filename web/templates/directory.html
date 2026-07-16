@@ -53,7 +53,9 @@
               <div class="inline-actions" style="justify-content:flex-start;gap:10px;">
                 <a class="btn" href="{{ u.join_url }}">Learn more</a>
                 {% if u.recruiting %}
-                  {% if user %}
+                  {% if u.invite %}
+                    <a class="btn btn-strong" href="{{ u.invite }}" target="_blank" rel="noopener">Join Discord</a>
+                  {% elif user %}
                     <a class="btn btn-strong" href="{{ u.apply_url }}">Apply</a>
                   {% else %}
                     <a class="btn btn-strong" href="/login">Sign in to apply</a>

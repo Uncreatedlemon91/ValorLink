@@ -39,6 +39,11 @@
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <div class="field"><label>Name</label><input name="regiment_name" required value="{{ cfg.regiment_name }}"></div>
       <div class="field"><label>Motto</label><input name="motto" value="{{ cfg.regiment_motto or '' }}"></div>
+      <div class="field">
+        <label>Discord invite <span class="opt">(recruiting)</span></label>
+        <input name="discord_invite" value="{{ cfg.discord_invite or '' }}" placeholder="https://discord.gg/yourinvite">
+        <span class="order-note">When set, the site's Apply / Enlist buttons send recruits straight to your Discord instead of the web form.</span>
+      </div>
       <div class="field-row">
         <div class="field"><label>Brand colour</label><input name="brand_color" value="{{ brand_hex }}"></div>
         <div class="field"><label>Inactivity (days)</label><input name="inactivity_days" type="number" min="1" max="365" value="{{ cfg.inactivity_days_threshold }}"></div>

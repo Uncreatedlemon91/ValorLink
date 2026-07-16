@@ -232,6 +232,24 @@ def test_admin_edits_discord_server_id():
         assert tenant_by_slug(s, "2ndus").discord_guild_id is None
 
 
+def test_discord_invite_replaces_web_apply():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Adm", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    c.post("/admin/identity",
+           data={"csrf": _csrf(c, "/command-tent", _host("5thva")), "regiment_name": "5th Virginia",
+                 "brand_color": "#7c1f2b", "inactivity_days": "30",
+                 "discord_invite": "https://discord.gg/xyz789"},
+           headers=_host("5thva"))
+    # a signed-out visitor gets a Discord invite button — no OAuth/apply needed
+    v = TestClient(app)
+    jp = v.get("/join", headers=_host("5thva")).text
+    assert "Join our Discord" in jp and "discord.gg/xyz789" in jp
+    # and the directory card links to the invite too
+    d = v.get("/", headers={"host": APEX}).text
+    assert "discord.gg/xyz789" in d and "Join Discord" in d
+
+
 def test_join_page_and_directory_counts():
     c = TestClient(app)
     html = c.get("/join", headers=_host("5thva")).text

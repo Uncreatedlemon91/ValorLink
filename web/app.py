@@ -229,13 +229,16 @@ def directory_mode(request: Request) -> bool:
     return slug_from_host(request.headers.get("host", "")) is None
 
 
-def _unit_member_count(db_url: str) -> int | None:
-    """Active member count for a unit, or None if its database is unavailable."""
+def _unit_directory_info(db_url: str) -> dict:
+    """Public directory facts read from a unit's own database: active member
+    count and Discord invite (if any). Empty dict if the DB is unavailable."""
     try:
         with sessionmaker_for(db_url)() as s:
-            return s.query(Member).filter(Member.status == "active").count()
+            cfg = get_config(s)
+            count = s.query(Member).filter(Member.status == "active").count()
+            return {"members": count, "invite": cfg.discord_invite}
     except Exception:
-        return None
+        return {}
 
 
 def _platform_activity(limit: int = 18):
@@ -287,21 +290,22 @@ def _render_directory(request: Request):
     base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
     with registry_session() as rs:
         rows = listed_tenants(rs)
-        units = [
-            {
+        units = []
+        for t in rows:
+            info = _unit_directory_info(t.db_url)
+            units.append({
                 "slug": t.slug,
                 "name": t.name,
                 "motto": t.motto,
                 "blurb": t.blurb,
                 "brand_color": brand_hex(t.brand_color),
                 "recruiting": t.recruiting_open,
-                "members": _unit_member_count(t.db_url),
+                "members": info.get("members"),
+                "invite": info.get("invite"),
                 "url": f"https://{t.slug}.{base_domain}/",
                 "join_url": f"https://{t.slug}.{base_domain}/join",
                 "apply_url": f"https://{t.slug}.{base_domain}/apply",
-            }
-            for t in rows
-        ]
+            })
     ctx = {
         "request": request,
         "units": units,
@@ -450,6 +454,7 @@ def join(request: Request, session: Session = Depends(get_session)):
         unit_name=listing_name, motto=motto, blurb=blurb, recruiting=recruiting,
         active=active, upcoming=upcoming, nights=nights,
         apply_slug=tenant.slug, already_applied=already_applied, is_member=is_member,
+        invite=cfg.discord_invite,
     )
     return templates.TemplateResponse(request, "join.html", ctx)
 
@@ -477,7 +482,8 @@ def apply_form(request: Request, session: Session = Depends(get_session)):
         already = session.get(Candidacy, int(viewer["id"])) is not None
         is_member = session.get(Member, int(viewer["id"])) is not None
     ctx.update(unit_name=name, recruiting=recruiting, questions=questions,
-               already_applied=already, is_member=is_member)
+               already_applied=already, is_member=is_member,
+               invite=get_config(session).discord_invite)
     return templates.TemplateResponse(request, "apply.html", ctx)
 
 
@@ -1463,10 +1469,11 @@ def post_identity(
     brand_color: str = Form(...),
     inactivity_days: int = Form(...),
     theme: str = Form(""),
+    discord_invite: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.update_identity,
-               regiment_name, motto, brand_color, inactivity_days, theme,
+               regiment_name, motto, brand_color, inactivity_days, theme, discord_invite,
                redirect="/command-tent")
 
 
