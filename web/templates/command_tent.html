@@ -43,21 +43,13 @@
         <div class="field"><label>Brand colour</label><input name="brand_color" value="{{ brand_hex }}"></div>
         <div class="field"><label>Inactivity (days)</label><input name="inactivity_days" type="number" min="1" max="365" value="{{ cfg.inactivity_days_threshold }}"></div>
       </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Vocabulary</label>
-          <select name="terminology">
-            {% for value, label in terminology_choices %}<option value="{{ value }}" {{ 'selected' if value == cfg.terminology }}>{{ label }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label>Theme</label>
-          <select name="theme">
-            {% for value, label in theme_choices %}<option value="{{ value }}" {{ 'selected' if value == cfg.theme }}>{{ label }}</option>{% endfor %}
-          </select>
-        </div>
+      <div class="field">
+        <label>Theme</label>
+        <select name="theme">
+          {% for value, label in theme_choices %}<option value="{{ value }}" {{ 'selected' if value == cfg.theme }}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="order-note">The portal's look. Set the wording in Custom Wording below.</span>
       </div>
-      <span class="order-note">Vocabulary sets the wording (roster, events…) and Theme sets the look — both to suit your game.</span>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save identity</button></div>
     </form>
   </div>
@@ -85,10 +77,9 @@
   </div>
 </div>
 
-<h2 class="section" id="wording">Custom Wording <span class="tally">override any term</span></h2>
-<p class="lede">These start from your chosen <b>Vocabulary</b> preset. Change any that you
-want your own word for — blank or unchanged fields keep following the preset, so
-switching preset later still updates them.</p>
+<h2 class="section" id="wording">Custom Wording <span class="tally">name things your way</span></h2>
+<p class="lede">Tailor the portal's vocabulary to your game — change any term below. Leave a
+field as-is to keep the default wording.</p>
 <div class="order-card" style="max-width:760px;">
   <form class="orders" method="post" action="/admin/terminology">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">

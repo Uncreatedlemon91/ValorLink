@@ -205,7 +205,7 @@ def _base_context(request: Request, session: Session) -> dict:
         "tenant": tenant,
         "platform_base": os.getenv("PLATFORM_BASE_DOMAIN"),
         # Per-unit vocabulary (preset + any custom overrides); `terms.<key>`.
-        "terms": terminology.resolve_terms(cfg.terminology, cfg.terminology_custom),
+        "terms": terminology.resolve_terms(cfg.terminology_custom),
         "theme": cfg.theme or terminology.DEFAULT_THEME,
     }
 
@@ -919,7 +919,6 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),
         questions=services.list_recruitment_questions(session),
-        terminology_choices=terminology.PRESET_CHOICES,
         theme_choices=terminology.THEME_CHOICES,
         term_fields=terminology.EDITABLE_KEYS,
         has_custom_terms=bool(cfg.terminology_custom),
@@ -1373,12 +1372,11 @@ def post_identity(
     motto: str = Form(""),
     brand_color: str = Form(...),
     inactivity_days: int = Form(...),
-    terminology: str = Form(""),
     theme: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.update_identity,
-               regiment_name, motto, brand_color, inactivity_days, terminology, theme,
+               regiment_name, motto, brand_color, inactivity_days, theme,
                redirect="/command-tent")
 
 
