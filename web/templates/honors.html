@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Honors{% endblock %}
+{% block title %}{{ terms.honors }}{% endblock %}
 {% block content %}
 
-<h2 class="section">Honors &amp; Qualifications <span class="tally">{{ catalogue|length }} in the catalogue</span></h2>
+<h2 class="section">{{ terms.honors }} &amp; Qualifications <span class="tally">{{ catalogue|length }} in the catalogue</span></h2>
 <p class="lede">Medals, commendations, and courses of instruction, with those who hold them.</p>
 
 {% if tier_at_least(user, TIER_OFFICER) %}

@@ -32,6 +32,7 @@ from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
+from utils import terminology
 from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
 from web import auth, services
 from web.tenant import (
@@ -203,6 +204,8 @@ def _base_context(request: Request, session: Session) -> dict:
         "pending_recruits": pending_recruits,
         "tenant": tenant,
         "platform_base": os.getenv("PLATFORM_BASE_DOMAIN"),
+        # Per-unit vocabulary; templates reference `terms.<key>`.
+        "terms": terminology.get_terms(cfg.terminology),
     }
 
 
@@ -915,6 +918,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),
         questions=services.list_recruitment_questions(session),
+        terminology_choices=terminology.PRESET_CHOICES,
         listing=listing,
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
@@ -1365,10 +1369,11 @@ def post_identity(
     motto: str = Form(""),
     brand_color: str = Form(...),
     inactivity_days: int = Form(...),
+    terminology: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.update_identity,
-               regiment_name, motto, brand_color, inactivity_days,
+               regiment_name, motto, brand_color, inactivity_days, terminology,
                redirect="/command-tent")
 
 

@@ -500,11 +500,13 @@ def import_roster(session, actor: dict, role_id: str = "") -> str:
 # --- Events & attendance ------------------------------------------------- #
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
                  tz_offset: str | int = 0, repeat_weeks: str | int = 1) -> int:
+    from utils.terminology import event_types_for
     name = name.strip()
     if not name:
-        raise ActionError("The muster call needs a name.")
-    if event_type not in EVENT_TYPES:
-        raise ActionError("Choose a drill, battle, or operation.")
+        raise ActionError("The event needs a name.")
+    allowed = event_types_for(get_config(session).terminology)
+    if event_type not in allowed:
+        raise ActionError(f"Choose one of: {', '.join(allowed)}.")
     try:
         local = datetime.strptime(when.strip(), "%Y-%m-%d %H:%M")
     except ValueError:
@@ -652,11 +654,13 @@ def _parse_id(value: str) -> int | None:
         raise ActionError(f"'{value}' isn't a valid Discord ID (should be all digits).")
 
 
-def update_identity(session, name: str, motto: str, brand_hex: str, inactivity_days: int) -> str:
+def update_identity(session, name: str, motto: str, brand_hex: str,
+                    inactivity_days: int, terminology: str = "") -> str:
+    from utils.terminology import PRESETS
     cfg = get_config(session)
     name = name.strip()
     if not name:
-        raise ActionError("The regiment needs a name.")
+        raise ActionError("The unit needs a name.")
     try:
         color = int(brand_hex.strip().lstrip("#"), 16)
     except ValueError:
@@ -667,8 +671,10 @@ def update_identity(session, name: str, motto: str, brand_hex: str, inactivity_d
     cfg.regiment_motto = motto.strip() or None
     cfg.brand_color = color & 0xFFFFFF
     cfg.inactivity_days_threshold = inactivity_days
+    if terminology and terminology in PRESETS:
+        cfg.terminology = terminology
     session.commit()
-    return "Regiment identity updated."
+    return "Identity updated."
 
 
 def set_roles(session, values: dict[str, str]) -> str:
