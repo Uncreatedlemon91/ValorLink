@@ -18,6 +18,7 @@ control shown to recruiters is also shown to officers and admins.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -182,6 +183,15 @@ def discord_login(request: Request):
     return RedirectResponse(f"{_DISCORD_API}/oauth2/authorize?{urlencode(params)}", status_code=303)
 
 
+def _display_name(nick: str | None, global_name: str | None, username: str | None) -> str:
+    """The name to greet a signed-in user by. Prefers their Discord server
+    nickname (their WoR name), stripping the bot's rank prefix (e.g. "Pvt. ")
+    so it matches the callsign shown elsewhere; falls back to the Discord
+    account display name, then the handle."""
+    raw = (nick or "").strip() or (global_name or "").strip() or (username or "").strip() or "Officer"
+    return re.sub(r"^\w+\.\s*", "", raw).strip() or raw
+
+
 @router.get("/auth/discord/callback")
 def discord_callback(request: Request, code: str = "", state: str = ""):
     if not OAUTH_ENABLED:
@@ -219,13 +229,16 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
             me = me.json()
 
             role_ids: set[int] = set()
+            guild_nick: str | None = None
             if guild_id:
                 gm = client.get(
                     f"{_DISCORD_API}/users/@me/guilds/{guild_id}/member",
                     headers=bearer,
                 )
                 if gm.status_code == 200:
-                    role_ids = {int(r) for r in gm.json().get("roles", [])}
+                    gm_data = gm.json()
+                    role_ids = {int(r) for r in gm_data.get("roles", [])}
+                    guild_nick = gm_data.get("nick")
     except Exception:
         return _login_error(request, "We couldn't reach Discord to sign you in. Please try again.")
 
@@ -234,7 +247,10 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
         with sessionmaker_for(tenant.db_url)() as session:
             tier = tier_from_role_ids(session, role_ids)
 
-    display = me.get("global_name") or me.get("username") or "Officer"
+    # Show the name the regiment knows them by: their server nickname (their WoR
+    # name) with the bot's rank prefix stripped, falling back to their Discord
+    # account name.
+    display = _display_name(guild_nick, me.get("global_name"), me.get("username"))
     request.session["user"] = {
         "id": int(me["id"]),
         "name": display,
