@@ -1,18 +1,18 @@
-"""Per-unit terminology presets.
+"""Per-unit terminology.
 
 The platform's mechanics are game-agnostic; only the vocabulary is flavoured.
-A unit picks a preset (Command Tent → Identity) and every page renders that
-preset's words. New keys added here fall back to the War of Rights wording, so
-templates can reference a key before every preset defines it.
+There is one default vocabulary (below); an admin overrides any individual word
+from the Command Tent's Custom Wording editor. Overrides are stored as JSON in
+GuildConfig.terminology_custom and merged on top of the default, so a unit can
+speak in whatever terms suit its game.
 
-A unit may also override individual words on top of its preset; those overrides
-are stored as JSON in GuildConfig.terminology_custom and merged last.
+Visual themes (parchment / modern) are separate and chosen alongside.
 """
 import json
 
-# War of Rights / 1860s regimental flavour — also the fallback for any key a
-# preset omits.
-WAR_OF_RIGHTS = {
+# The default vocabulary. Every key an admin can override lives here so no
+# template ever renders a blank, and the Custom Wording editor has a baseline.
+DEFAULT_TERMS = {
     "unit": "Regiment",
     "unit_plural": "Regiments",
     "subunit": "Company",
@@ -46,120 +46,7 @@ WAR_OF_RIGHTS = {
     "event_types": ["Drill", "Battle", "Operation"],
 }
 
-def _preset(**overrides) -> dict:
-    """A preset built on the War of Rights defaults with the given overrides,
-    so a preset only has to state the words that differ."""
-    base = dict(WAR_OF_RIGHTS)
-    base.update(overrides)
-    return base
-
-
-# Neutral modern-military flavour, for tactical shooters / milsim units.
-MODERN_MILITARY = {
-    "unit": "Unit",
-    "unit_plural": "Units",
-    "subunit": "Squad",
-    "subunit_plural": "Squads",
-    "roster_nav": "Roster",
-    "roster_full": "Full Roster",
-    "active_roster": "Active Roster",
-    "events_nav": "Operations",
-    "event": "Operation",
-    "events": "Operations",
-    "event_create": "Schedule an Op",
-    "event_upcoming": "Upcoming Operations",
-    "event_past": "Past Operations",
-    "attendance": "Attendance",
-    "honors": "Commendations",
-    "leave": "Leave",
-    "leave_full": "Leave",
-    "on_leave": "On Leave",
-    "enlist": "Enlist",
-    "enlisted": "Enlisted",
-    "hq": "HQ",
-    "command": "Command",
-    "promotions": "Promotions",
-    "recruits": "Recruits",
-    "recruitment": "Recruitment",
-    "join": "Join Us",
-    "member": "operator",
-    "members": "operators",
-    "orders": "Post Orders",
-    "tagline": "Unit Command · Roster",
-    "event_types": ["Training", "Operation", "Scrim"],
-}
-
-# Squad — tactical shooter clans organised into squads.
-SQUAD = _preset(
-    unit="Unit", unit_plural="Units", subunit="Squad", subunit_plural="Squads",
-    roster_nav="Roster", roster_full="Full Roster", active_roster="Active Roster",
-    events_nav="Operations", event="Operation", events="Operations",
-    event_create="Schedule an Op", event_upcoming="Upcoming Operations",
-    event_past="Past Operations", honors="Commendations",
-    leave="Leave", leave_full="Leave", on_leave="On Leave",
-    hq="HQ", command="Command", member="member", members="members", tagline="Unit Command · Roster",
-    event_types=["Training", "Scrimmage", "Operation"],
-)
-
-# Hell Let Loose — WWII company/squad flavour.
-HELL_LET_LOOSE = _preset(
-    unit="Company", unit_plural="Companies", subunit="Squad", subunit_plural="Squads",
-    roster_nav="Roster", roster_full="Full Roster", active_roster="Active Roster",
-    events_nav="Operations", event="Operation", events="Operations",
-    event_create="Schedule an Op", event_upcoming="Upcoming Operations",
-    event_past="Past Operations", honors="Commendations",
-    leave="Leave", leave_full="Leave", on_leave="On Leave",
-    hq="HQ", command="Command", member="soldier", members="soldiers", tagline="Company Command · Roster",
-    event_types=["Drill", "Battle", "Scrimmage"],
-)
-
-# Foxhole — persistent-war regiments, logistics and fronts.
-FOXHOLE = _preset(
-    unit="Regiment", unit_plural="Regiments", subunit="Squad", subunit_plural="Squads",
-    roster_nav="Roster", roster_full="Full Roster", active_roster="Active Roster",
-    events_nav="Operations", event="Operation", events="Operations",
-    event_create="Plan an Op", event_upcoming="Upcoming Operations",
-    event_past="Past Operations", honors="Commendations",
-    leave="Leave", leave_full="Leave", on_leave="On Leave",
-    hq="HQ", command="Command", member="soldier", members="soldiers", tagline="Regimental Command · Roster",
-    event_types=["Logi Run", "Operation", "Defense"],
-)
-
-# EVE Online — corporations, fleets, pilots.
-EVE_ONLINE = _preset(
-    unit="Corporation", unit_plural="Corporations", subunit="Fleet", subunit_plural="Fleets",
-    roster_nav="Members", roster_full="Corporation Members", active_roster="Members",
-    events_nav="Fleets", event="Fleet", events="Fleets",
-    event_create="Form a Fleet", event_upcoming="Upcoming Fleets",
-    event_past="Past Fleets", honors="Medals",
-    leave="Leave", leave_full="Leave", on_leave="On Leave",
-    hq="Corp HQ", command="Directorate", member="pilot", members="pilots",
-    enlist="Apply", enlisted="Joined", tagline="Corporation · Fleet Command",
-    event_types=["Roam", "Fleet Op", "Structure"],
-)
-
-PRESETS = {
-    "wor": WAR_OF_RIGHTS,
-    "modern": MODERN_MILITARY,
-    "squad": SQUAD,
-    "hll": HELL_LET_LOOSE,
-    "foxhole": FOXHOLE,
-    "eve": EVE_ONLINE,
-}
-
-# (value, human label) for a picker; first entry is the default.
-PRESET_CHOICES = [
-    ("wor", "War of Rights (period)"),
-    ("modern", "Modern military"),
-    ("squad", "Squad"),
-    ("hll", "Hell Let Loose"),
-    ("foxhole", "Foxhole"),
-    ("eve", "EVE Online"),
-]
-
-DEFAULT_PRESET = "wor"
-
-# Visual themes (CSS skins). Independent of the vocabulary preset.
+# Visual themes (CSS skins), chosen per unit.
 THEME_CHOICES = [
     ("parchment", "Parchment (period)"),
     ("modern", "Modern (dark)"),
@@ -167,24 +54,8 @@ THEME_CHOICES = [
 DEFAULT_THEME = "parchment"
 THEMES = {value for value, _ in THEME_CHOICES}
 
-
-def get_terms(preset: str | None) -> dict:
-    """The terminology map for a preset, with any missing keys filled from the
-    War of Rights defaults so no template ever renders a blank."""
-    chosen = PRESETS.get(preset or DEFAULT_PRESET, WAR_OF_RIGHTS)
-    if chosen is WAR_OF_RIGHTS:
-        return dict(WAR_OF_RIGHTS)
-    merged = dict(WAR_OF_RIGHTS)
-    merged.update(chosen)
-    return merged
-
-
-def event_types_for(preset: str | None) -> list[str]:
-    return get_terms(preset)["event_types"]
-
-
-# Words an admin can override, in display order, with a friendly label for the
-# editor. (event_types is handled separately as a comma-separated list.)
+# Words an admin can override, in display order, with a friendly editor label.
+# (event_types is handled separately as a comma-separated list.)
 EDITABLE_KEYS = [
     ("unit", "Unit (e.g. Regiment)"),
     ("subunit", "Sub-unit (e.g. Company)"),
@@ -211,9 +82,9 @@ EDITABLE_KEYS = [
 _EDITABLE = {k for k, _ in EDITABLE_KEYS}
 
 
-def resolve_terms(preset: str | None, custom_json: str | None) -> dict:
-    """Effective terminology: preset words with any per-unit overrides applied."""
-    terms = get_terms(preset)
+def resolve_terms(custom_json: str | None) -> dict:
+    """Effective terminology: the default words with any per-unit overrides."""
+    terms = dict(DEFAULT_TERMS)
     if not custom_json:
         return terms
     try:
@@ -230,19 +101,17 @@ def resolve_terms(preset: str | None, custom_json: str | None) -> dict:
     return terms
 
 
-def diff_overrides(preset: str | None, submitted: dict) -> dict:
-    """Given submitted field values, keep only those that actually differ from
-    the preset — so unedited fields keep following the preset, and changing the
-    preset later still flows through for them."""
-    base = get_terms(preset)
+def diff_overrides(submitted: dict) -> dict:
+    """Given submitted field values, keep only those that differ from the
+    defaults, so unedited fields keep following the default wording."""
     overrides: dict = {}
     for key, _ in EDITABLE_KEYS:
         val = (submitted.get(key) or "").strip()
-        if val and val != base.get(key):
+        if val and val != DEFAULT_TERMS.get(key):
             overrides[key] = val
     raw_types = (submitted.get("event_types") or "").strip()
     if raw_types:
         types = [t.strip() for t in raw_types.split(",") if t.strip()]
-        if types and types != base.get("event_types"):
+        if types and types != DEFAULT_TERMS.get("event_types"):
             overrides["event_types"] = types
     return overrides

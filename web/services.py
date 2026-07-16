@@ -505,7 +505,7 @@ def create_event(session, actor: dict, name: str, event_type: str, when: str,
     if not name:
         raise ActionError("The event needs a name.")
     cfg = get_config(session)
-    allowed = resolve_terms(cfg.terminology, cfg.terminology_custom)["event_types"]
+    allowed = resolve_terms(cfg.terminology_custom)["event_types"]
     if event_type not in allowed:
         raise ActionError(f"Choose one of: {', '.join(allowed)}.")
     try:
@@ -656,8 +656,8 @@ def _parse_id(value: str) -> int | None:
 
 
 def update_identity(session, name: str, motto: str, brand_hex: str,
-                    inactivity_days: int, terminology: str = "", theme: str = "") -> str:
-    from utils.terminology import PRESETS, THEMES
+                    inactivity_days: int, theme: str = "") -> str:
+    from utils.terminology import THEMES
     cfg = get_config(session)
     name = name.strip()
     if not name:
@@ -672,8 +672,6 @@ def update_identity(session, name: str, motto: str, brand_hex: str,
     cfg.regiment_motto = motto.strip() or None
     cfg.brand_color = color & 0xFFFFFF
     cfg.inactivity_days_threshold = inactivity_days
-    if terminology and terminology in PRESETS:
-        cfg.terminology = terminology
     if theme and theme in THEMES:
         cfg.theme = theme
     session.commit()
@@ -685,7 +683,7 @@ def set_terminology(session, submitted: dict) -> str:
     differ from the preset are kept, so unedited words keep following it."""
     from utils.terminology import diff_overrides
     cfg = get_config(session)
-    overrides = diff_overrides(cfg.terminology, submitted)
+    overrides = diff_overrides(submitted)
     cfg.terminology_custom = json.dumps(overrides) if overrides else None
     session.commit()
     return "Custom wording saved." if overrides else "Custom wording cleared."

@@ -456,21 +456,16 @@ def test_member_profile_and_loa_self_service():
     assert len(_actions(queue.LOA)) >= 1
 
 
-def test_terminology_preset_switches_vocabulary():
+def test_identity_theme_switch():
     client = TestClient(app)
     _login(client, "admin")
-    # default preset (wor) shows period vocabulary in the nav
-    assert "Muster Calls" in client.get("/").text
-    # switch the unit to the modern-military preset
+    assert 'theme-parchment' in client.get("/").text
     client.post("/admin/identity",
                 data={"csrf": _csrf(client, "/command-tent"), "regiment_name": "7th Rangers",
-                      "brand_color": "#33aa55", "inactivity_days": "30", "terminology": "modern"})
+                      "brand_color": "#33aa55", "inactivity_days": "30", "theme": "modern"})
     with SessionLocal() as s:
-        assert get_config(s).terminology == "modern"
-    nav = client.get("/").text
-    assert "Operations" in nav and "Muster Calls" not in nav
-    # event-type options follow the preset too
-    assert ">Training<" in client.get("/muster-calls").text
+        assert get_config(s).theme == "modern"
+    assert 'theme-modern' in client.get("/").text
 
 
 def test_custom_terminology_overrides_and_reset():
