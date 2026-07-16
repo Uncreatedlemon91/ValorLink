@@ -81,6 +81,20 @@ def test_apex_shows_the_directory():
     assert "5th Virginia" in html and "2nd United States" in html
 
 
+def test_directory_shows_platform_activity_feed():
+    from datetime import datetime, timedelta
+
+    from db.models import Member
+    c = TestClient(app)
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Member(discord_id=98765, callsign="Newbie", rank="Pvt", company="A",
+                     status="active", joined_date=datetime.utcnow() - timedelta(days=1)))
+        s.commit()
+    html = c.get("/", headers={"host": APEX}).text
+    assert "On the Field" in html
+    assert "Newbie" in html and "enlisted" in html and "5th Virginia" in html
+
+
 def test_subdomain_serves_its_own_unit():
     c = TestClient(app)
     html = c.get("/", headers=_host("5thva")).text

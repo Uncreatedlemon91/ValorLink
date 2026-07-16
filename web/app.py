@@ -27,7 +27,16 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from db.models import AttendanceRecord, AwardType, Candidacy, Company, Event, Member, Rank
+from db.models import (
+    AttendanceRecord,
+    AwardType,
+    Candidacy,
+    Company,
+    Event,
+    Member,
+    MemberAward,
+    Rank,
+)
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -227,6 +236,51 @@ def _unit_member_count(db_url: str) -> int | None:
         return None
 
 
+def _platform_activity(limit: int = 18):
+    """Recent public activity across every listed unit: new units, enlistments,
+    and honors. Aggregated from each unit's own database; unlisted units (which
+    opted out of the directory) and any unreadable database are skipped."""
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    cutoff = datetime.utcnow() - timedelta(days=45)
+    items = []
+    with registry_session() as rs:
+        units = [(t.slug, t.name, t.db_url, t.created_at) for t in listed_tenants(rs)]
+
+    for slug, name, db_url, created_at in units:
+        unit_url = f"https://{slug}.{base_domain}/" if base_domain else "/"
+        if created_at and created_at >= cutoff:
+            items.append({"when": created_at, "kind": "unit", "unit": name,
+                          "url": unit_url, "who": None, "text": "joined ValorLink"})
+        try:
+            with sessionmaker_for(db_url)() as s:
+                for m in (
+                    s.query(Member)
+                    .filter(Member.joined_date >= cutoff)
+                    .order_by(Member.joined_date.desc())
+                    .limit(8)
+                ):
+                    items.append({"when": m.joined_date, "kind": "enlist", "unit": name,
+                                  "url": unit_url, "who": m.callsign, "text": "enlisted"})
+                for a in (
+                    s.query(MemberAward)
+                    .filter(MemberAward.date_awarded >= cutoff)
+                    .order_by(MemberAward.date_awarded.desc())
+                    .limit(8)
+                ):
+                    member = s.get(Member, a.member_id)
+                    award = a.award_type
+                    items.append({
+                        "when": a.date_awarded, "kind": "award", "unit": name, "url": unit_url,
+                        "who": member.callsign if member else "A member",
+                        "text": f"earned {award.name}" if award else "earned an honor",
+                    })
+        except Exception:
+            continue
+
+    items.sort(key=lambda x: x["when"] or datetime.min, reverse=True)
+    return items[:limit]
+
+
 def _render_directory(request: Request):
     base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
     with registry_session() as rs:
@@ -254,6 +308,7 @@ def _render_directory(request: Request):
         "csrf_token": auth.get_csrf_token(request),
         "flash": request.session.pop("flash", []),
         "now": datetime.utcnow(),
+        "activity": _platform_activity(),
     }
     return templates.TemplateResponse(request, "directory.html", ctx)
 
