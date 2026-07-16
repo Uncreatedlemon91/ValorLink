@@ -94,6 +94,15 @@ def test_unknown_subdomain_is_404():
     assert r.status_code == 404 and "No Such Unit" in r.text
 
 
+def test_signed_in_name_prefers_server_nickname():
+    from web.auth import _display_name
+    # server nickname (WoR name) wins, with the bot's rank prefix stripped
+    assert _display_name("Pvt. Smith", "SmithGaming", "smith_h") == "Smith"
+    # no nickname → Discord account display name, then the handle
+    assert _display_name(None, "SmithGaming", "smith_h") == "SmithGaming"
+    assert _display_name(None, None, "smith_h") == "smith_h"
+
+
 def test_login_is_scoped_across_units():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 1, "name": "Col. Test", "tier": "officer"},
