@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Muster Calls{% endblock %}
+{% block title %}{{ terms.events_nav }}{% endblock %}
 {% block content %}
 
 {% if tier_at_least(user, TIER_OFFICER) %}
-<h2 class="section">Call a Muster</h2>
+<h2 class="section">{{ terms.event_create }}</h2>
 <div class="order-card" style="max-width:640px;">
   <form class="orders" method="post" action="/muster-calls/create">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -12,7 +12,7 @@
     <div class="field">
       <label>Kind</label>
       <select name="event_type">
-        {% for t in event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        {% for t in terms.event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
       </select>
     </div>
     <div class="field-row">
@@ -37,7 +37,7 @@
 </div>
 {% endif %}
 
-<h2 class="section">Muster Calls to Come <span class="tally">{{ upcoming|length }} on the books</span></h2>
+<h2 class="section">{{ terms.event_upcoming }} <span class="tally">{{ upcoming|length }} on the books</span></h2>
 {% if upcoming %}
   <table class="ledger">
     <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Answered</th></tr></thead>
@@ -56,7 +56,7 @@
   <p class="empty">No calls are presently on the books.</p>
 {% endif %}
 
-<h2 class="section">Calls Past <span class="tally">{{ past|length }} on record</span></h2>
+<h2 class="section">{{ terms.event_past }} <span class="tally">{{ past|length }} on record</span></h2>
 {% if past %}
   <table class="ledger">
     <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Mustered</th></tr></thead>

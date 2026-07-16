@@ -49,7 +49,7 @@
 {% endif %}
 
 {% if tier_at_least(user, TIER_OFFICER) %}
-<h2 class="section">Mark the Muster <span class="tally">record actual turnout</span></h2>
+<h2 class="section">Mark {{ terms.attendance }} <span class="tally">record actual turnout</span></h2>
 <div class="order-card" style="max-width:640px;">
   <form class="orders" method="post" action="/muster-calls/{{ event.id }}/attendance">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">

@@ -43,6 +43,13 @@
         <div class="field"><label>Brand colour</label><input name="brand_color" value="{{ brand_hex }}"></div>
         <div class="field"><label>Inactivity (days)</label><input name="inactivity_days" type="number" min="1" max="365" value="{{ cfg.inactivity_days_threshold }}"></div>
       </div>
+      <div class="field">
+        <label>Vocabulary</label>
+        <select name="terminology">
+          {% for value, label in terminology_choices %}<option value="{{ value }}" {{ 'selected' if value == cfg.terminology }}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="order-note">Sets the wording across your portal (roster, events, ranks flavour) to suit your game.</span>
+      </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save identity</button></div>
     </form>
   </div>

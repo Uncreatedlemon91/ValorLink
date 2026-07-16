@@ -36,7 +36,7 @@ places them on furlough until the date given; the bot notifies them and posts to
   <p class="empty">No leave requests are pending.</p>
 {% endif %}
 
-<h2 class="section">On Furlough <span class="tally">{{ on_leave|length }} away</span></h2>
+<h2 class="section">{{ terms.on_leave }} <span class="tally">{{ on_leave|length }} away</span></h2>
 {% if on_leave %}
   <table class="ledger">
     <thead><tr><th>Member</th><th>Rank</th><th>Company</th><th class="num">Returns</th><th class="num"></th></tr></thead>

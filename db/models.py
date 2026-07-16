@@ -172,6 +172,8 @@ class GuildConfig(Base):
     regiment_motto = Column(String, nullable=True)
     brand_color = Column(Integer, nullable=False, default=0x2F3136)
     inactivity_days_threshold = Column(Integer, nullable=False, default=30)
+    # Vocabulary preset (see utils/terminology.py): "wor", "modern", …
+    terminology = Column(String, nullable=False, default="wor", server_default="wor")
 
     admin_role_id = Column(BigInteger, nullable=True)
     officer_role_id = Column(BigInteger, nullable=True)
