@@ -9,6 +9,9 @@
   <p class="lede">You're already enrolled with this unit. <a href="/my-record">View your record ›</a></p>
 {% elif not recruiting %}
   <p class="lede">This unit isn't accepting applications right now.</p>
+{% elif invite %}
+  <p class="lede">This unit recruits through its Discord. Join the server and the recruiters will take it from there.</p>
+  <a class="btn btn-strong btn-lg" href="{{ invite }}" target="_blank" rel="noopener">Join our Discord</a>
 {% elif already_applied %}
   <p class="lede">Your application is already in — an officer will be in touch.</p>
 {% elif not user %}

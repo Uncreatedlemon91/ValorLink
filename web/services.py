@@ -656,7 +656,7 @@ def _parse_id(value: str) -> int | None:
 
 
 def update_identity(session, name: str, motto: str, brand_hex: str,
-                    inactivity_days: int, theme: str = "") -> str:
+                    inactivity_days: int, theme: str = "", discord_invite: str = "") -> str:
     from utils.terminology import THEMES
     cfg = get_config(session)
     name = name.strip()
@@ -668,10 +668,14 @@ def update_identity(session, name: str, motto: str, brand_hex: str,
         raise ActionError("Enter a valid hex colour, e.g. #7C1F2B.")
     if not (1 <= inactivity_days <= 365):
         raise ActionError("Inactivity threshold must be between 1 and 365 days.")
+    invite = discord_invite.strip()
+    if invite and not invite.startswith(("https://", "http://")):
+        raise ActionError("The Discord invite must be a full link, e.g. https://discord.gg/abc123.")
     cfg.regiment_name = name
     cfg.regiment_motto = motto.strip() or None
     cfg.brand_color = color & 0xFFFFFF
     cfg.inactivity_days_threshold = inactivity_days
+    cfg.discord_invite = invite or None
     if theme and theme in THEMES:
         cfg.theme = theme
     session.commit()

@@ -19,6 +19,9 @@
     <p class="order-note">You're already enrolled with this unit. <a href="/my-record">View your record ›</a></p>
   {% elif not recruiting %}
     <p class="order-note">This unit isn't accepting applications right now. Check back soon.</p>
+  {% elif invite %}
+    <a class="btn btn-strong btn-lg" href="{{ invite }}" target="_blank" rel="noopener">Join our Discord</a>
+    <p class="order-note">Enlist by joining the unit's Discord — the recruiters take it from there.</p>
   {% elif already_applied %}
     <p class="order-note">Your application is in — an officer will be in touch. Thank you for your interest!</p>
   {% elif user %}
