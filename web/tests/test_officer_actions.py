@@ -468,6 +468,29 @@ def test_identity_theme_switch():
     assert 'theme-modern' in client.get("/").text
 
 
+def test_headquarters_activity_feed():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        s.get(Member, MEMBER_ID).joined_date = datetime.utcnow() - timedelta(days=1)
+        s.commit()
+    # promote (Private -> Corporal)
+    client.post(f"/members/{MEMBER_ID}/rank",
+                data={"csrf": _csrf(client), "rank": "Corporal", "mode": "promote"})
+    # grant the seeded award
+    with SessionLocal() as s:
+        award_id = s.query(AwardType).filter_by(name="Marksman").one().id
+    client.post(f"/members/{MEMBER_ID}/award",
+                data={"csrf": _csrf(client), "award_type_id": award_id})
+
+    html = client.get("/").text
+    assert "Recent Activity" in html
+    assert "enlisted" in html
+    assert "was promoted to Corporal" in html
+    assert "earned Marksman" in html
+
+
 def test_custom_terminology_overrides_and_reset():
     client = TestClient(app)
     _login(client, "admin")

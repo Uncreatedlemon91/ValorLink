@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -36,6 +37,7 @@ from db.models import (
     Member,
     MemberAward,
     Rank,
+    ServiceHistoryEntry,
 )
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
@@ -318,6 +320,46 @@ def _render_directory(request: Request):
 # --------------------------------------------------------------------------- #
 
 
+def _unit_activity(session: Session, limit: int = 12):
+    """Recent activity within one unit (its bound session): enlistments,
+    promotions, and honors, newest first."""
+    cutoff = datetime.utcnow() - timedelta(days=60)
+    items = []
+    for m in (
+        session.query(Member)
+        .filter(Member.joined_date >= cutoff)
+        .order_by(Member.joined_date.desc())
+        .limit(10)
+    ):
+        items.append({"when": m.joined_date, "kind": "enlist", "who": m.callsign, "text": "enlisted"})
+    for e in (
+        session.query(ServiceHistoryEntry)
+        .filter(ServiceHistoryEntry.date >= cutoff, ServiceHistoryEntry.entry.like("Promoted%"))
+        .order_by(ServiceHistoryEntry.date.desc())
+        .limit(10)
+    ):
+        member = session.get(Member, e.member_id)
+        who = member.callsign if member else "A member"
+        match = re.search(r" to (.+?) by ", e.entry)
+        text = f"was promoted to {match.group(1)}" if match else "was promoted"
+        items.append({"when": e.date, "kind": "promote", "who": who, "text": text})
+    for a in (
+        session.query(MemberAward)
+        .filter(MemberAward.date_awarded >= cutoff)
+        .order_by(MemberAward.date_awarded.desc())
+        .limit(10)
+    ):
+        member = session.get(Member, a.member_id)
+        award = a.award_type
+        items.append({
+            "when": a.date_awarded, "kind": "award",
+            "who": member.callsign if member else "A member",
+            "text": f"earned {award.name}" if award else "earned an honor",
+        })
+    items.sort(key=lambda x: x["when"] or datetime.min, reverse=True)
+    return items[:limit]
+
+
 @app.get("/", response_class=HTMLResponse)
 def headquarters(request: Request, session: Session = Depends(get_session)):
     if directory_mode(request):
@@ -333,14 +375,7 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
     }
     counts["enrolled"] = counts["active"] + counts["loa"] + counts["inactive"]
 
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_enlistments = (
-        session.query(Member)
-        .filter(Member.joined_date >= thirty_days_ago)
-        .order_by(Member.joined_date.desc())
-        .limit(6)
-        .all()
-    )
+    activity = _unit_activity(session)
 
     upcoming = (
         session.query(Event)
@@ -357,7 +392,7 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
 
     ctx.update(
         counts=counts,
-        recent_enlistments=recent_enlistments,
+        activity=activity,
         upcoming=upcoming,
         pending=pending,
         company_count=len(companies),
