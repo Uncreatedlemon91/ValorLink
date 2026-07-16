@@ -36,6 +36,16 @@ class Member(Base):
     thread_id = Column(BigInteger, nullable=True)
     loa_until = Column(DateTime, nullable=True)
 
+    # Member self-service profile
+    timezone = Column(String, nullable=True)      # IANA name or free text, e.g. "America/New_York"
+    ingame_name = Column(String, nullable=True)   # War of Rights in-game name
+    availability = Column(String, nullable=True)  # nights they play (comma-separated day codes)
+    bio = Column(Text, nullable=True)
+
+    # A member-requested leave awaiting an officer's decision
+    loa_requested_until = Column(DateTime, nullable=True)
+    loa_reason = Column(String, nullable=True)
+
     service_history = relationship(
         "ServiceHistoryEntry", back_populates="member", cascade="all, delete-orphan"
     )
@@ -85,6 +95,8 @@ class Event(Base):
     created_by = Column(BigInteger, nullable=False)
     channel_id = Column(BigInteger, nullable=True)
     message_id = Column(BigInteger, nullable=True)
+    outcome = Column(String, nullable=True)       # after-action result, e.g. Victory/Defeat/Draw
+    after_action = Column(Text, nullable=True)     # after-action notes
 
     attendance_records = relationship(
         "AttendanceRecord", back_populates="event", cascade="all, delete-orphan"

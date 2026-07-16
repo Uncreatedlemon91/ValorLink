@@ -191,6 +191,8 @@ class Bridge(commands.Cog):
 
     async def _do_refresh_personnel(self, guild, p):
         await self._refresh(guild, p["discord_id"])
+        if p.get("dm"):
+            await self._dm(guild, p["discord_id"], p["dm"])
 
     async def _do_discipline(self, guild, p):
         member = guild.get_member(p["discord_id"])

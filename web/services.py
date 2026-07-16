@@ -291,6 +291,86 @@ def loa_end(session, actor: dict, discord_id: int) -> str:
     return f"{callsign} is back on active duty."
 
 
+# --- Member profile (self-service) --------------------------------------- #
+DAY_CODES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def update_profile(session, actor: dict, discord_id: int, timezone: str = "",
+                   ingame_name: str = "", availability: str = "", bio: str = "") -> str:
+    """A member updates their own profile. Web-only data (no Discord side
+    effect). ``availability`` is a comma-separated subset of DAY_CODES."""
+    record = _member(session, discord_id)
+    record.timezone = (timezone or "").strip() or None
+    record.ingame_name = (ingame_name or "").strip() or None
+    days = [d for d in (availability or "").split(",") if d in DAY_CODES]
+    record.availability = ",".join(days) or None
+    record.bio = (bio or "").strip()[:1000] or None
+    session.commit()
+    return "Your profile has been updated."
+
+
+# --- Leave of absence: member self-request ------------------------------- #
+def request_loa(session, actor: dict, discord_id: int, days: int, reason: str = "") -> str:
+    record = _member(session, discord_id)
+    if days < 1 or days > 180:
+        raise ActionError("Leave must be between 1 and 180 days.")
+    if record.status == "loa":
+        raise ActionError("You are already on leave.")
+    if record.status == "discharged":
+        raise ActionError("A discharged member cannot request leave.")
+    record.loa_requested_until = datetime.utcnow() + timedelta(days=days)
+    record.loa_reason = (reason or "").strip() or None
+    session.commit()
+    until = record.loa_requested_until.strftime("%d %b %Y")
+    return f"Leave requested until {until}. An officer will review it."
+
+
+def approve_loa_request(session, actor: dict, discord_id: int) -> str:
+    record = _member(session, discord_id)
+    if not record.loa_requested_until:
+        raise ActionError(f"{record.callsign} has no pending leave request.")
+    callsign = record.callsign
+    loa_until = record.loa_requested_until
+    until_str = loa_until.strftime("%d %b %Y")
+    record.status = "loa"
+    record.loa_until = loa_until
+    reason = record.loa_reason
+    record.loa_requested_until = None
+    record.loa_reason = None
+    entry = f"Leave of absence granted until {until_str} by {actor['name']} (member request)."
+    if reason:
+        entry += f" Reason: {reason}"
+    _log(session, discord_id, entry, actor)
+    queue.enqueue(
+        session,
+        queue.LOA,
+        {"discord_id": discord_id, "callsign": callsign, "until": until_str,
+         "dm": f"Your leave of absence has been approved until **{until_str}**.",
+         "billboard": f"**{callsign}** is on leave of absence until {until_str}."},
+        actor_id=actor["id"],
+    )
+    session.commit()
+    return f"Approved {callsign}'s leave until {until_str}."
+
+
+def deny_loa_request(session, actor: dict, discord_id: int) -> str:
+    record = _member(session, discord_id)
+    if not record.loa_requested_until:
+        raise ActionError(f"{record.callsign} has no pending leave request.")
+    callsign = record.callsign
+    record.loa_requested_until = None
+    record.loa_reason = None
+    _log(session, discord_id, f"Leave request declined by {actor['name']}.", actor)
+    queue.enqueue(
+        session,
+        queue.REFRESH_PERSONNEL,
+        {"discord_id": discord_id, "dm": f"Your leave request was declined by {actor['name']}."},
+        actor_id=actor["id"],
+    )
+    session.commit()
+    return f"Declined {callsign}'s leave request."
+
+
 # --- Recruitment --------------------------------------------------------- #
 def approve_candidate(session, actor: dict, discord_id: int) -> str:
     candidacy = session.get(Candidacy, discord_id)
@@ -415,7 +495,7 @@ def import_roster(session, actor: dict, role_id: str = "") -> str:
 
 # --- Events & attendance ------------------------------------------------- #
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
-                 tz_offset: str | int = 0) -> int:
+                 tz_offset: str | int = 0, repeat_weeks: str | int = 1) -> int:
     name = name.strip()
     if not name:
         raise ActionError("The muster call needs a name.")
@@ -431,16 +511,39 @@ def create_event(session, actor: dict, name: str, event_type: str, when: str,
         offset = int(tz_offset)
     except (TypeError, ValueError):
         offset = 0
-    scheduled_at = local + timedelta(minutes=offset)
-    event = Event(
-        name=name, event_type=event_type, scheduled_at=scheduled_at, created_by=actor["id"]
-    )
-    session.add(event)
+    try:
+        weeks = max(1, min(int(repeat_weeks), 26))
+    except (TypeError, ValueError):
+        weeks = 1
+    base = local + timedelta(minutes=offset)
+
+    first_id = None
+    for i in range(weeks):
+        event = Event(name=name, event_type=event_type,
+                      scheduled_at=base + timedelta(weeks=i), created_by=actor["id"])
+        session.add(event)
+        session.commit()
+        session.refresh(event)
+        queue.enqueue(session, queue.ANNOUNCE_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+        session.commit()
+        if first_id is None:
+            first_id = event.id
+    return first_id
+
+
+def record_after_action(session, actor: dict, event_id: int, outcome: str = "",
+                        notes: str = "") -> str:
+    """Record an event's outcome and after-action notes. Web-only history."""
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That muster call no longer exists.")
+    event.outcome = (outcome or "").strip() or None
+    event.after_action = (notes or "").strip() or None
     session.commit()
-    session.refresh(event)
-    queue.enqueue(session, queue.ANNOUNCE_EVENT, {"event_id": event.id}, actor_id=actor["id"])
-    session.commit()
-    return event.id
+    return "After-action report saved."
+
+
+EVENT_OUTCOMES = ["", "Victory", "Defeat", "Draw", "Stood Down"]
 
 
 def mark_attendance(session, actor: dict, event_id: int, member_id: int, status: str) -> str:

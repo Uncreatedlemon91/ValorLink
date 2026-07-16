@@ -12,8 +12,16 @@
   <div class="facts">
     <div><span class="k">When</span><br>{{ event.scheduled_at|fmt_date(true) }}</div>
     <div><span class="k">Replies</span><br>{{ records|length }}</div>
+    {% if event.outcome %}<div><span class="k">Outcome</span><br>{{ event.outcome }}</div>{% endif %}
   </div>
 </div>
+
+{% if event.after_action %}
+<div class="order-card" style="margin-top:16px;max-width:720px;">
+  <h3 class="order-title">After-Action Report</h3>
+  <p style="white-space:pre-wrap;margin:0;">{{ event.after_action }}</p>
+</div>
+{% endif %}
 
 <div class="tally-row" style="margin-top: 24px;">
   {% for status in ['accepted', 'tentative', 'declined', 'present', 'absent', 'excused'] %}
@@ -62,6 +70,23 @@
     <div class="field field-actions"><button class="btn btn-strong" type="submit">Record</button></div>
   </form>
 </div>
+
+{% if is_past %}
+<h2 class="section">After-Action <span class="tally">record the outcome</span></h2>
+<div class="order-card" style="max-width:640px;">
+  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/after-action">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field">
+      <label>Outcome</label>
+      <select name="outcome">
+        {% for o in outcome_options %}<option value="{{ o }}" {{ 'selected' if o == event.outcome }}>{{ o or '— none —' }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="How it went, standout performances, lessons…">{{ event.after_action or '' }}</textarea></div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Save report</button></div>
+  </form>
+</div>
+{% endif %}
 {% endif %}
 
 <h2 class="section">The Reckoning</h2>

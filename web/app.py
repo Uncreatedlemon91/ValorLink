@@ -213,9 +213,19 @@ def directory_mode(request: Request) -> bool:
     return slug_from_host(request.headers.get("host", "")) is None
 
 
+def _unit_member_count(db_url: str) -> int | None:
+    """Active member count for a unit, or None if its database is unavailable."""
+    try:
+        with sessionmaker_for(db_url)() as s:
+            return s.query(Member).filter(Member.status == "active").count()
+    except Exception:
+        return None
+
+
 def _render_directory(request: Request):
     base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
     with registry_session() as rs:
+        rows = listed_tenants(rs)
         units = [
             {
                 "slug": t.slug,
@@ -224,9 +234,11 @@ def _render_directory(request: Request):
                 "blurb": t.blurb,
                 "brand_color": brand_hex(t.brand_color),
                 "recruiting": t.recruiting_open,
+                "members": _unit_member_count(t.db_url),
                 "url": f"https://{t.slug}.{base_domain}/",
+                "join_url": f"https://{t.slug}.{base_domain}/join",
             }
-            for t in listed_tenants(rs)
+            for t in rows
         ]
     ctx = {
         "request": request,
@@ -293,6 +305,57 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         announce_ready=bool(get_config(session).announcements_channel_id),
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
+
+
+@app.get("/join", response_class=HTMLResponse)
+def join(request: Request, session: Session = Depends(get_session)):
+    """A unit's public recruiting page — what they are, how active they are,
+    and how to apply. Visible to everyone, including signed-out visitors."""
+    if directory_mode(request):
+        return RedirectResponse("/", status_code=303)  # the apex is the directory
+    ctx = _base_context(request, session)
+    tenant = resolve_tenant(request)
+    cfg = get_config(session)
+
+    listing_name, motto, blurb, recruiting = cfg.regiment_name, cfg.regiment_motto, None, True
+    with registry_session() as rs:
+        row = tenant_by_slug(rs, tenant.slug)
+        if row is not None:
+            listing_name = row.name
+            motto = row.motto or cfg.regiment_motto
+            blurb = row.blurb
+            recruiting = row.recruiting_open
+
+    active = session.query(Member).filter(Member.status == "active").count()
+    upcoming = (
+        session.query(Event)
+        .filter(Event.scheduled_at >= datetime.utcnow())
+        .order_by(Event.scheduled_at.asc())
+        .limit(5)
+        .all()
+    )
+    # When do members tend to play? Tally their self-reported nights.
+    play_nights: dict[str, int] = defaultdict(int)
+    for (avail,) in session.query(Member.availability).filter(
+        Member.status == "active", Member.availability.isnot(None)
+    ):
+        for d in (avail or "").split(","):
+            if d:
+                play_nights[d] += 1
+    nights = [d for d in services.DAY_CODES if play_nights.get(d)]
+
+    viewer = ctx["user"]
+    already_applied = is_member = False
+    if viewer:
+        already_applied = session.get(Candidacy, int(viewer["id"])) is not None
+        is_member = session.get(Member, int(viewer["id"])) is not None
+
+    ctx.update(
+        unit_name=listing_name, motto=motto, blurb=blurb, recruiting=recruiting,
+        active=active, upcoming=upcoming, nights=nights,
+        apply_slug=tenant.slug, already_applied=already_applied, is_member=is_member,
+    )
+    return templates.TemplateResponse(request, "join.html", ctx)
 
 
 @app.post("/announce")
@@ -434,17 +497,37 @@ def _render_dossier(request: Request, session: Session, member: Member, is_self:
     for rec in member.attendance_records:
         att_counts[rec.status] += 1
 
+    # A single chronological timeline merging enlistment, service entries,
+    # conduct records, and honors — the member's story in one column.
+    timeline = []
+    if member.joined_date:
+        timeline.append({"date": member.joined_date, "kind": "enlist",
+                         "label": "Enlisted", "text": f"Joined the regiment as {member.rank}."})
+    for e in service:
+        timeline.append({"date": e.date, "kind": "service", "label": "Service", "text": e.entry})
+    for r in discipline:
+        timeline.append({"date": r.date, "kind": "conduct", "label": r.record_type,
+                         "text": r.reason})
+    for a in awards:
+        emoji = f"{a.award_type.emoji} " if a.award_type.emoji else ""
+        timeline.append({"date": a.date_awarded, "kind": "honor", "label": "Honor",
+                         "text": f"Awarded {emoji}{a.award_type.name}."})
+    timeline.sort(key=lambda t: t["date"] or datetime.min, reverse=True)
+
     ctx.update(
         member=member,
         rank=rank_utils.rank_by_name(session, member.rank),
         service=service,
         discipline=discipline,
         awards=awards,
+        timeline=timeline,
         att_counts=dict(att_counts),
         rank_options=services.rank_options(session),
         company_options=services.company_options(session),
         held_award_ids={a.award_type_id for a in member.awards},
         award_catalogue=session.query(AwardType).order_by(AwardType.name).all(),
+        day_codes=services.DAY_CODES,
+        member_days=(member.availability or "").split(",") if member.availability else [],
         is_self=is_self,
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
@@ -687,6 +770,8 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
         attendance_statuses=services.ATTENDANCE_STATUSES,
         can_rsvp=can_rsvp,
         my_rsvp=my_rsvp,
+        is_past=event.scheduled_at < datetime.utcnow(),
+        outcome_options=services.EVENT_OUTCOMES,
     )
     return templates.TemplateResponse(request, "event_detail.html", ctx)
 
@@ -976,6 +1061,107 @@ def post_loa_end(
                redirect=f"/dossier/{discord_id}")
 
 
+def _self_action(request: Request, csrf: str, fn, *args, redirect: str):
+    """Run a service call on behalf of the signed-in member (self-service)."""
+    user = auth.effective_user(request, resolve_tenant(request).slug)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(redirect, status_code=303)
+    actor = {"id": user["id"], "name": user["name"]}
+    with _tenant_session(request) as session:
+        try:
+            _flash(request, fn(session, actor, int(user["id"]), *args), "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse(redirect, status_code=303)
+
+
+@app.post("/my-record/profile")
+def post_profile(
+    request: Request,
+    csrf: str = Form(...),
+    timezone: str = Form(""),
+    ingame_name: str = Form(""),
+    availability: list[str] = Form(default=[]),
+    bio: str = Form(""),
+):
+    days = ",".join(availability)
+    return _self_action(request, csrf, services.update_profile,
+                        timezone, ingame_name, days, bio, redirect="/my-record")
+
+
+@app.post("/my-record/request-loa")
+def post_request_loa(
+    request: Request,
+    csrf: str = Form(...),
+    days: int = Form(...),
+    reason: str = Form(""),
+):
+    return _self_action(request, csrf, services.request_loa, days, reason,
+                        redirect="/my-record")
+
+
+@app.post("/members/{discord_id}/loa-request/approve")
+def post_loa_request_approve(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.approve_loa_request, actor, discord_id,
+               redirect="/leave")
+
+
+@app.post("/members/{discord_id}/loa-request/deny")
+def post_loa_request_deny(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.deny_loa_request, actor, discord_id,
+               redirect="/leave")
+
+
+@app.get("/leave", response_class=HTMLResponse)
+def leave_board(request: Request, session: Session = Depends(get_session),
+                user: dict = Depends(auth.require_officer)):
+    """The leave board: members currently on furlough, plus pending self-requests."""
+    ctx = _base_context(request, session)
+    on_leave = (
+        session.query(Member)
+        .filter(Member.status == "loa")
+        .order_by(Member.loa_until)
+        .all()
+    )
+    pending = (
+        session.query(Member)
+        .filter(Member.loa_requested_until.isnot(None), Member.status != "loa")
+        .order_by(Member.loa_requested_until)
+        .all()
+    )
+    ctx.update(on_leave=on_leave, pending=pending, now=datetime.utcnow())
+    return templates.TemplateResponse(request, "leave.html", ctx)
+
+
+@app.post("/muster-calls/{event_id}/after-action")
+def post_after_action(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    outcome: str = Form(""),
+    notes: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.record_after_action, actor, event_id, outcome, notes,
+               redirect=f"/muster-calls/{event_id}")
+
+
 @app.post("/recruits/{discord_id}/approve")
 def post_approve(
     request: Request,
@@ -1010,6 +1196,7 @@ def post_create_event(
     date: str = Form(...),
     time: str = Form(...),
     tz_offset: str = Form("0"),
+    repeat_weeks: str = Form("1"),
     user: dict = Depends(auth.require_officer),
 ):
     if not auth.verify_csrf(request, csrf):
@@ -1019,7 +1206,8 @@ def post_create_event(
     with _tenant_session(request) as session:
         try:
             event_id = services.create_event(
-                session, actor, name, event_type, f"{date} {time}", tz_offset=tz_offset
+                session, actor, name, event_type, f"{date} {time}",
+                tz_offset=tz_offset, repeat_weeks=repeat_weeks,
             )
             _flash(request, f"'{name}' announced.", "ok")
             return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)

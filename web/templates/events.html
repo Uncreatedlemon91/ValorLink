@@ -19,6 +19,16 @@
       <div class="field"><label>Date</label><input name="date" type="date" required></div>
       <div class="field"><label>Time <span class="opt">(your local time)</span></label><input name="time" type="time" required value="19:00"></div>
     </div>
+    <div class="field">
+      <label>Repeat</label>
+      <select name="repeat_weeks">
+        <option value="1">Just once</option>
+        <option value="4">Weekly, 4 times</option>
+        <option value="8">Weekly, 8 times</option>
+        <option value="12">Weekly, 12 times</option>
+      </select>
+      <span class="order-note">Schedules the same call at weekly intervals from the date above.</span>
+    </div>
     <div class="field field-actions"><button class="btn btn-strong" type="submit">Post the call</button></div>
   </form>
   <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the

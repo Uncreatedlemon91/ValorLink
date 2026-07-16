@@ -14,9 +14,14 @@
     <div><span class="k">Company</span><br>{{ member.company }}</div>
     <div><span class="k">Enrolled</span><br>{{ member.joined_date|fmt_date }}</div>
     <div><span class="k">Last Seen</span><br>{{ member.last_active_date|fmt_date }}</div>
+    {% if member.ingame_name %}<div><span class="k">In-Game Name</span><br>{{ member.ingame_name }}</div>{% endif %}
+    {% if member.timezone %}<div><span class="k">Timezone</span><br>{{ member.timezone }}</div>{% endif %}
+    {% if member_days %}<div><span class="k">Plays</span><br>{{ member_days|join(', ') }}</div>{% endif %}
     {% if member.loa_until %}<div><span class="k">Furlough Until</span><br>{{ member.loa_until|fmt_date }}</div>{% endif %}
   </div>
 </div>
+
+{% if member.bio %}<p class="dossier-bio">{{ member.bio }}</p>{% endif %}
 
 <div class="cols" style="margin-top: 10px;">
   <section>
@@ -49,33 +54,63 @@
   </section>
 
   <section>
-    <h2 class="section">Service History</h2>
-    {% if service %}
-      <ul class="entry-list">
-        {% for e in service %}
-          <li><span class="date">{{ e.date|fmt_date }}</span>{{ e.entry }}</li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="empty">No entries in the service book.</p>
-    {% endif %}
-
-    <h2 class="section">Conduct Record</h2>
-    {% if discipline %}
-      <ul class="entry-list">
-        {% for r in discipline %}
-          <li>
-            <span class="date">{{ r.date|fmt_date }} &middot;
-              <span class="badge rec-{{ r.record_type }}">{{ r.record_type|record_label }}</span>
-            </span>{{ r.reason }}
+    <h2 class="section">Service Timeline</h2>
+    {% if timeline %}
+      <ul class="timeline">
+        {% for t in timeline %}
+          <li class="tl-{{ t.kind }}">
+            <span class="tl-dot"></span>
+            <span class="date">{{ t.date|fmt_date }}</span>
+            {% if t.kind == 'conduct' %}<span class="badge rec-{{ t.label }}">{{ t.label|record_label }}</span> {% endif %}
+            {{ t.text }}
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty">Conduct unblemished.</p>
+      <p class="empty">No entries in the service book yet.</p>
     {% endif %}
   </section>
 </div>
+
+{% if is_self %}
+<h2 class="section">My Details <span class="tally">visible to your officers</span></h2>
+<div class="orders-grid">
+  <div class="order-card">
+    <h3 class="order-title">Profile</h3>
+    <form class="orders" method="post" action="/my-record/profile">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field"><label>War of Rights name</label><input name="ingame_name" value="{{ member.ingame_name or '' }}" placeholder="Your in-game name"></div>
+      <div class="field"><label>Timezone</label><input name="timezone" value="{{ member.timezone or '' }}" placeholder="e.g. America/New_York or GMT+1"></div>
+      <div class="field">
+        <label>Nights I play</label>
+        <div class="day-picker">
+          {% for d in day_codes %}
+            <label class="day-chip"><input type="checkbox" name="availability" value="{{ d }}" {{ 'checked' if d in member_days }}> {{ d }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field"><label>About me <span class="opt">(optional)</span></label><textarea name="bio" rows="2" maxlength="1000">{{ member.bio or '' }}</textarea></div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Save profile</button></div>
+    </form>
+  </div>
+
+  {% if member.status == 'active' %}
+  <div class="order-card">
+    <h3 class="order-title">Request Leave</h3>
+    {% if member.loa_requested_until %}
+      <p class="order-note">You have a leave request pending until <b>{{ member.loa_requested_until|fmt_date }}</b>, awaiting an officer's approval.</p>
+    {% else %}
+      <form class="orders" method="post" action="/my-record/request-loa">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="field"><label>Days</label><input name="days" type="number" min="1" max="180" value="14" required></div>
+        <div class="field"><label>Reason <span class="opt">(optional)</span></label><input name="reason" placeholder="Exams, deployment, travel…"></div>
+        <div class="field field-actions"><button class="btn btn-strong" type="submit">Request leave</button></div>
+      </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if tier_at_least(user, TIER_OFFICER) %}
 <h2 class="section">Orderly Room <span class="tally">issue orders — the bot carries them out</span></h2>
