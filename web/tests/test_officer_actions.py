@@ -473,6 +473,25 @@ def test_terminology_preset_switches_vocabulary():
     assert ">Training<" in client.get("/muster-calls").text
 
 
+def test_custom_terminology_overrides_and_reset():
+    client = TestClient(app)
+    _login(client, "admin")
+    # override one term (and event kinds) on top of the default wor preset
+    client.post("/admin/terminology",
+                data={"csrf": _csrf(client, "/command-tent"), "events_nav": "War Room",
+                      "event_types": "Muster, Siege"})
+    with SessionLocal() as s:
+        assert "War Room" in (get_config(s).terminology_custom or "")
+    nav = client.get("/").text
+    assert "War Room" in nav and "Muster Roll" in nav  # override applied, others intact
+    assert ">Siege<" in client.get("/muster-calls").text
+    # reset drops the overrides
+    client.post("/admin/terminology/reset", data={"csrf": _csrf(client, "/command-tent")})
+    with SessionLocal() as s:
+        assert get_config(s).terminology_custom is None
+    assert "War Room" not in client.get("/").text
+
+
 def test_recurring_events_and_after_action():
     from datetime import datetime, timedelta
     client = TestClient(app)

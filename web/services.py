@@ -500,11 +500,12 @@ def import_roster(session, actor: dict, role_id: str = "") -> str:
 # --- Events & attendance ------------------------------------------------- #
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
                  tz_offset: str | int = 0, repeat_weeks: str | int = 1) -> int:
-    from utils.terminology import event_types_for
+    from utils.terminology import resolve_terms
     name = name.strip()
     if not name:
         raise ActionError("The event needs a name.")
-    allowed = event_types_for(get_config(session).terminology)
+    cfg = get_config(session)
+    allowed = resolve_terms(cfg.terminology, cfg.terminology_custom)["event_types"]
     if event_type not in allowed:
         raise ActionError(f"Choose one of: {', '.join(allowed)}.")
     try:
@@ -677,6 +678,25 @@ def update_identity(session, name: str, motto: str, brand_hex: str,
         cfg.theme = theme
     session.commit()
     return "Identity updated."
+
+
+def set_terminology(session, submitted: dict) -> str:
+    """Store per-word overrides on top of the unit's preset. Only values that
+    differ from the preset are kept, so unedited words keep following it."""
+    from utils.terminology import diff_overrides
+    cfg = get_config(session)
+    overrides = diff_overrides(cfg.terminology, submitted)
+    cfg.terminology_custom = json.dumps(overrides) if overrides else None
+    session.commit()
+    return "Custom wording saved." if overrides else "Custom wording cleared."
+
+
+def reset_terminology(session) -> str:
+    """Drop all custom overrides; the unit falls back to its preset's words."""
+    cfg = get_config(session)
+    cfg.terminology_custom = None
+    session.commit()
+    return "Reverted to the preset's wording."
 
 
 def set_roles(session, values: dict[str, str]) -> str:

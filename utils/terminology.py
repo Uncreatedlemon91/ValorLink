@@ -4,7 +4,11 @@ The platform's mechanics are game-agnostic; only the vocabulary is flavoured.
 A unit picks a preset (Command Tent → Identity) and every page renders that
 preset's words. New keys added here fall back to the War of Rights wording, so
 templates can reference a key before every preset defines it.
+
+A unit may also override individual words on top of its preset; those overrides
+are stored as JSON in GuildConfig.terminology_custom and merged last.
 """
+import json
 
 # War of Rights / 1860s regimental flavour — also the fallback for any key a
 # preset omits.
@@ -177,3 +181,68 @@ def get_terms(preset: str | None) -> dict:
 
 def event_types_for(preset: str | None) -> list[str]:
     return get_terms(preset)["event_types"]
+
+
+# Words an admin can override, in display order, with a friendly label for the
+# editor. (event_types is handled separately as a comma-separated list.)
+EDITABLE_KEYS = [
+    ("unit", "Unit (e.g. Regiment)"),
+    ("subunit", "Sub-unit (e.g. Company)"),
+    ("hq", "Home / headquarters"),
+    ("active_roster", "Active roster (nav)"),
+    ("roster_nav", "Full roster (nav)"),
+    ("events_nav", "Events (nav)"),
+    ("event", "A single event"),
+    ("event_create", "Create-event button"),
+    ("event_upcoming", "Upcoming-events heading"),
+    ("event_past", "Past-events heading"),
+    ("attendance", "Attendance"),
+    ("honors", "Awards / honors"),
+    ("leave", "Leave (nav)"),
+    ("on_leave", "On-leave heading"),
+    ("promotions", "Promotions"),
+    ("recruits", "Recruits (nav)"),
+    ("join", "Join page"),
+    ("command", "Admin area"),
+    ("member", "member (singular)"),
+    ("members", "members (plural)"),
+    ("tagline", "Banner tagline"),
+]
+_EDITABLE = {k for k, _ in EDITABLE_KEYS}
+
+
+def resolve_terms(preset: str | None, custom_json: str | None) -> dict:
+    """Effective terminology: preset words with any per-unit overrides applied."""
+    terms = get_terms(preset)
+    if not custom_json:
+        return terms
+    try:
+        custom = json.loads(custom_json)
+    except (ValueError, TypeError):
+        return terms
+    if not isinstance(custom, dict):
+        return terms
+    for key, value in custom.items():
+        if key == "event_types" and isinstance(value, list) and value:
+            terms["event_types"] = [str(v) for v in value]
+        elif key in _EDITABLE and isinstance(value, str) and value.strip():
+            terms[key] = value.strip()
+    return terms
+
+
+def diff_overrides(preset: str | None, submitted: dict) -> dict:
+    """Given submitted field values, keep only those that actually differ from
+    the preset — so unedited fields keep following the preset, and changing the
+    preset later still flows through for them."""
+    base = get_terms(preset)
+    overrides: dict = {}
+    for key, _ in EDITABLE_KEYS:
+        val = (submitted.get(key) or "").strip()
+        if val and val != base.get(key):
+            overrides[key] = val
+    raw_types = (submitted.get("event_types") or "").strip()
+    if raw_types:
+        types = [t.strip() for t in raw_types.split(",") if t.strip()]
+        if types and types != base.get("event_types"):
+            overrides["event_types"] = types
+    return overrides

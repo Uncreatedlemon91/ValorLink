@@ -204,8 +204,8 @@ def _base_context(request: Request, session: Session) -> dict:
         "pending_recruits": pending_recruits,
         "tenant": tenant,
         "platform_base": os.getenv("PLATFORM_BASE_DOMAIN"),
-        # Per-unit vocabulary; templates reference `terms.<key>`.
-        "terms": terminology.get_terms(cfg.terminology),
+        # Per-unit vocabulary (preset + any custom overrides); `terms.<key>`.
+        "terms": terminology.resolve_terms(cfg.terminology, cfg.terminology_custom),
         "theme": cfg.theme or terminology.DEFAULT_THEME,
     }
 
@@ -921,6 +921,8 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         questions=services.list_recruitment_questions(session),
         terminology_choices=terminology.PRESET_CHOICES,
         theme_choices=terminology.THEME_CHOICES,
+        term_fields=terminology.EDITABLE_KEYS,
+        has_custom_terms=bool(cfg.terminology_custom),
         listing=listing,
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
@@ -1378,6 +1380,30 @@ def post_identity(
     return _do(request, csrf, services.update_identity,
                regiment_name, motto, brand_color, inactivity_days, terminology, theme,
                redirect="/command-tent")
+
+
+@app.post("/admin/terminology")
+async def post_terminology(request: Request, user: dict = Depends(auth.require_admin)):
+    form = await request.form()
+    if not auth.verify_csrf(request, form.get("csrf", "")):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    submitted = {k: str(v) for k, v in form.items()}
+    with _tenant_session(request) as session:
+        try:
+            _flash(request, services.set_terminology(session, submitted), "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/terminology/reset")
+def post_terminology_reset(
+    request: Request,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.reset_terminology, redirect="/command-tent")
 
 
 async def _do_form(request: Request, fn, keys, redirect: str):
