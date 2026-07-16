@@ -71,6 +71,22 @@
         </div>
       {% endif %}
 
+      {% if activity %}
+      <h2 class="section">On the Field <span class="tally">recent activity across ValorLink</span></h2>
+      <ul class="feed">
+        {% for a in activity %}
+          <li class="feed-{{ a.kind }}">
+            <span class="feed-dot"></span>
+            <span class="feed-text">
+              {% if a.who %}<b>{{ a.who }}</b> {{ a.text }} in <a href="{{ a.url }}">{{ a.unit }}</a>
+              {% else %}<a href="{{ a.url }}">{{ a.unit }}</a> {{ a.text }}{% endif %}
+            </span>
+            <time class="feed-when" datetime="{{ a.when.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="date">{{ a.when.strftime('%d %b') }}</time>
+          </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
 
       <footer>
@@ -79,5 +95,15 @@
       </footer>
     </main>
   </div>
+
+  <script>
+    // Render feed timestamps in the viewer's own timezone.
+    document.querySelectorAll('time[data-local]').forEach(function (el) {
+      var d = new Date(el.getAttribute('datetime'));
+      if (isNaN(d.getTime())) return;
+      try { el.textContent = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }); } catch (e) {}
+      el.title = d.toString();
+    });
+  </script>
 </body>
 </html>

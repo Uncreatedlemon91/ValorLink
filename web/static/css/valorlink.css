@@ -598,6 +598,20 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   .pipeline { grid-template-columns: 1fr; }
 }
 
+/* Platform activity feed (directory) */
+.feed { list-style: none; margin: 6px 0 0; padding: 0; }
+.feed li {
+  display: grid; grid-template-columns: 16px 1fr auto; align-items: baseline;
+  gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule);
+}
+.feed li:last-child { border-bottom: none; }
+.feed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong); align-self: center; }
+.feed-enlist .feed-dot { background: #3f6b3a; }
+.feed-award .feed-dot { background: #b8860b; }
+.feed-unit .feed-dot { background: var(--seal); }
+.feed-text { color: var(--ink); }
+.feed-when { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.06em; white-space: nowrap; }
+
 /* Custom wording editor (Command Tent) */
 .term-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
 .term-grid .field { margin: 4px 0; }
