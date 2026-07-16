@@ -85,6 +85,34 @@
   </div>
 </div>
 
+<h2 class="section" id="wording">Custom Wording <span class="tally">override any term</span></h2>
+<p class="lede">These start from your chosen <b>Vocabulary</b> preset. Change any that you
+want your own word for — blank or unchanged fields keep following the preset, so
+switching preset later still updates them.</p>
+<div class="order-card" style="max-width:760px;">
+  <form class="orders" method="post" action="/admin/terminology">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="term-grid">
+      {% for key, label in term_fields %}
+        <div class="field">
+          <label>{{ label }}</label>
+          <input name="{{ key }}" value="{{ terms[key] }}" maxlength="60">
+        </div>
+      {% endfor %}
+      <div class="field">
+        <label>Event kinds <span class="opt">(comma-separated)</span></label>
+        <input name="event_types" value="{{ terms.event_types|join(', ') }}" maxlength="120">
+      </div>
+    </div>
+    <div class="field field-actions">
+      <button class="btn btn-strong" type="submit">Save wording</button>
+      {% if has_custom_terms %}
+        <button class="btn" type="submit" formaction="/admin/terminology/reset" formnovalidate>Reset to preset</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
 {% if listing %}
 <h2 class="section">Public Listing <span class="tally">shown in the ValorLink directory</span></h2>
 <div class="order-card" style="max-width:640px;">

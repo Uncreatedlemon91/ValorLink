@@ -598,6 +598,11 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   .pipeline { grid-template-columns: 1fr; }
 }
 
+/* Custom wording editor (Command Tent) */
+.term-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
+.term-grid .field { margin: 4px 0; }
+@media (max-width: 560px) { .term-grid { grid-template-columns: 1fr; } }
+
 /* Roster tools: search / filter / bulk */
 .roster-tools {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;

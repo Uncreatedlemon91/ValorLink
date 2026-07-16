@@ -176,6 +176,8 @@ class GuildConfig(Base):
     terminology = Column(String, nullable=False, default="wor", server_default="wor")
     # Visual theme (CSS skin): "parchment", "modern".
     theme = Column(String, nullable=False, default="parchment", server_default="parchment")
+    # JSON map of per-word overrides applied on top of the terminology preset.
+    terminology_custom = Column(Text, nullable=True)
 
     admin_role_id = Column(BigInteger, nullable=True)
     officer_role_id = Column(BigInteger, nullable=True)
