@@ -181,6 +181,16 @@ def test_admin_edits_discord_server_id():
         assert tenant_by_slug(s, "2ndus").discord_guild_id is None
 
 
+def test_join_page_and_directory_counts():
+    c = TestClient(app)
+    html = c.get("/join", headers=_host("5thva")).text
+    assert "Enlist with 5th Virginia" in html
+    assert "recruiting" in html.lower()
+    # the apex directory shows a member count and links to the join page
+    d = c.get("/", headers={"host": APEX}).text
+    assert "Learn more" in d and "member" in d
+
+
 def test_register_flow_and_tls_allow():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},

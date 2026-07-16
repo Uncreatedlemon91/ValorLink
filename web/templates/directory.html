@@ -45,12 +45,13 @@
               <h3 class="order-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
               {% if u.motto %}<p class="motto" style="font-size:14px;margin:2px 0 8px;">“{{ u.motto }}”</p>{% endif %}
               {% if u.blurb %}<p style="margin:6px 0 12px;">{{ u.blurb }}</p>{% endif %}
-              <p style="margin:6px 0 12px;">
+              <p class="unit-meta" style="margin:6px 0 12px;">
                 {% if u.recruiting %}<span class="badge s-active">Recruiting</span>
                 {% else %}<span class="badge s-inactive">Not recruiting</span>{% endif %}
+                {% if u.members is not none %}<span class="unit-count">{{ u.members }} member{{ 's' if u.members != 1 }}</span>{% endif %}
               </p>
               <div class="inline-actions" style="justify-content:flex-start;gap:10px;">
-                <a class="btn" href="{{ u.url }}">Visit portal</a>
+                <a class="btn" href="{{ u.join_url }}">Learn more</a>
                 {% if u.recruiting %}
                   {% if user %}
                     <form method="post" action="/apply/{{ u.slug }}">

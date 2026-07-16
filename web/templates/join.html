@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Join {{ unit_name }}{% endblock %}
+{% block content %}
+
+<div class="join-hero">
+  <h2 class="join-title">Enlist with {{ unit_name }}</h2>
+  {% if motto %}<p class="motto">“{{ motto }}”</p>{% endif %}
+  <div class="join-stats">
+    <div class="stat"><span class="stat-num">{{ active }}</span><span class="stat-cap">on the rolls</span></div>
+    <div class="stat"><span class="stat-num">{{ 'Open' if recruiting else 'Closed' }}</span><span class="stat-cap">recruiting</span></div>
+    {% if nights %}<div class="stat"><span class="stat-num" style="font-size:16px;">{{ nights|join(' · ') }}</span><span class="stat-cap">active nights</span></div>{% endif %}
+  </div>
+</div>
+
+{% if blurb %}<p class="lede" style="max-width:640px;">{{ blurb }}</p>{% endif %}
+
+<div class="join-cta">
+  {% if is_member %}
+    <p class="order-note">You're already enrolled with this unit. <a href="/my-record">View your record ›</a></p>
+  {% elif not recruiting %}
+    <p class="order-note">This unit isn't accepting applications right now. Check back soon.</p>
+  {% elif already_applied %}
+    <p class="order-note">Your application is in — an officer will be in touch. Thank you for your interest!</p>
+  {% elif user %}
+    <form method="post" action="/apply/{{ apply_slug }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn btn-strong btn-lg" type="submit">Apply to enlist</button>
+    </form>
+    <p class="order-note">Applying as <b>{{ user.name }}</b>. An officer reviews every application.</p>
+  {% else %}
+    <a class="btn btn-strong btn-lg" href="/login">Sign in with Discord to apply</a>
+    <p class="order-note">You'll sign in with Discord, then apply in one click.</p>
+  {% endif %}
+</div>
+
+{% if upcoming %}
+<h2 class="section">What We're Up To <span class="tally">upcoming musters</span></h2>
+<table class="ledger">
+  <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th></tr></thead>
+  <tbody>
+  {% for ev in upcoming %}
+    <tr>
+      <td class="callsign">{{ ev.name }}</td>
+      <td class="muted">{{ ev.event_type }}</td>
+      <td class="num">{{ ev.scheduled_at|fmt_date(true) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="order-note">Times shown in your local zone.</p>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

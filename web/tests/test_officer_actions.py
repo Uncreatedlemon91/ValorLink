@@ -428,6 +428,60 @@ def test_discord_name_change_updates_callsign():
         (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster) = saved
 
 
+def test_member_profile_and_loa_self_service():
+    client = TestClient(app)
+    _login(client, "none", discord_id=MEMBER_ID, name="Testman")
+
+    def mcsrf(path="/my-record"):
+        m = re.search(r'name="csrf" value="([^"]+)"', client.get(path).text)
+        return m.group(1)
+
+    client.post("/my-record/profile",
+                data={"csrf": mcsrf(), "ingame_name": "TM", "timezone": "UTC",
+                      "availability": ["Fri", "Sat"], "bio": "Line infantry."})
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)
+        assert m.ingame_name == "TM" and m.availability == "Fri,Sat" and m.bio == "Line infantry."
+
+    client.post("/my-record/request-loa", data={"csrf": mcsrf(), "days": "10", "reason": "exams"})
+    with SessionLocal() as s:
+        assert s.get(Member, MEMBER_ID).loa_requested_until is not None
+
+    # officer approves from the leave board
+    _login(client, "officer")
+    client.post(f"/members/{MEMBER_ID}/loa-request/approve", data={"csrf": _csrf(client, "/leave")})
+    with SessionLocal() as s:
+        m = s.get(Member, MEMBER_ID)
+        assert m.status == "loa" and m.loa_until is not None and m.loa_requested_until is None
+    assert len(_actions(queue.LOA)) >= 1
+
+
+def test_recurring_events_and_after_action():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    _login(client, "officer")
+    client.post("/muster-calls/create",
+                data={"csrf": _csrf(client, "/muster-calls"), "name": "Weekly Drill",
+                      "event_type": "Drill", "date": "2099-02-01", "time": "19:00",
+                      "tz_offset": "0", "repeat_weeks": "4"})
+    with SessionLocal() as s:
+        evs = s.query(Event).filter_by(name="Weekly Drill").order_by(Event.scheduled_at).all()
+        assert len(evs) == 4
+        # spaced one week apart
+        assert (evs[1].scheduled_at - evs[0].scheduled_at) == timedelta(weeks=1)
+
+    with SessionLocal() as s:
+        pe = Event(name="Past Battle", event_type="Battle",
+                   scheduled_at=datetime.utcnow() - timedelta(days=1), created_by=1)
+        s.add(pe); s.commit(); peid = pe.id
+    client.post(f"/muster-calls/{peid}/after-action",
+                data={"csrf": _csrf(client, f"/muster-calls/{peid}"),
+                      "outcome": "Victory", "notes": "Held the bridge."})
+    with SessionLocal() as s:
+        pe = s.get(Event, peid)
+        assert pe.outcome == "Victory" and pe.after_action == "Held the bridge."
+
+
 def test_member_can_rsvp_from_the_web():
     from datetime import datetime
     client = TestClient(app)

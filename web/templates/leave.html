@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Leave{% endblock %}
+{% block content %}
+
+<h2 class="section">Leave Requests <span class="tally">{{ pending|length }} awaiting decision</span></h2>
+<p class="lede">Members who have requested a leave of absence from their record. Approving
+places them on furlough until the date given; the bot notifies them and posts to the billboard.</p>
+
+{% if pending %}
+  <table class="ledger">
+    <thead><tr><th>Member</th><th>Rank</th><th class="num">Until</th><th>Reason</th><th class="num">Decision</th></tr></thead>
+    <tbody>
+    {% for m in pending %}
+      <tr>
+        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+        <td>{{ m.rank }}</td>
+        <td class="num">{{ m.loa_requested_until|fmt_date }}</td>
+        <td class="muted">{{ m.loa_reason or '—' }}</td>
+        <td class="num">
+          <div class="inline-actions">
+            <form method="post" action="/members/{{ m.discord_id }}/loa-request/approve">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="btn btn-approve btn-small" type="submit">Approve</button>
+            </form>
+            <form method="post" action="/members/{{ m.discord_id }}/loa-request/deny">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="btn btn-danger btn-small" type="submit">Decline</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="empty">No leave requests are pending.</p>
+{% endif %}
+
+<h2 class="section">On Furlough <span class="tally">{{ on_leave|length }} away</span></h2>
+{% if on_leave %}
+  <table class="ledger">
+    <thead><tr><th>Member</th><th>Rank</th><th>Company</th><th class="num">Returns</th><th class="num"></th></tr></thead>
+    <tbody>
+    {% for m in on_leave %}
+      <tr class="{{ 'overdue' if m.loa_until and m.loa_until < now }}">
+        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+        <td>{{ m.rank }}</td>
+        <td class="muted">{{ m.company }}</td>
+        <td class="num">{% if m.loa_until %}{{ m.loa_until|fmt_date }}{% if m.loa_until < now %} <span class="rate-low">(due)</span>{% endif %}{% else %}—{% endif %}</td>
+        <td class="num">
+          <form method="post" action="/members/{{ m.discord_id }}/loa-end">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-small" type="submit">Return</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="order-note">Members return to active duty automatically when their leave ends; use
+  <b>Return</b> to bring someone back early.</p>
+{% else %}
+  <p class="empty">No members are currently on leave.</p>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}
