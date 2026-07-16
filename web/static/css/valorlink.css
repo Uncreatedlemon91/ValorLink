@@ -608,6 +608,7 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .feed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong); align-self: center; }
 .feed-enlist .feed-dot { background: #3f6b3a; }
 .feed-award .feed-dot { background: #b8860b; }
+.feed-promote .feed-dot { background: var(--union); }
 .feed-unit .feed-dot { background: var(--seal); }
 .feed-text { color: var(--ink); }
 .feed-when { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.06em; white-space: nowrap; }

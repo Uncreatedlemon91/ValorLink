@@ -88,23 +88,19 @@
   </section>
 </div>
 
-<h2 class="section">Lately Enlisted <span class="tally">past thirty days</span></h2>
-{% if recent_enlistments %}
-  <table class="ledger">
-    <thead><tr><th>Callsign</th><th>Rank</th><th>Company</th><th class="num">Enrolled</th></tr></thead>
-    <tbody>
-    {% for m in recent_enlistments %}
-      <tr>
-        <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
-        <td>{{ m.rank }}</td>
-        <td class="muted">{{ m.company }}</td>
-        <td class="num muted">{{ m.joined_date|fmt_date }}</td>
-      </tr>
+<h2 class="section">Recent Activity <span class="tally">enlistments, promotions &amp; honors</span></h2>
+{% if activity %}
+  <ul class="feed">
+    {% for a in activity %}
+      <li class="feed-{{ a.kind }}">
+        <span class="feed-dot"></span>
+        <span class="feed-text"><b>{{ a.who }}</b> {{ a.text }}</span>
+        <time class="feed-when" datetime="{{ a.when.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="date">{{ a.when.strftime('%d %b') }}</time>
+      </li>
     {% endfor %}
-    </tbody>
-  </table>
+  </ul>
 {% else %}
-  <p class="empty">No new enlistments have been mustered this month.</p>
+  <p class="empty">No recent activity to report.</p>
 {% endif %}
 
 <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
