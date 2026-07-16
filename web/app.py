@@ -14,6 +14,7 @@ then visit http://127.0.0.1:8000.
 """
 from __future__ import annotations
 
+import json
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -237,6 +238,7 @@ def _render_directory(request: Request):
                 "members": _unit_member_count(t.db_url),
                 "url": f"https://{t.slug}.{base_domain}/",
                 "join_url": f"https://{t.slug}.{base_domain}/join",
+                "apply_url": f"https://{t.slug}.{base_domain}/apply",
             }
             for t in rows
         ]
@@ -356,6 +358,62 @@ def join(request: Request, session: Session = Depends(get_session)):
         apply_slug=tenant.slug, already_applied=already_applied, is_member=is_member,
     )
     return templates.TemplateResponse(request, "join.html", ctx)
+
+
+@app.get("/apply", response_class=HTMLResponse)
+def apply_form(request: Request, session: Session = Depends(get_session)):
+    """The unit's application form — its recruitment questions, or a simple
+    confirm if it asks none."""
+    if directory_mode(request):
+        return RedirectResponse("/", status_code=303)
+    ctx = _base_context(request, session)
+    tenant = resolve_tenant(request)
+    name, recruiting = get_config(session).regiment_name, True
+    with registry_session() as rs:
+        row = tenant_by_slug(rs, tenant.slug)
+        if row is not None:
+            name, recruiting = row.name, row.recruiting_open
+    questions = services.list_recruitment_questions(session, enabled_only=True)
+    # Applying only needs the visitor's Discord identity (they may have signed
+    # in on the directory), so use the global identity, not the unit-scoped one.
+    viewer = auth.current_user(request)
+    ctx["user"] = viewer
+    already = is_member = False
+    if viewer:
+        already = session.get(Candidacy, int(viewer["id"])) is not None
+        is_member = session.get(Member, int(viewer["id"])) is not None
+    ctx.update(unit_name=name, recruiting=recruiting, questions=questions,
+               already_applied=already, is_member=is_member)
+    return templates.TemplateResponse(request, "apply.html", ctx)
+
+
+@app.post("/apply")
+async def apply_submit(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    form = await request.form()
+    if not auth.verify_csrf(request, form.get("csrf", "")):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/apply", status_code=303)
+    with _tenant_session(request) as session:
+        questions = services.list_recruitment_questions(session, enabled_only=True)
+        answers = []
+        for q in questions:
+            val = (form.get(f"q_{q.id}") or "").strip()
+            if q.required and not val:
+                _flash(request, f"Please answer: {q.prompt}", "error")
+                return RedirectResponse("/apply", status_code=303)
+            if val:
+                answers.append({"q": q.prompt, "a": val[:1000]})
+        try:
+            msg = services.submit_application(
+                session, int(user["id"]), user.get("name", "Applicant"), answers
+            )
+            _flash(request, msg, "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse("/", status_code=303)
 
 
 @app.post("/announce")
@@ -856,6 +914,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         brand_hex=brand_hex(cfg.brand_color),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),
+        questions=services.list_recruitment_questions(session),
         listing=listing,
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
@@ -890,6 +949,10 @@ def recruits(request: Request, session: Session = Depends(get_session)):
 
     by_stage: dict[str, list] = {key: [] for key, _, _ in RECRUIT_COLUMNS}
     for c in candidates:
+        try:
+            c.parsed_answers = json.loads(c.answers) if c.answers else []
+        except (ValueError, TypeError):
+            c.parsed_answers = []
         # Anything with a missing/unknown stage falls back to the first column.
         by_stage.get(c.stage, by_stage["applied"]).append(c)
 
@@ -1427,6 +1490,50 @@ def post_company_remove(
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.company_remove, company_id, redirect="/command-tent")
+
+
+@app.post("/admin/questions/add")
+def post_question_add(
+    request: Request,
+    csrf: str = Form(...),
+    prompt: str = Form(...),
+    required: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.question_add, prompt, bool(required),
+               redirect="/command-tent")
+
+
+@app.post("/admin/questions/{question_id}/move")
+def post_question_move(
+    request: Request,
+    question_id: int,
+    csrf: str = Form(...),
+    direction: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.question_move, question_id, direction,
+               redirect="/command-tent")
+
+
+@app.post("/admin/questions/{question_id}/toggle")
+def post_question_toggle(
+    request: Request,
+    question_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.question_toggle, question_id, redirect="/command-tent")
+
+
+@app.post("/admin/questions/{question_id}/remove")
+def post_question_remove(
+    request: Request,
+    question_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.question_remove, question_id, redirect="/command-tent")
 
 
 # Bot invite permissions: manage roles/nicknames/threads, send/embed, history.

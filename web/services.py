@@ -12,7 +12,10 @@ Validation failures raise ActionError with a message safe to show the user.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
+
+from sqlalchemy import func
 
 from db.models import (
     AttendanceRecord,
@@ -24,6 +27,7 @@ from db.models import (
     Member,
     MemberAward,
     Rank,
+    RecruitmentQuestion,
     ServiceHistoryEntry,
 )
 from utils import queue
@@ -829,17 +833,77 @@ def rsvp(session, event_id: int, discord_id: int, status: str) -> str:
 
 
 # --- Public applications (cross-unit) ------------------------------------ #
-def submit_application(session, discord_id: int, callsign: str) -> str:
+def submit_application(session, discord_id: int, callsign: str,
+                       answers: list[dict] | None = None) -> str:
     """Record a public application against a unit (its own database session).
-    Deduplicates against existing members and pending candidacies."""
+    Deduplicates against existing members and pending candidacies. ``answers``
+    is a list of {"q": prompt, "a": answer} captured from the unit's questions."""
     callsign = (callsign or "").strip() or "Applicant"
     if session.get(Member, discord_id) is not None:
         raise ActionError("You already have a record with this unit.")
     if session.get(Candidacy, discord_id) is not None:
         raise ActionError("Your application to this unit is already pending.")
-    session.add(Candidacy(discord_id=discord_id, callsign=callsign))
+    cand = Candidacy(discord_id=discord_id, callsign=callsign)
+    if answers:
+        cand.answers = json.dumps(answers)
+    session.add(cand)
     session.commit()
     return "Application submitted — the unit's recruiters will review it."
+
+
+# --- Recruitment questions (per-unit config) ----------------------------- #
+def list_recruitment_questions(session, enabled_only: bool = False):
+    q = session.query(RecruitmentQuestion)
+    if enabled_only:
+        q = q.filter(RecruitmentQuestion.enabled.is_(True))
+    return q.order_by(RecruitmentQuestion.position, RecruitmentQuestion.id).all()
+
+
+def question_add(session, prompt: str, required: bool = True) -> str:
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise ActionError("The question can't be empty.")
+    if len(prompt) > 200:
+        raise ActionError("Keep the question under 200 characters.")
+    max_pos = session.query(func.max(RecruitmentQuestion.position)).scalar() or 0
+    session.add(RecruitmentQuestion(prompt=prompt, position=max_pos + 1,
+                                    required=bool(required), enabled=True))
+    session.commit()
+    return "Question added."
+
+
+def question_remove(session, question_id: int) -> str:
+    q = session.get(RecruitmentQuestion, question_id)
+    if q is None:
+        raise ActionError("No such question.")
+    session.delete(q)
+    session.commit()
+    return "Question removed."
+
+
+def question_move(session, question_id: int, direction: str) -> str:
+    if direction not in ("up", "down"):
+        raise ActionError("Move must be up or down.")
+    ordered = list_recruitment_questions(session)
+    idx = next((i for i, x in enumerate(ordered) if x.id == question_id), None)
+    if idx is None:
+        raise ActionError("No such question.")
+    swap = idx - 1 if direction == "up" else idx + 1
+    if swap < 0 or swap >= len(ordered):
+        return "Already at the end."
+    a, b = ordered[idx], ordered[swap]
+    a.position, b.position = b.position, a.position
+    session.commit()
+    return "Question reordered."
+
+
+def question_toggle(session, question_id: int) -> str:
+    q = session.get(RecruitmentQuestion, question_id)
+    if q is None:
+        raise ActionError("No such question.")
+    q.enabled = not q.enabled
+    session.commit()
+    return f"Question {'shown' if q.enabled else 'hidden'}."
 
 
 # --- Option sources for the UI ------------------------------------------ #

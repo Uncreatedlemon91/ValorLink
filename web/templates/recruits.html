@@ -24,6 +24,17 @@ first contact to decision.
       <div class="recruit-name">{{ c.callsign }}</div>
       <div class="recruit-meta">Applied {{ c.created_at|fmt_date }}</div>
 
+      {% if can_decide and c.parsed_answers %}
+      <details class="recruit-answers">
+        <summary>{{ c.parsed_answers|length }} answer{{ 's' if c.parsed_answers|length != 1 }}</summary>
+        <dl>
+          {% for a in c.parsed_answers %}
+            <dt>{{ a.q }}</dt><dd>{{ a.a }}</dd>
+          {% endfor %}
+        </dl>
+      </details>
+      {% endif %}
+
       {% if can_decide %}
         {% if c.notes %}<div class="recruit-notes">{{ c.notes }}</div>{% endif %}
         <details class="recruit-notes-edit">

@@ -1,9 +1,11 @@
+import json
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from db.base import db_session
-from db.models import Candidacy, Member, ServiceHistoryEntry
+from db.models import Candidacy, Member, RecruitmentQuestion, ServiceHistoryEntry
 from tenancy.routing import bind_guild
 from utils import ranks as rank_utils
 from utils.billboard import post_billboard
@@ -162,11 +164,42 @@ class InterviewView(discord.ui.View):
         await interaction.edit_original_response(content="Candidate denied.", view=None)
 
 
-class ApplyModal(discord.ui.Modal, title="Regiment Application"):
-    callsign = discord.ui.TextInput(label="In-Game Name / Callsign", placeholder="e.g. Smith")
-    age = discord.ui.TextInput(label="Age", placeholder="Must be 18+", min_length=1, max_length=3)
-    timezone = discord.ui.TextInput(label="Timezone", placeholder="e.g. EST / GMT")
-    reason = discord.ui.TextInput(label="Why do you want to join?", style=discord.TextStyle.paragraph)
+# Used when a unit hasn't configured its own recruitment questions.
+DEFAULT_APPLY_FIELDS = [("Age", True), ("Timezone", True), ("Why do you want to join?", False)]
+
+
+def _apply_fields(session):
+    """The application questions to ask in Discord — the unit's configured ones
+    (first four, the modal's limit), or a sensible default set if none are set."""
+    qs = (
+        session.query(RecruitmentQuestion)
+        .filter(RecruitmentQuestion.enabled.is_(True))
+        .order_by(RecruitmentQuestion.position, RecruitmentQuestion.id)
+        .all()
+    )
+    if qs:
+        return [(q.prompt, q.required) for q in qs[:4]]
+    return DEFAULT_APPLY_FIELDS
+
+
+class ApplyModal(discord.ui.Modal):
+    def __init__(self, fields):
+        super().__init__(title="Regiment Application")
+        self.callsign = discord.ui.TextInput(
+            label="In-Game Name / Callsign", placeholder="e.g. Smith", max_length=100
+        )
+        self.add_item(self.callsign)
+        self._questions = []
+        for prompt, required in fields:
+            item = discord.ui.TextInput(
+                label=prompt[:45],  # Discord caps labels at 45 chars
+                placeholder=(prompt[:100] if len(prompt) > 45 else None),
+                style=discord.TextStyle.paragraph,
+                required=required,
+                max_length=1000,
+            )
+            self.add_item(item)
+            self._questions.append((prompt, item))
 
     async def on_submit(self, interaction: discord.Interaction):
         bind_guild(interaction.guild_id)
@@ -193,12 +226,15 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
         recruiter_role = interaction.guild.get_role(recruiter_role_id) if recruiter_role_id else None
         ping = f"{interaction.user.mention} {recruiter_role.mention if recruiter_role else ''}".strip()
 
+        answers = [{"q": prompt, "a": item.value.strip()}
+                   for prompt, item in self._questions if item.value.strip()]
+
         embed = base_embed(title="New Application")
         embed.add_field(name="Applicant", value=interaction.user.mention, inline=True)
         embed.add_field(name="Callsign", value=self.callsign.value, inline=True)
-        embed.add_field(name="Age", value=self.age.value, inline=True)
-        embed.add_field(name="Timezone", value=self.timezone.value, inline=True)
-        embed.add_field(name="Reason", value=self.reason.value, inline=False)
+        for prompt, item in self._questions:
+            if item.value.strip():
+                embed.add_field(name=prompt[:256], value=item.value[:1024], inline=False)
 
         view = InterviewView(interaction.user.id, self.callsign.value)
         msg = await thread.send(content=ping, embed=embed, view=view)
@@ -209,6 +245,7 @@ class ApplyModal(discord.ui.Modal, title="Regiment Application"):
                 callsign=self.callsign.value,
                 thread_id=thread.id,
                 message_id=msg.id,
+                answers=json.dumps(answers) if answers else None,
             ))
             session.commit()
 
@@ -222,7 +259,9 @@ class JoinButtonView(discord.ui.View):
     @discord.ui.button(label="Apply to Enlist", style=discord.ButtonStyle.primary, custom_id="recruit_apply")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         bind_guild(interaction.guild_id)
-        await interaction.response.send_modal(ApplyModal())
+        with db_session() as session:
+            fields = _apply_fields(session)
+        await interaction.response.send_modal(ApplyModal(fields))
 
 
 class Recruitment(commands.Cog):
