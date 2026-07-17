@@ -77,6 +77,42 @@
   </section>
 </div>
 
+{% if is_self and self_dashboard %}
+<h2 class="section">Your Musters <span class="tally">answer the call</span></h2>
+<div class="stat-strip">
+  <div class="stat"><span class="stat-num">{% if self_dashboard.turnout.pct is not none %}{{ self_dashboard.turnout.pct }}%{% else %}—{% endif %}</span><span class="stat-cap">your turnout</span></div>
+  <div class="stat"><span class="stat-num">{{ self_dashboard.turnout.present }}</span><span class="stat-cap">musters made</span></div>
+  <div class="stat"><span class="stat-num">{{ self_dashboard.upcoming|length }}</span><span class="stat-cap">coming up</span></div>
+</div>
+{% if self_dashboard.upcoming %}
+<table class="ledger">
+  <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th>Your RSVP</th></tr></thead>
+  <tbody>
+  {% for ev in self_dashboard.upcoming %}
+    <tr>
+      <td class="callsign"><a href="/muster-calls/{{ ev.id }}">{{ ev.name }}</a></td>
+      <td class="muted">{{ ev.event_type }}</td>
+      <td class="num">{{ ev.scheduled_at|fmt_date(true) }}</td>
+      <td class="rsvp-cell">
+        {% set mine = self_dashboard.my_rsvps.get(ev.id) %}
+        {% for value, label in rsvp_choices %}
+          <form method="post" action="/muster-calls/{{ ev.id }}/rsvp" style="display:inline;">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="status" value="{{ value }}">
+            <input type="hidden" name="next" value="/my-record">
+            <button class="btn btn-small {{ 'btn-strong' if mine == value else 'btn-ghost' }}" type="submit">{{ label }}</button>
+          </form>
+        {% endfor %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p class="empty">No musters are on the books right now.</p>
+{% endif %}
+{% endif %}
+
 {% if is_self %}
 <h2 class="section">My Details <span class="tally">visible to your officers</span></h2>
 <div class="orders-grid">
@@ -95,6 +131,10 @@
         </div>
       </div>
       <div class="field"><label>About me <span class="opt">(optional)</span></label><textarea name="bio" rows="2" maxlength="1000">{{ member.bio or '' }}</textarea></div>
+      <div class="field">
+        <label class="check-inline"><input type="checkbox" name="reminders_opt_out" value="1" {{ 'checked' if member.reminders_opt_out }}>
+        Don't DM me event reminders</label>
+      </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save profile</button></div>
     </form>
   </div>

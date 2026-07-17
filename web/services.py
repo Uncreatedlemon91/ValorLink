@@ -19,6 +19,7 @@ from sqlalchemy import func
 
 from db.models import (
     AttendanceRecord,
+    AuditEntry,
     AwardType,
     Candidacy,
     Company,
@@ -65,6 +66,33 @@ def _log(session, member_id: int, entry: str, actor: dict):
     )
 
 
+# --- Audit trail --------------------------------------------------------- #
+# The set of action categories the audit log distinguishes, for filtering.
+AUDIT_CATEGORIES = [
+    "rank", "company", "service", "discipline", "lifecycle", "leave",
+    "recruitment", "awards", "announcement", "roster",
+]
+
+
+def _audit(session, actor: dict | None, category: str, summary: str,
+           target_id: int | None = None, source: str = "web") -> None:
+    """Record an accountability entry alongside the action's own data change.
+    Added to the caller's session; committed by the caller."""
+    session.add(AuditEntry(
+        actor_id=actor.get("id") if actor else None,
+        actor_name=actor.get("name") if actor else None,
+        source=source, category=category, summary=summary, target_id=target_id,
+    ))
+
+
+def list_audit(session, category: str = "", limit: int = 200) -> list[AuditEntry]:
+    """Recent audit entries, newest first, optionally filtered by category."""
+    q = session.query(AuditEntry)
+    if category:
+        q = q.filter(AuditEntry.category == category)
+    return q.order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit).all()
+
+
 # --- Rank ---------------------------------------------------------------- #
 def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str = "") -> str:
     new_record = rank_utils.rank_by_name(session, new_rank)
@@ -102,6 +130,7 @@ def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: 
          "old_rank": old_rank, "new_rank": new_rank, "billboard": billboard},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "rank", entry, target_id=discord_id)
     session.commit()
     action = "promoted to" if is_promotion else "stepped down from"
     return f"{callsign} {action} {new_rank}."
@@ -126,6 +155,7 @@ def set_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str
          "old_rank": old_rank, "new_rank": new_rank, "billboard": None},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "rank", entry, target_id=discord_id)
     session.commit()
     return f"{callsign}'s rank set to {new_rank}."
 
@@ -149,6 +179,8 @@ def assign_company(session, actor: dict, discord_id: int, company: str) -> str:
          "billboard": f"**{callsign}** has been assigned to **{company}**."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "company",
+           f"Transferred {callsign} from {old_company} to {company}.", target_id=discord_id)
     session.commit()
     return f"{callsign} assigned to {company}."
 
@@ -160,6 +192,8 @@ def service_log(session, actor: dict, discord_id: int, entry: str) -> str:
     if not entry:
         raise ActionError("The service-log entry can't be empty.")
     _log(session, discord_id, entry, actor)
+    _audit(session, actor, "service", f"Logged a note on {record.callsign}: {entry}",
+           target_id=discord_id)
     queue.enqueue(session, queue.REFRESH_PERSONNEL, {"discord_id": discord_id}, actor_id=actor["id"])
     session.commit()
     return f"Logged entry for {record.callsign}."
@@ -186,6 +220,8 @@ def discipline(session, actor: dict, discord_id: int, record_type: str, reason: 
          "dm": f"You received a **{record_type}**: {reason}"},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "discipline",
+           f"Issued a {record_type} to {record.callsign}: {reason}", target_id=discord_id)
     session.commit()
     return f"{record_type.capitalize()} issued to {record.callsign}."
 
@@ -214,6 +250,8 @@ def discharge(session, actor: dict, discord_id: int, discharge_type: str, reason
          "billboard": f"**{callsign}** has been {verb.lower()} discharged."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "lifecycle",
+           f"{verb} discharged {callsign}. Reason: {reason}", target_id=discord_id)
     session.commit()
     return f"{callsign} has been {verb.lower()} discharged."
 
@@ -240,6 +278,8 @@ def reinstate(session, actor: dict, discord_id: int, reason: str = "") -> str:
          "billboard": f"**{callsign}** has been reinstated to active duty."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "lifecycle", f"Reinstated {callsign} to active duty.",
+           target_id=discord_id)
     session.commit()
     return f"{callsign} has been reinstated."
 
@@ -271,6 +311,8 @@ def loa(session, actor: dict, discord_id: int, days: int, reason: str = "") -> s
          "billboard": f"**{callsign}** is on leave of absence until {until_str}."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "leave", f"Placed {callsign} on leave until {until_str}.",
+           target_id=discord_id)
     session.commit()
     return f"{callsign} placed on leave until {until_str}."
 
@@ -292,6 +334,7 @@ def loa_end(session, actor: dict, discord_id: int) -> str:
          "billboard": f"**{callsign}** has returned from leave of absence."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "leave", f"Ended {callsign}'s leave early.", target_id=discord_id)
     session.commit()
     return f"{callsign} is back on active duty."
 
@@ -301,7 +344,8 @@ DAY_CODES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def update_profile(session, actor: dict, discord_id: int, timezone: str = "",
-                   ingame_name: str = "", availability: str = "", bio: str = "") -> str:
+                   ingame_name: str = "", availability: str = "", bio: str = "",
+                   reminders_opt_out: bool = False) -> str:
     """A member updates their own profile. Web-only data (no Discord side
     effect). ``availability`` is a comma-separated subset of DAY_CODES."""
     record = _member(session, discord_id)
@@ -310,6 +354,7 @@ def update_profile(session, actor: dict, discord_id: int, timezone: str = "",
     days = [d for d in (availability or "").split(",") if d in DAY_CODES]
     record.availability = ",".join(days) or None
     record.bio = (bio or "").strip()[:1000] or None
+    record.reminders_opt_out = bool(reminders_opt_out)
     session.commit()
     return "Your profile has been updated."
 
@@ -354,6 +399,8 @@ def approve_loa_request(session, actor: dict, discord_id: int) -> str:
          "billboard": f"**{callsign}** is on leave of absence until {until_str}."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "leave",
+           f"Approved {callsign}'s leave request until {until_str}.", target_id=discord_id)
     session.commit()
     return f"Approved {callsign}'s leave until {until_str}."
 
@@ -372,6 +419,8 @@ def deny_loa_request(session, actor: dict, discord_id: int) -> str:
         {"discord_id": discord_id, "dm": f"Your leave request was declined by {actor['name']}."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "leave", f"Declined {callsign}'s leave request.",
+           target_id=discord_id)
     session.commit()
     return f"Declined {callsign}'s leave request."
 
@@ -409,6 +458,8 @@ def approve_candidate(session, actor: dict, discord_id: int) -> str:
                f"Welcome to the regiment!"},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "recruitment", f"Approved {callsign}'s enlistment as {default_rank}.",
+           target_id=discord_id)
     session.commit()
     return f"{callsign} enlisted as {default_rank}."
 
@@ -427,6 +478,8 @@ def deny_candidate(session, actor: dict, discord_id: int) -> str:
          "dm": f"Your application to **{regiment_name}** has been denied at this time."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "recruitment", f"Denied {callsign}'s application.",
+           target_id=discord_id)
     session.commit()
     return f"{callsign}'s application was denied."
 
@@ -470,6 +523,8 @@ def post_announcement(session, actor: dict, title: str, body: str) -> str:
         {"title": title, "body": body, "actor_id": actor["id"], "actor_name": actor["name"]},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "announcement",
+           f"Posted an announcement: {title or body[:60]}")
     session.commit()
     return "Announcement queued — the bot is posting it now."
 
@@ -493,6 +548,8 @@ def import_roster(session, actor: dict, role_id: str = "") -> str:
          "default_rank": default_rank, "default_company": default_company},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "roster",
+           "Queued a roster import from Discord" + (" (filtered by role)" if rid else "."))
     session.commit()
     scope = "members with that role" if rid else "all non-bot members"
     return f"Import queued — the bot is adding {scope} not already on the roster."
@@ -625,6 +682,8 @@ def grant_award(session, actor: dict, discord_id: int, award_type_id: int, notes
          "billboard": f"**{member.callsign}** has been awarded **{award.name}**."},
         actor_id=actor["id"],
     )
+    _audit(session, actor, "awards", f"Awarded {award.name} to {member.callsign}.",
+           target_id=discord_id)
     session.commit()
     return f"{member.callsign} was awarded {award.name}."
 
@@ -641,6 +700,9 @@ def revoke_award(session, actor: dict, discord_id: int, award_type_id: int) -> s
     award = session.get(AwardType, award_type_id)
     session.delete(existing)
     queue.enqueue(session, queue.AWARD_REVOKED, {"discord_id": discord_id}, actor_id=actor["id"])
+    _audit(session, actor, "awards",
+           f"Revoked {award.name if award else 'an honor'} from {member.callsign}.",
+           target_id=discord_id)
     session.commit()
     return f"Removed {award.name if award else 'the honor'} from {member.callsign}."
 

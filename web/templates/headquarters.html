@@ -52,13 +52,26 @@
     <h2 class="section">Next {{ terms.events_nav }}</h2>
     {% if upcoming %}
       <table class="ledger">
-        <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th></tr></thead>
+        <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th>{% if is_member %}<th>Your RSVP</th>{% endif %}</tr></thead>
         <tbody>
         {% for ev in upcoming %}
           <tr>
             <td class="callsign"><a href="/muster-calls/{{ ev.id }}">{{ ev.name }}</a></td>
             <td class="muted">{{ ev.event_type }}</td>
             <td class="num">{{ ev.scheduled_at|fmt_date(true) }}</td>
+            {% if is_member %}
+            <td class="rsvp-cell">
+              {% set mine = my_rsvps.get(ev.id) %}
+              {% for value, label in rsvp_choices %}
+                <form method="post" action="/muster-calls/{{ ev.id }}/rsvp" style="display:inline;">
+                  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                  <input type="hidden" name="status" value="{{ value }}">
+                  <input type="hidden" name="next" value="/">
+                  <button class="btn btn-small {{ 'btn-strong' if mine == value else 'btn-ghost' }}" type="submit">{{ label }}</button>
+                </form>
+              {% endfor %}
+            </td>
+            {% endif %}
           </tr>
         {% endfor %}
         </tbody>

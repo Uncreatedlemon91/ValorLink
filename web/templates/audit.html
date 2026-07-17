@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Ledger{% endblock %}
+{% block content %}
+
+<h2 class="section">Order Ledger <span class="tally">{{ entries|length }} recent</span></h2>
+<p class="lede">Every unit-changing action taken through the website — promotions, transfers,
+discipline, enlistments, honors, leave, and announcements — with who ordered it and when.
+A running record for accountability.</p>
+
+<div class="audit-filter">
+  <a href="/audit" class="chip {{ 'chip-on' if not category }}">All</a>
+  {% for c in categories %}
+    <a href="/audit?category={{ c }}" class="chip {{ 'chip-on' if category == c }}">{{ c }}</a>
+  {% endfor %}
+</div>
+
+{% if entries %}
+<table class="ledger">
+  <thead><tr><th class="num">When</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td class="num muted">{{ e.at|fmt_date(true) }}</td>
+      <td class="callsign">{{ e.actor_name }}
+        <span class="audit-src src-{{ e.source }}">{{ 'web' if e.source == 'web' else 'discord' }}</span>
+      </td>
+      <td><span class="cat-chip">{{ e.category }}</span></td>
+      <td>{{ e.summary }}
+        {% if e.target_id and e.target_name %}
+          <a class="audit-target" href="/dossier/{{ e.target_id }}">→ {{ e.target_name }}</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="hollow"><div class="mark">✶</div><h3>Nothing on Record</h3>
+  <p>No actions {% if category %}in this category {% endif %}have been logged yet.
+  As officers act through the site, their orders are recorded here.</p></div>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

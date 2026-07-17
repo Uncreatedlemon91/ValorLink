@@ -858,6 +858,76 @@ def test_event_reminder_dms_rsvps_once():
     bridge._dm.assert_not_awaited()
 
 
+def test_officer_action_writes_audit_entry():
+    from db.models import AuditEntry
+    client = TestClient(app)
+    _login(client, "officer")
+    client.post(f"/members/{MEMBER_ID}/rank",
+                data={"csrf": _csrf(client), "rank": "Sergeant", "mode": "promote"})
+    with SessionLocal() as s:
+        entries = s.query(AuditEntry).all()
+        assert any(e.category == "rank" and "Sergeant" in e.summary
+                   and e.target_id == MEMBER_ID and e.source == "web" for e in entries)
+    # it surfaces on the officer-gated Order Ledger, with a link to the member
+    html = client.get("/audit").text
+    assert "Order Ledger" in html and "Sergeant" in html and f"/dossier/{MEMBER_ID}" in html
+
+
+def test_audit_ledger_requires_officer():
+    client = TestClient(app)
+    _login(client, "none")
+    r = client.get("/audit", follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+
+def test_reminder_skips_opted_out_member():
+    from datetime import datetime, timedelta
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        s.get(Member, MEMBER_ID).reminders_opt_out = True
+        ev = Event(name="Drill", event_type="Drill",
+                   scheduled_at=datetime.utcnow() + timedelta(minutes=20), created_by=1)
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+        s.add(AttendanceRecord(event_id=eid, member_id=MEMBER_ID, status="accepted"))
+        s.commit()
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._dm = AsyncMock()
+    asyncio.run(bridge._remind_unit(MagicMock()))
+    bridge._dm.assert_not_awaited()  # opted out → no DM
+    with SessionLocal() as s:
+        assert s.get(Event, eid).reminder_sent_at is not None  # still marked, not re-scanned
+
+
+def test_profile_toggle_sets_reminder_opt_out():
+    client = TestClient(app)
+    _login(client, "officer", discord_id=MEMBER_ID, name="Testman")
+    client.post("/my-record/profile",
+                data={"csrf": _csrf(client, "/my-record"), "reminders_opt_out": "1"})
+    with SessionLocal() as s:
+        assert s.get(Member, MEMBER_ID).reminders_opt_out is True
+    # unchecking clears it (checkbox absent from the form submission)
+    client.post("/my-record/profile", data={"csrf": _csrf(client, "/my-record")})
+    with SessionLocal() as s:
+        assert s.get(Member, MEMBER_ID).reminders_opt_out is False
+
+
+def test_my_record_shows_muster_dashboard():
+    from datetime import datetime, timedelta
+    client = TestClient(app)
+    _login(client, "officer", discord_id=MEMBER_ID, name="Testman")
+    with SessionLocal() as s:
+        s.add(Event(name="Saturday Line", event_type="Battle",
+                    scheduled_at=datetime.utcnow() + timedelta(days=2), created_by=1))
+        s.commit()
+    html = client.get("/my-record").text
+    assert "Your Musters" in html and "Saturday Line" in html and "/rsvp" in html
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

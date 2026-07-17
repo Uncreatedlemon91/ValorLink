@@ -443,6 +443,19 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
     companies = list_companies(session)
     ranks = rank_utils.all_ranks(session)
 
+    # The signed-in member's own RSVP to each upcoming call, so they can answer
+    # the call straight from Headquarters.
+    viewer = ctx["user"]
+    my_member = session.get(Member, int(viewer["id"])) if viewer else None
+    my_rsvps: dict[int, str] = {}
+    if my_member and upcoming:
+        ev_ids = [e.id for e in upcoming]
+        for r in session.query(AttendanceRecord).filter(
+            AttendanceRecord.event_id.in_(ev_ids),
+            AttendanceRecord.member_id == my_member.discord_id,
+        ):
+            my_rsvps[r.event_id] = r.status
+
     ctx.update(
         counts=counts,
         activity=activity,
@@ -452,6 +465,9 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         rank_count=len(ranks),
         can_announce=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
         announce_ready=bool(get_config(session).announcements_channel_id),
+        is_member=bool(my_member),
+        my_rsvps=my_rsvps,
+        rsvp_choices=[("accepted", "Accept"), ("tentative", "Tentative"), ("declined", "Decline")],
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
 
@@ -721,7 +737,36 @@ def _render_dossier(request: Request, session: Session, member: Member, is_self:
                          "text": f"Awarded {emoji}{a.award_type.name}."})
     timeline.sort(key=lambda t: t["date"] or datetime.min, reverse=True)
 
+    # A member viewing their own record gets a small dashboard: their upcoming
+    # musters (with one-click RSVP) and their turnout rate.
+    self_dashboard = None
+    if is_self:
+        now = datetime.utcnow()
+        upcoming_events = (
+            session.query(Event)
+            .filter(Event.scheduled_at >= now)
+            .order_by(Event.scheduled_at.asc())
+            .limit(5)
+            .all()
+        )
+        my_rsvps: dict[int, str] = {}
+        if upcoming_events:
+            ev_ids = [e.id for e in upcoming_events]
+            for r in session.query(AttendanceRecord).filter(
+                AttendanceRecord.event_id.in_(ev_ids),
+                AttendanceRecord.member_id == member.discord_id,
+            ):
+                my_rsvps[r.event_id] = r.status
+        _events, _sbm, rate_for = _attendance_index(session)
+        self_dashboard = {
+            "upcoming": upcoming_events,
+            "my_rsvps": my_rsvps,
+            "turnout": rate_for(member),
+        }
+
     ctx.update(
+        self_dashboard=self_dashboard,
+        rsvp_choices=[("accepted", "Accept"), ("tentative", "Tentative"), ("declined", "Decline")],
         member=member,
         rank=rank_utils.rank_by_name(session, member.rank),
         service=service,
@@ -1026,6 +1071,29 @@ def _setup_checklist(session: Session, cfg) -> list[dict]:
          "#companies", "Members are assigned to a company on the roster."),
     ]
     return [{"label": s[0], "done": s[1], "anchor": s[2], "hint": s[3]} for s in steps]
+
+
+@app.get("/audit", response_class=HTMLResponse)
+def audit_log(request: Request, category: str = "",
+              session: Session = Depends(get_session),
+              user: dict = Depends(auth.require_officer)):
+    """The unit's accountability log: who did what, when, and from where."""
+    ctx = _base_context(request, session)
+    category = category if category in services.AUDIT_CATEGORIES else ""
+    entries = services.list_audit(session, category=category)
+    target_ids = {e.target_id for e in entries if e.target_id}
+    names = {}
+    if target_ids:
+        for m in session.query(Member).filter(Member.discord_id.in_(target_ids)):
+            names[m.discord_id] = m.callsign
+    rows = [
+        {"at": e.at, "actor_name": e.actor_name or "—", "source": e.source,
+         "category": e.category, "summary": e.summary,
+         "target_id": e.target_id, "target_name": names.get(e.target_id)}
+        for e in entries
+    ]
+    ctx.update(entries=rows, categories=services.AUDIT_CATEGORIES, category=category)
+    return templates.TemplateResponse(request, "audit.html", ctx)
 
 
 @app.get("/command-tent", response_class=HTMLResponse)
@@ -1333,10 +1401,12 @@ def post_profile(
     ingame_name: str = Form(""),
     availability: list[str] = Form(default=[]),
     bio: str = Form(""),
+    reminders_opt_out: bool = Form(False),
 ):
     days = ",".join(availability)
     return _self_action(request, csrf, services.update_profile,
-                        timezone, ingame_name, days, bio, redirect="/my-record")
+                        timezone, ingame_name, days, bio, reminders_opt_out,
+                        redirect="/my-record")
 
 
 @app.post("/my-record/request-loa")
@@ -1469,19 +1539,22 @@ def post_rsvp(
     event_id: int,
     csrf: str = Form(...),
     status: str = Form(...),
+    next: str = Form(""),
 ):
+    # Return to wherever the RSVP was made from (Headquarters or the call page).
+    dest = next if next.startswith("/") else f"/muster-calls/{event_id}"
     user = auth.effective_user(request, resolve_tenant(request).slug)
     if not user:
         raise auth.NotAuthenticated()
     if not auth.verify_csrf(request, csrf):
         _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+        return RedirectResponse(dest, status_code=303)
     with _tenant_session(request) as session:
         try:
             _flash(request, services.rsvp(session, event_id, int(user["id"]), status), "ok")
         except services.ActionError as exc:
             _flash(request, str(exc), "error")
-    return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+    return RedirectResponse(dest, status_code=303)
 
 
 @app.post("/muster-calls/{event_id}/attendance")

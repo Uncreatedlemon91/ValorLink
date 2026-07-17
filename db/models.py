@@ -47,6 +47,9 @@ class Member(Base):
     loa_requested_until = Column(DateTime, nullable=True)
     loa_reason = Column(String, nullable=True)
 
+    # Opt out of the bot's pre-event reminder DMs.
+    reminders_opt_out = Column(Boolean, nullable=False, default=False, server_default="0")
+
     service_history = relationship(
         "ServiceHistoryEntry", back_populates="member", cascade="all, delete-orphan"
     )
@@ -271,6 +274,25 @@ class Candidacy(Base):
     # Snapshot of the applicant's answers to the unit's recruitment questions,
     # as JSON [{"q": prompt, "a": answer}, ...]. Captured at apply time.
     answers = Column(Text, nullable=True)
+
+
+class AuditEntry(Base):
+    """An accountability record of a unit-changing action: who did what, when,
+    and from where (the website or a Discord command). Written at the same
+    choke points that mutate regiment data, so a unit's leaders can answer
+    'who changed this?' without piecing it together from scattered logs.
+    """
+
+    __tablename__ = "audit_entries"
+
+    id = Column(Integer, primary_key=True)
+    at = Column(DateTime, default=_utcnow, index=True)
+    actor_id = Column(BigInteger, nullable=True)      # Discord id of who acted
+    actor_name = Column(String, nullable=True)        # their name at the time
+    source = Column(String, nullable=False, default="web")  # web | discord
+    category = Column(String, nullable=False)         # rank|company|discipline|…
+    summary = Column(Text, nullable=False)            # human-readable description
+    target_id = Column(BigInteger, nullable=True)     # member the action concerns
 
 
 class RecruitmentQuestion(Base):

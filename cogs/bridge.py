@@ -142,6 +142,12 @@ class Bridge(commands.Cog):
                 )
                 .all()
             )
+            opted_out = {
+                m.discord_id
+                for m in session.query(Member.discord_id).filter(
+                    Member.reminders_opt_out.is_(True)
+                )
+            }
             plans = []
             for event in due:
                 recipients = [
@@ -150,6 +156,7 @@ class Bridge(commands.Cog):
                         AttendanceRecord.event_id == event.id,
                         AttendanceRecord.status.in_(("accepted", "tentative")),
                     )
+                    if r.member_id not in opted_out
                 ]
                 plans.append((event.id, event.name, event.event_type,
                               event.scheduled_at, recipients))
