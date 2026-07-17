@@ -201,16 +201,32 @@ class Roster(commands.Cog):
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
-        # A global username change updates the callsign in every registered unit
-        # the member is in — but only where they have no server nickname, since
-        # a nickname takes precedence over the username.
-        if before.name == after.name:
+        # Username and avatar changes both arrive here. A username change updates
+        # the callsign (only where there's no server nickname, which takes
+        # precedence); an avatar change updates the stored avatar everywhere.
+        name_changed = before.name != after.name
+        avatar_changed = before.avatar != after.avatar
+        if not name_changed and not avatar_changed:
             return
+        new_avatar = after.avatar.key if after.avatar else None
         for guild in self.bot.guilds:
             member = guild.get_member(after.id)
-            if member is None or member.nick:
+            if member is None:
                 continue
-            await self._apply_display_name(guild, after.id, after.name)
+            if db_url_for_guild(guild.id) is None:
+                continue
+            if avatar_changed:
+                token = bind_guild(guild.id)
+                try:
+                    with db_session() as session:
+                        record = session.get(Member, after.id)
+                        if record is not None and record.avatar != new_avatar:
+                            record.avatar = new_avatar
+                            session.commit()
+                finally:
+                    reset_current_db_url(token)
+            if name_changed and not member.nick:
+                await self._apply_display_name(guild, after.id, after.name)
 
     @tasks.loop(hours=24)
     async def inactivity_check(self):

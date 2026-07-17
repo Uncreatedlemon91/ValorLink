@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -180,10 +180,27 @@ def fmt_date(value: datetime | None, with_time: bool = False):
     )
 
 
+def avatar_url(member, size: int = 64) -> str:
+    """Discord CDN avatar URL for a member (or a (discord_id, hash) pair),
+    falling back to Discord's default avatar when we don't have a hash yet."""
+    if member is None:
+        return ""
+    if isinstance(member, (tuple, list)):
+        discord_id, avatar = member[0], member[1]
+    else:
+        discord_id, avatar = member.discord_id, getattr(member, "avatar", None)
+    if avatar:
+        ext = "gif" if str(avatar).startswith("a_") else "png"
+        return f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar}.{ext}?size={size}"
+    default = (int(discord_id) >> 22) % 6
+    return f"https://cdn.discordapp.com/embed/avatars/{default}.png"
+
+
 templates.env.filters["status_label"] = status_label
 templates.env.filters["record_label"] = record_label
 templates.env.filters["attendance_label"] = attendance_label
 templates.env.filters["fmt_date"] = fmt_date
+templates.env.filters["avatar_url"] = avatar_url
 
 
 def get_session(tenant: TenantCtx = Depends(get_tenant)):
@@ -218,6 +235,7 @@ def _base_context(request: Request, session: Session) -> dict:
         # Per-unit vocabulary (preset + any custom overrides); `terms.<key>`.
         "terms": terminology.resolve_terms(cfg.terminology_custom),
         "theme": cfg.theme or terminology.DEFAULT_THEME,
+        "crest": cfg.crest,
     }
 
 
@@ -236,7 +254,7 @@ def _unit_directory_info(db_url: str) -> dict:
         with sessionmaker_for(db_url)() as s:
             cfg = get_config(s)
             count = s.query(Member).filter(Member.status == "active").count()
-            return {"members": count, "invite": cfg.discord_invite}
+            return {"members": count, "invite": cfg.discord_invite, "crest": cfg.crest}
     except Exception:
         return {}
 
@@ -265,7 +283,8 @@ def _platform_activity(limit: int = 18):
                     .limit(8)
                 ):
                     items.append({"when": m.joined_date, "kind": "enlist", "unit": name,
-                                  "url": unit_url, "who": m.callsign, "text": "enlisted"})
+                                  "url": unit_url, "who": m.callsign, "text": "enlisted",
+                                  "av": (m.discord_id, m.avatar)})
                 for a in (
                     s.query(MemberAward)
                     .filter(MemberAward.date_awarded >= cutoff)
@@ -278,6 +297,7 @@ def _platform_activity(limit: int = 18):
                         "when": a.date_awarded, "kind": "award", "unit": name, "url": unit_url,
                         "who": member.callsign if member else "A member",
                         "text": f"earned {award.name}" if award else "earned an honor",
+                        "av": (member.discord_id, member.avatar) if member else None,
                     })
         except Exception:
             continue
@@ -302,6 +322,7 @@ def _render_directory(request: Request):
                 "recruiting": t.recruiting_open,
                 "members": info.get("members"),
                 "invite": info.get("invite"),
+                "crest": info.get("crest"),
                 "url": f"https://{t.slug}.{base_domain}/",
                 "join_url": f"https://{t.slug}.{base_domain}/join",
                 "apply_url": f"https://{t.slug}.{base_domain}/apply",
@@ -335,7 +356,8 @@ def _unit_activity(session: Session, limit: int = 12):
         .order_by(Member.joined_date.desc())
         .limit(10)
     ):
-        items.append({"when": m.joined_date, "kind": "enlist", "who": m.callsign, "text": "enlisted"})
+        items.append({"when": m.joined_date, "kind": "enlist", "who": m.callsign,
+                      "text": "enlisted", "av": (m.discord_id, m.avatar)})
     for e in (
         session.query(ServiceHistoryEntry)
         .filter(ServiceHistoryEntry.date >= cutoff, ServiceHistoryEntry.entry.like("Promoted%"))
@@ -346,7 +368,8 @@ def _unit_activity(session: Session, limit: int = 12):
         who = member.callsign if member else "A member"
         match = re.search(r" to (.+?) by ", e.entry)
         text = f"was promoted to {match.group(1)}" if match else "was promoted"
-        items.append({"when": e.date, "kind": "promote", "who": who, "text": text})
+        items.append({"when": e.date, "kind": "promote", "who": who, "text": text,
+                      "av": (member.discord_id, member.avatar) if member else None})
     for a in (
         session.query(MemberAward)
         .filter(MemberAward.date_awarded >= cutoff)
@@ -359,6 +382,7 @@ def _unit_activity(session: Session, limit: int = 12):
             "when": a.date_awarded, "kind": "award",
             "who": member.callsign if member else "A member",
             "text": f"earned {award.name}" if award else "earned an honor",
+            "av": (member.discord_id, member.avatar) if member else None,
         })
     items.sort(key=lambda x: x["when"] or datetime.min, reverse=True)
     return items[:limit]
@@ -1475,6 +1499,49 @@ def post_identity(
     return _do(request, csrf, services.update_identity,
                regiment_name, motto, brand_color, inactivity_days, theme, discord_invite,
                redirect="/command-tent")
+
+
+CREST_MAX_BYTES = 256 * 1024
+CREST_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+@app.post("/admin/crest")
+async def post_crest(
+    request: Request,
+    csrf: str = Form(...),
+    crest_file: UploadFile = File(...),
+    user: dict = Depends(auth.require_admin),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    if (crest_file.content_type or "") not in CREST_TYPES:
+        _flash(request, "The crest must be a PNG, JPEG, WebP, or GIF image.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    data = await crest_file.read()
+    if len(data) > CREST_MAX_BYTES:
+        _flash(request, "The crest image must be under 256 KB.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    import base64
+    uri = f"data:{crest_file.content_type};base64,{base64.b64encode(data).decode()}"
+    with _tenant_session(request) as session:
+        get_config(session).crest = uri
+        session.commit()
+    _flash(request, "Crest updated.", "ok")
+    return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/crest/remove")
+def post_crest_remove(request: Request, csrf: str = Form(...),
+                      user: dict = Depends(auth.require_admin)):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    with _tenant_session(request) as session:
+        get_config(session).crest = None
+        session.commit()
+    _flash(request, "Crest removed.", "ok")
+    return RedirectResponse("/command-tent", status_code=303)
 
 
 @app.post("/admin/terminology")

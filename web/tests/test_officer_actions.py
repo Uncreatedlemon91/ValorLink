@@ -359,7 +359,7 @@ def test_bridge_import_roster_creates_new_members_only():
     def mk(uid, name, is_bot=False):
         m = MagicMock()
         m.id = uid; m.bot = is_bot; m.name = name; m.nick = None
-        m.display_name = name; m.roles = []
+        m.display_name = name; m.roles = []; m.avatar = None
         return m
 
     people = [mk(999, "BotGuy", is_bot=True), mk(MEMBER_ID, "Testman"), mk(500, "Newbie")]
@@ -413,6 +413,7 @@ def test_discord_name_change_updates_callsign():
         cog.bot.guilds = [guild]
         ub, ua = MagicMock(), MagicMock()
         ub.name = "old"; ua.name = "NewUser"; ua.id = MEMBER_ID
+        ub.avatar = ua.avatar = None
         asyncio.run(cog.on_user_update(ub, ua))
         with SessionLocal() as s:
             assert s.get(Member, MEMBER_ID).callsign == "NewUser"
@@ -421,6 +422,7 @@ def test_discord_name_change_updates_callsign():
         member.nick = "Pvt. KeepThis"
         ub2, ua2 = MagicMock(), MagicMock()
         ub2.name = "NewUser"; ua2.name = "Ignored"; ua2.id = MEMBER_ID
+        ub2.avatar = ua2.avatar = None
         asyncio.run(cog.on_user_update(ub2, ua2))
         with SessionLocal() as s:
             assert s.get(Member, MEMBER_ID).callsign == "NewUser"  # unchanged

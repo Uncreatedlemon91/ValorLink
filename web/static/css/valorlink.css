@@ -598,12 +598,55 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   .pipeline { grid-template-columns: 1fr; }
 }
 
+/* Dismissible flashes + confirm modal */
+.flash { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.flash-x {
+  background: none; border: none; color: inherit; font-size: 20px; line-height: 1;
+  cursor: pointer; opacity: 0.55; padding: 0 2px;
+}
+.flash-x:hover { opacity: 1; }
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(20,12,4,0.55);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 3px;
+  padding: 22px 24px; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.45);
+}
+body.theme-modern .modal { background: #1c2025; }
+.modal-msg { margin: 0 0 18px; color: var(--ink); font-size: 15px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* Responsive tables: let wide ledgers scroll instead of breaking the layout */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 4px 0; }
+.table-scroll > .ledger { margin-top: 0; }
+@media (max-width: 640px) {
+  .table-scroll > .ledger { min-width: 520px; }
+}
+
+/* Unit crest */
+.crest-img { max-height: 84px; max-width: 220px; width: auto; margin: 0 auto 4px; display: block; }
+.crest-preview img { max-height: 80px; max-width: 200px; border: 1px solid var(--rule); padding: 4px; background: var(--paper-2); }
+.unit-crest { height: 22px; width: 22px; object-fit: contain; vertical-align: middle; margin-right: 7px; }
+
+/* Member avatars */
+.avatar {
+  width: 24px; height: 24px; border-radius: 50%; object-fit: cover;
+  vertical-align: middle; margin-right: 7px;
+  border: 1px solid var(--rule-strong); background: var(--paper-2);
+}
+.avatar-lg { width: 64px; height: 64px; margin-right: 0; }
+.avatar-sm { width: 18px; height: 18px; margin-right: 5px; }
+.dossier-id { display: flex; align-items: center; gap: 14px; }
+
 /* Platform activity feed (directory) */
 .feed { list-style: none; margin: 6px 0 0; padding: 0; }
 .feed li {
-  display: grid; grid-template-columns: 16px 1fr auto; align-items: baseline;
+  display: grid; grid-template-columns: 20px 1fr auto; align-items: center;
   gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule);
 }
+.feed .avatar-sm { margin-right: 0; }
 .feed li:last-child { border-bottom: none; }
 .feed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong); align-self: center; }
 .feed-enlist .feed-dot { background: #3f6b3a; }
@@ -691,6 +734,16 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 }
 .promo-next { font-weight: 600; color: var(--seal); }
 .promo-short { color: var(--oxblood); }
+
+/* Attendance turnout chart */
+.att-chart {
+  display: flex; align-items: flex-end; gap: 6px; height: 140px;
+  padding: 10px 4px 0; overflow-x: auto; border-bottom: 1px solid var(--rule);
+}
+.att-chart .bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 22px; flex: 1 1 22px; height: 100%; }
+.att-chart .bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.att-chart .bar { width: 100%; background: var(--seal); border-radius: 2px 2px 0 0; min-height: 2px; }
+.att-chart .bar-lbl { font-size: 10px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 
 /* Attendance analytics */
 .stat-strip { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 26px; }

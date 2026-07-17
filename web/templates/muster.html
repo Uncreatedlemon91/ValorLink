@@ -54,7 +54,7 @@
         <tr data-callsign="{{ m.callsign|lower }}" data-company="{{ m.company }}"
             data-rank="{{ m.rank }}" data-status="{{ m.status }}">
           {% if can_manage %}<td class="pick"><input type="checkbox" name="ids" value="{{ m.discord_id }}" class="row-pick"></td>{% endif %}
-          <td class="callsign"><a href="/dossier/{{ m.discord_id }}">{{ m.callsign }}</a></td>
+          <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a></td>
           <td>{{ m.rank }}</td>
           <td class="muted">{{ m.company }}</td>
           <td><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
