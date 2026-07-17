@@ -2,10 +2,13 @@
 
 Two ways to sign in:
 
-* **Discord OAuth2** (production). The officer logs in with Discord; we read
-  their roles in the configured guild and map them to a permission tier by
-  comparing against the same admin/officer/recruiter role IDs the bot's
-  `/config` command sets. Enabled when DISCORD_CLIENT_ID / _SECRET /
+* **Discord OAuth2** (production). The officer logs in with Discord once, and
+  the single grant is used to read their member roles in *every* platform unit
+  they belong to — mapping each to a permission tier by comparing against the
+  admin/officer/recruiter role IDs that unit's `/config` sets. The result is a
+  ``{slug: tier}`` map on the session, so one sign-in works across the whole
+  platform (e.g. browse the directory, then administer your own unit without a
+  second login). Enabled when DISCORD_CLIENT_ID / _SECRET /
   DISCORD_OAUTH_REDIRECT are set in the environment.
 
 * **Dev login** (local only). A simple "act as" form, gated behind
@@ -24,10 +27,11 @@ import secrets
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
-import config
+from tenancy.registry import registry_session
+from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
 from utils.settings import get_config
-from web.tenant import get_tenant, resolve_tenant, tenant_by_slug_ctx
+from web.tenant import get_tenant, resolve_tenant
 
 # --- Permission tiers ---------------------------------------------------- #
 TIER_NONE = "none"
@@ -62,18 +66,31 @@ def current_user(request: Request) -> dict | None:
 
 
 def effective_user(request: Request, tenant_slug: str | None = None) -> dict | None:
-    """The signed-in user, but only when they're viewing the unit they signed
-    into. Signing into one unit grants nothing on another."""
+    """The signed-in user as seen by the unit currently being viewed, with
+    ``tier`` set to their permission tier *on that unit*.
+
+    A single Discord sign-in resolves the user's tier for every unit they
+    belong to (stored as a ``tiers`` map). Viewing a unit they have no standing
+    in returns ``None`` — they're a visitor there — so signing in still grants
+    nothing on units where they hold no role.
+    """
     user = request.session.get("user")
     if not user:
         return None
     if tenant_slug is None:
         ctx = getattr(request.state, "tenant", None)
         tenant_slug = ctx.slug if ctx else None
-    user_tenant = user.get("tenant")
-    if user_tenant is not None and tenant_slug is not None and user_tenant != tenant_slug:
+
+    tiers = user.get("tiers")
+    if tiers is None:
+        # Legacy session from before platform-wide sign-in: a single-unit
+        # binding. Honor it only on the unit that was signed into.
+        if user.get("tenant") == tenant_slug:
+            return user
         return None
-    return user
+    if tenant_slug not in tiers:
+        return None
+    return {**user, "tier": tiers[tenant_slug]}
 
 
 class NotAuthenticated(Exception):
@@ -122,7 +139,10 @@ DEV_LOGIN_ENABLED = os.getenv("WEB_DEV_LOGIN", "").lower() in ("1", "true", "yes
 OAUTH_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
 OAUTH_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 OAUTH_REDIRECT = os.getenv("DISCORD_OAUTH_REDIRECT", "")
-OAUTH_SCOPE = "identify guilds.members.read"
+# `guilds` lets us list which units the user is in; `guilds.members.read` lets
+# us read their roles in each — together, one sign-in resolves their tier across
+# every unit they belong to.
+OAUTH_SCOPE = "identify guilds guilds.members.read"
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REDIRECT)
 
 _DISCORD_API = "https://discord.com/api"
@@ -150,8 +170,11 @@ def dev_login(
     if tier not in _ORDER:
         tier = TIER_NONE
     slug = resolve_tenant(request).slug
+    # Dev login is a per-unit "act as": grant the chosen tier on this unit only,
+    # mirroring production's per-unit tier map.
     request.session["user"] = {
-        "id": discord_id, "name": name, "tier": tier, "via": "dev", "tenant": slug
+        "id": discord_id, "name": name, "via": "dev",
+        "tenant": slug, "tiers": {slug: tier},
     }
     return RedirectResponse("/", status_code=303)
 
@@ -192,6 +215,61 @@ def _display_name(nick: str | None, global_name: str | None, username: str | Non
     return re.sub(r"^\w+\.\s*", "", raw).strip() or raw
 
 
+def _resolve_membership(client, bearer: dict, me: dict, signin_slug: str | None):
+    """Resolve the user's permission tier on every platform unit they belong to.
+
+    One OAuth grant (scopes ``guilds`` + ``guilds.members.read``) can read the
+    user's member object in any guild they're in, so we look up which units
+    they're a member of and compute a tier for each in a single sign-in.
+
+    Returns ``(tiers, signin_nick)`` where ``tiers`` maps unit slug → tier and
+    ``signin_nick`` is their server nickname in the unit they signed in from
+    (used only for the greeting name).
+    """
+    from db.models import Member
+
+    # Which guilds is the user in? (Best-effort — if this call is throttled we
+    # still probe the unit they signed in from below.)
+    guild_ids: set[int] = set()
+    gr = client.get(f"{_DISCORD_API}/users/@me/guilds", headers=bearer)
+    if gr.status_code == 200:
+        guild_ids = {int(g["id"]) for g in gr.json() if g.get("id")}
+
+    # Snapshot units before opening any per-unit session.
+    with registry_session() as reg:
+        units = [
+            (t.slug, int(t.discord_guild_id), t.db_url)
+            for t in all_tenants(reg)
+            if t.discord_guild_id
+        ]
+
+    tiers: dict[str, str] = {}
+    signin_nick: str | None = None
+    uid = int(me["id"])
+    avatar = me.get("avatar")
+    for slug, gid, db_url in units:
+        # Probe a unit if the user is in its guild, and always probe the unit
+        # they signed in from so that path never regresses if the guilds list
+        # was unavailable.
+        if gid not in guild_ids and slug != signin_slug:
+            continue
+        gm = client.get(f"{_DISCORD_API}/users/@me/guilds/{gid}/member", headers=bearer)
+        if gm.status_code != 200:
+            continue
+        gm_data = gm.json()
+        role_ids = {int(r) for r in gm_data.get("roles", [])}
+        with sessionmaker_for(db_url)() as session:
+            tiers[slug] = tier_from_role_ids(session, role_ids)
+            # Keep the member's avatar fresh from their Discord profile.
+            record = session.get(Member, uid)
+            if record is not None and record.avatar != avatar:
+                record.avatar = avatar
+                session.commit()
+        if slug == signin_slug:
+            signin_nick = gm_data.get("nick")
+    return tiers, signin_nick
+
+
 @router.get("/auth/discord/callback")
 def discord_callback(request: Request, code: str = "", state: str = ""):
     if not OAUTH_ENABLED:
@@ -201,8 +279,6 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
 
     tenant_slug = request.session.pop("oauth_tenant", None)
     origin = request.session.pop("oauth_origin", None) or "/"
-    tenant = tenant_by_slug_ctx(tenant_slug) if tenant_slug else None
-    guild_id = tenant.guild_id if tenant else config.GUILD_ID
 
     import httpx
 
@@ -228,41 +304,21 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
             me.raise_for_status()
             me = me.json()
 
-            role_ids: set[int] = set()
-            guild_nick: str | None = None
-            if guild_id:
-                gm = client.get(
-                    f"{_DISCORD_API}/users/@me/guilds/{guild_id}/member",
-                    headers=bearer,
-                )
-                if gm.status_code == 200:
-                    gm_data = gm.json()
-                    role_ids = {int(r) for r in gm_data.get("roles", [])}
-                    guild_nick = gm_data.get("nick")
+            # One grant → the user's tier on every unit they belong to.
+            tiers, signin_nick = _resolve_membership(client, bearer, me, tenant_slug)
     except Exception:
         return _login_error(request, "We couldn't reach Discord to sign you in. Please try again.")
-
-    tier = TIER_NONE
-    if tenant:
-        with sessionmaker_for(tenant.db_url)() as session:
-            tier = tier_from_role_ids(session, role_ids)
-            # Keep the member's avatar fresh from their Discord profile.
-            from db.models import Member
-            record = session.get(Member, int(me["id"]))
-            if record is not None and record.avatar != me.get("avatar"):
-                record.avatar = me.get("avatar")
-                session.commit()
 
     # Show the name the regiment knows them by: their server nickname (their WoR
     # name) with the bot's rank prefix stripped, falling back to their Discord
     # account name.
-    display = _display_name(guild_nick, me.get("global_name"), me.get("username"))
+    display = _display_name(signin_nick, me.get("global_name"), me.get("username"))
     request.session["user"] = {
         "id": int(me["id"]),
         "name": display,
-        "tier": tier,
         "via": "discord",
-        "tenant": tenant.slug if tenant else tenant_slug,
+        "tenant": tenant_slug,
+        "tiers": tiers,
     }
     return RedirectResponse(origin, status_code=303)
 

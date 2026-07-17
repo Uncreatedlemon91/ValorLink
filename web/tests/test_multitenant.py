@@ -325,6 +325,72 @@ def test_registration_closed_by_default():
             os.environ["PLATFORM_OPEN_REGISTRATION"] = old
 
 
+class _FakeResp:
+    def __init__(self, status, payload):
+        self.status_code = status
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _FakeDiscord:
+    """Stands in for httpx during OAuth: knows which guilds the user is in and
+    their roles in each, so we can exercise membership resolution offline."""
+
+    def __init__(self, guild_roles: dict[int, list[str]], nicks: dict[int, str]):
+        self.guild_roles = guild_roles  # guild_id -> role id strings
+        self.nicks = nicks
+
+    def get(self, url, headers=None):
+        if url.endswith("/users/@me/guilds"):
+            return _FakeResp(200, [{"id": str(g)} for g in self.guild_roles])
+        # .../guilds/{gid}/member
+        gid = int(url.rstrip("/").split("/")[-2])
+        if gid not in self.guild_roles:
+            return _FakeResp(404, {})
+        return _FakeResp(200, {"roles": self.guild_roles[gid], "nick": self.nicks.get(gid)})
+
+
+class _Req:
+    def __init__(self, user):
+        self.session = {"user": user}
+        self.state = type("S", (), {})()
+
+
+def test_one_signin_resolves_tier_across_all_units():
+    """A single OAuth grant resolves the user's tier on every unit they belong
+    to — admin on their own unit, plain member on another — so they never sign
+    in twice."""
+    from web.auth import _resolve_membership, effective_user
+
+    # guild ids the fixture assigned each unit
+    with registry_session() as s:
+        g_5th = tenant_by_slug(s, "5thva").discord_guild_id
+        g_2nd = tenant_by_slug(s, "2ndus").discord_guild_id
+    # make role 111 the admin role in 5thva only
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        get_config(s).admin_role_id = 111
+        s.commit()
+
+    fake = _FakeDiscord(
+        guild_roles={g_5th: ["111"], g_2nd: []},  # admin in 5thva, no role in 2ndus
+        nicks={g_5th: "Col. Reb"},
+    )
+    me = {"id": 500, "global_name": "RebGaming", "username": "reb", "avatar": None}
+    tiers, nick = _resolve_membership(fake, {}, me, "5thva")
+
+    assert tiers == {"5thva": "admin", "2ndus": "none"}
+    assert nick == "Col. Reb"
+
+    # effective_user honors the map per-unit: admin where they hold the role,
+    # a recognized member elsewhere, a visitor on units they don't belong to.
+    req = _Req({"id": 500, "name": "Reb", "via": "discord", "tiers": tiers})
+    assert effective_user(req, "5thva")["tier"] == "admin"
+    assert effective_user(req, "2ndus")["tier"] == "none"
+    assert effective_user(req, "hq") is None
+
+
 import re  # noqa: E402
 
 
