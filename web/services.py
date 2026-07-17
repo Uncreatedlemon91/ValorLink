@@ -26,6 +26,7 @@ from db.models import (
     Event,
     Member,
     MemberAward,
+    PendingAction,
     Rank,
     RecruitmentQuestion,
     ServiceHistoryEntry,
@@ -934,6 +935,151 @@ def question_toggle(session, question_id: int) -> str:
     q.enabled = not q.enabled
     session.commit()
     return f"Question {'shown' if q.enabled else 'hidden'}."
+
+
+# --- Action queue: visibility & retry ------------------------------------ #
+# Friendly labels for the queued Discord side-effects, keyed by action name.
+ACTION_LABELS = {
+    queue.SYNC_RANK: "Rank change",
+    queue.SYNC_COMPANY: "Company transfer",
+    queue.DISCIPLINE: "Disciplinary record",
+    queue.DISCHARGE: "Discharge",
+    queue.REINSTATE: "Reinstatement",
+    queue.LOA: "Leave of absence",
+    queue.LOA_END: "Return from leave",
+    queue.APPROVE_CANDIDATE: "Enlistment approval",
+    queue.DENY_CANDIDATE: "Application denial",
+    queue.REFRESH_PERSONNEL: "Dossier refresh",
+    queue.ANNOUNCE_EVENT: "Event announcement",
+    queue.AWARD_GRANTED: "Honor granted",
+    queue.AWARD_REVOKED: "Honor revoked",
+    queue.POST_ANNOUNCEMENT: "Announcement",
+    queue.IMPORT_ROSTER: "Roster import",
+}
+
+
+def action_label(action: str) -> str:
+    return ACTION_LABELS.get(action, action.replace("_", " ").capitalize())
+
+
+def list_recent_actions(session, limit: int = 25) -> list[dict]:
+    """The queue's unfinished and recently-finished work, newest first, so an
+    admin can see what's stuck or failed and retry it. `done` rows are omitted
+    unless recent, keeping the panel focused on what needs attention."""
+    cutoff = datetime.utcnow() - timedelta(hours=6)
+    rows = (
+        session.query(PendingAction)
+        .filter(
+            (PendingAction.status != queue.DONE)
+            | (PendingAction.processed_at >= cutoff)
+        )
+        .order_by(PendingAction.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "label": action_label(r.action),
+            "status": r.status,
+            "attempts": r.attempts,
+            "error": r.error,
+            "created_at": r.created_at,
+            "processed_at": r.processed_at,
+        }
+        for r in rows
+    ]
+
+
+def action_queue_counts(session) -> dict:
+    """Small summary for the badge: how many are pending vs failed."""
+    pending = session.query(PendingAction).filter(PendingAction.status == queue.PENDING).count()
+    failed = session.query(PendingAction).filter(PendingAction.status == queue.FAILED).count()
+    return {"pending": pending, "failed": failed}
+
+
+def retry_action(session, action_id: int) -> str:
+    """Re-queue a single failed action so the bot attempts it again."""
+    row = session.get(PendingAction, action_id)
+    if row is None:
+        raise ActionError("That action is no longer in the queue.")
+    if row.status != queue.FAILED:
+        raise ActionError("Only failed actions can be retried.")
+    row.status = queue.PENDING
+    row.attempts = 0
+    row.error = None
+    row.processed_at = None
+    session.commit()
+    return "Action re-queued — the bot will try it again shortly."
+
+
+def retry_all_failed_actions(session) -> str:
+    """Re-queue every failed action at once."""
+    rows = session.query(PendingAction).filter(PendingAction.status == queue.FAILED).all()
+    for row in rows:
+        row.status = queue.PENDING
+        row.attempts = 0
+        row.error = None
+        row.processed_at = None
+    session.commit()
+    n = len(rows)
+    if not n:
+        return "No failed actions to retry."
+    return f"Re-queued {n} failed action{'s' if n != 1 else ''}."
+
+
+def dismiss_action(session, action_id: int) -> str:
+    """Drop a failed action from the queue without retrying it."""
+    row = session.get(PendingAction, action_id)
+    if row is None:
+        raise ActionError("That action is no longer in the queue.")
+    if row.status != queue.FAILED:
+        raise ActionError("Only failed actions can be dismissed.")
+    session.delete(row)
+    session.commit()
+    return "Action dismissed."
+
+
+# --- Recruitment funnel metrics ------------------------------------------ #
+def recruitment_metrics(session) -> dict:
+    """Read-through numbers on the recruitment pipeline: how many sit at each
+    stage, how long they've been waiting, and recent enlistment throughput.
+
+    Only truthful, currently-derivable figures — pipeline state plus enlistments
+    counted from personnel records — since denied applications aren't retained.
+    """
+    now = datetime.utcnow()
+    candidates = session.query(Candidacy).all()
+    stage_counts = {"applied": 0, "interviewing": 0, "decision": 0}
+    ages = []
+    oldest = None
+    for c in candidates:
+        stage = c.stage if c.stage in stage_counts else "applied"
+        stage_counts[stage] += 1
+        if c.created_at:
+            days = (now - c.created_at).days
+            ages.append(days)
+            if oldest is None or days > oldest:
+                oldest = days
+    ages.sort()
+    median_wait = ages[len(ages) // 2] if ages else None
+    stale = sum(1 for d in ages if d >= 14)
+
+    # Enlisted recently — the pipeline's output. joined_date is set when a
+    # member's record is created (approval), so it's a fair proxy for approvals.
+    def _enlisted_since(days):
+        cutoff = now - timedelta(days=days)
+        return session.query(Member).filter(Member.joined_date >= cutoff).count()
+
+    return {
+        "total": len(candidates),
+        "stages": stage_counts,
+        "median_wait": median_wait,
+        "oldest": oldest,
+        "stale": stale,
+        "enlisted_30d": _enlisted_since(30),
+        "enlisted_7d": _enlisted_since(7),
+    }
 
 
 # --- Option sources for the UI ------------------------------------------ #

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Platform Dashboard</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css">
+  <style>:root { --seal: #7c1f2b; }</style>
+</head>
+<body>
+  <div class="sheet" style="--seal:#7c1f2b;">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>Platform Dashboard</h1>
+      <p class="motto">Every unit on ValorLink, at a glance</p>
+    </header>
+
+    <div class="authbar">
+      <a href="/" class="who">‹ The Muster Grounds</a>
+      <a href="/register">Raise a unit</a>
+      {% if user %}<a href="/logout">Sign out</a>{% endif %}
+    </div>
+
+    <main class="wrap">
+      {% if flash %}
+        <div class="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="stat-strip">
+        <div class="stat"><span class="stat-num">{{ totals.units }}</span><span class="stat-cap">units</span></div>
+        <div class="stat"><span class="stat-num">{{ totals.members }}</span><span class="stat-cap">active members</span></div>
+        <div class="stat"><span class="stat-num">{{ totals.pending }}</span><span class="stat-cap">pending recruits</span></div>
+        <div class="stat"><span class="stat-num">{{ totals.unlinked }}</span><span class="stat-cap">not linked to Discord</span></div>
+      </div>
+
+      <h2 class="section">Units <span class="tally">{{ units|length }}</span></h2>
+      <p class="lede">Each unit's health across the platform. “Not linked” means no Discord
+      server is bound yet, so the bot can't act for it. An unreadable unit is flagged in red.</p>
+
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>Unit</th><th>Handle</th><th class="num">Members</th>
+            <th class="num">Recruits</th><th>Recruiting</th><th>Listed</th>
+            <th>Discord</th><th class="num">Last active</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for u in units %}
+          <tr class="{{ 'row-fail' if not u.ok }}">
+            <td class="callsign">
+              <a href="{{ u.url }}">{{ u.name }}</a>
+              {% if u.is_default %}<span class="rankchip">default</span>{% endif %}
+              {% if not u.ok %}<span class="q-err">— database unreadable</span>{% endif %}
+            </td>
+            <td class="muted">{{ u.slug }}.{{ base_domain }}</td>
+            <td class="num">{{ u.members if u.members is not none else '—' }}</td>
+            <td class="num">{% if u.pending %}<span class="pip">{{ u.pending }}</span>{% else %}{{ u.pending if u.pending is not none else '—' }}{% endif %}</td>
+            <td>{% if u.recruiting %}<span class="rate rate-ok">open</span>{% else %}<span class="muted">closed</span>{% endif %}</td>
+            <td>{{ 'yes' if u.listed else 'no' }}</td>
+            <td>{% if u.linked %}<span class="rate rate-ok">linked</span>{% else %}<span class="rate rate-low">not linked</span>{% endif %}</td>
+            <td class="num muted">{% if u.last_active %}{{ u.last_active|fmt_date }}{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

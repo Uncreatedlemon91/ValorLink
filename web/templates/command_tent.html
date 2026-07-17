@@ -32,6 +32,60 @@
 </details>
 {% endif %}
 
+{% if queue_actions %}
+<details class="setup-card queue-card" id="action-queue" {{ 'open' if queue_counts.failed }}>
+  <summary>
+    <span class="setup-title">Bot Action Queue</span>
+    <span class="setup-progress {{ 'is-fail' if queue_counts.failed else ('is-complete' if not queue_counts.pending) }}">
+      {% if queue_counts.failed %}{{ queue_counts.failed }} failed{% elif queue_counts.pending %}{{ queue_counts.pending }} pending{% else %}all clear{% endif %}
+    </span>
+  </summary>
+  <p class="order-note">Actions the website hands to the bot to carry out in Discord — role swaps,
+  nickname changes, announcements. They normally clear within seconds.
+  {% if queue_counts.failed %}A <b>failed</b> action was tried a few times without success — usually the
+  bot lacks a permission, a channel isn't set, or it was briefly offline. Fix the cause, then retry.{% endif %}</p>
+
+  {% if queue_counts.failed %}
+  <form method="post" action="/admin/actions/retry-all" style="margin-bottom:.6rem;">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button class="btn btn-small btn-strong" type="submit">Retry all failed</button>
+  </form>
+  {% endif %}
+
+  <table class="ledger">
+    <thead><tr><th>Action</th><th>Status</th><th class="num">When</th><th></th></tr></thead>
+    <tbody>
+    {% for a in queue_actions %}
+      <tr class="{{ 'row-fail' if a.status == 'failed' }}">
+        <td class="callsign">{{ a.label }}
+          {% if a.error %}<span class="q-err" title="{{ a.error }}">— {{ a.error|truncate(80) }}</span>{% endif %}
+        </td>
+        <td>
+          {% if a.status == 'failed' %}<span class="rate rate-low">failed</span>
+          {% elif a.status == 'pending' %}<span class="rate">pending{% if a.attempts %} · try {{ a.attempts + 1 }}{% endif %}</span>
+          {% else %}<span class="rate rate-ok">done</span>{% endif %}
+        </td>
+        <td class="num muted">{{ a.created_at|fmt_date(true) }}</td>
+        <td class="num">
+          {% if a.status == 'failed' %}
+          <form method="post" action="/admin/actions/{{ a.id }}/retry" style="display:inline;">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-small" type="submit">Retry</button>
+          </form>
+          <form method="post" action="/admin/actions/{{ a.id }}/dismiss" style="display:inline;"
+                data-confirm="Dismiss this failed action without retrying?">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-small btn-ghost" type="submit">Dismiss</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
 <div class="orders-grid">
   <div class="order-card">
     <h3 class="order-title" id="identity">Regiment Identity</h3>

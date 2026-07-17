@@ -391,6 +391,47 @@ def test_one_signin_resolves_tier_across_all_units():
     assert effective_user(req, "hq") is None
 
 
+def test_unit_switcher_lists_the_users_units():
+    """A user who belongs to more than one unit gets a header switcher listing
+    them, with the current unit flagged."""
+    from web.app import _my_units
+
+    req = _Req({"id": 9, "name": "X", "via": "discord",
+                "tiers": {"5thva": "admin", "2ndus": "none"}})
+    units = _my_units(req, "5thva")
+    by_slug = {u["slug"]: u for u in units}
+    assert set(by_slug) == {"5thva", "2ndus"}
+    assert by_slug["5thva"]["current"] is True
+    assert by_slug["2ndus"]["current"] is False
+    assert by_slug["2ndus"]["url"].endswith("2ndus.valorlink.co/")
+
+    # a user in only one unit gets no switcher
+    solo = _Req({"id": 9, "tiers": {"5thva": "admin"}})
+    assert _my_units(solo, "5thva") == []
+
+
+def test_platform_dashboard_requires_platform_admin():
+    """The cross-unit dashboard is gated to the PLATFORM_ADMIN_IDS allowlist."""
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9, "name": "Nobody", "tier": "admin"},
+           headers={"host": APEX}, follow_redirects=False)
+    # no allowlist configured → not a platform admin → refused
+    r = c.get("/admin/platform", headers={"host": APEX}, follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+    old = os.environ.get("PLATFORM_ADMIN_IDS")
+    os.environ["PLATFORM_ADMIN_IDS"] = "9"
+    try:
+        html = c.get("/admin/platform", headers={"host": APEX}).text
+        assert "Platform Dashboard" in html
+        assert "5th Virginia" in html and "2nd United States" in html
+    finally:
+        if old is None:
+            os.environ.pop("PLATFORM_ADMIN_IDS", None)
+        else:
+            os.environ["PLATFORM_ADMIN_IDS"] = old
+
+
 import re  # noqa: E402
 
 

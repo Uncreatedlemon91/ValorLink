@@ -212,6 +212,30 @@ def get_session(tenant: TenantCtx = Depends(get_tenant)):
         session.close()
 
 
+def _my_units(request: Request, current_slug: str) -> list[dict]:
+    """The units the signed-in user belongs to, for the header switcher. One
+    Discord sign-in resolves a tier on every unit they're in (auth.tiers), so we
+    can offer a one-click hop between them. Empty unless platform mode is on and
+    they belong to more than one unit."""
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    if not base_domain:
+        return []
+    user = auth.current_user(request)
+    tiers = (user or {}).get("tiers") or {}
+    if len(tiers) < 2:
+        return []
+    with registry_session() as rs:
+        names = {t.slug: t.name for t in all_tenants(rs) if t.slug in tiers}
+    units = [
+        {"slug": slug, "name": names[slug],
+         "url": f"https://{slug}.{base_domain}/",
+         "tier": tiers[slug], "current": slug == current_slug}
+        for slug in tiers if slug in names
+    ]
+    units.sort(key=lambda u: u["name"].lower())
+    return units
+
+
 def _base_context(request: Request, session: Session) -> dict:
     """Context every page needs: regiment identity for the banner + nav,
     plus the signed-in officer, a CSRF token, and any flashed messages."""
@@ -220,6 +244,7 @@ def _base_context(request: Request, session: Session) -> dict:
     pending_recruits = session.query(Candidacy).count()
     tenant = resolve_tenant(request)
     return {
+        "my_units": _my_units(request, tenant.slug),
         "request": request,
         "regiment_name": cfg.regiment_name,
         "regiment_motto": cfg.regiment_motto,
@@ -1043,8 +1068,39 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         term_fields=terminology.EDITABLE_KEYS,
         has_custom_terms=bool(cfg.terminology_custom),
         listing=listing,
+        queue_actions=services.list_recent_actions(session),
+        queue_counts=services.action_queue_counts(session),
     )
     return templates.TemplateResponse(request, "command_tent.html", ctx)
+
+
+@app.post("/admin/actions/{action_id}/retry")
+def post_action_retry(
+    request: Request,
+    action_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.retry_action, action_id, redirect="/command-tent")
+
+
+@app.post("/admin/actions/{action_id}/dismiss")
+def post_action_dismiss(
+    request: Request,
+    action_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.dismiss_action, action_id, redirect="/command-tent")
+
+
+@app.post("/admin/actions/retry-all")
+def post_action_retry_all(
+    request: Request,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.retry_all_failed_actions, redirect="/command-tent")
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -1090,6 +1146,7 @@ def recruits(request: Request, session: Session = Depends(get_session)):
     ctx["columns"] = columns
     ctx["total"] = len(candidates)
     ctx["stages"] = services.RECRUIT_STAGES
+    ctx["metrics"] = services.recruitment_metrics(session)
     return templates.TemplateResponse(request, "recruits.html", ctx)
 
 
@@ -1770,6 +1827,72 @@ def _is_platform_admin(user: dict | None) -> bool:
     if not allow:
         return False
     return str(user.get("id")) in {a for a in allow.split(",") if a}
+
+
+def _platform_dashboard() -> list[dict]:
+    """Per-unit health across the whole platform, for the platform-admin
+    dashboard. Reads each unit's own database; an unreadable unit is reported
+    rather than skipped, so a broken unit is visible instead of silent."""
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    with registry_session() as rs:
+        rows = [
+            {"slug": t.slug, "name": t.name, "is_default": t.is_default,
+             "listed": t.listed, "recruiting": t.recruiting_open,
+             "guild_id": t.discord_guild_id, "db_url": t.db_url,
+             "created_at": t.created_at}
+            for t in all_tenants(rs)
+        ]
+    units = []
+    for r in rows:
+        info = {"slug": r["slug"], "name": r["name"], "is_default": r["is_default"],
+                "listed": r["listed"], "recruiting": r["recruiting"],
+                "linked": bool(r["guild_id"]), "created_at": r["created_at"],
+                "url": f"https://{r['slug']}.{base_domain}/" if base_domain else "/",
+                "members": None, "pending": None, "last_active": None, "ok": True}
+        try:
+            with sessionmaker_for(r["db_url"])() as s:
+                info["members"] = s.query(Member).filter(Member.status == "active").count()
+                info["pending"] = s.query(Candidacy).count()
+                latest = (
+                    s.query(Member.last_active_date)
+                    .order_by(Member.last_active_date.desc())
+                    .first()
+                )
+                info["last_active"] = latest[0] if latest else None
+        except Exception:
+            info["ok"] = False
+        units.append(info)
+    units.sort(key=lambda u: (u["is_default"], u["name"].lower()))
+    return units
+
+
+@app.get("/admin/platform", response_class=HTMLResponse)
+def platform_admin(request: Request):
+    """A cross-unit control panel for the platform's operators."""
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        raise TenantNotFound(None)
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _is_platform_admin(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    units = _platform_dashboard()
+    ctx = {
+        "request": request,
+        "user": user,
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "base_domain": os.getenv("PLATFORM_BASE_DOMAIN"),
+        "units": units,
+        "now": datetime.utcnow(),
+        "totals": {
+            "units": len(units),
+            "members": sum(u["members"] or 0 for u in units),
+            "pending": sum(u["pending"] or 0 for u in units),
+            "unlinked": sum(1 for u in units if not u["linked"]),
+        },
+    }
+    return templates.TemplateResponse(request, "platform_admin.html", ctx)
 
 
 # --- Self-serve: register a unit ------------------------------------------ #

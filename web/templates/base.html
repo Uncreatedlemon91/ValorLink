@@ -33,6 +33,20 @@
 
     <div class="authbar">
       {% if platform_base %}<a href="https://{{ platform_base }}/" class="who">‹ All units</a>{% endif %}
+      {% if my_units %}
+        <details class="unit-switcher">
+          <summary>{{ regiment_name }} <span class="uswitch-caret">▾</span></summary>
+          <div class="uswitch-menu">
+            <div class="uswitch-head">Your units</div>
+            {% for u in my_units %}
+              <a href="{{ u.url }}" class="uswitch-item{{ ' current' if u.current }}">
+                <span class="uswitch-name">{{ u.name }}</span>
+                <span class="rankchip">{{ u.tier }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
       {% if user %}
         <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
         <a href="/my-record">My record</a>

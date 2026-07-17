@@ -782,6 +782,82 @@ def test_bridge_announces_event_to_channel():
         assert s.get(Event, event_id).message_id == 987654321
 
 
+def test_failed_action_shows_and_retries():
+    from web import services
+    client = TestClient(app)
+    _login(client, "admin")
+    # a failed action sits in the queue
+    with SessionLocal() as s:
+        s.add(PendingAction(action=queue.POST_ANNOUNCEMENT, payload="{}",
+                            status=queue.FAILED, attempts=3, error="No channel"))
+        s.commit()
+    # it surfaces on the Command Tent with a retry control
+    html = client.get("/command-tent").text
+    assert "Bot Action Queue" in html and "Announcement" in html and "No channel" in html
+    # admin retries it → back to pending, counters reset
+    with SessionLocal() as s:
+        aid = s.query(PendingAction).one().id
+    r = client.post(f"/admin/actions/{aid}/retry", data={"csrf": _csrf(client, "/command-tent")})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        row = s.get(PendingAction, aid)
+        assert row.status == queue.PENDING and row.attempts == 0 and row.error is None
+
+
+def test_retry_all_and_dismiss_require_admin():
+    client = TestClient(app)
+    _login(client, "officer")  # not admin: the require_admin gate fires before CSRF
+    r = client.post("/admin/actions/retry-all", data={"csrf": "x"}, follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+
+def test_recruitment_metrics_counts_pipeline():
+    from datetime import datetime, timedelta
+    from web import services
+    with SessionLocal() as s:
+        # CANDIDATE_ID already seeded at 'applied'; add two more
+        s.add(Candidacy(discord_id=201, callsign="B", stage="interviewing"))
+        old = Candidacy(discord_id=202, callsign="C", stage="decision")
+        old.created_at = datetime.utcnow() - timedelta(days=20)
+        s.add(old)
+        s.commit()
+    with SessionLocal() as s:
+        m = services.recruitment_metrics(s)
+    assert m["total"] == 3
+    assert m["stages"] == {"applied": 1, "interviewing": 1, "decision": 1}
+    assert m["stale"] == 1  # the 20-day-old one
+    assert m["oldest"] >= 20
+
+
+def test_event_reminder_dms_rsvps_once():
+    from datetime import datetime, timedelta
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        ev = Event(name="Night Drill", event_type="Drill",
+                   scheduled_at=datetime.utcnow() + timedelta(minutes=30), created_by=1)
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+        s.add(AttendanceRecord(event_id=eid, member_id=MEMBER_ID, status="accepted"))
+        s.commit()
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._dm = AsyncMock()
+    guild = MagicMock()
+
+    asyncio.run(bridge._remind_unit(guild))
+    bridge._dm.assert_awaited_once()  # the accepted member got one DM
+    with SessionLocal() as s:
+        assert s.get(Event, eid).reminder_sent_at is not None
+
+    # a second pass sends nothing (already reminded)
+    bridge._dm.reset_mock()
+    asyncio.run(bridge._remind_unit(guild))
+    bridge._dm.assert_not_awaited()
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

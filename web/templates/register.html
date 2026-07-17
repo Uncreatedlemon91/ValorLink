@@ -68,6 +68,11 @@
         })();
       </script>
 
+      {% if is_platform_admin %}
+      <p class="lede" style="margin-top:1.4rem;">Managing the platform? See every unit's health on the
+      <a href="/admin/platform">Platform Dashboard ›</a></p>
+      {% endif %}
+
       {% if is_platform_admin and existing_units %}
       <h2 class="section">Existing Units <span class="tally">{{ existing_units|length }}</span></h2>
       <p class="lede">Removing a unit takes it off the platform and directory.

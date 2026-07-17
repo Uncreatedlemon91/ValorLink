@@ -9,6 +9,28 @@ first contact to decision.
 (the bot assigns roles, sets their nickname, opens a dossier, and welcomes them).
 {% else %}Sign in as a recruiter to move applicants along, add notes, or decide.{% endif %}</p>
 
+{% if metrics %}
+<div class="stat-strip">
+  <div class="stat"><span class="stat-num">{{ metrics.total }}</span><span class="stat-cap">in the pipeline</span></div>
+  <div class="stat"><span class="stat-num">{% if metrics.median_wait is not none %}{{ metrics.median_wait }}d{% else %}—{% endif %}</span><span class="stat-cap">median wait</span></div>
+  <div class="stat"><span class="stat-num">{{ metrics.stale }}</span><span class="stat-cap">waiting 14d+</span></div>
+  <div class="stat"><span class="stat-num">{{ metrics.enlisted_30d }}</span><span class="stat-cap">enlisted (30d)</span></div>
+</div>
+{% if metrics.total %}
+<div class="funnel">
+  {% set st = metrics.stages %}
+  {% set fmax = [st.applied, st.interviewing, st.decision, 1]|max %}
+  {% for key, label in [('applied','At the Gate'), ('interviewing','In Interview'), ('decision','Awaiting Decision')] %}
+    <div class="funnel-row">
+      <span class="funnel-label">{{ label }}</span>
+      <span class="funnel-bar"><span class="funnel-fill" style="width: {{ (st[key] / fmax * 100)|round }}%;"></span></span>
+      <span class="funnel-count">{{ st[key] }}</span>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
 {% if total %}
 <div class="pipeline">
   {% for col in columns %}

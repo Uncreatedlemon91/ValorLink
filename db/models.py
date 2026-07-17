@@ -98,6 +98,7 @@ class Event(Base):
     message_id = Column(BigInteger, nullable=True)
     outcome = Column(String, nullable=True)       # after-action result, e.g. Victory/Defeat/Draw
     after_action = Column(Text, nullable=True)     # after-action notes
+    reminder_sent_at = Column(DateTime, nullable=True)  # when the bot DM'd RSVPs the pre-event reminder
 
     attendance_records = relationship(
         "AttendanceRecord", back_populates="event", cascade="all, delete-orphan"

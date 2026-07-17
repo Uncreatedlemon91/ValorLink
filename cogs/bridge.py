@@ -12,19 +12,27 @@ the web side and is the source of truth.
 """
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord.ext import commands, tasks
 
 from db.base import db_session
 from db.context import reset_current_db_url, set_current_db_url
-from db.models import Company, DisciplinaryRecord, Event, Member, PendingAction, Rank
+from db.models import (
+    AttendanceRecord,
+    Company,
+    DisciplinaryRecord,
+    Event,
+    Member,
+    PendingAction,
+    Rank,
+)
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants
 from utils import queue
 from utils.billboard import post_billboard
-from utils.embeds import base_embed
+from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config
 from utils.sync import sync_company, sync_rank
 
@@ -32,6 +40,8 @@ log = logging.getLogger("valorlink.bridge")
 
 BATCH = 20
 MAX_ATTEMPTS = 3
+# How far ahead of a muster call to DM those who answered the call.
+REMIND_LEAD = timedelta(minutes=60)
 RECORD_COLORS = {
     "note": discord.Color.light_grey(),
     "warn": discord.Color.orange(),
@@ -53,9 +63,11 @@ class Bridge(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.drain_queue.start()
+        self.remind_events.start()
 
     def cog_unload(self):
         self.drain_queue.cancel()
+        self.remind_events.cancel()
 
     @tasks.loop(seconds=4.0)
     async def drain_queue(self):
@@ -96,6 +108,68 @@ class Bridge(commands.Cog):
 
     @drain_queue.before_loop
     async def _before(self):
+        await self.bot.wait_until_ready()
+
+    # --- Event reminders ---------------------------------------------- #
+    @tasks.loop(minutes=5.0)
+    async def remind_events(self):
+        """DM everyone who answered the call (accepted/tentative) about an hour
+        before a muster call, once per event. One bot, many units."""
+        with registry_session() as rs:
+            units = [(t.discord_guild_id, t.db_url) for t in all_tenants(rs)]
+
+        for guild_id, db_url in units:
+            guild = self.bot.get_guild(guild_id) if guild_id else None
+            if guild is None:
+                continue
+            token = set_current_db_url(db_url)
+            try:
+                await self._remind_unit(guild)
+            except Exception:  # noqa: BLE001 -- never let one unit stall the loop
+                log.exception("Reminder pass failed for guild %s", guild_id)
+            finally:
+                reset_current_db_url(token)
+
+    async def _remind_unit(self, guild: discord.Guild):
+        now = datetime.utcnow()
+        with db_session() as session:
+            due = (
+                session.query(Event)
+                .filter(
+                    Event.reminder_sent_at.is_(None),
+                    Event.scheduled_at > now,
+                    Event.scheduled_at <= now + REMIND_LEAD,
+                )
+                .all()
+            )
+            plans = []
+            for event in due:
+                recipients = [
+                    r.member_id
+                    for r in session.query(AttendanceRecord).filter(
+                        AttendanceRecord.event_id == event.id,
+                        AttendanceRecord.status.in_(("accepted", "tentative")),
+                    )
+                ]
+                plans.append((event.id, event.name, event.event_type,
+                              event.scheduled_at, recipients))
+
+        for event_id, name, event_type, when, recipients in plans:
+            text = (
+                f"⏰ Reminder: **{event_type}: {name}** musters "
+                f"{discord_ts(when, 'R')} ({discord_ts(when, 'f')})."
+            )
+            for member_id in recipients:
+                await self._dm(guild, member_id, text)
+            # Mark sent even if there were no recipients, so we don't re-scan it.
+            with db_session() as session:
+                row = session.get(Event, event_id)
+                if row is not None:
+                    row.reminder_sent_at = datetime.utcnow()
+                    session.commit()
+
+    @remind_events.before_loop
+    async def _before_remind(self):
         await self.bot.wait_until_ready()
 
     def _finish(self, action_id: int, status: str | None, error: str | None = None):
