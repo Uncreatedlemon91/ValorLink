@@ -35,6 +35,7 @@ class Member(Base):
     rank_since = Column(DateTime, default=_utcnow)  # when they took their current rank
     thread_id = Column(BigInteger, nullable=True)
     loa_until = Column(DateTime, nullable=True)
+    avatar = Column(String, nullable=True)  # Discord avatar hash, for CDN URLs
 
     # Member self-service profile
     timezone = Column(String, nullable=True)      # IANA name or free text, e.g. "America/New_York"
@@ -171,6 +172,7 @@ class GuildConfig(Base):
     regiment_name = Column(String, nullable=False, default="Unconfigured Regiment")
     regiment_motto = Column(String, nullable=True)
     discord_invite = Column(String, nullable=True)  # public invite to the unit's Discord
+    crest = Column(Text, nullable=True)             # unit emblem, stored as a data URI
     brand_color = Column(Integer, nullable=False, default=0x2F3136)
     inactivity_days_threshold = Column(Integer, nullable=False, default=30)
     # Vocabulary preset (see utils/terminology.py): "wor", "modern", …

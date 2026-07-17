@@ -18,6 +18,19 @@ absences aside — so it reflects the musters they were actually expected at.</p
   <p>No muster calls have been held in this window. Attendance figures appear once calls are on record.</p></div>
 {% else %}
 
+{% if event_summary %}
+{% set maxp = event_summary|map(attribute='present')|max %}
+<h2 class="section">Turnout Trend <span class="tally">present per call, oldest → newest</span></h2>
+<div class="att-chart">
+  {% for s in event_summary|reverse %}
+    <div class="bar-col" title="{{ s.event.name }} — {{ s.present }} present of {{ s.responses }} answered">
+      <div class="bar-track"><div class="bar" style="height: {{ (s.present / (maxp or 1) * 100)|round }}%;"></div></div>
+      <div class="bar-lbl">{{ s.present }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if at_risk %}
 <h2 class="section">At Risk <span class="tally">below {{ at_risk_pct }}% turnout</span></h2>
 <p class="lede">Active members who have missed more musters than they've made (with at

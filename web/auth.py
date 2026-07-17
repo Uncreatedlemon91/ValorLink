@@ -246,6 +246,12 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
     if tenant:
         with sessionmaker_for(tenant.db_url)() as session:
             tier = tier_from_role_ids(session, role_ids)
+            # Keep the member's avatar fresh from their Discord profile.
+            from db.models import Member
+            record = session.get(Member, int(me["id"]))
+            if record is not None and record.avatar != me.get("avatar"):
+                record.avatar = me.get("avatar")
+                session.commit()
 
     # Show the name the regiment knows them by: their server nickname (their WoR
     # name) with the bot's rank prefix stripped, falling back to their Discord

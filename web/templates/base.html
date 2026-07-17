@@ -10,7 +10,7 @@
 <body class="theme-{{ theme|default('parchment') }}">
   <div class="sheet" style="--seal: {{ brand_color }};">
     <header class="banner">
-      <div class="crest">★ ✶ ★</div>
+      {% if crest %}<img class="crest-img" src="{{ crest }}" alt="">{% else %}<div class="crest">★ ✶ ★</div>{% endif %}
       <h1>{{ regiment_name }}</h1>
       {% if regiment_motto %}<p class="motto">“{{ regiment_motto }}”</p>{% endif %}
       <div class="estd">{{ terms.tagline }}</div>
@@ -45,8 +45,8 @@
 
     <main class="wrap">
       {% if flash %}
-        <div class="flashes">
-          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        <div class="flashes" id="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}"><span>{{ f.text }}</span><button type="button" class="flash-x" aria-label="Dismiss">×</button></div>{% endfor %}
         </div>
       {% endif %}
       {% block content %}{% endblock %}
@@ -72,6 +72,59 @@
           : { year: 'numeric', month: 'short', day: '2-digit' };
         try { el.textContent = d.toLocaleString(undefined, opts); } catch (e) {}
         el.title = d.toString();
+      });
+    })();
+
+    // Wrap wide tables so they scroll on small screens instead of overflowing.
+    (function () {
+      document.querySelectorAll('.ledger').forEach(function (t) {
+        if (t.parentElement && t.parentElement.classList.contains('table-scroll')) return;
+        var w = document.createElement('div');
+        w.className = 'table-scroll';
+        t.parentNode.insertBefore(w, t);
+        w.appendChild(t);
+      });
+    })();
+
+    // Dismissible, auto-fading flash messages.
+    (function () {
+      document.querySelectorAll('#flashes .flash').forEach(function (el) {
+        var x = el.querySelector('.flash-x');
+        function close() { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 300); }
+        if (x) x.addEventListener('click', close);
+        if (!el.classList.contains('flash-error')) setTimeout(close, 5000);
+      });
+    })();
+
+    // Styled confirmation for actions marked data-confirm, replacing window.confirm.
+    (function () {
+      var pending = null;
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML =
+        '<div class="modal" role="alertdialog" aria-modal="true">' +
+        '<p class="modal-msg"></p>' +
+        '<div class="modal-actions">' +
+        '<button type="button" class="btn modal-cancel">Cancel</button>' +
+        '<button type="button" class="btn btn-danger modal-ok">Confirm</button>' +
+        '</div></div>';
+      document.body.appendChild(overlay);
+      var msgEl = overlay.querySelector('.modal-msg');
+      function hide() { overlay.classList.remove('open'); pending = null; }
+      overlay.querySelector('.modal-cancel').addEventListener('click', hide);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) hide(); });
+      overlay.querySelector('.modal-ok').addEventListener('click', function () {
+        var f = pending; hide();
+        if (f) { f.dataset.confirmed = '1'; if (f.requestSubmit) f.requestSubmit(); else f.submit(); }
+      });
+      document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+          if (form.dataset.confirmed === '1') { form.dataset.confirmed = ''; return; }
+          e.preventDefault();
+          pending = form;
+          msgEl.textContent = form.getAttribute('data-confirm');
+          overlay.classList.add('open');
+        });
       });
     })();
   </script>

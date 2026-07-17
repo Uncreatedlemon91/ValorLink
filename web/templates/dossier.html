@@ -6,9 +6,14 @@
 
 <div class="dossier-head">
   <div class="name">
-    <div class="rank">{{ member.rank }}{% if rank and rank.abbreviation %} &middot; {{ rank.abbreviation }}{% endif %}</div>
-    <h1>{{ member.callsign }}</h1>
-    <span class="badge s-{{ member.status }}">{{ member.status|status_label }}</span>
+    <div class="dossier-id">
+      <img class="avatar avatar-lg" src="{{ member|avatar_url(128) }}" alt="" loading="lazy">
+      <div>
+        <div class="rank">{{ member.rank }}{% if rank and rank.abbreviation %} &middot; {{ rank.abbreviation }}{% endif %}</div>
+        <h1>{{ member.callsign }}</h1>
+        <span class="badge s-{{ member.status }}">{{ member.status|status_label }}</span>
+      </div>
+    </div>
   </div>
   <div class="facts">
     <div><span class="k">Company</span><br>{{ member.company }}</div>
@@ -202,7 +207,7 @@ roster, and dossier updates are applied in Discord within moments.</p>
       <div class="held-honors">
         {% for a in awards %}
           <form method="post" action="/members/{{ member.discord_id }}/award/{{ a.award_type_id }}/revoke"
-                onsubmit="return confirm('Revoke {{ a.award_type.name }}?');">
+                data-confirm="Revoke {{ a.award_type.name }}?">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <button class="chip-revoke" type="submit" title="Revoke">{% if a.award_type.emoji %}{{ a.award_type.emoji }} {% endif %}{{ a.award_type.name }} ✕</button>
           </form>
@@ -236,7 +241,7 @@ roster, and dossier updates are applied in Discord within moments.</p>
     <div class="order-card order-grave">
       <h3 class="order-title">Discharge</h3>
       <form class="orders" method="post" action="/members/{{ member.discord_id }}/discharge"
-            onsubmit="return confirm('Discharge {{ member.callsign }} from the regiment?');">
+            data-confirm="Discharge {{ member.callsign }} from the regiment?">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         <div class="field">
           <label>Manner</label>

@@ -42,7 +42,8 @@
         <div class="orders-grid" style="margin-top:22px;">
           {% for u in units %}
             <div class="order-card" style="--seal: {{ u.brand_color }};">
-              <h3 class="order-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
+              <h3 class="order-title" style="color: {{ u.brand_color }};">
+                {% if u.crest %}<img class="unit-crest" src="{{ u.crest }}" alt="">{% endif %}{{ u.name }}</h3>
               {% if u.motto %}<p class="motto" style="font-size:14px;margin:2px 0 8px;">“{{ u.motto }}”</p>{% endif %}
               {% if u.blurb %}<p style="margin:6px 0 12px;">{{ u.blurb }}</p>{% endif %}
               <p class="unit-meta" style="margin:6px 0 12px;">
@@ -78,7 +79,7 @@
       <ul class="feed">
         {% for a in activity %}
           <li class="feed-{{ a.kind }}">
-            <span class="feed-dot"></span>
+            {% if a.av %}<img class="avatar avatar-sm" src="{{ a.av|avatar_url }}" alt="" loading="lazy">{% else %}<span class="feed-dot"></span>{% endif %}
             <span class="feed-text">
               {% if a.who %}<b>{{ a.who }}</b> {{ a.text }} in <a href="{{ a.url }}">{{ a.unit }}</a>
               {% else %}<a href="{{ a.url }}">{{ a.unit }}</a> {{ a.text }}{% endif %}

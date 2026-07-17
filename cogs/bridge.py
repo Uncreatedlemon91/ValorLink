@@ -307,11 +307,15 @@ class Bridge(commands.Cog):
                 thread_id = created.thread.id
             except discord.HTTPException:
                 thread_id = None
-        if thread_id:
+        avatar = applicant.avatar.key if applicant and applicant.avatar else None
+        if thread_id or avatar:
             with db_session() as session:
                 record = session.get(Member, p["discord_id"])
                 if record:
-                    record.thread_id = thread_id
+                    if thread_id:
+                        record.thread_id = thread_id
+                    if avatar:
+                        record.avatar = avatar
                     session.commit()
 
         if applicant:
@@ -404,8 +408,14 @@ class Bridge(commands.Cog):
             if role is not None and role not in member.roles:
                 continue
             callsign = (member.nick or member.display_name or member.name).strip()
+            avatar = member.avatar.key if member.avatar else None
             with db_session() as session:
-                if session.get(Member, member.id) is not None:
+                existing = session.get(Member, member.id)
+                if existing is not None:
+                    # Backfill the avatar for members already on the books.
+                    if existing.avatar != avatar:
+                        existing.avatar = avatar
+                        session.commit()
                     continue
                 session.add(Member(
                     discord_id=member.id,
@@ -413,6 +423,7 @@ class Bridge(commands.Cog):
                     rank=default_rank,
                     company=default_company,
                     status="active",
+                    avatar=avatar,
                 ))
                 session.commit()
             added += 1
