@@ -325,6 +325,35 @@ def test_registration_closed_by_default():
             os.environ["PLATFORM_OPEN_REGISTRATION"] = old
 
 
+def test_open_registration_overrides_admin_allowlist():
+    """PLATFORM_OPEN_REGISTRATION opens registration to any signed-in user even
+    when a PLATFORM_ADMIN_IDS allowlist is set (admins keep their extra powers,
+    the door is simply open)."""
+    old_admin = os.environ.get("PLATFORM_ADMIN_IDS")
+    os.environ["PLATFORM_ADMIN_IDS"] = "9999"  # a different user is the admin
+    os.environ["PLATFORM_OPEN_REGISTRATION"] = "1"
+    try:
+        c = TestClient(app)
+        # a non-admin signed-in user
+        c.post("/auth/dev", data={"discord_id": 42, "name": "Newcomer", "tier": "none"},
+               headers={"host": APEX}, follow_redirects=False)
+        html = c.get("/register", headers={"host": APEX}).text
+        assert "Registration Closed" not in html and "New Unit" in html
+        # they can create a unit despite not being on the admin allowlist
+        token = _csrf(c, "/register", {"host": APEX})
+        c.post("/register",
+               data={"csrf": token, "slug": "opened", "name": "Opened Up", "guild_id": ""},
+               headers={"host": APEX}, follow_redirects=False)
+        with registry_session() as s:
+            assert tenant_by_slug(s, "opened") is not None
+    finally:
+        os.environ["PLATFORM_OPEN_REGISTRATION"] = "1"  # restore module default
+        if old_admin is None:
+            os.environ.pop("PLATFORM_ADMIN_IDS", None)
+        else:
+            os.environ["PLATFORM_ADMIN_IDS"] = old_admin
+
+
 class _FakeResp:
     def __init__(self, status, payload):
         self.status_code = status

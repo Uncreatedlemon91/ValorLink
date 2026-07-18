@@ -1947,15 +1947,23 @@ def _bot_invite_url() -> str | None:
 
 
 def _can_register(user: dict | None) -> bool:
-    """Who may create a unit. Secure by default: with a PLATFORM_ADMIN_IDS
-    allowlist, only those admins; otherwise registration is closed unless
-    PLATFORM_OPEN_REGISTRATION is explicitly enabled."""
+    """Who may create a unit. Secure by default, with two independent levers:
+
+    * PLATFORM_OPEN_REGISTRATION — when enabled, any signed-in user may create
+      a unit. This takes precedence, so it works even alongside an admin
+      allowlist (admins keep their extra powers; the door is simply open).
+    * PLATFORM_ADMIN_IDS — when set and open registration is off, only those
+      admins may create units (a curated platform).
+
+    With neither set, registration is closed."""
     if not user:
         return False
+    if os.getenv("PLATFORM_OPEN_REGISTRATION", "").lower() in ("1", "true", "yes"):
+        return True
     allow = os.getenv("PLATFORM_ADMIN_IDS", "").replace(" ", "")
     if allow:
         return str(user.get("id")) in {a for a in allow.split(",") if a}
-    return os.getenv("PLATFORM_OPEN_REGISTRATION", "").lower() in ("1", "true", "yes")
+    return False
 
 
 def _is_platform_admin(user: dict | None) -> bool:
