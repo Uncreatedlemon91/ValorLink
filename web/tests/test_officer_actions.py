@@ -925,7 +925,90 @@ def test_my_record_shows_muster_dashboard():
                     scheduled_at=datetime.utcnow() + timedelta(days=2), created_by=1))
         s.commit()
     html = client.get("/my-record").text
-    assert "Your Musters" in html and "Saturday Line" in html and "/rsvp" in html
+    assert "Your Events" in html and "Saturday Line" in html and "/rsvp" in html
+
+
+def test_edit_event_updates_and_queues_refresh():
+    from datetime import datetime
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        ev = Event(name="Old", event_type="Drill", scheduled_at=datetime(2099, 1, 1, 19, 0),
+                   created_by=1, channel_id=5, message_id=9, reminder_sent_at=datetime.utcnow())
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+    token = _csrf(client, f"/muster-calls/{eid}")
+    client.post(f"/muster-calls/{eid}/update",
+                data={"csrf": token, "name": "New Name", "event_type": "Battle",
+                      "date": "2099-02-02", "time": "20:00", "tz_offset": "0"})
+    with SessionLocal() as s:
+        ev = s.get(Event, eid)
+        assert ev.name == "New Name" and ev.event_type == "Battle"
+        assert ev.scheduled_at.strftime("%Y-%m-%d %H:%M") == "2099-02-02 20:00"
+        assert ev.reminder_sent_at is None  # rescheduling re-arms the reminder
+    assert len(_actions(queue.REFRESH_EVENT)) == 1
+
+
+def test_delete_event_removes_and_queues_withdrawal():
+    import json
+    from datetime import datetime
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        ev = Event(name="Doomed", event_type="Drill", scheduled_at=datetime(2099, 1, 1),
+                   created_by=1, channel_id=5, message_id=9)
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+        s.add(AttendanceRecord(event_id=eid, member_id=MEMBER_ID, status="accepted"))
+        s.commit()
+    token = _csrf(client, f"/muster-calls/{eid}")
+    r = client.post(f"/muster-calls/{eid}/delete", data={"csrf": token}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/muster-calls"
+    with SessionLocal() as s:
+        assert s.get(Event, eid) is None
+        assert s.query(AttendanceRecord).filter_by(event_id=eid).count() == 0  # cascaded
+    acts = _actions(queue.DELETE_EVENT)
+    assert len(acts) == 1
+    p = json.loads(acts[0].payload)
+    assert p["channel_id"] == 5 and p["message_id"] == 9
+
+
+def test_bulk_attendance_marks_many_and_skips_blanks():
+    from datetime import datetime
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        s.add(Member(discord_id=101, callsign="Two", rank="Private", company="Alpha", status="active"))
+        ev = Event(name="Drill", event_type="Drill", scheduled_at=datetime(2099, 1, 1), created_by=1)
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+    token = _csrf(client, f"/muster-calls/{eid}")
+    client.post(f"/muster-calls/{eid}/attendance/bulk",
+                data={"csrf": token, "status_100": "present", "status_101": "absent",
+                      f"status_{CANDIDATE_ID}": "", "status_999": "present"})
+    with SessionLocal() as s:
+        recs = {r.member_id: r.status for r in s.query(AttendanceRecord).filter_by(event_id=eid)}
+    assert recs.get(100) == "present" and recs.get(101) == "absent"
+    assert 999 not in recs  # not a member → skipped
+    assert CANDIDATE_ID not in recs  # blank → untouched
+
+
+def test_bridge_deletes_event_message():
+    from cogs.bridge import Bridge
+    bridge = object.__new__(Bridge)
+    guild = MagicMock()
+    channel = MagicMock()
+    msg = AsyncMock()
+    channel.fetch_message = AsyncMock(return_value=msg)
+    guild.get_channel.return_value = channel
+    asyncio.run(bridge._do_delete_event(guild, {"channel_id": 5, "message_id": 9}))
+    msg.delete.assert_awaited()
 
 
 def _run_all():

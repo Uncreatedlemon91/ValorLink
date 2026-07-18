@@ -452,6 +452,41 @@ class Bridge(commands.Cog):
 
         self.bot.add_view(view, message_id=message.id)
 
+    async def _do_refresh_event(self, guild, p):
+        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets
+
+        with db_session() as session:
+            event = session.get(Event, p["event_id"])
+            if event is None or not event.message_id or not event.channel_id:
+                return
+            buckets = _rsvp_buckets(session, event.id)
+            embed = _build_event_embed(event, buckets)
+            channel_id, message_id, event_id = event.channel_id, event.message_id, event.id
+
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.HTTPException:
+            return
+        view = RSVPView(event_id)
+        try:
+            await message.edit(embed=embed, view=view)
+            self.bot.add_view(view, message_id=message_id)
+        except discord.HTTPException:
+            pass
+
+    async def _do_delete_event(self, guild, p):
+        channel = guild.get_channel(p["channel_id"])
+        if channel is None:
+            return
+        try:
+            message = await channel.fetch_message(p["message_id"])
+            await message.delete()
+        except discord.HTTPException:
+            pass
+
     async def _do_award_granted(self, guild, p):
         await self._refresh(guild, p["discord_id"])
         if p.get("billboard"):

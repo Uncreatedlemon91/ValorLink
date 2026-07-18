@@ -971,6 +971,12 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
 body.theme-modern .audit-filter .chip-on { color: #fff; }
 
+/* ---- Bulk attendance grid --------------------------------------------- */
+.att-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+.att-grid { margin-top: 4px; }
+.att-grid td { padding-top: 6px; padding-bottom: 6px; }
+.att-grid select { min-width: 150px; }
+
 /* ---- Inline RSVP + profile toggles ------------------------------------ */
 .rsvp-cell { white-space: nowrap; }
 .rsvp-cell form { margin: 0 2px 0 0; }

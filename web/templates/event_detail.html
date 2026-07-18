@@ -2,7 +2,7 @@
 {% block title %}{{ event.name }}{% endblock %}
 {% block content %}
 
-<p style="margin-top:16px;"><a class="backlink" href="/muster-calls">‹ back to muster calls</a></p>
+<p style="margin-top:16px;"><a class="backlink" href="/muster-calls">‹ back to {{ terms.events_nav|lower }}</a></p>
 
 <div class="dossier-head">
   <div class="name">
@@ -49,44 +49,116 @@
 {% endif %}
 
 {% if tier_at_least(user, TIER_OFFICER) %}
-<h2 class="section">Mark {{ terms.attendance }} <span class="tally">record actual turnout</span></h2>
-<div class="order-card" style="max-width:640px;">
-  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/attendance">
+<h2 class="section">Mark {{ terms.attendance }} <span class="tally">record actual turnout for everyone at once</span></h2>
+<div class="order-card">
+  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/attendance/bulk" id="bulk-att">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <div class="field-row">
-      <div class="field">
-        <label>Member</label>
-        <select name="member_id" required>
-          {% for m in active_members %}<option value="{{ m.discord_id }}">{{ m.callsign }} ({{ m.rank }})</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label>Standing</label>
-        <select name="status">
-          {% for s in attendance_statuses %}<option value="{{ s }}">{{ s|attendance_label }}</option>{% endfor %}
-        </select>
-      </div>
+    {% if roster_attendance %}
+    <div class="att-tools">
+      <button type="button" class="btn btn-small" data-setall="present">All present</button>
+      <button type="button" class="btn btn-small" data-setall="absent">All absent</button>
+      <button type="button" class="btn btn-small btn-ghost" data-setall="">Clear</button>
     </div>
-    <div class="field field-actions"><button class="btn btn-strong" type="submit">Record</button></div>
+    <table class="ledger att-grid">
+      <thead><tr><th>Member</th><th>Standing</th></tr></thead>
+      <tbody>
+      {% for r in roster_attendance %}
+        <tr>
+          <td class="callsign">{{ r.member.callsign }} <span class="muted">({{ r.member.rank }})</span></td>
+          <td>
+            <select name="status_{{ r.member.discord_id }}">
+              <option value="" {{ 'selected' if not r.status }}>— no change —</option>
+              {% for s in attendance_statuses %}<option value="{{ s }}" {{ 'selected' if r.status == s }}>{{ s|attendance_label }}</option>{% endfor %}
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Save attendance</button></div>
+    {% else %}
+    <p class="order-note">No active members to mark yet.</p>
+    {% endif %}
   </form>
 </div>
+<script>
+  (function () {
+    var form = document.getElementById('bulk-att');
+    if (!form) return;
+    form.querySelectorAll('[data-setall]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var v = btn.getAttribute('data-setall');
+        form.querySelectorAll('select[name^="status_"]').forEach(function (sel) { sel.value = v; });
+      });
+    });
+  })();
+</script>
 
-{% if is_past %}
-<h2 class="section">After-Action <span class="tally">record the outcome</span></h2>
-<div class="order-card" style="max-width:640px;">
-  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/after-action">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <div class="field">
-      <label>Outcome</label>
-      <select name="outcome">
-        {% for o in outcome_options %}<option value="{{ o }}" {{ 'selected' if o == event.outcome }}>{{ o or '— none —' }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="How it went, standout performances, lessons…">{{ event.after_action or '' }}</textarea></div>
-    <div class="field field-actions"><button class="btn btn-strong" type="submit">Save report</button></div>
-  </form>
+<div class="orders-grid" style="margin-top:26px;">
+  <div class="order-card">
+    <h3 class="order-title">Edit {{ terms.event }}</h3>
+    <form class="orders" method="post" action="/muster-calls/{{ event.id }}/update" id="edit-event">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="tz_offset" id="edit-tz" value="0">
+      <div class="field"><label>Occasion</label><input name="name" required value="{{ event.name }}"></div>
+      <div class="field">
+        <label>Kind</label>
+        <select name="event_type">
+          {% for t in event_types %}<option value="{{ t }}" {{ 'selected' if t == event.event_type }}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date</label><input name="date" id="edit-date" type="date" required></div>
+        <div class="field"><label>Time <span class="opt">(your local time)</span></label><input name="time" id="edit-time" type="time" required></div>
+      </div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Save changes</button></div>
+    </form>
+    <p class="order-note">Rescheduling updates the Discord announcement and re-arms the reminder.</p>
+  </div>
+
+  {% if is_past %}
+  <div class="order-card">
+    <h3 class="order-title">After-Action</h3>
+    <form class="orders" method="post" action="/muster-calls/{{ event.id }}/after-action">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field">
+        <label>Outcome</label>
+        <select name="outcome">
+          {% for o in outcome_options %}<option value="{{ o }}" {{ 'selected' if o == event.outcome }}>{{ o or '— none —' }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="How it went, standout performances, lessons…">{{ event.after_action or '' }}</textarea></div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Save report</button></div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="order-card">
+    <h3 class="order-title">Remove {{ terms.event }}</h3>
+    <p class="order-note">Deletes this {{ terms.event|lower }} and its attendance records, and withdraws
+    the Discord announcement. This can't be undone.</p>
+    <form method="post" action="/muster-calls/{{ event.id }}/delete"
+          data-confirm="Delete '{{ event.name }}' and all its attendance records?">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn btn-danger" type="submit">Delete this {{ terms.event|lower }}</button>
+    </form>
+  </div>
 </div>
-{% endif %}
+<script>
+  // Prefill the edit form's date/time in the officer's local zone, and send the
+  // offset so the server can convert back to UTC (matching the create form).
+  (function () {
+    var iso = "{{ event_iso }}";
+    var d = new Date(iso);
+    if (!isNaN(d.getTime())) {
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      document.getElementById('edit-date').value =
+        d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      document.getElementById('edit-time').value = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    document.getElementById('edit-tz').value = new Date().getTimezoneOffset();
+  })();
+</script>
 {% endif %}
 
 <h2 class="section">The Reckoning</h2>

@@ -3,9 +3,9 @@
 {% block content %}
 
 <h2 class="section">Attendance <span class="tally">last {{ window_days }} days</span></h2>
-<p class="lede">Turnout across muster calls held in the last {{ window_days }} days.
-A member's rate counts only calls held after they enrolled, and sets excused
-absences aside — so it reflects the musters they were actually expected at.</p>
+<p class="lede">Turnout across events held in the last {{ window_days }} days.
+A member's rate counts only events held after they enrolled, and sets excused
+absences aside — so it reflects the events they were actually expected at.</p>
 
 <div class="stat-strip">
   <div class="stat"><span class="stat-num">{{ event_count }}</span><span class="stat-cap">calls held</span></div>
@@ -14,8 +14,8 @@ absences aside — so it reflects the musters they were actually expected at.</p
 </div>
 
 {% if event_count == 0 %}
-  <div class="hollow"><div class="mark">✶</div><h3>No Calls Yet</h3>
-  <p>No muster calls have been held in this window. Attendance figures appear once calls are on record.</p></div>
+  <div class="hollow"><div class="mark">✶</div><h3>No Events Yet</h3>
+  <p>No events have been held in this window. Attendance figures appear once events are on record.</p></div>
 {% else %}
 
 {% if event_summary %}
@@ -33,8 +33,8 @@ absences aside — so it reflects the musters they were actually expected at.</p
 
 {% if at_risk %}
 <h2 class="section">At Risk <span class="tally">below {{ at_risk_pct }}% turnout</span></h2>
-<p class="lede">Active members who have missed more musters than they've made (with at
-least a couple of eligible calls). Worth a check-in.</p>
+<p class="lede">Active members who have missed more events than they've made (with at
+least a couple of eligible events). Worth a check-in.</p>
 <table class="ledger">
   <thead><tr><th>Callsign</th><th>Rank</th><th>Company</th><th class="num">Turnout</th><th class="num">Made</th></tr></thead>
   <tbody>

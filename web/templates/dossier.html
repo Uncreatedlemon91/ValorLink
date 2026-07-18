@@ -54,7 +54,7 @@
         </tbody>
       </table>
     {% else %}
-      <p class="empty">Has answered no muster call.</p>
+      <p class="empty">Has attended no events.</p>
     {% endif %}
   </section>
 
@@ -78,10 +78,10 @@
 </div>
 
 {% if is_self and self_dashboard %}
-<h2 class="section">Your Musters <span class="tally">answer the call</span></h2>
+<h2 class="section">Your {{ terms.events_nav }} <span class="tally">answer the call</span></h2>
 <div class="stat-strip">
   <div class="stat"><span class="stat-num">{% if self_dashboard.turnout.pct is not none %}{{ self_dashboard.turnout.pct }}%{% else %}—{% endif %}</span><span class="stat-cap">your turnout</span></div>
-  <div class="stat"><span class="stat-num">{{ self_dashboard.turnout.present }}</span><span class="stat-cap">musters made</span></div>
+  <div class="stat"><span class="stat-num">{{ self_dashboard.turnout.present }}</span><span class="stat-cap">events attended</span></div>
   <div class="stat"><span class="stat-num">{{ self_dashboard.upcoming|length }}</span><span class="stat-cap">coming up</span></div>
 </div>
 {% if self_dashboard.upcoming %}
@@ -109,7 +109,7 @@
   </tbody>
 </table>
 {% else %}
-  <p class="empty">No musters are on the books right now.</p>
+  <p class="empty">No events are on the books right now.</p>
 {% endif %}
 {% endif %}
 

@@ -29,7 +29,7 @@
       </select>
       <span class="order-note">Schedules the same call at weekly intervals from the date above.</span>
     </div>
-    <div class="field field-actions"><button class="btn btn-strong" type="submit">Post the call</button></div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">{{ terms.event_create }}</button></div>
   </form>
   <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the
   announcement with Accept / Tentative / Decline buttons to the announcements channel.</p>
@@ -59,7 +59,7 @@
 <h2 class="section">{{ terms.event_past }} <span class="tally">{{ past|length }} on record</span></h2>
 {% if past %}
   <table class="ledger">
-    <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Mustered</th></tr></thead>
+    <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th><th class="num">Present</th></tr></thead>
     <tbody>
     {% for row in past %}
       <tr>

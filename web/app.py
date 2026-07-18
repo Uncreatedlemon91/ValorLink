@@ -984,7 +984,7 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
 
     event = session.get(Event, event_id)
     if event is None:
-        ctx["message"] = "No such muster call is recorded."
+        ctx["message"] = "No such event is recorded."
         return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
 
     records = []
@@ -1014,12 +1014,23 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
             mine = next((r for r in event.attendance_records if r.member_id == me.discord_id), None)
             my_rsvp = mine.status if mine else None
 
+    # Roster for the bulk attendance grid: every active/on-leave member with
+    # their current recorded standing (blank if not yet marked).
+    status_by_member = {r.member_id: r.status for r in event.attendance_records}
+    roster_attendance = [
+        {"member": m, "status": status_by_member.get(m.discord_id, "")}
+        for m in active_members
+    ]
+
     ctx.update(
         event=event,
+        event_iso=event.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         records=records,
         counts=dict(counts),
         active_members=active_members,
+        roster_attendance=roster_attendance,
         attendance_statuses=services.ATTENDANCE_STATUSES,
+        event_types=terminology.resolve_terms(get_config(session).terminology_custom)["event_types"],
         can_rsvp=can_rsvp,
         my_rsvp=my_rsvp,
         is_past=event.scheduled_at < datetime.utcnow(),
@@ -1569,6 +1580,62 @@ def post_attendance(
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.mark_attendance, actor, event_id, member_id, status,
                redirect=f"/muster-calls/{event_id}")
+
+
+@app.post("/muster-calls/{event_id}/attendance/bulk")
+async def post_bulk_attendance(
+    request: Request,
+    event_id: int,
+    user: dict = Depends(auth.require_officer),
+):
+    """Record actual attendance for many members in one submission. Each member
+    row posts a `status_<discord_id>` field; blanks are left untouched."""
+    form = await request.form()
+    if not auth.verify_csrf(request, form.get("csrf", "")):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+    statuses: dict[int, str] = {}
+    for key, val in form.items():
+        if key.startswith("status_") and val:
+            try:
+                statuses[int(key[len("status_"):])] = str(val)
+            except ValueError:
+                continue
+    actor = {"id": user["id"], "name": user["name"]}
+    with _tenant_session(request) as session:
+        try:
+            _flash(request, services.bulk_mark_attendance(session, actor, event_id, statuses), "ok")
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+    return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
+
+
+@app.post("/muster-calls/{event_id}/update")
+def post_update_event(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    event_type: str = Form(...),
+    date: str = Form(...),
+    time: str = Form(...),
+    tz_offset: str = Form("0"),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.update_event, actor, event_id, name, event_type,
+               f"{date} {time}", tz_offset, redirect=f"/muster-calls/{event_id}")
+
+
+@app.post("/muster-calls/{event_id}/delete")
+def post_delete_event(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.delete_event, actor, event_id, redirect="/muster-calls")
 
 
 # --- Awards --------------------------------------------------------------- #

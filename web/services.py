@@ -70,7 +70,7 @@ def _log(session, member_id: int, entry: str, actor: dict):
 # The set of action categories the audit log distinguishes, for filtering.
 AUDIT_CATEGORIES = [
     "rank", "company", "service", "discipline", "lifecycle", "leave",
-    "recruitment", "awards", "announcement", "roster",
+    "recruitment", "awards", "announcement", "roster", "event",
 ]
 
 
@@ -594,6 +594,104 @@ def create_event(session, actor: dict, name: str, event_type: str, when: str,
         if first_id is None:
             first_id = event.id
     return first_id
+
+
+def _parse_when(when: str, tz_offset: str | int = 0) -> datetime:
+    """Parse a 'YYYY-MM-DD HH:MM' local time into naive UTC using the browser's
+    minute offset (UTC = local + offset)."""
+    try:
+        local = datetime.strptime(when.strip(), "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise ActionError("Enter a valid date and time.")
+    try:
+        offset = int(tz_offset)
+    except (TypeError, ValueError):
+        offset = 0
+    return local + timedelta(minutes=offset)
+
+
+def update_event(session, actor: dict, event_id: int, name: str, event_type: str,
+                 when: str, tz_offset: str | int = 0) -> str:
+    """Edit an existing event's name, type, and schedule. Re-renders the
+    Discord announcement embed if one was posted."""
+    from utils.terminology import resolve_terms
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That event no longer exists.")
+    name = name.strip()
+    if not name:
+        raise ActionError("The event needs a name.")
+    allowed = resolve_terms(get_config(session).terminology_custom)["event_types"]
+    if event_type not in allowed:
+        raise ActionError(f"Choose one of: {', '.join(allowed)}.")
+    event.name = name
+    event.event_type = event_type
+    event.scheduled_at = _parse_when(when, tz_offset)
+    # A rescheduled event should remind afresh.
+    event.reminder_sent_at = None
+    if event.message_id:
+        queue.enqueue(session, queue.REFRESH_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+    _audit(session, actor, "event", f"Edited the event '{name}'.")
+    session.commit()
+    return f"'{name}' updated."
+
+
+def delete_event(session, actor: dict, event_id: int) -> str:
+    """Delete an event and its attendance records, and withdraw the Discord
+    announcement if one was posted."""
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That event no longer exists.")
+    name = event.name
+    # The event row is about to vanish, so carry the message coordinates on the
+    # queued action itself for the bot to delete.
+    if event.channel_id and event.message_id:
+        queue.enqueue(
+            session, queue.DELETE_EVENT,
+            {"channel_id": event.channel_id, "message_id": event.message_id},
+            actor_id=actor["id"],
+        )
+    _audit(session, actor, "event", f"Deleted the event '{name}'.")
+    session.delete(event)
+    session.commit()
+    return f"'{name}' deleted."
+
+
+def bulk_mark_attendance(session, actor: dict, event_id: int,
+                         statuses: dict[int, str]) -> str:
+    """Record actual attendance for many members at once. ``statuses`` maps a
+    member's discord id to present/absent/excused; blanks are skipped."""
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That event no longer exists.")
+    changed = 0
+    for member_id, status in statuses.items():
+        if status not in ATTENDANCE_STATUSES:
+            continue
+        member = session.get(Member, member_id)
+        if member is None:
+            continue
+        record = (
+            session.query(AttendanceRecord)
+            .filter(AttendanceRecord.event_id == event_id,
+                    AttendanceRecord.member_id == member_id)
+            .one_or_none()
+        )
+        if record:
+            if record.status == status:
+                continue
+            record.status = status
+            record.responded_at = datetime.utcnow()
+        else:
+            session.add(AttendanceRecord(event_id=event_id, member_id=member_id, status=status))
+        member.last_active_date = datetime.utcnow()
+        changed += 1
+    if not changed:
+        return "No attendance changes to save."
+    _audit(session, actor, "event",
+           f"Marked attendance for {changed} member{'s' if changed != 1 else ''} at '{event.name}'.")
+    session.commit()
+    return f"Recorded attendance for {changed} member{'s' if changed != 1 else ''}."
 
 
 def record_after_action(session, actor: dict, event_id: int, outcome: str = "",
