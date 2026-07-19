@@ -54,6 +54,10 @@ class Tenant(RegistryBase):
     is_default = Column(Boolean, nullable=False, default=False)  # the apex / legacy unit
     created_at = Column(DateTime, default=_utcnow)
 
+    # Directory categorisation, for search/filter on the public listing.
+    game = Column(String, nullable=True)    # e.g. "War of Rights", "Squad"
+    tags = Column(String, nullable=True)    # comma-separated free tags (playstyle, region)
+
 
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
@@ -61,8 +65,27 @@ RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)
 
 
 def init_registry():
-    """Create the registry schema if it doesn't exist yet."""
+    """Create the registry schema if it doesn't exist yet, then add any columns
+    that were introduced after a deployment first created the table."""
     RegistryBase.metadata.create_all(registry_engine)
+    _ensure_columns()
+
+
+def _ensure_columns():
+    """create_all never alters an existing table, so add newly-introduced
+    columns idempotently — this stands in for Alembic on the self-managed
+    registry, letting new fields land on existing deployments on startup."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(registry_engine)
+    if "tenants" not in insp.get_table_names():
+        return
+    existing = {c["name"] for c in insp.get_columns("tenants")}
+    wanted = {"game": "VARCHAR", "tags": "VARCHAR"}
+    with registry_engine.begin() as conn:
+        for col, coltype in wanted.items():
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE tenants ADD COLUMN {col} {coltype}"))
 
 
 @contextmanager

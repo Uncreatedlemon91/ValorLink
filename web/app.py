@@ -348,13 +348,37 @@ def _render_directory(request: Request):
                 "members": info.get("members"),
                 "invite": info.get("invite"),
                 "crest": info.get("crest"),
+                "game": (t.game or "").strip() or None,
+                "tags": [s.strip() for s in (t.tags or "").split(",") if s.strip()],
                 "url": f"https://{t.slug}.{base_domain}/",
                 "join_url": f"https://{t.slug}.{base_domain}/join",
                 "apply_url": f"https://{t.slug}.{base_domain}/apply",
             })
+
+    # Sort so open, larger units surface first within any grouping.
+    def _rank(u):
+        return (not u["recruiting"], -(u["members"] or 0), u["name"].lower())
+
+    units.sort(key=_rank)
+
+    # Group into per-game sections; units without a game fall under "Other".
+    OTHER = "Other"
+    by_game: dict[str, list] = defaultdict(list)
+    for u in units:
+        by_game[u["game"] or OTHER].append(u)
+    # Sections ordered by size, with "Other" always last.
+    section_names = sorted(
+        by_game, key=lambda g: (g == OTHER, -len(by_game[g]), g.lower())
+    )
+    sections = [{"game": g, "units": by_game[g]} for g in section_names]
+    games = sorted((g for g in by_game if g != OTHER), key=str.lower)
+
     ctx = {
         "request": request,
         "units": units,
+        "sections": sections,
+        "games": games,
+        "total_units": len(units),
         "base_domain": base_domain,
         "user": auth.current_user(request),
         "csrf_token": auth.get_csrf_token(request),
@@ -1167,6 +1191,8 @@ def command_tent(request: Request, session: Session = Depends(get_session),
                     "name": row.name,
                     "motto": row.motto or "",
                     "blurb": row.blurb or "",
+                    "game": row.game or "",
+                    "tags": row.tags or "",
                     "recruiting_open": row.recruiting_open,
                     "listed": row.listed,
                     "discord_guild_id": row.discord_guild_id or "",
@@ -2318,6 +2344,8 @@ def post_listing(
     name: str = Form(...),
     motto: str = Form(""),
     blurb: str = Form(""),
+    game: str = Form(""),
+    tags: str = Form(""),
     recruiting_open: str = Form(""),
     listed: str = Form(""),
     user: dict = Depends(auth.require_admin),
@@ -2330,12 +2358,16 @@ def post_listing(
     if not name:
         _flash(request, "The public name can't be empty.", "error")
         return RedirectResponse("/command-tent", status_code=303)
+    # Normalise tags to a clean comma-separated list.
+    clean_tags = ", ".join(s.strip() for s in tags.split(",") if s.strip()) or None
     with registry_session() as rs:
         row = tenant_by_slug(rs, tenant.slug)
         if row is not None:
             row.name = name
             row.motto = motto.strip() or None
             row.blurb = blurb.strip() or None
+            row.game = game.strip() or None
+            row.tags = clean_tags
             row.recruiting_open = bool(recruiting_open)
             row.listed = bool(listed)
             rs.commit()

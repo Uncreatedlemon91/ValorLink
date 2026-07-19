@@ -191,6 +191,15 @@ field as-is to keep the default wording.</p>
     <div class="field"><label>Public name</label><input name="name" required value="{{ listing.name }}"></div>
     <div class="field"><label>Motto</label><input name="motto" value="{{ listing.motto }}"></div>
     <div class="field"><label>Blurb <span class="opt">(shown on your directory card)</span></label><textarea name="blurb" rows="3">{{ listing.blurb }}</textarea></div>
+    <div class="field-row">
+      <div class="field"><label>Game</label><input name="game" value="{{ listing.game }}" placeholder="War of Rights" list="game-suggestions">
+        <span class="order-note">Groups your unit under this game in the directory.</span></div>
+      <div class="field"><label>Tags <span class="opt">(comma-separated)</span></label><input name="tags" value="{{ listing.tags }}" placeholder="Milsim, EU, Competitive"></div>
+    </div>
+    <datalist id="game-suggestions">
+      <option value="War of Rights"><option value="Squad"><option value="Arma 3"><option value="Arma Reforger">
+      <option value="Hell Let Loose"><option value="Post Scriptum"><option value="Ready or Not"><option value="Rising Storm 2">
+    </datalist>
     <div class="field"><label class="checkline"><input type="checkbox" name="recruiting_open" value="1" {{ 'checked' if listing.recruiting_open }}> Open to applications</label></div>
     <div class="field"><label class="checkline"><input type="checkbox" name="listed" value="1" {{ 'checked' if listing.listed }}> List this unit in the public directory</label></div>
     <div class="field field-actions"><button class="btn btn-strong" type="submit">Save listing</button></div>

@@ -325,6 +325,35 @@ def test_registration_closed_by_default():
             os.environ["PLATFORM_OPEN_REGISTRATION"] = old
 
 
+def test_directory_groups_and_filters_by_game():
+    with registry_session() as s:
+        fifth = tenant_by_slug(s, "5thva")
+        fifth.game = "War of Rights"; fifth.tags = "Milsim, EU"
+        tenant_by_slug(s, "2ndus").game = "Squad"
+        s.commit()
+    c = TestClient(app)
+    html = c.get("/", headers={"host": APEX}).text
+    # per-game section grouping + filter chips + the search tooling
+    assert 'data-game="War of Rights"' in html and 'data-game="Squad"' in html
+    assert 'id="dir-search"' in html and 'id="dir-filters"' in html
+    # tags render on the card and feed search
+    assert "Milsim" in html
+
+
+def test_listing_editor_saves_game_and_tags():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    token = _csrf(c, "/command-tent", _host("5thva"))
+    c.post("/admin/listing",
+           data={"csrf": token, "name": "5th Virginia", "game": "War of Rights",
+                 "tags": " Milsim ,, EU ", "listed": "1"}, headers=_host("5thva"))
+    with registry_session() as s:
+        row = tenant_by_slug(s, "5thva")
+        assert row.game == "War of Rights"
+        assert row.tags == "Milsim, EU"  # normalised: trimmed, blanks dropped
+
+
 def test_open_registration_overrides_admin_allowlist():
     """PLATFORM_OPEN_REGISTRATION opens registration to any signed-in user even
     when a PLATFORM_ADMIN_IDS allowlist is set (admins keep their extra powers,
