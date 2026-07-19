@@ -384,23 +384,46 @@ def _directory_data():
             "total_units": len(units), "base_domain": base_domain}
 
 
-FEATURED_LIMIT = 6
+def _user_units(request: Request):
+    """The units the signed-in user belongs to (from their per-unit tier map),
+    with the public facts needed to render a card and a link to each portal."""
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    user = auth.current_user(request)
+    tiers = (user or {}).get("tiers") or {}
+    if not tiers:
+        return []
+    units = []
+    with registry_session() as rs:
+        for slug, tier in tiers.items():
+            t = tenant_by_slug(rs, slug)
+            if t is None:
+                continue
+            info = _unit_directory_info(t.db_url)
+            units.append({
+                "slug": slug, "name": t.name, "tier": tier,
+                "brand_color": brand_hex(t.brand_color),
+                "crest": info.get("crest"), "members": info.get("members"),
+                "recruiting": t.recruiting_open,
+                "url": f"https://{slug}.{base_domain}/",
+            })
+    units.sort(key=lambda u: u["name"].lower())
+    return units
 
 
 def _render_home(request: Request):
-    """The apex landing: a hero with a search that leads to Find a Unit, a few
-    recruiting units to highlight, and the platform activity feed."""
+    """The apex landing: what ValorLink is, plus navigation to Find a Unit and
+    My Units, and the platform activity feed."""
     data = _directory_data()
-    recruiting = [u for u in data["units"] if u["recruiting"]]
-    featured = recruiting[:FEATURED_LIMIT]
+    user = auth.current_user(request)
+    my_count = len((user or {}).get("tiers") or {})
     ctx = {
         "request": request,
-        "featured": featured,
-        "recruiting_total": len(recruiting),
-        "games": data["games"],
         "total_units": data["total_units"],
+        "recruiting_total": sum(1 for u in data["units"] if u["recruiting"]),
+        "game_count": len(data["games"]),
+        "my_unit_count": my_count,
         "base_domain": data["base_domain"],
-        "user": auth.current_user(request),
+        "user": user,
         "csrf_token": auth.get_csrf_token(request),
         "flash": request.session.pop("flash", []),
         "now": datetime.utcnow(),
@@ -547,6 +570,27 @@ def find_units(request: Request, q: str = "", game: str = ""):
     if not directory_mode(request):  # on a unit subdomain
         return RedirectResponse(f"https://{base}/find", status_code=307)
     return _render_find(request, q=q, game=game)
+
+
+@app.get("/my-units", response_class=HTMLResponse)
+def my_units_page(request: Request):
+    """The signed-in user's units — a launchpad to each portal. A platform
+    (apex) page; from a unit subdomain it bounces to the apex."""
+    base = os.getenv("PLATFORM_BASE_DOMAIN")
+    if not base:
+        raise TenantNotFound(None)
+    if not directory_mode(request):
+        return RedirectResponse(f"https://{base}/my-units", status_code=307)
+    ctx = {
+        "request": request,
+        "units": _user_units(request),
+        "base_domain": base,
+        "user": auth.current_user(request),
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "now": datetime.utcnow(),
+    }
+    return templates.TemplateResponse(request, "my_units.html", ctx)
 
 
 @app.get("/join", response_class=HTMLResponse)

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — My Units</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+  <style>:root { --seal: #7c1f2b; }</style>
+</head>
+<body>
+  <div class="sheet" style="--seal:#7c1f2b;">
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>My Units</h1>
+      <p class="motto">The outfits you serve in</p>
+    </header>
+
+    {% include "_apex_nav.html" %}
+
+    <div class="authbar">
+      <a href="/" class="who">‹ Home</a>
+      {% if user %}
+        <span class="who">Signed in as <b>{{ user.name }}</b></span>
+        <a href="/logout">Sign out</a>
+      {% else %}
+        <a href="/login">Sign in with Discord</a>
+      {% endif %}
+    </div>
+
+    <main class="wrap">
+      {% if flash %}
+        <div class="flashes">
+          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
+        </div>
+      {% endif %}
+
+      {% if not user %}
+        <div class="hollow">
+          <div class="mark">✵</div>
+          <h3>Sign In to See Your Units</h3>
+          <p>Sign in with Discord and the units you belong to appear here — one login works across all of them.</p>
+          <p style="margin-top:14px;"><a class="btn btn-strong" href="/login">Sign in with Discord</a></p>
+        </div>
+      {% elif units %}
+        <h2 class="section">Your Units <span class="tally">{{ units|length }}</span></h2>
+        <p class="lede">Open any unit's headquarters. Your rank and rights follow you into each.</p>
+        <div class="unit-grid">
+          {% for u in units %}
+            <a class="order-card unit-card my-unit" href="{{ u.url }}" style="--seal: {{ u.brand_color }};">
+              <div class="unit-head">
+                {% if u.crest %}
+                  <img class="unit-logo" src="{{ u.crest }}" alt="">
+                {% else %}
+                  <div class="unit-logo unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
+                {% endif %}
+                <h3 class="unit-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
+              </div>
+              <p class="unit-meta">
+                <span class="rankchip">{{ u.tier }}</span>
+                {% if u.members is not none %}<span class="unit-count">{{ u.members }} member{{ 's' if u.members != 1 }}</span>{% endif %}
+              </p>
+              <span class="nav-card-go">Open headquarters →</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="hollow">
+          <div class="mark">✵</div>
+          <h3>No Units Yet</h3>
+          <p>You're signed in, but not enrolled in any unit on ValorLink.
+          <a href="/find">Find a unit ›</a> that's recruiting and apply to join.</p>
+        </div>
+      {% endif %}
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+      <footer>
+        ValorLink
+        <span class="fine">The Muster Grounds &middot; {{ now.strftime('%d %B %Y') }}</span>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

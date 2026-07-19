@@ -74,13 +74,41 @@ def _host(sub):
     return {"host": f"{sub}.{APEX}"}
 
 
-def test_apex_shows_the_home_landing():
+def test_apex_home_is_informative_with_navigation():
     c = TestClient(app)
     html = c.get("/", headers={"host": APEX}).text
-    # a hero with a search that leads to the Find-a-Unit page
-    assert "Find your unit" in html and 'action="/find"' in html
-    # recruiting units are featured on the landing
-    assert "5th Virginia" in html and "2nd United States" in html
+    # explains the platform and navigates to Find a Unit
+    assert "A home for your gaming unit" in html
+    assert 'href="/find"' in html and "Find a Unit" in html
+    # signed-out visitors are pointed at sign-in for My Units
+    assert "My Units" in html
+
+
+def test_home_shows_my_units_nav_when_signed_in():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers={"host": APEX}, follow_redirects=False)
+    html = c.get("/", headers={"host": APEX}).text
+    assert 'href="/my-units"' in html
+
+
+def test_my_units_page_lists_the_users_units():
+    c = TestClient(app)
+    # signing in on the apex resolves the default unit into the tier map
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers={"host": APEX}, follow_redirects=False)
+    html = c.get("/my-units", headers={"host": APEX}).text
+    assert "Your Units" in html and "Default Headquarters" in html
+    # a signed-out visitor is prompted to sign in
+    c2 = TestClient(app)
+    out = c2.get("/my-units", headers={"host": APEX}).text
+    assert "Sign In to See Your Units" in out
+
+
+def test_my_units_redirects_from_a_subdomain():
+    c = TestClient(app)
+    r = c.get("/my-units", headers=_host("5thva"), follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"].endswith("/my-units")
 
 
 def test_find_page_lists_and_prefills():
@@ -262,8 +290,8 @@ def test_discord_invite_replaces_web_apply():
     v = TestClient(app)
     jp = v.get("/join", headers=_host("5thva")).text
     assert "Join our Discord" in jp and "discord.gg/xyz789" in jp
-    # and the directory card links to the invite too
-    d = v.get("/", headers={"host": APEX}).text
+    # and the Find-a-Unit card links to the invite too
+    d = v.get("/find", headers={"host": APEX}).text
     assert "discord.gg/xyz789" in d and "Join Discord" in d
 
 
@@ -272,8 +300,8 @@ def test_join_page_and_directory_counts():
     html = c.get("/join", headers=_host("5thva")).text
     assert "Enlist with 5th Virginia" in html
     assert "recruiting" in html.lower()
-    # the apex directory shows a member count and links to the join page
-    d = c.get("/", headers={"host": APEX}).text
+    # the Find-a-Unit page shows a member count and links to each join page
+    d = c.get("/find", headers={"host": APEX}).text
     assert "Learn more" in d and "member" in d
 
 
@@ -355,9 +383,6 @@ def test_find_page_groups_and_filters_by_game():
     assert 'id="dir-search"' in html and 'id="dir-filters"' in html
     # tags render on the card and feed search
     assert "Milsim" in html
-    # the home surfaces the games as quick links to the find page
-    home = c.get("/", headers={"host": APEX}).text
-    assert '/find?game=' in home
 
 
 def test_listing_editor_saves_game_and_tags():
