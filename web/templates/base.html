@@ -16,7 +16,8 @@
       <div class="estd">{{ terms.tagline }}</div>
     </header>
 
-    <nav class="rail">
+    <button type="button" class="nav-toggle" aria-controls="rail" aria-expanded="false">☰ Menu</button>
+    <nav class="rail" id="rail">
       {% set path = request.url.path %}
       <a href="/" class="{{ 'active' if path == '/' }}">{{ terms.hq }}</a>
       <a href="/join" class="{{ 'active' if path == '/join' }}">{{ terms.join }}</a>
@@ -33,7 +34,13 @@
     </nav>
 
     <div class="authbar">
-      {% if platform_base %}<a href="https://{{ platform_base }}/" class="who">‹ All units</a>{% endif %}
+      {% if platform_base %}
+        <span class="plat-links">
+          <a href="https://{{ platform_base }}/">‹ ValorLink</a>
+          <a href="https://{{ platform_base }}/find">Find a Unit</a>
+          <a href="https://{{ platform_base }}/my-units">My Units</a>
+        </span>
+      {% endif %}
       {% if my_units %}
         <details class="unit-switcher">
           <summary>{{ regiment_name }} <span class="uswitch-caret">▾</span></summary>
@@ -74,6 +81,17 @@
   </div>
 
   <script>
+    // Collapsible navigation on small screens.
+    (function () {
+      var btn = document.querySelector('.nav-toggle');
+      var rail = document.getElementById('rail');
+      if (!btn || !rail) return;
+      btn.addEventListener('click', function () {
+        var open = rail.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    })();
+
     // Render every <time data-local> in the viewer's own timezone.
     (function () {
       document.querySelectorAll('time[data-local]').forEach(function (el) {
