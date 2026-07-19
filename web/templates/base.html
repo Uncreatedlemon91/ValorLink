@@ -53,18 +53,50 @@
     <button type="button" class="nav-toggle" aria-controls="rail" aria-expanded="false">☰ Menu</button>
     <nav class="rail" id="rail">
       {% set path = request.url.path %}
+      {% set g_personnel = path in ['/roster', '/muster', '/honors', '/promotions', '/leave'] or path.startswith('/dossier') %}
+      {% set g_events = path.startswith('/muster-calls') or path == '/attendance' %}
+      {% set g_recruit = path in ['/recruits', '/join'] %}
+      {% set g_manage = path in ['/audit', '/command-tent'] %}
+
       <a href="/" class="{{ 'active' if path == '/' }}">{{ terms.hq }}</a>
-      <a href="/join" class="{{ 'active' if path == '/join' }}">{{ terms.join }}</a>
-      <a href="/roster" class="{{ 'active' if path == '/roster' }}">{{ terms.active_roster }}</a>
-      <a href="/muster" class="{{ 'active' if path == '/muster' }}">{{ terms.roster_nav }}</a>
-      <a href="/muster-calls" class="{{ 'active' if path.startswith('/muster-calls') }}">{{ terms.events_nav }}</a>
-      <a href="/attendance" class="{{ 'active' if path == '/attendance' }}">{{ terms.attendance }}</a>
-      {% if tier_at_least(user, TIER_OFFICER) %}<a href="/promotions" class="{{ 'active' if path == '/promotions' }}">{{ terms.promotions }}</a>{% endif %}
-      {% if tier_at_least(user, TIER_OFFICER) %}<a href="/leave" class="{{ 'active' if path == '/leave' }}">{{ terms.leave }}</a>{% endif %}
-      <a href="/honors" class="{{ 'active' if path == '/honors' }}">{{ terms.honors }}</a>
-      <a href="/recruits" class="{{ 'active' if path == '/recruits' }}">{{ terms.recruits }}{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
-      {% if tier_at_least(user, TIER_OFFICER) %}<a href="/audit" class="{{ 'active' if path == '/audit' }}">Ledger</a>{% endif %}
-      {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'active' if path == '/command-tent' }}">{{ terms.command }}</a>{% endif %}
+
+      <div class="nav-group{{ ' active' if g_personnel }}">
+        <button type="button" class="nav-top" aria-haspopup="true" aria-expanded="false">Personnel <span class="caret">▾</span></button>
+        <div class="nav-menu">
+          <a href="/roster" class="{{ 'here' if path == '/roster' }}">{{ terms.active_roster }}</a>
+          <a href="/muster" class="{{ 'here' if path == '/muster' }}">{{ terms.roster_nav }}</a>
+          <a href="/roster?tab=assignments">{{ terms.assignments }}</a>
+          <a href="/honors" class="{{ 'here' if path == '/honors' }}">{{ terms.honors }}</a>
+          {% if tier_at_least(user, TIER_OFFICER) %}<a href="/promotions" class="{{ 'here' if path == '/promotions' }}">{{ terms.promotions }}</a>{% endif %}
+          {% if tier_at_least(user, TIER_OFFICER) %}<a href="/leave" class="{{ 'here' if path == '/leave' }}">{{ terms.leave }}</a>{% endif %}
+        </div>
+      </div>
+
+      <div class="nav-group{{ ' active' if g_events }}">
+        <button type="button" class="nav-top" aria-haspopup="true" aria-expanded="false">{{ terms.events_nav }} <span class="caret">▾</span></button>
+        <div class="nav-menu">
+          <a href="/muster-calls" class="{{ 'here' if path.startswith('/muster-calls') }}">All {{ terms.events_nav }}</a>
+          <a href="/attendance" class="{{ 'here' if path == '/attendance' }}">{{ terms.attendance }}</a>
+        </div>
+      </div>
+
+      <div class="nav-group{{ ' active' if g_recruit }}">
+        <button type="button" class="nav-top" aria-haspopup="true" aria-expanded="false">{{ terms.recruitment }} <span class="caret">▾</span></button>
+        <div class="nav-menu">
+          <a href="/recruits" class="{{ 'here' if path == '/recruits' }}">{{ terms.recruits }}{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
+          <a href="/join" class="{{ 'here' if path == '/join' }}">{{ terms.join }}</a>
+        </div>
+      </div>
+
+      {% if tier_at_least(user, TIER_OFFICER) %}
+      <div class="nav-group{{ ' active' if g_manage }}">
+        <button type="button" class="nav-top" aria-haspopup="true" aria-expanded="false">Manage <span class="caret">▾</span></button>
+        <div class="nav-menu">
+          <a href="/audit" class="{{ 'here' if path == '/audit' }}">Ledger</a>
+          {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'here' if path == '/command-tent' }}">{{ terms.command }}</a>{% endif %}
+        </div>
+      </div>
+      {% endif %}
     </nav>
 
     <main class="wrap">
@@ -109,6 +141,32 @@
         setH();
         window.addEventListener('resize', setH);
       }
+    })();
+
+    // Category dropdowns: hover-open on desktop; click/tap toggles too.
+    (function () {
+      var groups = Array.prototype.slice.call(document.querySelectorAll('.nav-group'));
+      if (!groups.length) return;
+      function closeAll(except) {
+        groups.forEach(function (g) {
+          if (g === except) return;
+          g.classList.remove('open');
+          var b = g.querySelector('.nav-top');
+          if (b) b.setAttribute('aria-expanded', 'false');
+        });
+      }
+      groups.forEach(function (g) {
+        var btn = g.querySelector('.nav-top');
+        if (!btn) return;
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var open = g.classList.toggle('open');
+          closeAll(g);
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+      });
+      document.addEventListener('click', function () { closeAll(null); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(null); });
     })();
 
     // Click-to-sort tables (any .ledger with a header; opt out with .no-sort).
