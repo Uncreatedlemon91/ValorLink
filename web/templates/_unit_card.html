@@ -1,0 +1,40 @@
+<div class="order-card unit-card" style="--seal: {{ u.brand_color }};"
+     data-search="{{ (u.name ~ ' ' ~ (u.motto or '') ~ ' ' ~ (u.blurb or '') ~ ' ' ~ (u.game or '') ~ ' ' ~ (u.tags|join(' ')))|lower }}"
+     data-name="{{ u.name|lower }}"
+     data-game="{{ u.game or 'Other' }}"
+     data-recruiting="{{ '1' if u.recruiting else '0' }}"
+     data-members="{{ u.members or 0 }}">
+  <div class="unit-head">
+    {% if u.crest %}
+      <img class="unit-logo" src="{{ u.crest }}" alt="">
+    {% else %}
+      <div class="unit-logo unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
+    {% endif %}
+    <h3 class="unit-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
+    {% if u.motto %}<p class="unit-motto">“{{ u.motto }}”</p>{% endif %}
+  </div>
+  {% if u.game or u.tags %}
+  <div class="unit-tags">
+    {% if u.game %}<span class="tagchip tag-game">{{ u.game }}</span>{% endif %}
+    {% for t in u.tags %}<span class="tagchip">{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+  {% if u.blurb %}<p class="unit-blurb">{{ u.blurb }}</p>{% endif %}
+  <p class="unit-meta">
+    {% if u.recruiting %}<span class="badge s-active">Recruiting</span>
+    {% else %}<span class="badge s-inactive">Not recruiting</span>{% endif %}
+    {% if u.members is not none %}<span class="unit-count">{{ u.members }} member{{ 's' if u.members != 1 }}</span>{% endif %}
+  </p>
+  <div class="inline-actions unit-actions">
+    <a class="btn" href="{{ u.join_url }}">Learn more</a>
+    {% if u.recruiting %}
+      {% if u.invite %}
+        <a class="btn btn-strong" href="{{ u.invite }}" target="_blank" rel="noopener">Join Discord</a>
+      {% elif user %}
+        <a class="btn btn-strong" href="{{ u.apply_url }}">Apply</a>
+      {% else %}
+        <a class="btn btn-strong" href="/login">Sign in to apply</a>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>

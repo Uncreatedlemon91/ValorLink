@@ -998,6 +998,28 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
 body.theme-modern .audit-filter .chip-on { color: #fff; }
 
+/* ---- Home landing: hero + search -------------------------------------- */
+.home-hero { text-align: center; padding: 20px 0 8px; }
+.home-hero-title { font-family: var(--serif); font-size: 30px; color: var(--seal); margin: 0 0 4px; }
+.home-hero-sub { color: var(--ink-soft); font-style: italic; margin: 0 0 18px; }
+.home-search { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.home-search input {
+  flex: 1 1 380px; max-width: 460px; padding: 11px 14px;
+  border: 1px solid var(--rule-strong); border-radius: 3px;
+  background: rgba(255,253,246,0.7); font-family: inherit; font-size: 15px;
+}
+.home-games { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 16px 0 4px; }
+.home-games .chip {
+  font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 11px; border: 1px solid var(--rule-strong); border-radius: 13px;
+  color: var(--ink-soft); background: rgba(255,253,246,0.5); text-decoration: none;
+}
+.home-games .chip:hover { border-color: var(--seal); color: var(--seal); text-decoration: none; }
+.home-games .chip-all { border-color: var(--seal); color: var(--seal); font-weight: 700; }
+.section .tally a { color: var(--seal); }
+body.theme-modern .home-search input,
+body.theme-modern .home-games .chip { background: rgba(255,255,255,0.04); }
+
 /* ---- Directory: search, filters, game sections ------------------------ */
 .dir-tools {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;

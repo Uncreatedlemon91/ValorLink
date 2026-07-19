@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ValorLink — Muster Grounds</title>
+  <title>ValorLink — Find a Unit</title>
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
   <style>:root { --seal: #7c1f2b; }</style>
 </head>
@@ -11,17 +11,16 @@
   <div class="sheet" style="--seal:#7c1f2b;">
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
-      <h1>ValorLink</h1>
-      <p class="motto">The Muster Grounds</p>
-      <div class="estd">A directory of units in the field</div>
+      <h1>Find a Unit</h1>
+      <p class="motto">Every unit mustering on ValorLink</p>
     </header>
 
     <div class="authbar">
+      <a href="/" class="who">‹ Home</a>
       {% if user %}
         <span class="who">Signed in as <b>{{ user.name }}</b></span>
         <a href="/logout">Sign out</a>
       {% else %}
-        <span class="who">Browsing as a visitor</span>
         <a href="/login">Sign in with Discord</a>
       {% endif %}
     </div>
@@ -33,61 +32,17 @@
         </div>
       {% endif %}
 
-      {% macro unitcard(u, user) %}
-        <div class="order-card unit-card" style="--seal: {{ u.brand_color }};"
-             data-search="{{ (u.name ~ ' ' ~ (u.motto or '') ~ ' ' ~ (u.blurb or '') ~ ' ' ~ (u.game or '') ~ ' ' ~ (u.tags|join(' ')))|lower }}"
-             data-name="{{ u.name|lower }}"
-             data-game="{{ u.game or 'Other' }}"
-             data-recruiting="{{ '1' if u.recruiting else '0' }}"
-             data-members="{{ u.members or 0 }}">
-          <div class="unit-head">
-            {% if u.crest %}
-              <img class="unit-logo" src="{{ u.crest }}" alt="">
-            {% else %}
-              <div class="unit-logo unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
-            {% endif %}
-            <h3 class="unit-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
-            {% if u.motto %}<p class="unit-motto">“{{ u.motto }}”</p>{% endif %}
-          </div>
-          {% if u.game or u.tags %}
-          <div class="unit-tags">
-            {% if u.game %}<span class="tagchip tag-game">{{ u.game }}</span>{% endif %}
-            {% for t in u.tags %}<span class="tagchip">{{ t }}</span>{% endfor %}
-          </div>
-          {% endif %}
-          {% if u.blurb %}<p class="unit-blurb">{{ u.blurb }}</p>{% endif %}
-          <p class="unit-meta">
-            {% if u.recruiting %}<span class="badge s-active">Recruiting</span>
-            {% else %}<span class="badge s-inactive">Not recruiting</span>{% endif %}
-            {% if u.members is not none %}<span class="unit-count">{{ u.members }} member{{ 's' if u.members != 1 }}</span>{% endif %}
-          </p>
-          <div class="inline-actions unit-actions">
-            <a class="btn" href="{{ u.join_url }}">Learn more</a>
-            {% if u.recruiting %}
-              {% if u.invite %}
-                <a class="btn btn-strong" href="{{ u.invite }}" target="_blank" rel="noopener">Join Discord</a>
-              {% elif user %}
-                <a class="btn btn-strong" href="{{ u.apply_url }}">Apply</a>
-              {% else %}
-                <a class="btn btn-strong" href="/login">Sign in to apply</a>
-              {% endif %}
-            {% endif %}
-          </div>
-        </div>
-      {% endmacro %}
-
-      <h2 class="section">Units in the Field <span class="tally">{{ total_units }} listed</span></h2>
-      <p class="lede">Browse the units mustering on ValorLink.
-      Sign in with Discord to apply to any that are recruiting.
+      <h2 class="section">Find a Unit <span class="tally">{{ total_units }} listed</span></h2>
+      <p class="lede">Search and filter every unit mustering on ValorLink. Sign in with Discord to apply to any that are recruiting.
       {% if user %}Leading your own outfit? <a href="/register">Raise a unit ›</a>{% endif %}</p>
 
       {% if units %}
         <div class="dir-tools">
-          <input type="search" id="dir-search" class="dir-search" placeholder="Search units, mottos, tags…" autocomplete="off">
+          <input type="search" id="dir-search" class="dir-search" placeholder="Search units, mottos, tags…" autocomplete="off" value="{{ q }}">
           {% if games %}
           <div class="dir-filters" id="dir-filters">
-            <button type="button" class="chip chip-on" data-game="">All games</button>
-            {% for g in games %}<button type="button" class="chip" data-game="{{ g }}">{{ g }}</button>{% endfor %}
+            <button type="button" class="chip {{ 'chip-on' if not active_game }}" data-game="">All games</button>
+            {% for g in games %}<button type="button" class="chip {{ 'chip-on' if active_game == g }}" data-game="{{ g }}">{{ g }}</button>{% endfor %}
           </div>
           {% endif %}
           <label class="dir-recruit"><input type="checkbox" id="dir-recruiting"> Recruiting only</label>
@@ -104,7 +59,7 @@
         <section class="dir-section" data-game="{{ sec.game }}">
           {% if games %}<h3 class="dir-section-head">{{ sec.game }} <span class="count">{{ sec.units|length }}</span></h3>{% endif %}
           <div class="unit-grid">
-            {% for u in sec.units %}{{ unitcard(u, user) }}{% endfor %}
+            {% for u in sec.units %}{% include "_unit_card.html" %}{% endfor %}
           </div>
         </section>
         {% endfor %}
@@ -159,7 +114,8 @@
       var chips = Array.prototype.slice.call(document.querySelectorAll('#dir-filters .chip'));
       var sections = Array.prototype.slice.call(document.querySelectorAll('.dir-section'));
       var empty = document.getElementById('dir-empty');
-      var activeGame = '';
+      var current = document.querySelector('#dir-filters .chip-on');
+      var activeGame = current ? current.getAttribute('data-game') : '';
 
       function sortGrid(sec) {
         var grid = sec.querySelector('.unit-grid');
@@ -206,6 +162,7 @@
       search.addEventListener('input', apply);
       recruiting.addEventListener('change', apply);
       sortSel.addEventListener('change', apply);
+      if (search.value || activeGame) apply();  // honor a prefilled search/game
     })();
   </script>
 </body>

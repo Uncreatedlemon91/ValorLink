@@ -344,7 +344,10 @@ def _platform_activity(limit: int = 18):
     return items[:limit]
 
 
-def _render_directory(request: Request):
+def _directory_data():
+    """Shared listing data for the home landing and the Find-a-Unit page:
+    the listed units (recruiting-first, larger first), grouped into per-game
+    sections, plus the set of games for filter chips."""
     base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
     with registry_session() as rs:
         rows = listed_tenants(rs)
@@ -368,36 +371,61 @@ def _render_directory(request: Request):
                 "apply_url": f"https://{t.slug}.{base_domain}/apply",
             })
 
-    # Sort so open, larger units surface first within any grouping.
-    def _rank(u):
-        return (not u["recruiting"], -(u["members"] or 0), u["name"].lower())
+    units.sort(key=lambda u: (not u["recruiting"], -(u["members"] or 0), u["name"].lower()))
 
-    units.sort(key=_rank)
-
-    # Group into per-game sections; units without a game fall under "Other".
     OTHER = "Other"
     by_game: dict[str, list] = defaultdict(list)
     for u in units:
         by_game[u["game"] or OTHER].append(u)
-    # Sections ordered by size, with "Other" always last.
-    section_names = sorted(
-        by_game, key=lambda g: (g == OTHER, -len(by_game[g]), g.lower())
-    )
+    section_names = sorted(by_game, key=lambda g: (g == OTHER, -len(by_game[g]), g.lower()))
     sections = [{"game": g, "units": by_game[g]} for g in section_names]
     games = sorted((g for g in by_game if g != OTHER), key=str.lower)
+    return {"units": units, "sections": sections, "games": games,
+            "total_units": len(units), "base_domain": base_domain}
 
+
+FEATURED_LIMIT = 6
+
+
+def _render_home(request: Request):
+    """The apex landing: a hero with a search that leads to Find a Unit, a few
+    recruiting units to highlight, and the platform activity feed."""
+    data = _directory_data()
+    recruiting = [u for u in data["units"] if u["recruiting"]]
+    featured = recruiting[:FEATURED_LIMIT]
     ctx = {
         "request": request,
-        "units": units,
-        "sections": sections,
-        "games": games,
-        "total_units": len(units),
-        "base_domain": base_domain,
+        "featured": featured,
+        "recruiting_total": len(recruiting),
+        "games": data["games"],
+        "total_units": data["total_units"],
+        "base_domain": data["base_domain"],
         "user": auth.current_user(request),
         "csrf_token": auth.get_csrf_token(request),
         "flash": request.session.pop("flash", []),
         "now": datetime.utcnow(),
         "activity": _platform_activity(),
+    }
+    return templates.TemplateResponse(request, "home.html", ctx)
+
+
+def _render_find(request: Request, q: str = "", game: str = ""):
+    """The full Find-a-Unit browser: every listed unit, searchable, filterable
+    by game, and sortable, grouped into per-game sections."""
+    data = _directory_data()
+    ctx = {
+        "request": request,
+        "units": data["units"],
+        "sections": data["sections"],
+        "games": data["games"],
+        "total_units": data["total_units"],
+        "base_domain": data["base_domain"],
+        "q": q,
+        "active_game": game if game in data["games"] else "",
+        "user": auth.current_user(request),
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "now": datetime.utcnow(),
     }
     return templates.TemplateResponse(request, "directory.html", ctx)
 
@@ -453,7 +481,7 @@ def _unit_activity(session: Session, limit: int = 12):
 @app.get("/", response_class=HTMLResponse)
 def headquarters(request: Request, session: Session = Depends(get_session)):
     if directory_mode(request):
-        return _render_directory(request)
+        return _render_home(request)
 
     ctx = _base_context(request, session)
 
@@ -507,6 +535,18 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         rsvp_choices=[("accepted", "Accept"), ("tentative", "Tentative"), ("declined", "Decline")],
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
+
+
+@app.get("/find", response_class=HTMLResponse)
+def find_units(request: Request, q: str = "", game: str = ""):
+    """The Find-a-Unit browser. A platform (apex) page; from a unit subdomain
+    it bounces to the apex."""
+    base = os.getenv("PLATFORM_BASE_DOMAIN")
+    if not base:
+        raise TenantNotFound(None)
+    if not directory_mode(request):  # on a unit subdomain
+        return RedirectResponse(f"https://{base}/find", status_code=307)
+    return _render_find(request, q=q, game=game)
 
 
 @app.get("/join", response_class=HTMLResponse)

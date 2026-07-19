@@ -74,11 +74,28 @@ def _host(sub):
     return {"host": f"{sub}.{APEX}"}
 
 
-def test_apex_shows_the_directory():
+def test_apex_shows_the_home_landing():
     c = TestClient(app)
     html = c.get("/", headers={"host": APEX}).text
-    assert "Units in the Field" in html
+    # a hero with a search that leads to the Find-a-Unit page
+    assert "Find your unit" in html and 'action="/find"' in html
+    # recruiting units are featured on the landing
     assert "5th Virginia" in html and "2nd United States" in html
+
+
+def test_find_page_lists_and_prefills():
+    c = TestClient(app)
+    html = c.get("/find", headers={"host": APEX}).text
+    assert "Find a Unit" in html and 'id="dir-search"' in html
+    assert "5th Virginia" in html and "2nd United States" in html
+    # a prefilled search term lands in the box
+    assert 'value="sharp"' in c.get("/find?q=sharp", headers={"host": APEX}).text
+
+
+def test_find_page_redirects_from_a_subdomain():
+    c = TestClient(app)
+    r = c.get("/find", headers=_host("5thva"), follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"].endswith("/find")
 
 
 def test_directory_shows_platform_activity_feed():
@@ -325,19 +342,22 @@ def test_registration_closed_by_default():
             os.environ["PLATFORM_OPEN_REGISTRATION"] = old
 
 
-def test_directory_groups_and_filters_by_game():
+def test_find_page_groups_and_filters_by_game():
     with registry_session() as s:
         fifth = tenant_by_slug(s, "5thva")
         fifth.game = "War of Rights"; fifth.tags = "Milsim, EU"
         tenant_by_slug(s, "2ndus").game = "Squad"
         s.commit()
     c = TestClient(app)
-    html = c.get("/", headers={"host": APEX}).text
+    html = c.get("/find", headers={"host": APEX}).text
     # per-game section grouping + filter chips + the search tooling
     assert 'data-game="War of Rights"' in html and 'data-game="Squad"' in html
     assert 'id="dir-search"' in html and 'id="dir-filters"' in html
     # tags render on the card and feed search
     assert "Milsim" in html
+    # the home surfaces the games as quick links to the find page
+    home = c.get("/", headers={"host": APEX}).text
+    assert '/find?game=' in home
 
 
 def test_listing_editor_saves_game_and_tags():
