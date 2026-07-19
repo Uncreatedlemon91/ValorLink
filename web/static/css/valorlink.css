@@ -119,13 +119,33 @@ nav.rail {
   padding: 10px 6px 0;
   border-bottom: 1px solid var(--rule);
   position: sticky;
-  top: 0;
+  top: var(--topbar-h, 0);
   background: var(--paper);
   box-shadow: 0 2px 6px rgba(0,0,0,0.04);
   z-index: 8;
   transition: padding .22s ease, box-shadow .22s ease;
 }
 nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
+
+/* Thin utility bar pinned to the very top: platform links + account. */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 4px 18px; padding: 7px clamp(16px, 4vw, 44px);
+  background: var(--paper-2); border-bottom: 1px solid var(--rule-strong);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint);
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+.topbar a { color: var(--ink-soft); transition: color .16s ease; }
+.topbar a:hover { color: var(--seal); text-decoration: none; }
+.topbar .who { color: var(--ink-faint); }
+.topbar .who b { color: var(--ink-soft); }
+.topbar .rankchip {
+  color: var(--brass); border: 1px solid var(--brass);
+  padding: 1px 6px; border-radius: 1px; margin-left: 4px;
+}
+.topbar .unit-switcher summary { padding: 1px 8px; }
+body.theme-modern .topbar { background: rgba(255,255,255,0.03); }
 nav.rail a {
   position: relative;
   color: var(--ink-soft);
@@ -162,7 +182,7 @@ body.theme-modern nav.rail a:hover { background: rgba(255,255,255,0.05); }
   font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;
 }
 @media (max-width: 720px) {
-  .nav-toggle { display: block; position: sticky; top: 0; z-index: 9; background: var(--paper); transition: background .18s ease; }
+  .nav-toggle { display: block; position: sticky; top: var(--topbar-h, 0); z-index: 9; background: var(--paper); transition: background .18s ease; }
   .nav-toggle[aria-expanded="true"] { color: var(--seal); border-color: var(--seal); }
   nav.rail { display: none; flex-direction: column; align-items: stretch; text-align: center; padding: 4px 0 0; position: static; box-shadow: none; gap: 0; }
   nav.rail.open { display: flex; animation: navdrop .22s ease; }

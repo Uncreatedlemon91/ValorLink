@@ -9,6 +9,40 @@
 </head>
 <body class="theme-{{ theme|default('parchment') }}">
   <div class="sheet" style="--seal: {{ brand_color }};">
+    <div class="topbar" id="topbar">
+      <div class="topbar-left">
+        {% if platform_base %}
+          <a href="https://{{ platform_base }}/">‹ ValorLink</a>
+          <a href="https://{{ platform_base }}/find">Find a Unit</a>
+          <a href="https://{{ platform_base }}/my-units">My Units</a>
+        {% endif %}
+      </div>
+      <div class="topbar-right">
+        {% if my_units %}
+          <details class="unit-switcher">
+            <summary>{{ regiment_name }} <span class="uswitch-caret">▾</span></summary>
+            <div class="uswitch-menu">
+              <div class="uswitch-head">Your units</div>
+              {% for u in my_units %}
+                <a href="{{ u.url }}" class="uswitch-item{{ ' current' if u.current }}">
+                  <span class="uswitch-name">{{ u.name }}</span>
+                  <span class="rankchip">{{ u.tier }}</span>
+                </a>
+              {% endfor %}
+            </div>
+          </details>
+        {% endif %}
+        {% if user %}
+          <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
+          <a href="/my-record">My record</a>
+          <a href="/logout">Sign out</a>
+        {% else %}
+          <span class="who">Visitor</span>
+          <a href="/login">Officer sign-in</a>
+        {% endif %}
+      </div>
+    </div>
+
     <header class="banner">
       {% if crest %}<img class="crest-img" src="{{ crest }}" alt="">{% else %}<div class="crest">★ ✶ ★</div>{% endif %}
       <h1>{{ regiment_name }}</h1>
@@ -32,38 +66,6 @@
       {% if tier_at_least(user, TIER_OFFICER) %}<a href="/audit" class="{{ 'active' if path == '/audit' }}">Ledger</a>{% endif %}
       {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'active' if path == '/command-tent' }}">{{ terms.command }}</a>{% endif %}
     </nav>
-
-    <div class="authbar">
-      {% if platform_base %}
-        <span class="plat-links">
-          <a href="https://{{ platform_base }}/">‹ ValorLink</a>
-          <a href="https://{{ platform_base }}/find">Find a Unit</a>
-          <a href="https://{{ platform_base }}/my-units">My Units</a>
-        </span>
-      {% endif %}
-      {% if my_units %}
-        <details class="unit-switcher">
-          <summary>{{ regiment_name }} <span class="uswitch-caret">▾</span></summary>
-          <div class="uswitch-menu">
-            <div class="uswitch-head">Your units</div>
-            {% for u in my_units %}
-              <a href="{{ u.url }}" class="uswitch-item{{ ' current' if u.current }}">
-                <span class="uswitch-name">{{ u.name }}</span>
-                <span class="rankchip">{{ u.tier }}</span>
-              </a>
-            {% endfor %}
-          </div>
-        </details>
-      {% endif %}
-      {% if user %}
-        <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
-        <a href="/my-record">My record</a>
-        <a href="/logout">Sign out</a>
-      {% else %}
-        <span class="who">Viewing as a visitor</span>
-        <a href="/login">Officer sign-in</a>
-      {% endif %}
-    </div>
 
     <main class="wrap">
       {% if request.url.path != '/' %}
@@ -97,6 +99,16 @@
       var onScroll = function () { rail.classList.toggle('stuck', window.scrollY > 12); };
       window.addEventListener('scroll', onScroll, { passive: true });
       onScroll();
+
+      // Keep the sticky nav parked just below the fixed top utility bar.
+      var topbar = document.getElementById('topbar');
+      if (topbar) {
+        var setH = function () {
+          document.documentElement.style.setProperty('--topbar-h', topbar.offsetHeight + 'px');
+        };
+        setH();
+        window.addEventListener('resize', setH);
+      }
     })();
 
     // Click-to-sort tables (any .ledger with a header; opt out with .no-sort).

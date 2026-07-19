@@ -168,7 +168,9 @@ def test_login_is_scoped_across_units():
            headers=_host("5thva"), follow_redirects=False)
     assert "Signed in as" in c.get("/", headers=_host("5thva")).text
     # a different unit sees a visitor
-    assert "Viewing as a visitor" in c.get("/", headers=_host("2ndus")).text
+    # on a unit they don't belong to they're a visitor (the top bar shows it)
+    other = c.get("/", headers=_host("2ndus")).text
+    assert "Officer sign-in" in other and "Signed in as" not in other
     # and an officer action on the other unit is refused
     r = c.post("/members/1/service-log", data={"csrf": "x", "entry": "hi"},
                headers=_host("2ndus"), follow_redirects=False)
