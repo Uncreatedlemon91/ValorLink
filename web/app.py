@@ -82,6 +82,19 @@ def _startup():
     ensure_ready()
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _asset_version() -> str:
+    """A cache-busting token for the stylesheet, derived from its modification
+    time. It changes whenever the file is rewritten (e.g. on a git pull), so
+    browsers fetch fresh CSS after a deploy instead of reusing a stale copy."""
+    try:
+        return str(int((BASE_DIR / "static" / "css" / "valorlink.css").stat().st_mtime))
+    except OSError:
+        return "1"
+
+
+templates.env.globals["css_v"] = _asset_version()
 templates.env.globals["tier_at_least"] = auth.tier_at_least
 templates.env.globals["TIER_RECRUITER"] = auth.TIER_RECRUITER
 templates.env.globals["TIER_OFFICER"] = auth.TIER_OFFICER

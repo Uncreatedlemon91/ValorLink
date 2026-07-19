@@ -1025,7 +1025,13 @@ body.theme-modern .audit-filter .chip-on { color: #fff; }
   color: var(--ink-soft); border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin: 0 0 14px;
 }
 .dir-section-head .count { color: var(--ink-faint); font-size: 12px; }
-.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.unit-grid {
+  display: grid; gap: 18px;
+  /* Cards keep a comfortable width and centre as a group, so a handful of
+     units read as tidy cards rather than stretching across the whole row. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 300px));
+  justify-content: center;
+}
 .unit-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 0 0 8px; }
 .tagchip {
   font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
