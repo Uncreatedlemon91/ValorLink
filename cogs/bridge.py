@@ -589,6 +589,26 @@ class Bridge(commands.Cog):
             embed.add_field(name="Filtered to role", value=role.mention, inline=True)
         await self._log_embed(guild, "admin_log_channel_id", embed)
 
+    async def _do_assign_role(self, guild, p):
+        member = guild.get_member(p["discord_id"])
+        role = guild.get_role(p["role_id"]) if p.get("role_id") else None
+        if member and role:
+            try:
+                await member.add_roles(role, reason="Assigned via web")
+            except discord.HTTPException:
+                pass
+        await self._refresh(guild, p["discord_id"])
+
+    async def _do_unassign_role(self, guild, p):
+        member = guild.get_member(p["discord_id"])
+        role = guild.get_role(p["role_id"]) if p.get("role_id") else None
+        if member and role:
+            try:
+                await member.remove_roles(role, reason="Unassigned via web")
+            except discord.HTTPException:
+                pass
+        await self._refresh(guild, p["discord_id"])
+
     async def _strip_managed_roles(self, member: discord.Member):
         with db_session() as session:
             cfg = get_config(session)

@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 
 from db.models import (
+    Assignment,
     AttendanceRecord,
     AuditEntry,
     AwardType,
@@ -26,6 +27,7 @@ from db.models import (
     DisciplinaryRecord,
     Event,
     Member,
+    MemberAssignment,
     MemberAward,
     PendingAction,
     Rank,
@@ -70,7 +72,7 @@ def _log(session, member_id: int, entry: str, actor: dict):
 # The set of action categories the audit log distinguishes, for filtering.
 AUDIT_CATEGORIES = [
     "rank", "company", "service", "discipline", "lifecycle", "leave",
-    "recruitment", "awards", "announcement", "roster", "event",
+    "recruitment", "awards", "announcement", "roster", "event", "assignment",
 ]
 
 
@@ -1023,6 +1025,100 @@ def company_remove(session, company_id: int) -> str:
     session.delete(company)
     session.commit()
     return f"Company '{name}' removed. Members assigned to it keep the label until reassigned."
+
+
+# --- Secondary assignments ----------------------------------------------- #
+def list_assignments(session) -> list[Assignment]:
+    """All assignments, leadership first, then by position and name."""
+    return (
+        session.query(Assignment)
+        .order_by(Assignment.is_leadership.desc(), Assignment.position, Assignment.name)
+        .all()
+    )
+
+
+def assignment_add(session, name: str, role_id: str = "", description: str = "",
+                   is_leadership: bool = False) -> str:
+    name = name.strip()
+    if not name:
+        raise ActionError("An assignment needs a name.")
+    if session.query(Assignment).filter(Assignment.name.ilike(name)).one_or_none():
+        raise ActionError(f"'{name}' already exists.")
+    top = session.query(func.max(Assignment.position)).scalar() or 0
+    session.add(Assignment(
+        name=name, role_id=_parse_id(role_id), description=description.strip() or None,
+        is_leadership=bool(is_leadership), position=top + 1,
+    ))
+    session.commit()
+    return f"Assignment '{name}' added."
+
+
+def assignment_update(session, assignment_id: int, role_id: str = "",
+                      description: str = "", is_leadership: bool = False) -> str:
+    a = session.get(Assignment, assignment_id)
+    if a is None:
+        raise ActionError("Unknown assignment.")
+    a.role_id = _parse_id(role_id)
+    a.description = description.strip() or None
+    a.is_leadership = bool(is_leadership)
+    session.commit()
+    return f"Assignment '{a.name}' updated."
+
+
+def assignment_remove(session, assignment_id: int) -> str:
+    a = session.get(Assignment, assignment_id)
+    if a is None:
+        raise ActionError("Unknown assignment.")
+    name = a.name
+    session.delete(a)  # cascades to member links (web side only; roles are left as-is)
+    session.commit()
+    return f"Assignment '{name}' removed."
+
+
+def assign_member(session, actor: dict, discord_id: int, assignment_id: int) -> str:
+    member = _member(session, discord_id)
+    a = session.get(Assignment, assignment_id)
+    if a is None:
+        raise ActionError("Unknown assignment.")
+    existing = (
+        session.query(MemberAssignment)
+        .filter(MemberAssignment.member_id == discord_id,
+                MemberAssignment.assignment_id == assignment_id)
+        .one_or_none()
+    )
+    if existing:
+        raise ActionError(f"{member.callsign} already holds {a.name}.")
+    session.add(MemberAssignment(member_id=discord_id, assignment_id=assignment_id,
+                                 assigned_by=actor["id"]))
+    if a.role_id:
+        queue.enqueue(session, queue.ASSIGN_ROLE,
+                      {"discord_id": discord_id, "role_id": a.role_id}, actor_id=actor["id"])
+    _audit(session, actor, "assignment", f"Assigned {member.callsign} to {a.name}.",
+           target_id=discord_id)
+    session.commit()
+    return f"{member.callsign} assigned to {a.name}."
+
+
+def unassign_member(session, actor: dict, discord_id: int, assignment_id: int) -> str:
+    member = _member(session, discord_id)
+    a = session.get(Assignment, assignment_id)
+    link = (
+        session.query(MemberAssignment)
+        .filter(MemberAssignment.member_id == discord_id,
+                MemberAssignment.assignment_id == assignment_id)
+        .one_or_none()
+    )
+    if link is None:
+        raise ActionError(f"{member.callsign} isn't assigned to that.")
+    name = a.name if a else "that assignment"
+    session.delete(link)
+    if a and a.role_id:
+        queue.enqueue(session, queue.UNASSIGN_ROLE,
+                      {"discord_id": discord_id, "role_id": a.role_id}, actor_id=actor["id"])
+    _audit(session, actor, "assignment", f"Removed {member.callsign} from {name}.",
+           target_id=discord_id)
+    session.commit()
+    return f"{member.callsign} removed from {name}."
 
 
 # --- Member self-service: RSVP ------------------------------------------- #

@@ -31,6 +31,8 @@ AWARD_GRANTED = "award_granted"         # refresh dossier + billboard
 AWARD_REVOKED = "award_revoked"         # refresh dossier
 POST_ANNOUNCEMENT = "post_announcement" # post an officer's announcement embed
 IMPORT_ROSTER = "import_roster"         # create records for current Discord members
+ASSIGN_ROLE = "assign_role"             # add a secondary-assignment Discord role
+UNASSIGN_ROLE = "unassign_role"         # remove a secondary-assignment Discord role
 
 # Statuses
 PENDING = "pending"

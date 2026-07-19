@@ -321,6 +321,50 @@ field as-is to keep the default wording.</p>
   </form>
 </div>
 
+<h2 class="section" id="assignments">{{ terms.assignments }} <span class="tally">secondary groups (High Command, Staff…)</span></h2>
+<p class="lede">Cross-cutting groups a member can hold on top of their company. Give one a
+Discord role and the bot adds/removes it as members are assigned. Mark a group as
+<b>leadership</b> to float it to the top of the Command &amp; Staff roster.</p>
+<table class="ledger admin-table">
+  <thead><tr><th>Assignment</th><th>Role ID</th><th>Leadership</th><th></th></tr></thead>
+  <tbody>
+  {% for a in assignments %}
+    <tr>
+      <td class="callsign">{{ a.name }}{% if a.description %}<span class="muted"> — {{ a.description }}</span>{% endif %}</td>
+      <td>
+        <form class="rowform" method="post" action="/admin/assignments/{{ a.id }}/update">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input name="role_id" value="{{ a.role_id or '' }}" size="14" placeholder="role ID" inputmode="numeric">
+          <input name="description" value="{{ a.description or '' }}" size="18" placeholder="description">
+          <label class="checkline"><input type="checkbox" name="is_leadership" value="1" {{ 'checked' if a.is_leadership }}> lead</label>
+          <button class="btn btn-small" type="submit">Save</button>
+        </form>
+      </td>
+      <td>{% if a.is_leadership %}<span class="badge abbr">★</span>{% endif %}</td>
+      <td class="num">
+        <form method="post" action="/admin/assignments/{{ a.id }}/remove" data-confirm="Remove {{ a.name }}? (Members keep any Discord role.)">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <button class="btn btn-small btn-danger" type="submit">Remove</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="order-card" style="max-width:640px; margin-top:14px;">
+  <h3 class="order-title">Add an {{ terms.assignments }} group</h3>
+  <form class="orders" method="post" action="/admin/assignments/add">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field-row">
+      <div class="field" style="flex:2;"><label>Name</label><input name="name" required placeholder="High Command"></div>
+      <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label>Description <span class="opt">(optional)</span></label><input name="description" placeholder="The unit's senior leadership."></div>
+    <div class="field"><label class="checkline"><input type="checkbox" name="is_leadership" value="1"> This is a leadership group</label></div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Add group</button></div>
+  </form>
+</div>
+
 <h2 class="section" id="questions">Recruitment Questions <span class="tally">asked when applicants enlist</span></h2>
 <p class="lede">Applicants answer these on your Join page and in the Discord application.
 Hidden questions aren't asked; drag order with the arrows.</p>

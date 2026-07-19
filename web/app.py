@@ -764,9 +764,18 @@ def _render_dossier(request: Request, session: Session, member: Member, is_self:
             "turnout": rate_for(member),
         }
 
+    held_assignments = sorted(
+        member.assignments,
+        key=lambda ma: (not ma.assignment.is_leadership, ma.assignment.position, ma.assignment.name),
+    )
+    held_ids = {ma.assignment_id for ma in member.assignments}
+    assignable = [a for a in services.list_assignments(session) if a.id not in held_ids]
+
     ctx.update(
         self_dashboard=self_dashboard,
         rsvp_choices=[("accepted", "Accept"), ("tentative", "Tentative"), ("declined", "Decline")],
+        held_assignments=held_assignments,
+        assignable=assignable,
         member=member,
         rank=rank_utils.rank_by_name(session, member.rank),
         service=service,
@@ -1045,6 +1054,24 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
     return templates.TemplateResponse(request, "event_detail.html", ctx)
 
 
+@app.get("/command-staff", response_class=HTMLResponse)
+def command_staff(request: Request, session: Session = Depends(get_session)):
+    """Members grouped by their secondary assignments — the staff & command
+    roster. Leadership groups sort to the top; within a group, seniority first."""
+    ctx = _base_context(request, session)
+    rank_pos = {r.name: r.position for r in rank_utils.all_ranks(session)}
+    groups = []
+    for a in services.list_assignments(session):
+        members = sorted(
+            [ma.member for ma in a.members if ma.member],
+            key=lambda m: (-rank_pos.get(m.rank, -1), m.callsign.lower()),
+        )
+        groups.append({"assignment": a, "members": members})
+    ctx["groups"] = groups
+    ctx["any_assignments"] = bool(groups)
+    return templates.TemplateResponse(request, "command_staff.html", ctx)
+
+
 @app.get("/honors", response_class=HTMLResponse)
 def honors(request: Request, session: Session = Depends(get_session)):
     """Awards & qualifications catalogue with their recipients."""
@@ -1148,6 +1175,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         brand_hex=brand_hex(cfg.brand_color),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),
+        assignments=services.list_assignments(session),
         questions=services.list_recruitment_questions(session),
         theme_choices=terminology.THEME_CHOICES,
         term_fields=terminology.EDITABLE_KEYS,
@@ -1892,6 +1920,71 @@ def post_company_remove(
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.company_remove, company_id, redirect="/command-tent")
+
+
+# --- Admin: secondary assignments ---------------------------------------- #
+@app.post("/admin/assignments/add")
+def post_assignment_add(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    role_id: str = Form(""),
+    description: str = Form(""),
+    is_leadership: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.assignment_add, name, role_id, description,
+               bool(is_leadership), redirect="/command-tent")
+
+
+@app.post("/admin/assignments/{assignment_id}/update")
+def post_assignment_update(
+    request: Request,
+    assignment_id: int,
+    csrf: str = Form(...),
+    role_id: str = Form(""),
+    description: str = Form(""),
+    is_leadership: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.assignment_update, assignment_id, role_id,
+               description, bool(is_leadership), redirect="/command-tent")
+
+
+@app.post("/admin/assignments/{assignment_id}/remove")
+def post_assignment_remove(
+    request: Request,
+    assignment_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.assignment_remove, assignment_id, redirect="/command-tent")
+
+
+@app.post("/members/{discord_id}/assign")
+def post_member_assign(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    assignment_id: int = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.assign_member, actor, discord_id, assignment_id,
+               redirect=f"/dossier/{discord_id}")
+
+
+@app.post("/members/{discord_id}/unassign")
+def post_member_unassign(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    assignment_id: int = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.unassign_member, actor, discord_id, assignment_id,
+               redirect=f"/dossier/{discord_id}")
 
 
 @app.post("/admin/questions/add")

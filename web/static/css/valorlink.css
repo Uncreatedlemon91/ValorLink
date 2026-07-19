@@ -998,6 +998,26 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
 body.theme-modern .audit-filter .chip-on { color: #fff; }
 
+/* ---- Secondary assignments -------------------------------------------- */
+.assign-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
+.assign-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+.assign-manage { display: flex; flex-wrap: wrap; gap: 8px; }
+.assign-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; letter-spacing: 0.04em;
+  padding: 3px 10px; border: 1px solid var(--rule-strong); border-radius: 12px;
+  background: rgba(255,253,246,0.5); color: var(--ink);
+}
+.assign-chip.lead { border-color: var(--seal); color: var(--seal); font-weight: 700; }
+.assign-chip.lead::before { content: "★"; font-size: 10px; }
+.assign-chip form { display: inline; margin: 0; }
+.chip-x {
+  border: none; background: none; cursor: pointer; color: var(--ink-faint);
+  font-size: 15px; line-height: 1; padding: 0 0 0 2px;
+}
+.chip-x:hover { color: var(--oxblood); }
+body.theme-modern .assign-chip { background: rgba(255,255,255,0.04); }
+
 /* ---- Event announcement lead-time picker ------------------------------ */
 .lead-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lead-row select { max-width: 120px; }

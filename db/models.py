@@ -62,6 +62,9 @@ class Member(Base):
     awards = relationship(
         "MemberAward", back_populates="member", cascade="all, delete-orphan"
     )
+    assignments = relationship(
+        "MemberAssignment", back_populates="member", cascade="all, delete-orphan"
+    )
 
 
 class ServiceHistoryEntry(Base):
@@ -158,6 +161,43 @@ class MemberAward(Base):
 
     member = relationship("Member", back_populates="awards")
     award_type = relationship("AwardType", back_populates="awards")
+
+
+class Assignment(Base):
+    """A secondary group a member can hold in addition to their company —
+    High Command, Staff, a training cadre, a colour guard. Cross-cutting and
+    optional (a member holds zero or more), each with an optional Discord role
+    the bot keeps in sync. Managed from the Command Tent, like Companies."""
+
+    __tablename__ = "assignments"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    role_id = Column(BigInteger, nullable=True)          # Discord role synced on assign
+    description = Column(Text, nullable=True)
+    is_leadership = Column(Boolean, nullable=False, default=False)  # sorts to the top of the staff roster
+    position = Column(Integer, nullable=False, default=0)
+
+    members = relationship(
+        "MemberAssignment", back_populates="assignment", cascade="all, delete-orphan"
+    )
+
+
+class MemberAssignment(Base):
+    """A member holding a secondary assignment. Many-to-many between members
+    and assignments."""
+
+    __tablename__ = "member_assignments"
+    __table_args__ = (UniqueConstraint("member_id", "assignment_id", name="uq_member_assignment"),)
+
+    id = Column(Integer, primary_key=True)
+    member_id = Column(BigInteger, ForeignKey("members.discord_id"), nullable=False)
+    assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=False)
+    assigned_at = Column(DateTime, default=_utcnow)
+    assigned_by = Column(BigInteger, nullable=True)
+
+    member = relationship("Member", back_populates="assignments")
+    assignment = relationship("Assignment", back_populates="members")
 
 
 class Setting(Base):

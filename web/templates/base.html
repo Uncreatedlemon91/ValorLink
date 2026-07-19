@@ -27,6 +27,7 @@
       {% if tier_at_least(user, TIER_OFFICER) %}<a href="/promotions" class="{{ 'active' if path == '/promotions' }}">{{ terms.promotions }}</a>{% endif %}
       {% if tier_at_least(user, TIER_OFFICER) %}<a href="/leave" class="{{ 'active' if path == '/leave' }}">{{ terms.leave }}</a>{% endif %}
       <a href="/honors" class="{{ 'active' if path == '/honors' }}">{{ terms.honors }}</a>
+      <a href="/command-staff" class="{{ 'active' if path == '/command-staff' }}">{{ terms.assignments }}</a>
       <a href="/recruits" class="{{ 'active' if path == '/recruits' }}">{{ terms.recruits }}{% if pending_recruits %} <span class="pip">{{ pending_recruits }}</span>{% endif %}</a>
       {% if tier_at_least(user, TIER_OFFICER) %}<a href="/audit" class="{{ 'active' if path == '/audit' }}">Ledger</a>{% endif %}
       {% if tier_at_least(user, TIER_ADMIN) %}<a href="/command-tent" class="{{ 'active' if path == '/command-tent' }}">{{ terms.command }}</a>{% endif %}

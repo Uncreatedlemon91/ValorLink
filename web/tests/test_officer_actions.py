@@ -1074,6 +1074,60 @@ def test_scheduler_skips_not_yet_due_announcement():
     bridge._do_announce_event.assert_not_awaited()
 
 
+def test_assignment_add_assign_and_unassign():
+    import json
+    from db.models import Assignment, MemberAssignment
+    client = TestClient(app)
+    _login(client, "admin")
+    # admin defines a leadership group with a Discord role
+    client.post("/admin/assignments/add",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "High Command",
+                      "role_id": "555", "description": "Senior leadership", "is_leadership": "1"})
+    with SessionLocal() as s:
+        a = s.query(Assignment).filter_by(name="High Command").one()
+        assert a.is_leadership is True and a.role_id == 555
+        aid = a.id
+    # assign a member → link created + role add queued + audited
+    client.post(f"/members/{MEMBER_ID}/assign",
+                data={"csrf": _csrf(client), "assignment_id": aid})
+    with SessionLocal() as s:
+        assert s.query(MemberAssignment).filter_by(member_id=MEMBER_ID, assignment_id=aid).count() == 1
+    acts = _actions(queue.ASSIGN_ROLE)
+    assert len(acts) == 1 and json.loads(acts[0].payload)["role_id"] == 555
+    # the staff roster shows the member under the group
+    staff = client.get("/command-staff").text
+    assert "High Command" in staff and "Testman" in staff
+    # unassign → link gone + role removal queued
+    client.post(f"/members/{MEMBER_ID}/unassign",
+                data={"csrf": _csrf(client), "assignment_id": aid})
+    with SessionLocal() as s:
+        assert s.query(MemberAssignment).filter_by(member_id=MEMBER_ID, assignment_id=aid).count() == 0
+    assert len(_actions(queue.UNASSIGN_ROLE)) == 1
+
+
+def test_assignment_actions_require_officer():
+    client = TestClient(app)
+    _login(client, "none")
+    r = client.post(f"/members/{MEMBER_ID}/assign",
+                    data={"csrf": "x", "assignment_id": 1}, follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+
+
+def test_bridge_assigns_and_unassigns_role():
+    from cogs.bridge import Bridge
+    bridge = object.__new__(Bridge)
+    bridge._refresh = AsyncMock()
+    member = AsyncMock()
+    role = MagicMock()
+    guild = MagicMock()
+    guild.get_member.return_value = member
+    guild.get_role.return_value = role
+    asyncio.run(bridge._do_assign_role(guild, {"discord_id": MEMBER_ID, "role_id": 555}))
+    member.add_roles.assert_awaited_once()
+    asyncio.run(bridge._do_unassign_role(guild, {"discord_id": MEMBER_ID, "role_id": 555}))
+    member.remove_roles.assert_awaited_once()
+
+
 def test_bridge_deletes_event_message():
     from cogs.bridge import Bridge
     bridge = object.__new__(Bridge)
