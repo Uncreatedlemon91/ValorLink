@@ -30,9 +30,22 @@
           Your unit's headquarters is live at:<br>
           <a class="btn" style="margin-top:8px;" href="{{ portal_url }}">{{ portal_url }}</a>
         </li>
-        <li><span class="date">Step Three — Configure from the Command Tent</span>
-          Sign in on your portal (you'll need the admin role you set with
-          <code>/config set_role key:admin</code> in Discord), then set roles,
+        <li><span class="date">Step Three — Bootstrap admin access in Discord</span>
+          Before you can sign in as an admin, bind your admin role in Discord.
+          Run this once in your server, as someone with server
+          <b>Administrator</b> permission:
+          <div class="bootstrap-note">
+            <span class="cmd">
+              <code class="cmd-text">/config set_role key:admin role:@Admin</code>
+              <button type="button" class="cmd-copy" data-copy="/config set_role key:admin role:@Admin">Copy</button>
+            </span>
+            <p class="bootstrap-hint">Replace <code>@Admin</code> with your server's admin role.
+            This first binding must be done in Discord; afterwards the admin role
+            can manage everything.</p>
+          </div>
+        </li>
+        <li><span class="date">Step Four — Configure from the Command Tent</span>
+          Sign in on your portal with that admin role, then set the other roles,
           channels, ranks, and companies from the Command Tent.
         </li>
       </ol>
@@ -40,5 +53,6 @@
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
     </main>
   </div>
+  {% include "_copy_js.html" %}
 </body>
 </html>

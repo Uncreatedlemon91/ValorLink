@@ -1191,6 +1191,27 @@ body.theme-modern .ring span { background: #14171b; }
 .onboard-step a.onboard-label { color: var(--seal); }
 .onboard-cta { display: inline-block; margin-top: 16px; }
 body.theme-modern .onboard { background: rgba(255,255,255,0.04); box-shadow: none; }
+.onboard-step .onboard-cmd { grid-column: 2; margin-top: 3px; }
+
+/* ---- Copyable command box (Discord bootstrap, etc.) ------------------- */
+.cmd { display: inline-flex; align-items: stretch; max-width: 100%; margin: 6px 0; vertical-align: middle; }
+.cmd-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+  background: var(--paper-2); color: var(--ink); border: 1px solid var(--rule-strong);
+  border-radius: 4px 0 0 4px; padding: 7px 10px; overflow-x: auto; white-space: nowrap;
+}
+.cmd-copy {
+  border: 1px solid var(--rule-strong); border-left: 0; border-radius: 0 4px 4px 0;
+  background: var(--seal); color: #fff; font-size: 12px; letter-spacing: 0.04em;
+  padding: 0 13px; cursor: pointer; white-space: nowrap; transition: filter .15s, background .15s;
+}
+.cmd-copy:hover { filter: brightness(1.1); }
+.cmd-copy.is-copied { background: #3f6b3a; }
+.bootstrap-note { margin: 12px 0 2px; }
+.bootstrap-lead { margin: 0 0 2px; }
+.bootstrap-hint { font-size: 12.5px; color: var(--ink-faint); margin: 4px 0 0; }
+body.theme-modern .cmd-text { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
+body.theme-modern .cmd-copy { border-color: #2a2f36; }
 
 /* ---- Apex navigation (platform pages) --------------------------------- */
 .apex-nav {

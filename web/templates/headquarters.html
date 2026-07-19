@@ -20,6 +20,13 @@
         <span class="onboard-mark">{{ '✓' if s.done else '○' }}</span>
         {% if s.done %}
           <span class="onboard-label">{{ s.label }}</span>
+        {% elif s.discord_cmd %}
+          <span class="onboard-label">{{ s.label }}</span>
+          <span class="onboard-hint">{{ s.hint }}</span>
+          <span class="onboard-cmd cmd">
+            <code class="cmd-text">{{ s.discord_cmd }}</code>
+            <button type="button" class="cmd-copy" data-copy="{{ s.discord_cmd }}">Copy</button>
+          </span>
         {% else %}
           <a class="onboard-label" href="/command-tent{{ s.anchor }}">{{ s.label }}</a>
           <span class="onboard-hint">{{ s.hint }}</span>
@@ -212,4 +219,5 @@
     });
   })();
 </script>
+{% include "_copy_js.html" %}
 {% endblock %}

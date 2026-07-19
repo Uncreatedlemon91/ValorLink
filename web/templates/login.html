@@ -52,5 +52,21 @@ roles.</p>
   </form>
 {% endif %}
 
+<details class="card" style="margin-top:20px;">
+  <summary style="cursor:pointer;font-weight:600;">Setting up a new unit? Bootstrap admin access</summary>
+  <p style="margin:12px 0 0;">Admin standing is read from the admin role you bind in
+  Discord. On a brand-new unit no admin role exists yet, so the first binding must
+  be run in your Discord server by someone with server <b>Administrator</b> permission:</p>
+  <div class="bootstrap-note">
+    <span class="cmd">
+      <code class="cmd-text">/config set_role key:admin role:@Admin</code>
+      <button type="button" class="cmd-copy" data-copy="/config set_role key:admin role:@Admin">Copy</button>
+    </span>
+    <p class="bootstrap-hint">Replace <code>@Admin</code> with your server's admin role, then
+    sign in above — everything else is set from the Command Tent.</p>
+  </div>
+</details>
+
 <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% include "_copy_js.html" %}
 {% endblock %}

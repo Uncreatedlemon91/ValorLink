@@ -1262,25 +1262,31 @@ def _setup_checklist(session: Session, cfg) -> list[dict]:
     to the Command Tent section that satisfies it. Drives the onboarding card."""
     rank_count = len(rank_utils.all_ranks(session))
     company_count = len(list_companies(session))
+    # A step may carry a Discord slash command when it must be bootstrapped in
+    # Discord rather than the web Command Tent — the admin role is the classic
+    # chicken-and-egg: you can't reach the web admin pages until it's set.
     steps = [
         ("Name your regiment", cfg.regiment_name not in ("", "Unconfigured Regiment"),
-         "#identity", "So the banner and directory show your unit, not a placeholder."),
+         "#identity", "So the banner and directory show your unit, not a placeholder.", None),
         ("Set the Admin role", bool(cfg.admin_role_id),
-         "#roles", "Grants full control here and in Discord."),
+         "#roles", "The very first admin role must be set in Discord, by someone with "
+         "server Administrator permission — replace @Admin with your role.",
+         "/config set_role key:admin role:@Admin"),
         ("Set the Officer role", bool(cfg.officer_role_id),
-         "#roles", "Officers manage the roster, events, and discipline."),
+         "#roles", "Officers manage the roster, events, and discipline.", None),
         ("Set the Recruiter role", bool(cfg.recruiter_role_id),
-         "#roles", "Recruiters approve or deny applicants."),
+         "#roles", "Recruiters approve or deny applicants.", None),
         ("Set the Roster channel", bool(cfg.roster_channel_id),
-         "#channels", "Where the live roster embed is posted and kept current."),
+         "#channels", "Where the live roster embed is posted and kept current.", None),
         ("Set the Recruitment channel", bool(cfg.recruitment_channel_id),
-         "#channels", "Where enlistment applications land for review."),
+         "#channels", "Where enlistment applications land for review.", None),
         ("Build the rank ladder", rank_count >= 2,
-         "#ranks", "You need ranks before you can promote anyone."),
+         "#ranks", "You need ranks before you can promote anyone.", None),
         ("Add a company", company_count >= 1,
-         "#companies", "Members are assigned to a company on the roster."),
+         "#companies", "Members are assigned to a company on the roster.", None),
     ]
-    return [{"label": s[0], "done": s[1], "anchor": s[2], "hint": s[3]} for s in steps]
+    return [{"label": s[0], "done": s[1], "anchor": s[2], "hint": s[3], "discord_cmd": s[4]}
+            for s in steps]
 
 
 @app.get("/audit", response_class=HTMLResponse)

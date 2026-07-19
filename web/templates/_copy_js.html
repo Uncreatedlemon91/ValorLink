@@ -1,0 +1,31 @@
+<script>
+  // Copy-to-clipboard for any [data-copy] button. Guarded so including this
+  // partial on more than one place in a page binds the handler only once.
+  (function () {
+    if (window.__vlCopyInit) return;
+    window.__vlCopyInit = true;
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-copy]');
+      if (!btn) return;
+      var text = btn.getAttribute('data-copy');
+      function flash() {
+        var old = btn.getAttribute('data-label') || btn.textContent;
+        btn.setAttribute('data-label', old);
+        btn.textContent = 'Copied';
+        btn.classList.add('is-copied');
+        setTimeout(function () { btn.textContent = old; btn.classList.remove('is-copied'); }, 1400);
+      }
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly', '');
+        ta.style.position = 'absolute'; ta.style.left = '-9999px';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); flash(); } catch (err) {}
+        document.body.removeChild(ta);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(flash).catch(fallback);
+      } else { fallback(); }
+    });
+  })();
+</script>
