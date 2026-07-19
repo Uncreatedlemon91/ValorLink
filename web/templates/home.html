@@ -9,24 +9,14 @@
 </head>
 <body>
   <div class="sheet" style="--seal:#7c1f2b;">
+    {% include "_apex_topbar.html" %}
+
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
       <h1>ValorLink</h1>
       <p class="motto">The Muster Grounds</p>
       <div class="estd">Command your unit · muster the field</div>
     </header>
-
-    {% include "_apex_nav.html" %}
-
-    <div class="authbar">
-      {% if user %}
-        <span class="who">Signed in as <b>{{ user.name }}</b></span>
-        <a href="/logout">Sign out</a>
-      {% else %}
-        <span class="who">Browsing as a visitor</span>
-        <a href="/login">Sign in with Discord</a>
-      {% endif %}
-    </div>
 
     <main class="wrap">
       {% if flash %}

@@ -9,17 +9,13 @@
 </head>
 <body>
   <div class="sheet" style="--seal:#7c1f2b;">
+    {% include "_apex_topbar.html" %}
+
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
       <h1>Platform Dashboard</h1>
       <p class="motto">Every unit on ValorLink, at a glance</p>
     </header>
-
-    <div class="authbar">
-      <a href="/" class="who">‹ The Muster Grounds</a>
-      <a href="/register">Raise a unit</a>
-      {% if user %}<a href="/logout">Sign out</a>{% endif %}
-    </div>
 
     <main class="wrap">
       {% if flash %}

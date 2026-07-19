@@ -138,6 +138,7 @@ nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
 .topbar-left, .topbar-right { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
 .topbar a { color: var(--ink-soft); transition: color .16s ease; }
 .topbar a:hover { color: var(--seal); text-decoration: none; }
+.topbar a.on { color: var(--seal); font-weight: 700; }
 .topbar .who { color: var(--ink-faint); }
 .topbar .who b { color: var(--ink-soft); }
 .topbar .rankchip {

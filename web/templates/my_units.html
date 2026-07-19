@@ -9,23 +9,13 @@
 </head>
 <body>
   <div class="sheet" style="--seal:#7c1f2b;">
+    {% include "_apex_topbar.html" %}
+
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
       <h1>My Units</h1>
       <p class="motto">The outfits you serve in</p>
     </header>
-
-    {% include "_apex_nav.html" %}
-
-    <div class="authbar">
-      <a href="/" class="who">‹ Home</a>
-      {% if user %}
-        <span class="who">Signed in as <b>{{ user.name }}</b></span>
-        <a href="/logout">Sign out</a>
-      {% else %}
-        <a href="/login">Sign in with Discord</a>
-      {% endif %}
-    </div>
 
     <main class="wrap">
       {% if flash %}

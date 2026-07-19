@@ -8,12 +8,12 @@
 </head>
 <body>
   <div class="sheet" style="--seal:#7c1f2b;">
+    {% include "_apex_topbar.html" %}
     <header class="banner">
       <div class="crest">★ ✶ ★</div>
       <h1>Raise a Unit</h1>
       <p class="motto">Muster your own regiment on ValorLink</p>
     </header>
-    <div class="authbar"><a href="/" class="who">‹ The Muster Grounds</a></div>
     <main class="wrap">
       {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
 

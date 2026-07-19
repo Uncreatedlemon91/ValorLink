@@ -2416,6 +2416,7 @@ def registered(request: Request):
         "slug": slug,
         "portal_url": f"https://{slug}.{base}/",
         "invite_url": _bot_invite_url(),
+        "user": auth.current_user(request),
         "now": datetime.utcnow(),
     }
     return templates.TemplateResponse(request, "registered.html", ctx)
