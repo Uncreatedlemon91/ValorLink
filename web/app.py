@@ -44,7 +44,13 @@ from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_
 from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
 from utils import terminology
-from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config, list_companies
+from utils.settings import (
+    CHANNEL_KEYS,
+    ROLE_KEYS,
+    default_company_name,
+    get_config,
+    list_companies,
+)
 from web import auth, services
 from web.tenant import (
     TenantCtx,
@@ -560,11 +566,15 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
     ]
     spark_max = max((s["present"] for s in spark), default=0)
     setup = None
+    setup_steps = None
     if auth.tier_at_least(ctx["user"], auth.TIER_ADMIN):
         checklist = _setup_checklist(session, get_config(session))
         done = sum(1 for s in checklist if s["done"])
         if done < len(checklist):
             setup = {"done": done, "total": len(checklist)}
+            # The full step list drives the actionable onboarding card; the
+            # next unfinished step is highlighted so there's an obvious "do this".
+            setup_steps = checklist
 
     ctx.update(
         counts=counts,
@@ -582,6 +592,7 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         spark=spark,
         spark_max=spark_max,
         setup=setup,
+        setup_steps=setup_steps,
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
 
@@ -1416,6 +1427,12 @@ def recruits(request: Request, session: Session = Depends(get_session)):
     ctx["total"] = len(candidates)
     ctx["stages"] = services.RECRUIT_STAGES
     ctx["metrics"] = services.recruitment_metrics(session)
+    # Options for choosing a starting rank/company at approval time (recruiters).
+    if ctx["can_decide"]:
+        ctx["rank_names"] = [r.name for r in rank_utils.all_ranks(session)]
+        ctx["company_names"] = [c.name for c in list_companies(session)]
+        ctx["default_rank"] = rank_utils.default_rank_name(session)
+        ctx["default_company"] = default_company_name(session)
     return templates.TemplateResponse(request, "recruits.html", ctx)
 
 
@@ -1685,11 +1702,13 @@ def post_approve(
     request: Request,
     discord_id: int,
     csrf: str = Form(...),
+    rank: str = Form(""),
+    company: str = Form(""),
     user: dict = Depends(auth.require_recruiter),
 ):
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.approve_candidate, actor, discord_id,
-               redirect="/recruits")
+               rank or None, company or None, redirect="/recruits")
 
 
 @app.post("/recruits/{discord_id}/deny")
@@ -1981,6 +2000,17 @@ async def post_roles(request: Request, user: dict = Depends(auth.require_admin))
 @app.post("/admin/channels")
 async def post_channels(request: Request, user: dict = Depends(auth.require_admin)):
     return await _do_form(request, services.set_channels, CHANNEL_KEYS, "/command-tent")
+
+
+@app.post("/admin/digest")
+def post_digest(
+    request: Request,
+    csrf: str = Form(...),
+    enabled: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.set_digest_enabled, bool(enabled),
+               redirect="/command-tent")
 
 
 # --- Admin: ranks --------------------------------------------------------- #

@@ -83,9 +83,27 @@ first contact to decision.
         </div>
 
         <div class="recruit-decide">
-          <form method="post" action="/recruits/{{ c.discord_id }}/approve">
+          <form method="post" action="/recruits/{{ c.discord_id }}/approve" class="approve-form">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <button class="btn btn-approve btn-small" type="submit">Approve</button>
+            {% if rank_names or company_names %}
+            <div class="approve-as">
+              {% if rank_names %}
+              <label>Rank
+                <select name="rank">
+                  {% for r in rank_names %}<option value="{{ r }}"{{ ' selected' if r == default_rank }}>{{ r }}</option>{% endfor %}
+                </select>
+              </label>
+              {% endif %}
+              {% if company_names %}
+              <label>Company
+                <select name="company">
+                  {% for co in company_names %}<option value="{{ co }}"{{ ' selected' if co == default_company }}>{{ co }}</option>{% endfor %}
+                </select>
+              </label>
+              {% endif %}
+            </div>
+            {% endif %}
+            <button class="btn btn-approve btn-small" type="submit">Approve &amp; enlist</button>
           </form>
           <form method="post" action="/recruits/{{ c.discord_id }}/deny"
                 data-confirm="Deny {{ c.callsign }}’s application?">

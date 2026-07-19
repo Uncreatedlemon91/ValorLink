@@ -2,6 +2,37 @@
 {% block title %}Headquarters{% endblock %}
 {% block content %}
 
+{% if setup_steps %}
+{% set next_step = (setup_steps | selectattr('done', 'equalto', false) | first) %}
+<section class="onboard" id="onboard-card" data-key="onboard-{{ setup.done }}-{{ setup.total }}">
+  <button type="button" class="onboard-dismiss" aria-label="Dismiss for now" title="Dismiss until the next step is done">×</button>
+  <div class="onboard-head">
+    <div>
+      <div class="onboard-title">Finish setting up your unit</div>
+      <div class="onboard-sub">{{ setup.done }} of {{ setup.total }} done{% if next_step %} · next: <b>{{ next_step.label }}</b>{% endif %}</div>
+    </div>
+    <div class="onboard-pct">{{ (setup.done / setup.total * 100)|round|int }}%</div>
+  </div>
+  <div class="onboard-track"><span class="onboard-fill" style="width: {{ (setup.done / setup.total * 100)|round }}%;"></span></div>
+  <ol class="onboard-steps">
+    {% for s in setup_steps %}
+      <li class="onboard-step {{ 'is-done' if s.done else 'is-todo' }}{{ ' is-next' if (not s.done and s is sameas next_step) }}">
+        <span class="onboard-mark">{{ '✓' if s.done else '○' }}</span>
+        {% if s.done %}
+          <span class="onboard-label">{{ s.label }}</span>
+        {% else %}
+          <a class="onboard-label" href="/command-tent{{ s.anchor }}">{{ s.label }}</a>
+          <span class="onboard-hint">{{ s.hint }}</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  <a class="btn btn-strong onboard-cta" href="/command-tent{{ next_step.anchor if next_step }}">
+    {% if next_step %}{{ next_step.label }} ›{% else %}Open the Command Tent ›{% endif %}
+  </a>
+</section>
+{% endif %}
+
 <div class="tally-row">
   <div class="medallion seal">
     <div class="num">{{ counts.active }}</div>
@@ -165,6 +196,20 @@
       else el.textContent = 'in ' + mins + 'm';
     }
     tick(); setInterval(tick, 60000);
+  })();
+
+  (function () {
+    var card = document.getElementById('onboard-card');
+    if (!card) return;
+    var key = 'valorlink.' + card.getAttribute('data-key');
+    // Dismissal is keyed to the current progress, so finishing a step brings
+    // the card back with the newly-relevant next task.
+    try { if (localStorage.getItem(key) === '1') { card.style.display = 'none'; } } catch (e) {}
+    var x = card.querySelector('.onboard-dismiss');
+    if (x) x.addEventListener('click', function () {
+      card.style.display = 'none';
+      try { localStorage.setItem(key, '1'); } catch (e) {}
+    });
   })();
 </script>
 {% endblock %}

@@ -717,7 +717,12 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 }
 .recruit-actions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 6px; }
 .recruit-actions form, .recruit-decide form { margin: 0; }
-.recruit-decide { display: flex; gap: 6px; border-top: 1px solid var(--rule); padding-top: 7px; }
+.recruit-decide { display: flex; gap: 6px; align-items: flex-end; border-top: 1px solid var(--rule); padding-top: 7px; }
+.approve-form { display: flex; flex-direction: column; gap: 5px; }
+.approve-as { display: flex; flex-wrap: wrap; gap: 6px; }
+.approve-as label { display: flex; flex-direction: column; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); gap: 2px; }
+.approve-as select { font-size: 12px; padding: 2px 4px; border: 1px solid var(--rule-strong); border-radius: 3px; background: var(--paper); color: var(--ink); }
+body.theme-modern .approve-as select { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
 .btn-ghost {
   background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong);
 }
@@ -1154,6 +1159,38 @@ a.hq-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(
 }
 body.theme-modern .hq-card { background: rgba(255,255,255,0.035); }
 body.theme-modern .ring span { background: #14171b; }
+
+/* ---- Onboarding card (HQ, admins, setup incomplete) ------------------- */
+.onboard {
+  position: relative; margin: 4px 0 26px; padding: 18px 20px 20px;
+  border: 1px solid var(--rule-strong); border-left: 4px solid var(--seal);
+  border-radius: 3px; background: rgba(255,253,246,0.7);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.onboard-dismiss {
+  position: absolute; top: 8px; right: 10px; border: 0; background: none;
+  font-size: 20px; line-height: 1; color: var(--ink-faint); cursor: pointer; padding: 2px 6px;
+}
+.onboard-dismiss:hover { color: var(--seal); }
+.onboard-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.onboard-title { font-family: var(--serif); font-size: 19px; color: var(--seal); font-weight: 700; }
+.onboard-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.onboard-pct { font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--seal); }
+.onboard-track { height: 7px; border-radius: 4px; background: var(--rule); margin: 12px 0 14px; overflow: hidden; }
+.onboard-fill { display: block; height: 100%; background: var(--seal); border-radius: 4px; transition: width .4s ease; }
+.onboard-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.onboard-step { display: grid; grid-template-columns: 20px auto; align-items: baseline; gap: 4px 8px; font-size: 13.5px; }
+.onboard-step .onboard-hint { grid-column: 2; font-size: 12px; color: var(--ink-faint); }
+.onboard-mark { text-align: center; font-weight: 700; }
+.onboard-step.is-done { color: var(--ink-faint); }
+.onboard-step.is-done .onboard-mark { color: #3f6b3a; }
+.onboard-step.is-done .onboard-label { text-decoration: line-through; }
+.onboard-step.is-todo .onboard-mark { color: var(--rule-strong); }
+.onboard-step.is-next .onboard-mark { color: var(--seal); }
+.onboard-step.is-next .onboard-label { font-weight: 700; }
+.onboard-step a.onboard-label { color: var(--seal); }
+.onboard-cta { display: inline-block; margin-top: 16px; }
+body.theme-modern .onboard { background: rgba(255,255,255,0.04); box-shadow: none; }
 
 /* ---- Apex navigation (platform pages) --------------------------------- */
 .apex-nav {

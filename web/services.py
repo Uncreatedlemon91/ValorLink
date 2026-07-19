@@ -428,42 +428,55 @@ def deny_loa_request(session, actor: dict, discord_id: int) -> str:
 
 
 # --- Recruitment --------------------------------------------------------- #
-def approve_candidate(session, actor: dict, discord_id: int) -> str:
+def approve_candidate(session, actor: dict, discord_id: int,
+                      rank: str | None = None, company: str | None = None) -> str:
     candidacy = session.get(Candidacy, discord_id)
     if candidacy is None:
         raise ActionError("That applicant is no longer in the recruitment queue.")
     callsign = candidacy.callsign
-    default_rank = rank_utils.default_rank_name(session)
-    default_company = default_company_name(session)
     regiment_name = get_config(session).regiment_name
+
+    # The recruiter may pick a starting rank/company; otherwise the defaults
+    # apply. A chosen value must be a real rank/company on the books.
+    start_rank = rank_utils.default_rank_name(session)
+    if rank:
+        if rank_utils.rank_by_name(session, rank) is None:
+            raise ActionError(f"“{rank}” is not a rank on the ladder.")
+        start_rank = rank
+    start_company = default_company_name(session)
+    if company:
+        if company_by_name(session, company) is None:
+            raise ActionError(f"“{company}” is not a company on the books.")
+        start_company = company
 
     session.merge(
         Member(
             discord_id=discord_id,
             callsign=callsign,
-            rank=default_rank,
-            company=default_company,
+            rank=start_rank,
+            company=start_company,
             status="active",
             thread_id=None,
         )
     )
     _log(session, discord_id,
-         f"Enlisted as {default_rank} via recruitment pipeline.", actor)
+         f"Enlisted as {start_rank}, {start_company} via recruitment pipeline.", actor)
     session.delete(candidacy)
     queue.enqueue(
         session,
         queue.APPROVE_CANDIDATE,
         {"discord_id": discord_id, "callsign": callsign, "actor_id": actor["id"],
-         "default_rank": default_rank, "default_company": default_company,
+         "default_rank": start_rank, "default_company": start_company,
          "billboard": f"**{callsign}** has enlisted in the regiment.",
          "dm": f"Your application to **{regiment_name}** has been approved. "
                f"Welcome to the regiment!"},
         actor_id=actor["id"],
     )
-    _audit(session, actor, "recruitment", f"Approved {callsign}'s enlistment as {default_rank}.",
+    _audit(session, actor, "recruitment",
+           f"Approved {callsign}'s enlistment as {start_rank}, {start_company}.",
            target_id=discord_id)
     session.commit()
-    return f"{callsign} enlisted as {default_rank}."
+    return f"{callsign} enlisted as {start_rank}, {start_company}."
 
 
 def deny_candidate(session, actor: dict, discord_id: int) -> str:
@@ -908,6 +921,14 @@ def set_channels(session, values: dict[str, str]) -> str:
         setattr(cfg, col, _parse_id(values.get(key, "")))
     session.commit()
     return "Channel bindings saved."
+
+
+def set_digest_enabled(session, enabled: bool) -> str:
+    cfg = get_config(session)
+    cfg.digest_enabled = bool(enabled)
+    session.commit()
+    return ("Weekly officer digest turned on." if enabled
+            else "Weekly officer digest turned off.")
 
 
 # --- Admin: ranks -------------------------------------------------------- #

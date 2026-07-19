@@ -246,6 +246,12 @@ class GuildConfig(Base):
     announcements_channel_id = Column(BigInteger, nullable=True)
     welcome_channel_id = Column(BigInteger, nullable=True)
     billboard_channel_id = Column(BigInteger, nullable=True)
+    digest_channel_id = Column(BigInteger, nullable=True)
+
+    # Weekly "state of the regiment" digest posted to officers. Enabled by
+    # default; falls back to the admin-log channel when no digest channel is set.
+    digest_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    digest_last_sent_at = Column(DateTime, nullable=True)
 
 
 class Rank(Base):

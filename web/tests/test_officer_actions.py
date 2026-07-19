@@ -1142,6 +1142,102 @@ def test_bridge_deletes_event_message():
     msg.delete.assert_awaited()
 
 
+def test_approve_with_chosen_rank_and_company():
+    import json
+    client = TestClient(app)
+    _login(client, "recruiter")
+    token = _csrf(client, "/recruits")
+    r = client.post(f"/recruits/{CANDIDATE_ID}/approve",
+                    data={"csrf": token, "rank": "Corporal", "company": "Bravo"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        m = s.get(Member, CANDIDATE_ID)
+        assert m is not None and m.rank == "Corporal" and m.company == "Bravo"
+    acts = _actions(queue.APPROVE_CANDIDATE)
+    assert acts and json.loads(acts[0].payload)["default_rank"] == "Corporal"
+
+
+def test_approve_rejects_unknown_rank():
+    client = TestClient(app)
+    _login(client, "recruiter")
+    token = _csrf(client, "/recruits")
+    client.post(f"/recruits/{CANDIDATE_ID}/approve",
+                data={"csrf": token, "rank": "Field Marshal"})
+    # the bogus rank is refused: applicant stays in the queue, nothing enlisted
+    with SessionLocal() as s:
+        assert s.get(Candidacy, CANDIDATE_ID) is not None
+        assert s.get(Member, CANDIDATE_ID) is None
+    assert _actions(queue.APPROVE_CANDIDATE) == []
+
+
+def test_digest_composes_state_of_the_regiment():
+    from datetime import datetime, timedelta
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        # a fresh enlistment this week, an event held, and one on the books
+        s.add(Member(discord_id=301, callsign="Newcomer", rank="Private",
+                     company="Alpha", status="active", joined_date=datetime.utcnow()))
+        held = Event(name="Saturday Drill", event_type="Drill",
+                     scheduled_at=datetime.utcnow() - timedelta(days=2), created_by=1)
+        s.add(held)
+        s.add(Event(name="Assault", event_type="Battle",
+                    scheduled_at=datetime.utcnow() + timedelta(days=3), created_by=1))
+        s.commit()
+        s.refresh(held)
+        s.add(AttendanceRecord(event_id=held.id, member_id=MEMBER_ID, status="present"))
+        s.commit()
+
+        d = Bridge._compose_digest(s)
+    assert d is not None
+    assert "Newcomer" in d["new_enlistments"]
+    assert d["recruits_waiting"] == 1  # the seeded applicant
+    assert ("Saturday Drill", 1) in d["turnout"]
+    assert any(name == "Assault" for name, _type, _when in d["upcoming"])
+
+
+def test_digest_posts_weekly_and_snoozes():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).admin_log_channel_id = 999  # digest falls back to admin_log
+        s.commit()
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = channel
+
+    asyncio.run(bridge._send_due_digests(guild))
+    channel.send.assert_awaited_once()
+    with SessionLocal() as s:
+        assert get_config(s).digest_last_sent_at is not None
+
+    # a second pass within the week posts nothing
+    channel.send.reset_mock()
+    asyncio.run(bridge._send_due_digests(guild))
+    channel.send.assert_not_awaited()
+
+
+def test_digest_disabled_does_not_post():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        cfg = get_config(s)
+        cfg.admin_log_channel_id = 999
+        cfg.digest_enabled = False
+        s.commit()
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = channel
+
+    asyncio.run(bridge._send_due_digests(guild))
+    channel.send.assert_not_awaited()
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

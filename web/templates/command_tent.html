@@ -201,6 +201,20 @@
         <div class="field field-actions"><button class="btn btn-strong" type="submit">Save channels</button></div>
       </form>
     </div>
+
+    <div class="order-card">
+      <h3 class="order-title" id="digest">Weekly Officer Digest</h3>
+      <p class="order-note">Every week the bot posts a “state of the regiment” summary —
+        strength, new enlistments, recruits at the gate, last week's turnout, and
+        what's on the books — to your <b>digest</b> channel (or the
+        <b>admin_log</b> channel if none is set). Set the channel above.</p>
+      <form class="orders" method="post" action="/admin/digest">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="field"><label class="checkline"><input type="checkbox" name="enabled" value="1" {{ 'checked' if cfg.digest_enabled }}> Post the weekly digest</label></div>
+        {% if cfg.digest_last_sent_at %}<p class="order-note">Last posted {{ cfg.digest_last_sent_at|fmt_date(true) }}.</p>{% endif %}
+        <div class="field field-actions"><button class="btn btn-strong" type="submit">Save</button></div>
+      </form>
+    </div>
   </div>
 </section>
 

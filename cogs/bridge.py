@@ -21,6 +21,7 @@ from db.base import db_session
 from db.context import reset_current_db_url, set_current_db_url
 from db.models import (
     AttendanceRecord,
+    Candidacy,
     Company,
     DisciplinaryRecord,
     Event,
@@ -42,6 +43,9 @@ BATCH = 20
 MAX_ATTEMPTS = 3
 # How far ahead of a muster call to DM those who answered the call.
 REMIND_LEAD = timedelta(minutes=60)
+# How often the officer digest posts, and the window it looks back/ahead over.
+DIGEST_INTERVAL = timedelta(days=7)
+DIGEST_WINDOW = timedelta(days=7)
 RECORD_COLORS = {
     "note": discord.Color.light_grey(),
     "warn": discord.Color.orange(),
@@ -126,6 +130,7 @@ class Bridge(commands.Cog):
             try:
                 await self._post_due_announcements(guild)
                 await self._remind_unit(guild)
+                await self._send_due_digests(guild)
             except Exception:  # noqa: BLE001 -- never let one unit stall the loop
                 log.exception("Scheduled event pass failed for guild %s", guild_id)
             finally:
@@ -208,6 +213,127 @@ class Bridge(commands.Cog):
                 if row is not None:
                     row.announced = True
                     session.commit()
+
+    # --- Weekly officer digest ---------------------------------------- #
+    @staticmethod
+    def _compose_digest(session) -> dict | None:
+        """A once-a-week 'state of the regiment' summary for officers. Returns
+        None for a dormant unit (nothing enrolled, upcoming, or at the gate) so
+        we don't post an empty embed."""
+        now = datetime.utcnow()
+        week_ago = now - DIGEST_WINDOW
+
+        members = session.query(Member).all()
+        active = [m for m in members if m.status == "active"]
+        on_loa = [m for m in active if m.loa_until and m.loa_until > now]
+        inactive = [m for m in members if m.status == "inactive"]
+        new_enlistments = [
+            m for m in members
+            if m.status != "discharged" and m.joined_date and m.joined_date >= week_ago
+        ]
+
+        recruits = session.query(Candidacy).all()
+        stale_recruits = [c for c in recruits if c.created_at and c.created_at <= now - timedelta(days=14)]
+
+        upcoming = (
+            session.query(Event)
+            .filter(Event.scheduled_at > now, Event.scheduled_at <= now + DIGEST_WINDOW)
+            .order_by(Event.scheduled_at)
+            .all()
+        )
+        held = (
+            session.query(Event)
+            .filter(Event.scheduled_at <= now, Event.scheduled_at >= week_ago)
+            .order_by(Event.scheduled_at)
+            .all()
+        )
+        turnout = [
+            (e.name, sum(1 for r in e.attendance_records if r.status == "present"))
+            for e in held
+        ]
+
+        if not members and not upcoming and not recruits:
+            return None
+
+        return {
+            "present": len(active) - len(on_loa),
+            "on_loa": len(on_loa),
+            "inactive": len(inactive),
+            "new_enlistments": [m.callsign for m in new_enlistments],
+            "recruits_waiting": len(recruits),
+            "recruits_stale": len(stale_recruits),
+            "upcoming": [(e.name, e.event_type, e.scheduled_at) for e in upcoming],
+            "turnout": turnout,
+        }
+
+    def _digest_embed(self, d: dict, regiment_name: str) -> discord.Embed:
+        embed = base_embed(
+            title=f"📋 Weekly Muster — {regiment_name}",
+            description="Where the regiment stands this week.",
+            color=discord.Color.dark_gold().value,
+        )
+        embed.add_field(
+            name="Strength",
+            value=(f"**{d['present']}** present for duty · **{d['on_loa']}** on furlough · "
+                   f"**{d['inactive']}** absent"),
+            inline=False,
+        )
+        if d["new_enlistments"]:
+            names = ", ".join(d["new_enlistments"][:10])
+            more = len(d["new_enlistments"]) - 10
+            if more > 0:
+                names += f" +{more} more"
+            embed.add_field(name=f"New Enlistments ({len(d['new_enlistments'])})", value=names, inline=False)
+        gate = f"**{d['recruits_waiting']}** at the gate"
+        if d["recruits_stale"]:
+            gate += f" · **{d['recruits_stale']}** waiting 14 days or more"
+        embed.add_field(name="Recruitment", value=gate, inline=False)
+        if d["turnout"]:
+            lines = "\n".join(f"• {name} — {n} present" for name, n in d["turnout"][:8])
+            embed.add_field(name="This Week's Turnout", value=lines, inline=False)
+        if d["upcoming"]:
+            lines = "\n".join(
+                f"• {name} ({etype}) — {discord_ts(when, 'R')}"
+                for name, etype, when in d["upcoming"][:8]
+            )
+            embed.add_field(name="On the Books", value=lines, inline=False)
+        embed.set_footer(text="ValorLink weekly digest")
+        embed.timestamp = datetime.now(timezone.utc)
+        return embed
+
+    async def _send_due_digests(self, guild: discord.Guild):
+        """Post the weekly digest to the officer channel, once per week per unit.
+        Falls back to the admin-log channel when no digest channel is set."""
+        now = datetime.utcnow()
+        with db_session() as session:
+            cfg = get_config(session)
+            if not cfg.digest_enabled:
+                return
+            last = cfg.digest_last_sent_at
+            if last is not None and now - last < DIGEST_INTERVAL:
+                return
+            channel_id = cfg.digest_channel_id or cfg.admin_log_channel_id
+            regiment_name = cfg.regiment_name
+            digest = self._compose_digest(session)
+
+        if not channel_id:
+            return  # no officer channel to post to yet; try again next pass
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            return  # channel configured but not visible; don't burn the weekly slot
+
+        # A dormant unit still snoozes for a week so we don't recompute each pass.
+        if digest is not None:
+            try:
+                await channel.send(embed=self._digest_embed(digest, regiment_name))
+            except discord.HTTPException:
+                log.exception("Weekly digest post failed")
+                return
+
+        with db_session() as session:
+            row = get_config(session)
+            row.digest_last_sent_at = datetime.utcnow()
+            session.commit()
 
     @remind_events.before_loop
     async def _before_remind(self):
