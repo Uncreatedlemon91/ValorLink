@@ -537,6 +537,54 @@ def test_platform_dashboard_requires_platform_admin():
             os.environ["PLATFORM_ADMIN_IDS"] = old
 
 
+def test_platform_broadcast_queues_update_to_every_unit():
+    """A platform admin's update lands on every unit's queue exactly once, so
+    the bot can post it to each admin-log channel."""
+    import json
+    from db.models import PendingAction
+    from utils.queue import PLATFORM_BROADCAST
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9, "name": "Owner", "tier": "admin"},
+           headers={"host": APEX}, follow_redirects=False)
+    old = os.environ.get("PLATFORM_ADMIN_IDS")
+    os.environ["PLATFORM_ADMIN_IDS"] = "9"
+    try:
+        token = _csrf(c, "/admin/platform", {"host": APEX})
+        r = c.post("/admin/platform/broadcast",
+                   data={"csrf": token, "title": "Update", "body": "New features are live."},
+                   headers={"host": APEX}, follow_redirects=False)
+        assert r.status_code == 303
+        all_dbs = [os.environ["DATABASE_URL"]] + [unit_db_url_for_slug(s) for s in UNITS]
+        for db_url in all_dbs:
+            with sessionmaker_for(db_url)() as s:
+                rows = s.query(PendingAction).filter(
+                    PendingAction.action == PLATFORM_BROADCAST).all()
+                assert len(rows) == 1
+                assert json.loads(rows[0].payload)["body"] == "New features are live."
+    finally:
+        if old is None:
+            os.environ.pop("PLATFORM_ADMIN_IDS", None)
+        else:
+            os.environ["PLATFORM_ADMIN_IDS"] = old
+
+
+def test_platform_broadcast_requires_platform_admin():
+    """A signed-in non-admin cannot broadcast to every unit."""
+    from db.models import PendingAction
+    from utils.queue import PLATFORM_BROADCAST
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 42, "name": "Nobody", "tier": "admin"},
+           headers={"host": APEX}, follow_redirects=False)
+    # no allowlist → not a platform admin → refused, nothing queued
+    r = c.post("/admin/platform/broadcast",
+               data={"csrf": "x", "body": "sneaky"},
+               headers={"host": APEX}, follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        assert s.query(PendingAction).filter(
+            PendingAction.action == PLATFORM_BROADCAST).count() == 0
+
+
 import re  # noqa: E402
 
 

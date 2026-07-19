@@ -31,6 +31,27 @@
         <div class="stat"><span class="stat-num">{{ totals.unlinked }}</span><span class="stat-cap">not linked to Discord</span></div>
       </div>
 
+      <h2 class="section">Broadcast an Update</h2>
+      <p class="lede">Post a platform update to every unit's <b>admin-log</b> channel — handy for
+      announcing new features or changes to the site. Units with no admin-log channel set are
+      skipped. It reaches each unit's Discord within a minute or two.</p>
+      <div class="order-card" style="max-width:640px;">
+        <form class="orders" method="post" action="/admin/platform/broadcast"
+              data-confirm="Send this update to all {{ totals.units }} unit admin-log channels?">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <div class="field">
+            <label>Heading <span class="opt">(optional)</span></label>
+            <input name="title" placeholder="ValorLink Platform Update" maxlength="240">
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <textarea name="body" rows="4" required maxlength="4000"
+              placeholder="New this week: pick a recruit's starting rank and company right from the pipeline, and a weekly digest now lands in your admin-log channel."></textarea>
+          </div>
+          <div class="field field-actions"><button class="btn btn-strong" type="submit">Send to all units</button></div>
+        </form>
+      </div>
+
       <h2 class="section">Units <span class="tally">{{ units|length }}</span></h2>
       <p class="lede">Each unit's health across the platform. “Not linked” means no Discord
       server is bound yet, so the bot can't act for it. An unreadable unit is flagged in red.</p>

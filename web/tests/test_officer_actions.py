@@ -1238,6 +1238,34 @@ def test_digest_disabled_does_not_post():
     channel.send.assert_not_awaited()
 
 
+def test_bridge_posts_platform_broadcast_to_admin_log():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).admin_log_channel_id = 4242
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = channel
+    asyncio.run(bridge._do_platform_broadcast(
+        guild, {"title": "Update", "body": "Site changes are live."}))
+    guild.get_channel.assert_called_with(4242)
+    channel.send.assert_awaited_once()
+
+
+def test_bridge_platform_broadcast_skips_unit_without_admin_log():
+    from cogs.bridge import Bridge
+    # no admin_log channel configured on the seeded default config
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = None
+    asyncio.run(bridge._do_platform_broadcast(guild, {"title": "", "body": "hi"}))
+    # nothing to post to; the call is a no-op that doesn't raise
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

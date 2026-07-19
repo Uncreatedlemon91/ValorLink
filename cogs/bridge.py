@@ -667,6 +667,24 @@ class Bridge(commands.Cog):
         embed.timestamp = datetime.now(timezone.utc)
         await channel.send(embed=embed)
 
+    async def _do_platform_broadcast(self, guild, p):
+        """A platform-wide update from the ValorLink operators, posted to this
+        unit's admin-log channel. A unit with no admin-log channel is simply
+        skipped (no error), so the broadcast never gets stuck retrying."""
+        with db_session() as session:
+            channel_id = get_config(session).admin_log_channel_id
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if channel is None:
+            return
+        embed = base_embed(
+            title=f"📢 {p.get('title') or 'ValorLink Platform Update'}",
+            description=p["body"],
+            color=discord.Color.blurple().value,
+        )
+        embed.set_footer(text="A message from the ValorLink team")
+        embed.timestamp = datetime.now(timezone.utc)
+        await channel.send(embed=embed)
+
     async def _do_import_roster(self, guild, p):
         default_rank = p["default_rank"]
         default_company = p["default_company"]

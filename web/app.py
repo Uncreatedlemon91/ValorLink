@@ -42,6 +42,7 @@ from db.models import (
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
+from utils import queue
 from utils import ranks as rank_utils
 from utils import terminology
 from utils.settings import (
@@ -2329,6 +2330,54 @@ def platform_admin(request: Request):
         },
     }
     return templates.TemplateResponse(request, "platform_admin.html", ctx)
+
+
+def _broadcast_to_all_units(title: str, body: str, actor_id: int | None) -> int:
+    """Drop a platform-update action on every unit's queue. The bot's bridge
+    drains each unit's queue against its own guild and posts the update to that
+    unit's admin-log channel. Returns the number of units the update reached."""
+    with registry_session() as rs:
+        db_urls = [t.db_url for t in all_tenants(rs)]
+    sent = 0
+    for db_url in db_urls:
+        try:
+            with sessionmaker_for(db_url)() as s:
+                queue.enqueue(s, queue.PLATFORM_BROADCAST,
+                              {"title": title, "body": body}, actor_id=actor_id)
+                s.commit()
+            sent += 1
+        except Exception:  # noqa: BLE001 -- one unreadable unit shouldn't stop the rest
+            pass
+    return sent
+
+
+@app.post("/admin/platform/broadcast")
+def platform_broadcast(
+    request: Request,
+    csrf: str = Form(...),
+    title: str = Form(""),
+    body: str = Form(...),
+):
+    """Send a platform update to every unit's admin-log channel (platform-admin
+    only). Handy for announcing site changes to unit operators."""
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        raise TenantNotFound(None)
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _is_platform_admin(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    body = body.strip()
+    if not body:
+        _flash(request, "An update needs a message.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    count = _broadcast_to_all_units(title.strip(), body, user.get("id"))
+    _flash(request, f"Update queued for {count} unit{'s' if count != 1 else ''}. "
+                    "The bot posts it to each admin-log channel shortly.", "ok")
+    return RedirectResponse("/admin/platform", status_code=303)
 
 
 # --- Self-serve: register a unit ------------------------------------------ #
