@@ -115,28 +115,38 @@ nav.rail {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 4px 0;
-  padding: 12px 0 0;
+  gap: 2px 2px;
+  padding: 10px 6px 0;
   border-bottom: 1px solid var(--rule);
   position: sticky;
   top: 0;
   background: var(--paper);
-  box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
   z-index: 8;
+  transition: padding .22s ease, box-shadow .22s ease;
 }
+nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
 nav.rail a {
+  position: relative;
   color: var(--ink-soft);
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.11em;
   font-size: 12px;
-  padding: 8px 16px;
-  border-bottom: 2px solid transparent;
+  padding: 9px 15px 11px;
+  border-radius: 3px 3px 0 0;
+  transition: color .18s ease, background .18s ease;
 }
-nav.rail a:hover { color: var(--ink); text-decoration: none; }
-nav.rail a.active {
-  color: var(--oxblood);
-  border-bottom-color: var(--seal);
+nav.rail a::after {
+  content: ""; position: absolute; left: 15px; right: 15px; bottom: 4px; height: 2px;
+  background: var(--seal); border-radius: 2px;
+  transform: scaleX(0); transform-origin: center; transition: transform .24s cubic-bezier(.4,0,.2,1);
 }
+nav.rail a:hover { color: var(--ink); text-decoration: none; background: rgba(0,0,0,0.03); }
+nav.rail a:hover::after { transform: scaleX(.55); }
+nav.rail a.active { color: var(--oxblood); }
+nav.rail a.active::after { transform: scaleX(1); }
+nav.rail .pip { transition: none; }
+body.theme-modern nav.rail a:hover { background: rgba(255,255,255,0.05); }
 
 /* Cross-links back to the platform, shown on a unit's pages */
 .plat-links { margin-right: auto; display: inline-flex; gap: 16px; }
@@ -152,13 +162,17 @@ nav.rail a.active {
   font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;
 }
 @media (max-width: 720px) {
-  .nav-toggle { display: block; position: sticky; top: 0; z-index: 9; background: var(--paper); }
-  nav.rail { display: none; flex-direction: column; align-items: stretch; text-align: center; padding-top: 6px; position: static; box-shadow: none; }
-  nav.rail.open { display: flex; }
-  nav.rail a { border-bottom: 1px solid var(--rule); border-left: 3px solid transparent; padding: 11px 16px; }
-  nav.rail a.active { border-bottom-color: var(--rule); border-left-color: var(--seal); }
+  .nav-toggle { display: block; position: sticky; top: 0; z-index: 9; background: var(--paper); transition: background .18s ease; }
+  .nav-toggle[aria-expanded="true"] { color: var(--seal); border-color: var(--seal); }
+  nav.rail { display: none; flex-direction: column; align-items: stretch; text-align: center; padding: 4px 0 0; position: static; box-shadow: none; gap: 0; }
+  nav.rail.open { display: flex; animation: navdrop .22s ease; }
+  nav.rail a { border-bottom: 1px solid var(--rule); border-left: 3px solid transparent; border-radius: 0; padding: 12px 16px; }
+  nav.rail a::after { display: none; }
+  nav.rail a:hover { background: rgba(0,0,0,0.03); }
+  nav.rail a.active { color: var(--oxblood); border-left-color: var(--seal); }
   .plat-links { width: 100%; justify-content: center; margin: 0 0 6px; }
 }
+@keyframes navdrop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
 /* Breadcrumbs */
 .crumbs { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-faint); margin: 14px 0 -6px; }
@@ -1072,9 +1086,16 @@ body.theme-modern .ring span { background: #14171b; }
   border-bottom: 1px solid var(--rule);
   font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
 }
-.apex-nav a { color: var(--ink-soft); border-bottom: 2px solid transparent; padding-bottom: 2px; }
+.apex-nav a { position: relative; color: var(--ink-soft); padding-bottom: 4px; transition: color .18s ease; }
+.apex-nav a::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--seal); border-radius: 2px;
+  transform: scaleX(0); transform-origin: center; transition: transform .24s cubic-bezier(.4,0,.2,1);
+}
 .apex-nav a:hover { color: var(--ink); text-decoration: none; }
-.apex-nav a.on { color: var(--seal); border-bottom-color: var(--seal); }
+.apex-nav a:hover::after { transform: scaleX(.6); }
+.apex-nav a.on { color: var(--seal); }
+.apex-nav a.on::after { transform: scaleX(1); }
 
 /* ---- Home landing: intro, nav cards, features ------------------------- */
 .home-intro { text-align: center; padding: 24px 0 8px; }
@@ -1174,19 +1195,29 @@ body.theme-modern .dir-search,
 body.theme-modern .dir-sort,
 body.theme-modern .dir-filters .chip { background: rgba(255,255,255,0.04); }
 
-/* ---- Tabs (roster By Company / By Assignment) ------------------------- */
-.tabs { display: flex; gap: 4px; border-bottom: 1.5px solid var(--rule-strong); margin: 6px 0 18px; }
+/* ---- Tabs (roster, Command Tent) -------------------------------------- */
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1.5px solid var(--rule-strong); margin: 6px 0 18px; }
 .tab {
+  position: relative;
   background: none; border: none; cursor: pointer;
-  font-family: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--ink-faint); padding: 8px 14px; margin-bottom: -1.5px;
-  border-bottom: 2px solid transparent;
+  font-family: inherit; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-faint); padding: 9px 15px; margin-bottom: -1.5px;
+  border-radius: 3px 3px 0 0; transition: color .18s ease, background .18s ease;
 }
-.tab:hover { color: var(--ink); }
-.tab.on { color: var(--seal); border-bottom-color: var(--seal); font-weight: 700; }
+.tab::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px;
+  background: var(--seal); border-radius: 2px;
+  transform: scaleX(0); transform-origin: center; transition: transform .24s cubic-bezier(.4,0,.2,1);
+}
+.tab:hover { color: var(--ink); background: rgba(0,0,0,0.03); }
+.tab:hover::after { transform: scaleX(.5); }
+.tab.on { color: var(--seal); font-weight: 700; }
+.tab.on::after { transform: scaleX(1); }
 .tab-panel { display: none; }
-.tab-panel.on { display: block; }
+.tab-panel.on { display: block; animation: tabfade .26s ease; }
+@keyframes tabfade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .lead-star { color: var(--seal); }
+body.theme-modern .tab:hover { background: rgba(255,255,255,0.05); }
 
 /* ---- Secondary assignments -------------------------------------------- */
 .assign-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }

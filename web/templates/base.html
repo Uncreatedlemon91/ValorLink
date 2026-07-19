@@ -93,6 +93,10 @@
         var open = rail.classList.toggle('open');
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
+      // Condense the sticky nav once the page scrolls under it.
+      var onScroll = function () { rail.classList.toggle('stuck', window.scrollY > 12); };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
     })();
 
     // Click-to-sort tables (any .ledger with a header; opt out with .no-sort).
