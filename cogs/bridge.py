@@ -124,9 +124,10 @@ class Bridge(commands.Cog):
                 continue
             token = set_current_db_url(db_url)
             try:
+                await self._post_due_announcements(guild)
                 await self._remind_unit(guild)
             except Exception:  # noqa: BLE001 -- never let one unit stall the loop
-                log.exception("Reminder pass failed for guild %s", guild_id)
+                log.exception("Scheduled event pass failed for guild %s", guild_id)
             finally:
                 reset_current_db_url(token)
 
@@ -173,6 +174,39 @@ class Bridge(commands.Cog):
                 row = session.get(Event, event_id)
                 if row is not None:
                     row.reminder_sent_at = datetime.utcnow()
+                    session.commit()
+
+    async def _post_due_announcements(self, guild: discord.Guild):
+        """Post the RSVP announcement for events whose scheduled lead time has
+        arrived but which haven't been announced yet — so a recurring series
+        rolls out one announcement at a time instead of all at creation."""
+        now = datetime.utcnow()
+        with db_session() as session:
+            candidates = (
+                session.query(Event)
+                .filter(
+                    Event.announced.is_(False),
+                    Event.announce_lead_minutes.isnot(None),
+                    Event.scheduled_at > now,
+                )
+                .all()
+            )
+            due_ids = [
+                e.id for e in candidates
+                if e.scheduled_at - timedelta(minutes=e.announce_lead_minutes) <= now
+            ]
+
+        for event_id in due_ids:
+            try:
+                await self._do_announce_event(guild, {"event_id": event_id})
+            except Exception:  # noqa: BLE001 -- record and move on
+                log.exception("Scheduled announce for event %s failed", event_id)
+            # Mark announced once dispatched so it never double-posts, matching
+            # the immediate-post path (a missing channel simply means no post).
+            with db_session() as session:
+                row = session.get(Event, event_id)
+                if row is not None:
+                    row.announced = True
                     session.commit()
 
     @remind_events.before_loop

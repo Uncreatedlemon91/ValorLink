@@ -16,6 +16,11 @@
   </div>
 </div>
 
+{% if announce_at %}
+<p class="lede" style="margin-top:12px;">📣 Not yet posted to Discord — the announcement goes up
+<time datetime="{{ announce_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ announce_at|fmt_date(true) }}</time>.</p>
+{% endif %}
+
 {% if event.after_action %}
 <div class="order-card" style="margin-top:16px;max-width:720px;">
   <h3 class="order-title">After-Action Report</h3>

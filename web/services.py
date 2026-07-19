@@ -556,8 +556,29 @@ def import_roster(session, actor: dict, role_id: str = "") -> str:
 
 
 # --- Events & attendance ------------------------------------------------- #
+# How far ahead the Discord RSVP announcement is posted, entered as a number +
+# unit on the create form. Blank/zero means post immediately (on creation).
+ANNOUNCE_UNIT_MINUTES = {"hours": 60, "days": 1440, "weeks": 10080}
+ANNOUNCE_UNITS = list(ANNOUNCE_UNIT_MINUTES)
+ANNOUNCE_MAX_MINUTES = 60 * 24 * 90  # cap the lead at 90 days
+
+
+def _lead_minutes(value: str | int, unit: str) -> int | None:
+    """Convert a 'post N <unit> before' choice into minutes. Blank/zero/invalid
+    → None, meaning post the announcement immediately on creation."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    per = ANNOUNCE_UNIT_MINUTES.get(unit, ANNOUNCE_UNIT_MINUTES["days"])
+    return min(n * per, ANNOUNCE_MAX_MINUTES)
+
+
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
-                 tz_offset: str | int = 0, repeat_weeks: str | int = 1) -> int:
+                 tz_offset: str | int = 0, repeat_weeks: str | int = 1,
+                 lead_value: str | int = 0, lead_unit: str = "days") -> int:
     from utils.terminology import resolve_terms
     name = name.strip()
     if not name:
@@ -581,15 +602,24 @@ def create_event(session, actor: dict, name: str, event_type: str, when: str,
     except (TypeError, ValueError):
         weeks = 1
     base = local + timedelta(minutes=offset)
+    lead = _lead_minutes(lead_value, lead_unit)
 
     first_id = None
     for i in range(weeks):
-        event = Event(name=name, event_type=event_type,
-                      scheduled_at=base + timedelta(weeks=i), created_by=actor["id"])
+        scheduled = base + timedelta(weeks=i)
+        event = Event(name=name, event_type=event_type, scheduled_at=scheduled,
+                      created_by=actor["id"], announce_lead_minutes=lead)
         session.add(event)
         session.commit()
         session.refresh(event)
-        queue.enqueue(session, queue.ANNOUNCE_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+        # Post now if there's no lead, or if the post-time has already arrived
+        # (e.g. an imminent first occurrence). Otherwise the bot's scheduler
+        # posts it once its lead window opens — so a recurring series announces
+        # one occurrence at a time instead of all at once.
+        due_now = lead is None or (scheduled - timedelta(minutes=lead)) <= datetime.utcnow()
+        if due_now:
+            queue.enqueue(session, queue.ANNOUNCE_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+            event.announced = True
         session.commit()
         if first_id is None:
             first_id = event.id

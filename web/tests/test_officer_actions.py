@@ -999,6 +999,81 @@ def test_bulk_attendance_marks_many_and_skips_blanks():
     assert CANDIDATE_ID not in recs  # blank → untouched
 
 
+def test_recurring_with_lead_defers_announcements():
+    from web import services
+    with SessionLocal() as s:
+        # 3 weekly events, announce 2 days before each — far in the future so
+        # none are due yet.
+        first = services.create_event(
+            s, {"id": 1, "name": "Off"}, "Recurring Drill", "Drill",
+            "2099-06-01 19:00", tz_offset=0, repeat_weeks=3,
+            lead_value="2", lead_unit="days")
+    with SessionLocal() as s:
+        evs = s.query(Event).filter(Event.name == "Recurring Drill").all()
+        assert len(evs) == 3
+        # every occurrence carries the lead and is not yet announced
+        assert all(e.announce_lead_minutes == 2 * 1440 for e in evs)
+        assert all(e.announced is False for e in evs)
+    # nothing was posted to Discord up front
+    assert _actions(queue.ANNOUNCE_EVENT) == []
+
+
+def test_immediate_event_still_announces_now():
+    from web import services
+    with SessionLocal() as s:
+        services.create_event(s, {"id": 1, "name": "Off"}, "One Off", "Drill",
+                              "2099-06-01 19:00", tz_offset=0, repeat_weeks=1,
+                              lead_value="0", lead_unit="days")
+    with SessionLocal() as s:
+        ev = s.query(Event).filter(Event.name == "One Off").one()
+        assert ev.announce_lead_minutes is None and ev.announced is True
+    assert len(_actions(queue.ANNOUNCE_EVENT)) == 1
+
+
+def test_scheduler_posts_due_announcement_once():
+    from datetime import datetime, timedelta
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        # scheduled 1 hour out with a 2-day lead → the post window is already open
+        ev = Event(name="Imminent", event_type="Drill",
+                   scheduled_at=datetime.utcnow() + timedelta(hours=1),
+                   created_by=1, announce_lead_minutes=2 * 1440, announced=False)
+        s.add(ev)
+        s.commit()
+        s.refresh(ev)
+        eid = ev.id
+
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._do_announce_event = AsyncMock()
+    asyncio.run(bridge._post_due_announcements(MagicMock()))
+    bridge._do_announce_event.assert_awaited_once()
+    with SessionLocal() as s:
+        assert s.get(Event, eid).announced is True
+
+    # a second pass does nothing (already announced)
+    bridge._do_announce_event.reset_mock()
+    asyncio.run(bridge._post_due_announcements(MagicMock()))
+    bridge._do_announce_event.assert_not_awaited()
+
+
+def test_scheduler_skips_not_yet_due_announcement():
+    from datetime import datetime, timedelta
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        # scheduled 30 days out with a 1-day lead → not due for ~29 days
+        ev = Event(name="Far Off", event_type="Drill",
+                   scheduled_at=datetime.utcnow() + timedelta(days=30),
+                   created_by=1, announce_lead_minutes=1440, announced=False)
+        s.add(ev)
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._do_announce_event = AsyncMock()
+    asyncio.run(bridge._post_due_announcements(MagicMock()))
+    bridge._do_announce_event.assert_not_awaited()
+
+
 def test_bridge_deletes_event_message():
     from cogs.bridge import Bridge
     bridge = object.__new__(Bridge)

@@ -29,6 +29,20 @@
       </select>
       <span class="order-note">Schedules the same call at weekly intervals from the date above.</span>
     </div>
+    <div class="field">
+      <label>Post to Discord</label>
+      <div class="lead-row">
+        <input name="lead_value" type="number" min="0" max="90" value="0" style="max-width:90px;">
+        <select name="lead_unit">
+          <option value="hours">hours</option>
+          <option value="days" selected>days</option>
+          <option value="weeks">weeks</option>
+        </select>
+        <span class="lead-suffix">before the event</span>
+      </div>
+      <span class="order-note">Leave at <b>0</b> to announce immediately. Set a lead so a recurring
+      series posts one announcement at a time (e.g. <b>2 days</b> before each occurrence) instead of all at once.</span>
+    </div>
     <div class="field field-actions"><button class="btn btn-strong" type="submit">{{ terms.event_create }}</button></div>
   </form>
   <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the

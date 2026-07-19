@@ -102,6 +102,10 @@ class Event(Base):
     outcome = Column(String, nullable=True)       # after-action result, e.g. Victory/Defeat/Draw
     after_action = Column(Text, nullable=True)     # after-action notes
     reminder_sent_at = Column(DateTime, nullable=True)  # when the bot DM'd RSVPs the pre-event reminder
+    # How far ahead of the event to post the Discord RSVP announcement. NULL =
+    # post immediately on creation. `announced` guards against double-posting.
+    announce_lead_minutes = Column(Integer, nullable=True)
+    announced = Column(Boolean, nullable=False, default=False, server_default="0")
 
     attendance_records = relationship(
         "AttendanceRecord", back_populates="event", cascade="all, delete-orphan"

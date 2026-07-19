@@ -1022,9 +1022,15 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
         for m in active_members
     ]
 
+    # If this event's Discord announcement is deferred, when does it post?
+    announce_at = None
+    if not event.announced and event.announce_lead_minutes is not None:
+        announce_at = event.scheduled_at - timedelta(minutes=event.announce_lead_minutes)
+
     ctx.update(
         event=event,
         event_iso=event.scheduled_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        announce_at=announce_at,
         records=records,
         counts=dict(counts),
         active_members=active_members,
@@ -1525,6 +1531,8 @@ def post_create_event(
     time: str = Form(...),
     tz_offset: str = Form("0"),
     repeat_weeks: str = Form("1"),
+    lead_value: str = Form("0"),
+    lead_unit: str = Form("days"),
     user: dict = Depends(auth.require_officer),
 ):
     if not auth.verify_csrf(request, csrf):
@@ -1536,6 +1544,7 @@ def post_create_event(
             event_id = services.create_event(
                 session, actor, name, event_type, f"{date} {time}",
                 tz_offset=tz_offset, repeat_weeks=repeat_weeks,
+                lead_value=lead_value, lead_unit=lead_unit,
             )
             _flash(request, f"'{name}' announced.", "ok")
             return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
