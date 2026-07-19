@@ -66,6 +66,9 @@
     </div>
 
     <main class="wrap">
+      {% if request.url.path != '/' %}
+      <div class="crumbs"><a href="/">{{ terms.hq }}</a> <span class="sep">›</span> <span class="crumb-here">{{ self.title() }}</span></div>
+      {% endif %}
       {% if flash %}
         <div class="flashes" id="flashes">
           {% for f in flash %}<div class="flash flash-{{ f.level }}"><span>{{ f.text }}</span><button type="button" class="flash-x" aria-label="Dismiss">×</button></div>{% endfor %}
@@ -89,6 +92,40 @@
       btn.addEventListener('click', function () {
         var open = rail.classList.toggle('open');
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    })();
+
+    // Click-to-sort tables (any .ledger with a header; opt out with .no-sort).
+    (function () {
+      function value(cell) {
+        if (!cell) return '';
+        var t = (cell.getAttribute('data-sort') || cell.textContent || '').trim();
+        var n = parseFloat(t.replace(/[,%]/g, ''));
+        if (t !== '' && !isNaN(n) && /^[-\d.,%\s\/]+$/.test(t)) return n;
+        return t.toLowerCase();
+      }
+      document.querySelectorAll('table.ledger:not(.no-sort):not(.admin-table)').forEach(function (table) {
+        var head = table.tHead, body = table.tBodies[0];
+        if (!head || !body) return;
+        var ths = Array.prototype.slice.call(head.rows[0].cells);
+        ths.forEach(function (th, idx) {
+          if (th.classList.contains('no-sort')) return;
+          th.classList.add('th-sort');
+          th.addEventListener('click', function () {
+            var dir = th.getAttribute('data-dir') === 'asc' ? 'desc' : 'asc';
+            ths.forEach(function (o) { o.removeAttribute('data-dir'); o.classList.remove('sorted-asc', 'sorted-desc'); });
+            th.setAttribute('data-dir', dir);
+            th.classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+            var rows = Array.prototype.slice.call(body.rows);
+            rows.sort(function (a, b) {
+              var av = value(a.cells[idx]), bv = value(b.cells[idx]);
+              if (av < bv) return dir === 'asc' ? -1 : 1;
+              if (av > bv) return dir === 'asc' ? 1 : -1;
+              return 0;
+            });
+            rows.forEach(function (r) { body.appendChild(r); });
+          });
+        });
       });
     })();
 

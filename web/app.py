@@ -544,6 +544,28 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         ):
             my_rsvps[r.event_id] = r.status
 
+    # Dashboard: next event, a turnout sparkline, and (for admins) setup progress.
+    now = datetime.utcnow()
+    next_event = upcoming[0] if upcoming else None
+    past_events = (
+        session.query(Event)
+        .filter(Event.scheduled_at < now)
+        .order_by(Event.scheduled_at.desc())
+        .limit(10)
+        .all()
+    )
+    spark = [
+        {"name": e.name, "present": sum(1 for r in e.attendance_records if r.status == "present")}
+        for e in reversed(past_events)
+    ]
+    spark_max = max((s["present"] for s in spark), default=0)
+    setup = None
+    if auth.tier_at_least(ctx["user"], auth.TIER_ADMIN):
+        checklist = _setup_checklist(session, get_config(session))
+        done = sum(1 for s in checklist if s["done"])
+        if done < len(checklist):
+            setup = {"done": done, "total": len(checklist)}
+
     ctx.update(
         counts=counts,
         activity=activity,
@@ -556,6 +578,10 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         is_member=bool(my_member),
         my_rsvps=my_rsvps,
         rsvp_choices=[("accepted", "Accept"), ("tentative", "Tentative"), ("declined", "Decline")],
+        next_event=next_event,
+        spark=spark,
+        spark_max=spark_max,
+        setup=setup,
     )
     return templates.TemplateResponse(request, "headquarters.html", ctx)
 

@@ -118,8 +118,11 @@ nav.rail {
   gap: 4px 0;
   padding: 12px 0 0;
   border-bottom: 1px solid var(--rule);
-  position: relative;
-  z-index: 6;
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+  z-index: 8;
 }
 nav.rail a {
   color: var(--ink-soft);
@@ -149,13 +152,26 @@ nav.rail a.active {
   font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;
 }
 @media (max-width: 720px) {
-  .nav-toggle { display: block; }
-  nav.rail { display: none; flex-direction: column; align-items: stretch; text-align: center; padding-top: 6px; }
+  .nav-toggle { display: block; position: sticky; top: 0; z-index: 9; background: var(--paper); }
+  nav.rail { display: none; flex-direction: column; align-items: stretch; text-align: center; padding-top: 6px; position: static; box-shadow: none; }
   nav.rail.open { display: flex; }
   nav.rail a { border-bottom: 1px solid var(--rule); border-left: 3px solid transparent; padding: 11px 16px; }
   nav.rail a.active { border-bottom-color: var(--rule); border-left-color: var(--seal); }
   .plat-links { width: 100%; justify-content: center; margin: 0 0 6px; }
 }
+
+/* Breadcrumbs */
+.crumbs { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-faint); margin: 14px 0 -6px; }
+.crumbs a { color: var(--ink-soft); }
+.crumbs .sep { margin: 0 6px; color: var(--rule-strong); }
+.crumbs .crumb-here { color: var(--seal); }
+
+/* Sortable table headers */
+th.th-sort { cursor: pointer; user-select: none; }
+th.th-sort:hover { color: var(--seal); }
+th.th-sort::after { content: "⇅"; font-size: 10px; color: var(--rule-strong); margin-left: 5px; }
+th.th-sort.sorted-asc::after { content: "↑"; color: var(--seal); }
+th.th-sort.sorted-desc::after { content: "↓"; color: var(--seal); }
 
 /* ---- Typography scaffolding -------------------------------------------- */
 
@@ -1019,6 +1035,35 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 .audit-src.src-web { color: var(--brass); border-color: var(--brass); }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
 body.theme-modern .audit-filter .chip-on { color: #fff; }
+
+/* ---- Headquarters dashboard cards ------------------------------------- */
+.hq-dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 22px 0; }
+.hq-card {
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
+  background: rgba(255,253,246,0.55); border-radius: 3px; padding: 14px 16px; text-align: center;
+}
+a.hq-card { text-decoration: none; color: var(--ink); display: block; transition: box-shadow .15s, transform .15s; }
+a.hq-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); text-decoration: none; }
+.hq-card-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+.hq-card-title { font-family: var(--serif); font-size: 18px; margin: 6px 0 2px; }
+.hq-card-title a { color: var(--seal); }
+.hq-countdown { font-family: var(--serif); font-size: 24px; font-weight: 700; color: var(--seal); }
+.hq-card-sub { font-size: 12px; color: var(--ink-faint); margin-top: 4px; }
+.hq-card-empty { color: var(--ink-faint); font-style: italic; padding: 14px 0; }
+.spark { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 56px; margin: 10px 0 2px; }
+.spark-bar { width: 10px; background: var(--seal); border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.85; }
+.ring {
+  width: 66px; height: 66px; border-radius: 50%; margin: 8px auto 4px;
+  background: conic-gradient(var(--seal) calc(var(--pct) * 1%), var(--rule) 0);
+  display: flex; align-items: center; justify-content: center;
+}
+.ring span {
+  width: 50px; height: 50px; border-radius: 50%; background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 700; color: var(--seal); font-size: 15px;
+}
+body.theme-modern .hq-card { background: rgba(255,255,255,0.035); }
+body.theme-modern .ring span { background: #14171b; }
 
 /* ---- Apex navigation (platform pages) --------------------------------- */
 .apex-nav {

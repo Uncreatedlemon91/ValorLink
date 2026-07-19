@@ -29,6 +29,39 @@
   </div>
 </div>
 
+<div class="hq-dash">
+  <div class="hq-card">
+    <div class="hq-card-label">Next {{ terms.event }}</div>
+    {% if next_event %}
+      <div class="hq-card-title"><a href="/muster-calls/{{ next_event.id }}">{{ next_event.name }}</a></div>
+      <div class="hq-countdown" data-countdown="{{ next_event.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">soon</div>
+      <div class="hq-card-sub">{{ next_event.scheduled_at|fmt_date(true) }}</div>
+    {% else %}
+      <div class="hq-card-empty">Nothing on the books</div>
+    {% endif %}
+  </div>
+
+  <div class="hq-card">
+    <div class="hq-card-label">Recent Turnout</div>
+    {% if spark %}
+      <div class="spark">
+        {% for s in spark %}<span class="spark-bar" style="height: {{ (s.present / (spark_max or 1) * 100)|round }}%;" title="{{ s.name }}: {{ s.present }} present"></span>{% endfor %}
+      </div>
+      <div class="hq-card-sub">present · last {{ spark|length }} call{{ 's' if spark|length != 1 }}</div>
+    {% else %}
+      <div class="hq-card-empty">No calls held yet</div>
+    {% endif %}
+  </div>
+
+  {% if setup %}
+  <a class="hq-card hq-setup" href="/command-tent">
+    <div class="hq-card-label">Setup</div>
+    <div class="ring" style="--pct: {{ (setup.done / setup.total * 100)|round }};"><span>{{ setup.done }}/{{ setup.total }}</span></div>
+    <div class="hq-card-sub">Finish setting up ›</div>
+  </a>
+  {% endif %}
+</div>
+
 {% if can_announce %}
 <details class="announce-card">
   <summary><span class="announce-title">Post Orders</span>
@@ -118,4 +151,20 @@
 
 <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
 
+<script>
+  (function () {
+    var el = document.querySelector('.hq-countdown');
+    if (!el) return;
+    var target = new Date(el.getAttribute('data-countdown'));
+    function tick() {
+      var ms = target - new Date();
+      if (ms <= 0) { el.textContent = 'now'; return; }
+      var mins = Math.floor(ms / 60000), h = Math.floor(mins / 60), d = Math.floor(h / 24);
+      if (d > 0) el.textContent = 'in ' + d + 'd ' + (h % 24) + 'h';
+      else if (h > 0) el.textContent = 'in ' + h + 'h ' + (mins % 60) + 'm';
+      else el.textContent = 'in ' + mins + 'm';
+    }
+    tick(); setInterval(tick, 60000);
+  })();
+</script>
 {% endblock %}
