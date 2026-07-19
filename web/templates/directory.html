@@ -41,17 +41,23 @@
       {% if units %}
         <div class="orders-grid" style="margin-top:22px;">
           {% for u in units %}
-            <div class="order-card" style="--seal: {{ u.brand_color }};">
-              <h3 class="order-title" style="color: {{ u.brand_color }};">
-                {% if u.crest %}<img class="unit-crest" src="{{ u.crest }}" alt="">{% endif %}{{ u.name }}</h3>
-              {% if u.motto %}<p class="motto" style="font-size:14px;margin:2px 0 8px;">“{{ u.motto }}”</p>{% endif %}
-              {% if u.blurb %}<p style="margin:6px 0 12px;">{{ u.blurb }}</p>{% endif %}
-              <p class="unit-meta" style="margin:6px 0 12px;">
+            <div class="order-card unit-card" style="--seal: {{ u.brand_color }};">
+              <div class="unit-head">
+                {% if u.crest %}
+                  <img class="unit-logo" src="{{ u.crest }}" alt="">
+                {% else %}
+                  <div class="unit-logo unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
+                {% endif %}
+                <h3 class="unit-title" style="color: {{ u.brand_color }};">{{ u.name }}</h3>
+                {% if u.motto %}<p class="unit-motto">“{{ u.motto }}”</p>{% endif %}
+              </div>
+              {% if u.blurb %}<p class="unit-blurb">{{ u.blurb }}</p>{% endif %}
+              <p class="unit-meta">
                 {% if u.recruiting %}<span class="badge s-active">Recruiting</span>
                 {% else %}<span class="badge s-inactive">Not recruiting</span>{% endif %}
                 {% if u.members is not none %}<span class="unit-count">{{ u.members }} member{{ 's' if u.members != 1 }}</span>{% endif %}
               </p>
-              <div class="inline-actions" style="justify-content:flex-start;gap:10px;">
+              <div class="inline-actions unit-actions">
                 <a class="btn" href="{{ u.join_url }}">Learn more</a>
                 {% if u.recruiting %}
                   {% if u.invite %}
