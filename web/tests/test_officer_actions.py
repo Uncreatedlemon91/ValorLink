@@ -1094,9 +1094,11 @@ def test_assignment_add_assign_and_unassign():
         assert s.query(MemberAssignment).filter_by(member_id=MEMBER_ID, assignment_id=aid).count() == 1
     acts = _actions(queue.ASSIGN_ROLE)
     assert len(acts) == 1 and json.loads(acts[0].payload)["role_id"] == 555
-    # the staff roster shows the member under the group
-    staff = client.get("/command-staff").text
+    # the roster's By-Assignment tab shows the member under the group
+    staff = client.get("/roster?tab=assignments").text
     assert "High Command" in staff and "Testman" in staff
+    # the old command-staff URL still lands there
+    assert client.get("/command-staff").url.path == "/roster"
     # unassign → link gone + role removal queued
     client.post(f"/members/{MEMBER_ID}/unassign",
                 data={"csrf": _csrf(client), "assignment_id": aid})

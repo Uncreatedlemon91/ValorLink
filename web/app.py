@@ -594,7 +594,7 @@ def post_announce(
 
 
 @app.get("/roster", response_class=HTMLResponse)
-def roster(request: Request, session: Session = Depends(get_session)):
+def roster(request: Request, session: Session = Depends(get_session), tab: str = "company"):
     ctx = _base_context(request, session)
 
     members = session.query(Member).filter(Member.status == "active").all()
@@ -615,7 +615,25 @@ def roster(request: Request, session: Session = Depends(get_session)):
         roster_members.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
         companies.append({"name": name, "members": roster_members})
 
-    ctx.update(companies=companies, active_total=len(members))
+    # The same present-for-duty members, grouped by secondary assignment for the
+    # "By Assignment" tab. Leadership groups first, seniority within.
+    active_ids = {m.discord_id for m in members}
+    member_by_id = {m.discord_id: m for m in members}
+    assignment_groups = []
+    for a in services.list_assignments(session):
+        grp = sorted(
+            [member_by_id[ma.member_id] for ma in a.members if ma.member_id in active_ids],
+            key=lambda m: (-rank_order.get(m.rank, -1), m.callsign.lower()),
+        )
+        assignment_groups.append({"assignment": a, "members": grp})
+
+    ctx.update(
+        companies=companies,
+        active_total=len(members),
+        assignment_groups=assignment_groups,
+        has_assignments=bool(assignment_groups),
+        active_tab=("assignments" if tab == "assignments" else "company"),
+    )
     return templates.TemplateResponse(request, "roster.html", ctx)
 
 
@@ -1054,22 +1072,11 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
     return templates.TemplateResponse(request, "event_detail.html", ctx)
 
 
-@app.get("/command-staff", response_class=HTMLResponse)
-def command_staff(request: Request, session: Session = Depends(get_session)):
-    """Members grouped by their secondary assignments — the staff & command
-    roster. Leadership groups sort to the top; within a group, seniority first."""
-    ctx = _base_context(request, session)
-    rank_pos = {r.name: r.position for r in rank_utils.all_ranks(session)}
-    groups = []
-    for a in services.list_assignments(session):
-        members = sorted(
-            [ma.member for ma in a.members if ma.member],
-            key=lambda m: (-rank_pos.get(m.rank, -1), m.callsign.lower()),
-        )
-        groups.append({"assignment": a, "members": members})
-    ctx["groups"] = groups
-    ctx["any_assignments"] = bool(groups)
-    return templates.TemplateResponse(request, "command_staff.html", ctx)
+@app.get("/command-staff")
+def command_staff(request: Request):
+    """The staff & command roster is now the Roster page's 'By Assignment' tab.
+    Kept as a redirect so existing links still land in the right place."""
+    return RedirectResponse("/roster?tab=assignments", status_code=307)
 
 
 @app.get("/honors", response_class=HTMLResponse)

@@ -3,34 +3,86 @@
 {% block content %}
 
 <h2 class="section">Roster of the Present <span class="tally">{{ active_total }} present for duty</span></h2>
-<p class="lede">Ordered by company, and within each by seniority of rank.</p>
 
-{% if companies %}
-  {% for company in companies %}
+<div class="tabs" role="tablist">
+  <button class="tab {{ 'on' if active_tab == 'company' }}" data-tab="company" role="tab">By Company</button>
+  {% if has_assignments %}
+  <button class="tab {{ 'on' if active_tab == 'assignments' }}" data-tab="assignments" role="tab">By {{ terms.assignments }}</button>
+  {% endif %}
+</div>
+
+<section class="tab-panel {{ 'on' if active_tab == 'company' }}" data-panel="company">
+  <p class="lede">Ordered by company, and within each by seniority of rank.</p>
+  {% if companies %}
+    {% for company in companies %}
+      <div class="company-block">
+        <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
+        <table class="ledger">
+          <thead><tr><th>Rank</th><th>Callsign</th><th class="num">Enrolled</th></tr></thead>
+          <tbody>
+          {% for m in company.members %}
+            <tr>
+              <td>{{ m.rank }}</td>
+              <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a></td>
+              <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="hollow">
+      <div class="mark">✶</div>
+      <h3>The Roster Stands Empty</h3>
+      <p>No soul is presently borne on the rolls as fit for duty.</p>
+    </div>
+  {% endif %}
+</section>
+
+{% if has_assignments %}
+<section class="tab-panel {{ 'on' if active_tab == 'assignments' }}" data-panel="assignments">
+  <p class="lede">Present-for-duty members grouped by their secondary assignments —
+  leadership, staff, and details drawn from across the companies.</p>
+  {% for g in assignment_groups %}
     <div class="company-block">
-      <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
+      <h3 class="company-name">
+        {% if g.assignment.is_leadership %}<span class="lead-star">★</span> {% endif %}{{ g.assignment.name }}
+        <span class="count">({{ g.members|length }})</span>
+      </h3>
+      {% if g.assignment.description %}<p class="lede" style="margin-top:0;">{{ g.assignment.description }}</p>{% endif %}
+      {% if g.members %}
       <table class="ledger">
-        <thead>
-          <tr><th>Rank</th><th>Callsign</th><th class="num">Enrolled</th></tr>
-        </thead>
+        <thead><tr><th>Rank</th><th>Callsign</th><th>Company</th></tr></thead>
         <tbody>
-        {% for m in company.members %}
+        {% for m in g.members %}
           <tr>
             <td>{{ m.rank }}</td>
             <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a></td>
-            <td class="num muted">{{ m.joined_date|fmt_date }}</td>
+            <td class="muted">{{ m.company }}</td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
+      {% else %}
+        <p class="empty">No one is assigned to this group yet.</p>
+      {% endif %}
     </div>
   {% endfor %}
-{% else %}
-  <div class="hollow">
-    <div class="mark">✶</div>
-    <h3>The Roster Stands Empty</h3>
-    <p>No soul is presently borne on the rolls as fit for duty.</p>
-  </div>
+</section>
 {% endif %}
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll('.tab');
+    var panels = document.querySelectorAll('.tab-panel');
+    function show(name) {
+      tabs.forEach(function (t) { t.classList.toggle('on', t.dataset.tab === name); });
+      panels.forEach(function (p) { p.classList.toggle('on', p.dataset.panel === name); });
+      try { history.replaceState(null, '', name === 'company' ? '/roster' : '/roster?tab=' + name); } catch (e) {}
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.tab); }); });
+  })();
+</script>
 
 {% endblock %}

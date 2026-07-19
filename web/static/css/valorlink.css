@@ -998,6 +998,20 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
 body.theme-modern .audit-filter .chip-on { color: #fff; }
 
+/* ---- Tabs (roster By Company / By Assignment) ------------------------- */
+.tabs { display: flex; gap: 4px; border-bottom: 1.5px solid var(--rule-strong); margin: 6px 0 18px; }
+.tab {
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-faint); padding: 8px 14px; margin-bottom: -1.5px;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--seal); border-bottom-color: var(--seal); font-weight: 700; }
+.tab-panel { display: none; }
+.tab-panel.on { display: block; }
+.lead-star { color: var(--seal); }
+
 /* ---- Secondary assignments -------------------------------------------- */
 .assign-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
 .assign-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
