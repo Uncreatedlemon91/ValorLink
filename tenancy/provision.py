@@ -104,6 +104,20 @@ def delete_unit(slug: str, purge: bool = False) -> dict:
 
     invalidate()
 
+    # Preserve each member's service in this unit before its database goes away,
+    # so it still shows on their cross-unit record. Read while the file exists,
+    # i.e. before the archive/purge step below.
+    from tenancy.career import snapshot_unit
+    try:
+        snapshot_unit(db_url, slug, name)
+    except Exception:  # noqa: BLE001 -- never block a deletion on the snapshot
+        pass
+
+    # Release the cached engine/connections so nothing lingers against the file
+    # we're about to archive.
+    from tenancy.units import dispose_engine
+    dispose_engine(db_url)
+
     archived_to = None
     if db_url.startswith("sqlite:///"):
         path = db_url[len("sqlite:///"):]

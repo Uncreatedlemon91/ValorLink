@@ -72,6 +72,23 @@ class Alliance(RegistryBase):
     created_at = Column(DateTime, default=_utcnow)
 
 
+class CareerEvent(RegistryBase):
+    """A durable record of a lifecycle event (enlisted, promoted, awarded,
+    discharged) captured when a unit is removed from the platform, so a
+    member's service in that unit survives the unit's deletion. Live units are
+    read directly; this log only preserves what would otherwise be lost."""
+
+    __tablename__ = "career_events"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(BigInteger, nullable=False, index=True)
+    unit_slug = Column(String, nullable=False)
+    unit_name = Column(String, nullable=False)
+    kind = Column(String, nullable=False)    # enlisted | promoted | awarded | discharged
+    detail = Column(String, nullable=True)   # rank name, award name, or discharge type
+    at = Column(DateTime, nullable=True)
+
+
 class AllianceMember(RegistryBase):
     """A unit's membership in an alliance. A membership is created as
     ``invited`` and only becomes ``active`` once an admin of that unit accepts —

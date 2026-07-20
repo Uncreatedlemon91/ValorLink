@@ -24,6 +24,7 @@ import os
 import re
 
 from db.models import AwardType, Member, MemberAward, ServiceHistoryEntry
+from tenancy.career import career_events_for
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
 
@@ -109,6 +110,50 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
     return posting
 
 
+def _archived_service(discord_id: int, live_slugs: set[str], level: str):
+    """Reconstruct service in now-deleted units from the durable career log.
+    Returns (postings, milestones) for units no longer live on the platform, so
+    a member's history survives a unit's removal."""
+    events = [e for e in career_events_for(discord_id) if e["unit_slug"] not in live_slugs]
+    by_unit: dict[str, list] = {}
+    for e in events:
+        by_unit.setdefault(e["unit_slug"], []).append(e)
+
+    postings, milestones = [], []
+    for slug, evs in by_unit.items():
+        unit = evs[0]["unit_name"]
+        enlisted = next((e["at"] for e in evs if e["kind"] == "enlisted"), None)
+        promotions = [e for e in evs if e["kind"] == "promoted"]
+        awards = [{"name": e["detail"], "emoji": None, "date": e["at"]}
+                  for e in evs if e["kind"] == "awarded"]
+        discharge = next((e for e in evs if e["kind"] == "discharged"), None)
+        final_rank = promotions[-1]["detail"] if promotions else None
+        postings.append({
+            "unit": unit, "slug": slug, "url": None, "archived": True,
+            "rank": final_rank or "—", "company": "",
+            "status": "discharged" if discharge else "departed",
+            "joined": enlisted, "rank_since": None,
+            "awards": awards, "promotions": [], "history": [],
+            "discharge_type": discharge["detail"] if (discharge and level in (LEVEL_OWNER, LEVEL_RECRUITER)) else None,
+        })
+        # Timeline entries — reason-free by construction.
+        if enlisted:
+            milestones.append({"at": enlisted, "kind": "enlisted", "unit": unit,
+                               "text": f"Enlisted in {unit}"})
+        for pr in promotions:
+            milestones.append({"at": pr["at"], "kind": "promote", "unit": unit,
+                               "text": f"Promoted to {pr['detail']} · {unit}"})
+        for a in awards:
+            milestones.append({"at": a["date"], "kind": "award", "unit": unit,
+                               "text": f"Awarded {a['name']} · {unit}"})
+        if discharge:
+            dt = discharge["detail"]
+            label = f"{dt.title()} discharge" if dt else "Departed"
+            milestones.append({"at": discharge["at"], "kind": "discharge", "unit": unit,
+                               "text": f"{label} · {unit} (archived)"})
+    return postings, milestones
+
+
 def build_service_record(discord_id: int, level: str) -> dict:
     """Aggregate ``discord_id``'s record across every unit, redacted to ``level``."""
     from tenancy.registry import registry_session
@@ -131,20 +176,27 @@ def build_service_record(discord_id: int, level: str) -> dict:
         except Exception:  # noqa: BLE001 -- an unreadable unit shouldn't sink the record
             continue
 
-    current = [p for p in postings if p["status"] != "discharged"]
-    former = [p for p in postings if p["status"] == "discharged"]
+    # Service in units that have since been deleted, from the durable log.
+    live_slugs = {p["slug"] for p in postings}
+    archived, archived_milestones = _archived_service(discord_id, live_slugs, level)
+    if archived and name is None:
+        name = f"ID {discord_id}"
 
-    joined_dates = [p["joined"] for p in postings if p["joined"]]
-    awards_total = sum(len(p["awards"]) for p in postings)
+    all_postings = postings + archived
+    current = [p for p in postings if p["status"] != "discharged"]
+    former = [p for p in postings if p["status"] == "discharged"] + archived
+
+    joined_dates = [p["joined"] for p in all_postings if p["joined"]]
+    awards_total = sum(len(p["awards"]) for p in all_postings)
     stats = {
-        "units_served": len(postings),
+        "units_served": len(all_postings),
         "active_units": len(current),
         "awards_total": awards_total,
         "first_enlisted": min(joined_dates) if joined_dates else None,
     }
     if level in (LEVEL_OWNER, LEVEL_RECRUITER):
         stats["dishonorable"] = sum(
-            1 for p in former if p["discharge_type"] == "dishonorable")
+            1 for p in former if p.get("discharge_type") == "dishonorable")
 
     # A reason-free milestone feed, merged across units: enlistments, awards,
     # and departures. Owners also see promotions via each unit's full history.
@@ -166,6 +218,7 @@ def build_service_record(discord_id: int, level: str) -> dict:
             milestones.append({"at": p.get("discharged_at") or p["rank_since"],
                                "kind": "discharge", "unit": p["unit"],
                                "text": f"{label} · {p['unit']}"})
+    milestones += archived_milestones
     milestones.sort(key=lambda m: (m["at"] is None, m["at"]))
 
     return {
@@ -173,10 +226,10 @@ def build_service_record(discord_id: int, level: str) -> dict:
         "name": name,
         "avatar": avatar,
         "level": level,
-        "postings": postings,
+        "postings": all_postings,
         "current": current,
         "former": former,
         "stats": stats,
         "milestones": milestones,
-        "found": bool(postings),
+        "found": bool(all_postings),
     }

@@ -35,6 +35,17 @@ def sessionmaker_for(db_url: str) -> sessionmaker:
     return _sessionmakers[db_url]
 
 
+def dispose_engine(db_url: str) -> None:
+    """Drop a unit's cached engine and connections — used when a unit is deleted
+    so no stale connection lingers against an archived database file."""
+    sm = _sessionmakers.pop(db_url, None)
+    if sm is not None:
+        sm.close_all()
+    engine = _engines.pop(db_url, None)
+    if engine is not None:
+        engine.dispose()
+
+
 def session_for(tenant) -> Session:
     """Open a session against a tenant's private database."""
     return sessionmaker_for(tenant.db_url)()

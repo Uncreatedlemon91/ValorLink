@@ -703,6 +703,31 @@ def test_service_record_is_public_positive_only():
     assert "misconduct" not in r.text          # reasons never shown
 
 
+def test_service_record_survives_unit_deletion():
+    """A member's service in a deleted unit is preserved via the durable log."""
+    from db.models import Member, ServiceHistoryEntry
+    from tenancy.provision import delete_unit
+    uid = 7100
+    # serving in both units, promoted in 2ndus which we then delete
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Member(discord_id=uid, callsign="Vet", rank="Private", company="Alpha",
+                     status="active"))
+        s.commit()
+    with sessionmaker_for(unit_db_url_for_slug("2ndus"))() as s:
+        s.add(Member(discord_id=uid, callsign="Vet", rank="Sergeant", company="Bravo",
+                     status="active"))
+        s.add(ServiceHistoryEntry(
+            member_id=uid, entry="Promoted from Corporal to Sergeant by Maj. Poe."))
+        s.commit()
+    delete_unit("2ndus")   # 2ndus leaves the platform
+    c = TestClient(app)
+    html = c.get(f"/u/{uid}", headers={"host": APEX}).text
+    assert "5th Virginia" in html            # still-live unit
+    assert "2nd United States" in html       # deleted unit, from the durable log
+    assert "Promoted to Sergeant" in html    # its history survived
+    assert "archived" in html                # marked as a disbanded unit
+
+
 def test_service_record_not_found_is_404():
     c = TestClient(app)
     r = c.get("/u/999999", headers={"host": APEX})

@@ -65,13 +65,15 @@
         {% for p in record.former %}
         <div class="posting posting-former">
           <div class="posting-head">
-            <a class="posting-unit" href="{{ p.url }}">{{ p.unit }}</a>
+            {% if p.url %}<a class="posting-unit" href="{{ p.url }}">{{ p.unit }}</a>
+            {% else %}<span class="posting-unit">{{ p.unit }}</span>{% endif %}
             {% if p.discharge_type == 'honorable' %}<span class="discharge-badge d-honorable">Honorable</span>
             {% elif p.discharge_type == 'dishonorable' %}<span class="discharge-badge d-dishonorable">Dishonorable</span>
+            {% elif p.archived %}<span class="rankchip">archived</span>
             {% else %}<span class="rankchip">former</span>{% endif %}
           </div>
-          <div class="posting-rank">{{ p.rank }} · {{ p.company }}</div>
-          <div class="posting-sub">Enlisted {{ p.joined|fmt_date }}</div>
+          <div class="posting-rank">{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
+          <div class="posting-sub">{% if p.joined %}Enlisted {{ p.joined|fmt_date }}{% endif %}{% if p.archived %} · unit since disbanded{% endif %}</div>
           {% if p.awards %}
           <div class="posting-awards">{% for a in p.awards %}<span class="award-chip">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
           {% endif %}
