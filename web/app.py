@@ -39,6 +39,7 @@ from db.models import (
     Rank,
     ServiceHistoryEntry,
 )
+from tenancy import alliance_events
 from tenancy import alliances as alliance_mod
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
@@ -601,7 +602,10 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         setup_steps=setup_steps,
     )
     if os.getenv("PLATFORM_BASE_DOMAIN"):
-        ctx["allies"] = alliance_mod.alliances_for_unit(resolve_tenant(request).slug)
+        allies = alliance_mod.alliances_for_unit(resolve_tenant(request).slug)
+        ctx["allies"] = allies
+        ctx["next_joint"] = alliance_events.next_event_for_alliances(
+            [a["id"] for a in allies])
     return templates.TemplateResponse(request, "headquarters.html", ctx)
 
 
@@ -1432,6 +1436,72 @@ def post_alliance_leave(
 ):
     me = resolve_tenant(request).slug
     return _do_alliance(request, csrf, alliance_mod.leave_alliance, alliance_id, me)
+
+
+def _parse_local_dt(value: str, tz_offset: str):
+    """A datetime-local value plus the browser's UTC offset (minutes) → UTC."""
+    dt = datetime.fromisoformat(value)  # naive local time
+    try:
+        offset = int(tz_offset)
+    except (TypeError, ValueError):
+        offset = 0
+    return dt + timedelta(minutes=offset)
+
+
+@app.post("/admin/alliances/{alliance_id}/events/create")
+def post_alliance_event_create(
+    request: Request,
+    alliance_id: int,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    event_type: str = Form("Line Battle"),
+    when: str = Form(...),
+    tz_offset: str = Form("0"),
+    description: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    me = resolve_tenant(request).slug
+    try:
+        scheduled_at = _parse_local_dt(when, tz_offset)
+    except ValueError:
+        _flash(request, "Enter a valid date and time.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    return _do_alliance(request, csrf, alliance_events.create_event,
+                        alliance_id, me, name, event_type, scheduled_at,
+                        description, int(user["id"]))
+
+
+@app.post("/alliance/{slug}/events/{event_id}/rsvp")
+def post_alliance_rsvp(
+    request: Request,
+    slug: str,
+    event_id: int,
+    csrf: str = Form(...),
+    status: str = Form(...),
+):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    dest = RedirectResponse(f"/alliance/{slug}", status_code=303)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return dest
+    detail = alliance_mod.alliance_detail(slug)
+    if detail is None:
+        return dest
+    member_slugs = {m["slug"] for m in detail["members"]}
+    mine = set((user.get("tiers") or {}).keys()) & member_slugs
+    if not mine:
+        _flash(request, "Only members of a unit in this alliance can answer the call.", "error")
+        return dest
+    if alliance_events.event_alliance_id(event_id) != detail["id"]:
+        return dest
+    try:
+        _flash(request, alliance_events.rsvp(event_id, int(user["id"]),
+                                             sorted(mine)[0], status), "ok")
+    except alliance_mod.AllianceError as exc:
+        _flash(request, str(exc), "error")
+    return dest
 
 
 @app.post("/admin/actions/{action_id}/retry")
@@ -2419,10 +2489,11 @@ def platform_admin(request: Request):
 @app.get("/alliance/{slug}", response_class=HTMLResponse)
 def alliance_page(request: Request, slug: str):
     """Public page for an alliance: its member units and combined strength."""
+    viewer = auth.current_user(request)
     detail = alliance_mod.alliance_detail(slug)
     ctx = {
         "request": request,
-        "user": auth.current_user(request),
+        "user": viewer,
         "flash": request.session.pop("flash", []),
     }
     if detail is None:
@@ -2443,6 +2514,13 @@ def alliance_page(request: Request, slug: str):
             total += info.get("members") or 0
     detail["strength"] = total
     ctx["alliance"] = detail
+    ctx["csrf_token"] = auth.get_csrf_token(request)
+    ctx["events"] = alliance_events.upcoming_events(
+        detail["id"], viewer_id=int(viewer["id"]) if viewer else None)
+    member_slugs = {m["slug"] for m in detail["members"]}
+    ctx["can_rsvp"] = bool(viewer and (set((viewer.get("tiers") or {}).keys()) & member_slugs))
+    ctx["rsvp_choices"] = [("accepted", "Answer the call"), ("tentative", "Tentative"),
+                           ("declined", "Can't attend")]
     return templates.TemplateResponse(request, "alliance.html", ctx)
 
 

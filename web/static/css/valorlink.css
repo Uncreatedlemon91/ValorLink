@@ -847,6 +847,13 @@ body.theme-modern .unit-logo-ph { background: rgba(255,255,255,0.05); }
 .unit-alliances { margin: 2px 0 4px; }
 .allies-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 14px 0 2px; padding: 8px 12px; border: 1px solid var(--rule); border-left: 3px solid var(--seal); border-radius: 3px; background: rgba(255,253,246,0.5); }
 .allies-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-right: 4px; }
+.allies-next { font-size: 12.5px; color: var(--ink-soft); margin-left: auto; }
+.je-card { border-top-color: var(--union, #1f3a7c); }
+.je-desc { font-size: 13px; color: var(--ink-soft); margin: 6px 0; }
+.je-counts { display: flex; gap: 12px; font-size: 12.5px; color: var(--ink-faint); margin: 6px 0; }
+.je-rsvp { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.je-rsvp form { margin: 0; }
+.je-schedule summary { cursor: pointer; font-size: 12px; color: var(--ink-soft); }
 .tab-pip { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--seal); color: #fff; font-size: 10px; line-height: 16px; text-align: center; vertical-align: middle; }
 body.theme-modern .alliance-chip { background: rgba(255,255,255,0.05); }
 body.theme-modern .allies-strip { background: rgba(255,255,255,0.035); }

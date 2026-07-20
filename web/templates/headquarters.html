@@ -106,6 +106,9 @@
   {% for a in allies %}
     <a class="alliance-chip" href="/alliance/{{ a.slug }}" title="{% for m in a.members %}{{ m.name }}{{ '' if loop.last else ', ' }}{% endfor %}">{{ a.name }} · {{ a.count }} unit{{ 's' if a.count != 1 }}</a>
   {% endfor %}
+  {% if next_joint %}
+  <span class="allies-next">Next joint op: <b>{{ next_joint.name }}</b> — <time datetime="{{ next_joint.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ next_joint.scheduled_at|fmt_date(true) }}</time></span>
+  {% endif %}
 </div>
 {% endif %}
 

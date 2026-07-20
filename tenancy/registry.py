@@ -105,6 +105,38 @@ class AllianceMember(RegistryBase):
     joined_at = Column(DateTime, default=_utcnow)
 
 
+class AllianceEvent(RegistryBase):
+    """A joint event hosted by an alliance (e.g. a coalition line battle).
+    Cross-unit by nature, so it lives in the control-plane; members of any
+    member unit can answer the call."""
+
+    __tablename__ = "alliance_events"
+
+    id = Column(Integer, primary_key=True)
+    alliance_id = Column(Integer, nullable=False, index=True)
+    host_slug = Column(String, nullable=False)     # the unit that scheduled it
+    name = Column(String, nullable=False)
+    event_type = Column(String, nullable=False, default="Line Battle")
+    scheduled_at = Column(DateTime, nullable=False)
+    description = Column(Text, nullable=True)
+    created_by = Column(BigInteger, nullable=True)  # Discord id of the scheduler
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class AllianceRSVP(RegistryBase):
+    """A member's answer to a joint event — keyed by Discord id and the unit
+    they answered from, since attendees span every allied unit."""
+
+    __tablename__ = "alliance_rsvps"
+
+    id = Column(Integer, primary_key=True)
+    alliance_event_id = Column(Integer, nullable=False, index=True)
+    discord_id = Column(BigInteger, nullable=False)
+    unit_slug = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="accepted")  # accepted|tentative|declined
+    responded_at = Column(DateTime, default=_utcnow)
+
+
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
 RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)

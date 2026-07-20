@@ -639,6 +639,51 @@ def test_alliance_badge_in_directory():
     assert "Army of NV" in html and 'href="/alliance/anv"' in html
 
 
+def test_joint_event_create_and_cross_unit_rsvp():
+    from tenancy.alliances import accept_invite, alliance_detail, create_alliance, invite_unit
+    from tenancy.alliance_events import upcoming_events
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    invite_unit(aid, "2ndus", "5thva")
+    accept_invite(aid, "2ndus")
+    # 5thva admin schedules a joint event
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    tok = _csrf(c, "/command-tent", _host("5thva"))
+    c.post(f"/admin/alliances/{aid}/events/create",
+           data={"csrf": tok, "name": "Coalition Battle", "event_type": "Line Battle",
+                 "when": "2099-01-01T19:00", "tz_offset": "0", "description": "Union side"},
+           headers=_host("5thva"))
+    evs = upcoming_events(aid)
+    assert len(evs) == 1 and evs[0]["name"] == "Coalition Battle"
+    eid = evs[0]["id"]
+    # a 2ndus member answers the call from the alliance page
+    c2 = TestClient(app)
+    c2.post("/auth/dev", data={"discord_id": 55, "name": "Pvt", "tier": "none"},
+            headers=_host("2ndus"), follow_redirects=False)
+    tok2 = _csrf(c2, "/alliance/anv", _host("2ndus"))
+    c2.post(f"/alliance/anv/events/{eid}/rsvp",
+            data={"csrf": tok2, "status": "accepted"}, headers=_host("2ndus"))
+    evs = upcoming_events(aid, viewer_id=55)
+    assert evs[0]["counts"]["accepted"] == 1
+    assert evs[0]["mine"] == "accepted"
+
+
+def test_joint_event_host_must_be_member():
+    from datetime import datetime
+    from tenancy.alliances import AllianceError, alliance_detail, create_alliance
+    from tenancy.alliance_events import create_event
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    try:
+        create_event(aid, "2ndus", "Sneaky Op", "Line Battle",
+                     datetime(2099, 1, 1, 19, 0), "", 1)
+        assert False, "a non-member unit should not be able to host"
+    except AllianceError as exc:
+        assert "member unit" in str(exc)
+
+
 def test_alliance_dissolves_when_last_unit_leaves():
     from tenancy.alliances import alliance_detail, create_alliance, leave_alliance
     create_alliance("Solo", "solo", "5thva")
