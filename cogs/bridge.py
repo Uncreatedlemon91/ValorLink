@@ -136,6 +136,73 @@ class Bridge(commands.Cog):
             finally:
                 reset_current_db_url(token)
 
+        # Joint (alliance) events span multiple guilds, so they're handled once
+        # per tick rather than inside the per-unit loop.
+        try:
+            await self._process_alliance_events()
+        except Exception:  # noqa: BLE001 -- never let alliances stall the loop
+            log.exception("Alliance event pass failed")
+
+    # --- Joint (alliance) events -------------------------------------- #
+    async def _process_alliance_events(self):
+        from tenancy import alliance_events as ae
+
+        for ev in ae.events_needing_announcement():
+            try:
+                await self._announce_alliance_event(ev)
+            except Exception:  # noqa: BLE001
+                log.exception("Alliance announce for event %s failed", ev["id"])
+            ae.mark_announced(ev["id"])
+
+        for ev in ae.events_needing_reminder(int(REMIND_LEAD.total_seconds() // 60)):
+            try:
+                await self._remind_alliance_event(ev)
+            except Exception:  # noqa: BLE001
+                log.exception("Alliance reminder for event %s failed", ev["id"])
+            ae.mark_reminded(ev["id"])
+
+    def _alliance_targets(self, alliance_id: int):
+        from tenancy import alliance_events as ae
+        return {t["slug"]: t for t in ae.member_targets(alliance_id)}
+
+    async def _announce_alliance_event(self, ev: dict):
+        from tenancy import alliance_events as ae
+
+        embed = base_embed(
+            title=f"⚔ Joint Operation: {ev['name']}",
+            description=ev.get("description") or "",
+            color=discord.Color.dark_gold().value,
+        )
+        embed.add_field(name="Kind", value=ev["event_type"], inline=True)
+        embed.add_field(name="When", value=discord_ts(ev["scheduled_at"], "F"), inline=True)
+        embed.add_field(name="Muster", value=discord_ts(ev["scheduled_at"], "R"), inline=True)
+        embed.set_footer(text="A joint call to arms from your alliance")
+
+        for target in ae.member_targets(ev["alliance_id"]):
+            guild = self.bot.get_guild(target["guild_id"]) if target["guild_id"] else None
+            if guild is None:
+                continue
+            token = set_current_db_url(target["db_url"])
+            try:
+                with db_session() as session:
+                    channel_id = get_config(session).announcements_channel_id
+                channel = guild.get_channel(channel_id) if channel_id else None
+                if channel is not None:
+                    await channel.send(embed=embed)
+            finally:
+                reset_current_db_url(token)
+
+    async def _remind_alliance_event(self, ev: dict):
+        targets = self._alliance_targets(ev["alliance_id"])
+        text = (f"⏰ Joint op reminder: **{ev['event_type']}: {ev['name']}** musters "
+                f"{discord_ts(ev['scheduled_at'], 'R')} ({discord_ts(ev['scheduled_at'], 'f')}).")
+        for r in ev["recipients"]:
+            target = targets.get(r["unit_slug"])
+            guild = self.bot.get_guild(target["guild_id"]) if target and target["guild_id"] else None
+            if guild is None:
+                continue
+            await self._dm(guild, r["discord_id"], text)
+
     async def _remind_unit(self, guild: discord.Guild):
         now = datetime.utcnow()
         with db_session() as session:
@@ -681,6 +748,23 @@ class Bridge(commands.Cog):
             member = guild.get_member(discord_id)
             if member:
                 await resync_nickname(member)
+
+    async def _do_alliance_announce(self, guild, p):
+        """An alliance-wide message, posted to this member unit's announcements
+        channel. A unit with no announcements channel is simply skipped."""
+        with db_session() as session:
+            channel_id = get_config(session).announcements_channel_id
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if channel is None:
+            return
+        embed = base_embed(
+            title=f"⚔ {p.get('title') or p.get('alliance_name') or 'Alliance Announcement'}",
+            description=p["body"],
+            color=discord.Color.dark_gold().value,
+        )
+        embed.set_footer(text=f"From the {p.get('alliance_name', 'alliance')}")
+        embed.timestamp = datetime.now(timezone.utc)
+        await channel.send(embed=embed)
 
     async def _do_platform_broadcast(self, guild, p):
         """A platform-wide update from the ValorLink operators, posted to this

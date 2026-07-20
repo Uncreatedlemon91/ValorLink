@@ -1504,6 +1504,53 @@ def post_alliance_rsvp(
     return dest
 
 
+def _alliance_broadcast(alliance_id: int, alliance_name: str, title: str,
+                        body: str, actor_id: int | None) -> int:
+    """Queue an alliance-wide message on every member unit's queue; the bot posts
+    it to each unit's announcements channel."""
+    sent = 0
+    for target in alliance_events.member_targets(alliance_id):
+        try:
+            with sessionmaker_for(target["db_url"])() as s:
+                queue.enqueue(s, queue.ALLIANCE_ANNOUNCE,
+                              {"alliance_name": alliance_name, "title": title, "body": body},
+                              actor_id=actor_id)
+                s.commit()
+            sent += 1
+        except Exception:  # noqa: BLE001 -- one unreadable unit shouldn't stop the rest
+            pass
+    return sent
+
+
+@app.post("/admin/alliances/{alliance_id}/announce")
+def post_alliance_announce(
+    request: Request,
+    alliance_id: int,
+    csrf: str = Form(...),
+    title: str = Form(""),
+    body: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    dest = RedirectResponse("/command-tent", status_code=303)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return dest
+    me = resolve_tenant(request).slug
+    mine = [a for a in alliance_mod.alliances_for_unit(me) if a["id"] == alliance_id]
+    if not mine:
+        _flash(request, "Your unit isn't a member of that alliance.", "error")
+        return dest
+    body = body.strip()
+    if not body:
+        _flash(request, "An announcement needs a message.", "error")
+        return dest
+    count = _alliance_broadcast(alliance_id, mine[0]["name"], title.strip(), body,
+                                int(user["id"]))
+    _flash(request, f"Announcement queued for {count} unit{'s' if count != 1 else ''}. "
+                    "The bot posts it to each announcements channel shortly.", "ok")
+    return dest
+
+
 @app.post("/admin/actions/{action_id}/retry")
 def post_action_retry(
     request: Request,

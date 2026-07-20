@@ -670,6 +670,50 @@ def test_joint_event_create_and_cross_unit_rsvp():
     assert evs[0]["mine"] == "accepted"
 
 
+def test_alliance_event_announce_and_reminder_bookkeeping():
+    from datetime import datetime, timedelta
+    from tenancy.alliances import accept_invite, alliance_detail, create_alliance, invite_unit
+    from tenancy.alliance_events import (create_event, events_needing_announcement,
+                                         events_needing_reminder, mark_announced,
+                                         member_targets, rsvp)
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    invite_unit(aid, "2ndus", "5thva")
+    accept_invite(aid, "2ndus")
+    assert sorted(t["slug"] for t in member_targets(aid)) == ["2ndus", "5thva"]
+    create_event(aid, "5thva", "Battle", "Line Battle",
+                 datetime.utcnow() + timedelta(minutes=40), "", 7)
+    need = events_needing_announcement()
+    assert len(need) == 1
+    eid = need[0]["id"]
+    mark_announced(eid)
+    assert events_needing_announcement() == []   # not re-announced
+    rsvp(eid, 55, "2ndus", "accepted")
+    due = events_needing_reminder(60)             # event 40 min out, 60 min window
+    assert len(due) == 1 and due[0]["recipients"][0]["discord_id"] == 55
+
+
+def test_alliance_announce_enqueues_to_member_units():
+    from db.models import PendingAction
+    from tenancy.alliances import accept_invite, alliance_detail, create_alliance, invite_unit
+    from utils.queue import ALLIANCE_ANNOUNCE
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    invite_unit(aid, "2ndus", "5thva")
+    accept_invite(aid, "2ndus")
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    tok = _csrf(c, "/command-tent", _host("5thva"))
+    c.post(f"/admin/alliances/{aid}/announce",
+           data={"csrf": tok, "title": "Muster", "body": "All regiments to the field."},
+           headers=_host("5thva"))
+    for slug in ("5thva", "2ndus"):
+        with sessionmaker_for(unit_db_url_for_slug(slug))() as s:
+            assert s.query(PendingAction).filter(
+                PendingAction.action == ALLIANCE_ANNOUNCE).count() == 1
+
+
 def test_joint_event_host_must_be_member():
     from datetime import datetime
     from tenancy.alliances import AllianceError, alliance_detail, create_alliance

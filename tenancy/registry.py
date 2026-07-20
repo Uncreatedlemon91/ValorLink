@@ -121,6 +121,9 @@ class AllianceEvent(RegistryBase):
     description = Column(Text, nullable=True)
     created_by = Column(BigInteger, nullable=True)  # Discord id of the scheduler
     created_at = Column(DateTime, default=_utcnow)
+    # Bot bookkeeping so a joint event is posted/reminded once, not every loop.
+    announced = Column(Boolean, nullable=False, default=False, server_default="0")
+    reminded = Column(Boolean, nullable=False, default=False, server_default="0")
 
 
 class AllianceRSVP(RegistryBase):
@@ -156,14 +159,21 @@ def _ensure_columns():
     from sqlalchemy import inspect, text
 
     insp = inspect(registry_engine)
-    if "tenants" not in insp.get_table_names():
-        return
-    existing = {c["name"] for c in insp.get_columns("tenants")}
-    wanted = {"game": "VARCHAR", "tags": "VARCHAR"}
+    tables = set(insp.get_table_names())
+    # {table: {column: sql-type}} — columns added after a table first shipped.
+    wanted = {
+        "tenants": {"game": "VARCHAR", "tags": "VARCHAR"},
+        "alliance_events": {"announced": "BOOLEAN DEFAULT 0",
+                            "reminded": "BOOLEAN DEFAULT 0"},
+    }
     with registry_engine.begin() as conn:
-        for col, coltype in wanted.items():
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE tenants ADD COLUMN {col} {coltype}"))
+        for table, cols in wanted.items():
+            if table not in tables:
+                continue
+            existing = {c["name"] for c in insp.get_columns(table)}
+            for col, coltype in cols.items():
+                if col not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"))
 
 
 @contextmanager

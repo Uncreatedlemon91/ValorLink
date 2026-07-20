@@ -530,6 +530,16 @@
         <div class="field field-actions"><button class="btn btn-small btn-strong" type="submit">Schedule event</button></div>
       </form>
     </details>
+    <details class="je-schedule" style="margin-top:4px;">
+      <summary>Post to the alliance</summary>
+      <form class="orders" method="post" action="/admin/alliances/{{ a.id }}/announce" style="margin-top:6px;"
+            data-confirm="Post this to all {{ a.count }} member units' announcement channels?">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="field"><label>Heading <span class="opt">(optional)</span></label><input name="title" placeholder="{{ a.name }}"></div>
+        <div class="field"><label>Message</label><textarea name="body" rows="2" required placeholder="Coalition muster this Saturday — all regiments to the field."></textarea></div>
+        <div class="field field-actions"><button class="btn btn-small btn-strong" type="submit">Post to {{ a.count }} unit{{ 's' if a.count != 1 }}</button></div>
+      </form>
+    </details>
   </div>
   {% endfor %}
   {% endif %}

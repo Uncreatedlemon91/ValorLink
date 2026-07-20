@@ -1297,6 +1297,23 @@ def test_bridge_resync_rebuilds_member_nickname():
     assert member.edit.call_args.kwargs["nick"] == "5thVA A Pvt. Testman"
 
 
+def test_bridge_alliance_announce_posts_to_announcements():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).announcements_channel_id = 555
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = channel
+    asyncio.run(bridge._do_alliance_announce(
+        guild, {"alliance_name": "Army of NV", "title": "Muster", "body": "To the field."}))
+    guild.get_channel.assert_called_with(555)
+    channel.send.assert_awaited_once()
+
+
 def test_bridge_posts_platform_broadcast_to_admin_log():
     from cogs.bridge import Bridge
     with SessionLocal() as s:

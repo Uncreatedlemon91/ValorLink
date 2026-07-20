@@ -126,3 +126,81 @@ def event_alliance_id(event_id: int) -> int | None:
     with registry_session() as s:
         e = s.get(AllianceEvent, event_id)
         return e.alliance_id if e else None
+
+
+# --- Bot-facing helpers (announce + remind across member guilds) ---------- #
+def member_targets(alliance_id: int) -> list[dict]:
+    """Active member units of an alliance with their Discord routing info."""
+    from tenancy.registry import AllianceMember, Tenant
+
+    with registry_session() as s:
+        slugs = [
+            r.unit_slug for r in s.query(AllianceMember).filter(
+                AllianceMember.alliance_id == alliance_id,
+                AllianceMember.status == "active").all()
+        ]
+        if not slugs:
+            return []
+        tenants = s.query(Tenant).filter(Tenant.slug.in_(slugs)).all()
+        return [{"slug": t.slug, "guild_id": t.discord_guild_id, "db_url": t.db_url}
+                for t in tenants]
+
+
+def events_needing_announcement() -> list[dict]:
+    """Future joint events not yet posted to member Discords."""
+    now = datetime.utcnow()
+    with registry_session() as s:
+        rows = (
+            s.query(AllianceEvent)
+            .filter(AllianceEvent.announced.is_(False),
+                    AllianceEvent.scheduled_at > now)
+            .all()
+        )
+        return [{"id": e.id, "alliance_id": e.alliance_id, "name": e.name,
+                 "event_type": e.event_type, "scheduled_at": e.scheduled_at,
+                 "description": e.description, "host_slug": e.host_slug}
+                for e in rows]
+
+
+def events_needing_reminder(lead_minutes: int) -> list[dict]:
+    """Joint events inside the reminder window that haven't been reminded yet,
+    each with the members who answered accepted/tentative."""
+    from datetime import timedelta
+    now = datetime.utcnow()
+    cutoff = now + timedelta(minutes=lead_minutes)
+    with registry_session() as s:
+        rows = (
+            s.query(AllianceEvent)
+            .filter(AllianceEvent.reminded.is_(False),
+                    AllianceEvent.scheduled_at > now,
+                    AllianceEvent.scheduled_at <= cutoff)
+            .all()
+        )
+        out = []
+        for e in rows:
+            recipients = [
+                {"discord_id": r.discord_id, "unit_slug": r.unit_slug}
+                for r in s.query(AllianceRSVP).filter(
+                    AllianceRSVP.alliance_event_id == e.id,
+                    AllianceRSVP.status.in_(("accepted", "tentative"))).all()
+            ]
+            out.append({"id": e.id, "alliance_id": e.alliance_id, "name": e.name,
+                        "event_type": e.event_type, "scheduled_at": e.scheduled_at,
+                        "recipients": recipients})
+        return out
+
+
+def _mark(event_id: int, field: str) -> None:
+    with registry_session() as s:
+        e = s.get(AllianceEvent, event_id)
+        if e is not None:
+            setattr(e, field, True)
+            s.commit()
+
+
+def mark_announced(event_id: int) -> None:
+    _mark(event_id, "announced")
+
+
+def mark_reminded(event_id: int) -> None:
+    _mark(event_id, "reminded")
