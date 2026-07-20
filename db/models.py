@@ -30,6 +30,9 @@ class Member(Base):
     rank = Column(String, nullable=False)
     company = Column(String, nullable=False, default="Unassigned")
     status = Column(String, nullable=False, default="active")  # active | inactive | discharged
+    # How they left, if discharged: honorable | dishonorable. Surfaced on the
+    # cross-unit service record so recruiters can vet applicants.
+    discharge_type = Column(String, nullable=True)
     joined_date = Column(DateTime, default=_utcnow)
     last_active_date = Column(DateTime, default=_utcnow)
     rank_since = Column(DateTime, default=_utcnow)  # when they took their current rank

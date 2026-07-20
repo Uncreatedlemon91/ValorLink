@@ -39,7 +39,11 @@ from db.models import (
     Rank,
     ServiceHistoryEntry,
 )
-from tenancy.registry import registry_session
+from tenancy.registry import (
+    profile_is_public as registry_profile_is_public,
+    registry_session,
+    set_profile_public as registry_set_profile_public,
+)
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
 from utils import queue
@@ -52,7 +56,7 @@ from utils.settings import (
     get_config,
     list_companies,
 )
-from web import auth, services
+from web import auth, profiles, services
 from web.tenant import (
     TenantCtx,
     TenantNotFound,
@@ -2340,6 +2344,62 @@ def platform_admin(request: Request):
         },
     }
     return templates.TemplateResponse(request, "platform_admin.html", ctx)
+
+
+# --- Cross-unit service record ------------------------------------------- #
+@app.get("/me")
+def my_service_record(request: Request):
+    """Shortcut to the signed-in member's own cross-unit service record."""
+    user = auth.current_user(request)
+    if not user:
+        return RedirectResponse("/auth/discord/login", status_code=303)
+    return RedirectResponse(f"/u/{user['id']}", status_code=303)
+
+
+@app.post("/me/visibility")
+def set_my_visibility(request: Request, csrf: str = Form(...), public: str = Form("")):
+    """Owner toggle: make my positive service record public, or hide it."""
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(f"/u/{user['id']}", status_code=303)
+    registry_set_profile_public(int(user["id"]), bool(public))
+    _flash(request, "Your service record is now public." if public
+           else "Your service record is now private.", "ok")
+    return RedirectResponse(f"/u/{user['id']}", status_code=303)
+
+
+@app.get("/u/{discord_id}", response_class=HTMLResponse)
+def service_record(request: Request, discord_id: int):
+    """A member's service record, aggregated across every unit and redacted to
+    what the viewer is allowed to see (owner / recruiter / public)."""
+    viewer = auth.current_user(request)
+    level = profiles.viewer_level(viewer, discord_id)
+    ctx = {
+        "request": request,
+        "user": viewer,
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "level": level,
+        "is_owner": level == profiles.LEVEL_OWNER,
+        "discord_id": discord_id,
+    }
+    if level is None:
+        # Signed-out visitors get a nudge to sign in; others, a private notice.
+        ctx["needs_login"] = viewer is None
+        return templates.TemplateResponse(request, "profile_private.html", ctx,
+                                          status_code=403)
+    record = profiles.build_service_record(discord_id, level)
+    if not record["found"]:
+        ctx["record"] = record
+        return templates.TemplateResponse(request, "profile_private.html", ctx,
+                                          status_code=404)
+    if level == profiles.LEVEL_OWNER:
+        record["public"] = registry_profile_is_public(discord_id)
+    ctx["record"] = record
+    return templates.TemplateResponse(request, "profile.html", ctx)
 
 
 def _broadcast_to_all_units(title: str, body: str, actor_id: int | None) -> int:

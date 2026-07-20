@@ -242,6 +242,7 @@ def discharge(session, actor: dict, discord_id: int, discharge_type: str, reason
     callsign = record.callsign
     verb = "Honorably" if discharge_type == "honorable" else "Dishonorably"
     record.status = "discharged"
+    record.discharge_type = discharge_type
     _log(session, discord_id,
          f"{verb} discharged by {actor['name']}. Reason: {reason}", actor)
     queue.enqueue(
@@ -267,6 +268,7 @@ def reinstate(session, actor: dict, discord_id: int, reason: str = "") -> str:
     callsign = record.callsign
     reason = reason.strip()
     record.status = "active"
+    record.discharge_type = None
     record.last_active_date = datetime.utcnow()
     entry = f"Reinstated by {actor['name']}."
     if reason:

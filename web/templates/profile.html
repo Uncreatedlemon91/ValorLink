@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — {{ record.name or 'Service Record' }}</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+</head>
+<body>
+  <div class="sheet">
+    {% include "_apex_topbar.html" %}
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <img class="avatar avatar-lg" src="{{ (record.discord_id, record.avatar)|avatar_url(128) }}" alt="">
+      <h1>{{ record.name or 'Unknown Soldier' }}</h1>
+      <p class="motto">Service Record
+        {% if level == 'owner' %}· your record across every unit
+        {% elif level == 'recruiter' %}· recruiter vetting view
+        {% else %}· public record{% endif %}</p>
+    </header>
+
+    <main class="wrap">
+      {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
+
+      {% if is_owner %}
+      <div class="order-card" style="max-width:640px;">
+        <h3 class="order-title">Who can see this</h3>
+        <form class="orders" method="post" action="/me/visibility">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <div class="field"><label class="checkline"><input type="checkbox" name="public" value="1" {{ 'checked' if record.public }}> Make my service record public</label></div>
+          <button class="btn btn-strong btn-small" type="submit">Save</button>
+        </form>
+        <p class="order-note">Public shows your units, ranks, and awards to anyone.
+          Recruiters at other units can always see your service and discharge
+          status when vetting applicants — this only controls your public profile.
+          Written reasons behind any discharge are never shared; only you see them here.</p>
+      </div>
+      {% endif %}
+
+      <div class="stat-strip">
+        <div class="stat"><span class="stat-num">{{ record.stats.units_served }}</span><span class="stat-cap">units served</span></div>
+        <div class="stat"><span class="stat-num">{{ record.stats.active_units }}</span><span class="stat-cap">active now</span></div>
+        <div class="stat"><span class="stat-num">{{ record.stats.awards_total }}</span><span class="stat-cap">honors</span></div>
+        <div class="stat"><span class="stat-num">{% if record.stats.first_enlisted %}{{ record.stats.first_enlisted.year }}{% else %}—{% endif %}</span><span class="stat-cap">first enlisted</span></div>
+        {% if record.stats.dishonorable is defined and record.stats.dishonorable %}
+        <div class="stat stat-warn"><span class="stat-num">{{ record.stats.dishonorable }}</span><span class="stat-cap">dishonorable</span></div>
+        {% endif %}
+      </div>
+
+      <h2 class="section">Current Postings</h2>
+      {% if record.current %}
+      <div class="posting-grid">
+        {% for p in record.current %}
+        <div class="posting">
+          <div class="posting-head">
+            <a class="posting-unit" href="{{ p.url }}">{{ p.unit }}</a>
+            <span class="rankchip">{{ p.status }}</span>
+          </div>
+          <div class="posting-rank">{{ p.rank }} · {{ p.company }}</div>
+          <div class="posting-sub">Enlisted {{ p.joined|fmt_date }}{% if p.rank_since %} · {{ p.rank }} since {{ p.rank_since|fmt_date }}{% endif %}</div>
+          {% if p.awards %}
+          <div class="posting-awards">{% for a in p.awards %}<span class="award-chip">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
+          {% endif %}
+          {% if is_owner and p.history %}
+          <details class="posting-history">
+            <summary>Full history ({{ p.history|length }})</summary>
+            <ul class="feed">{% for h in p.history %}<li><span class="feed-text">{{ h.entry }}</span> <time class="feed-when">{{ h.date|fmt_date }}</time></li>{% endfor %}</ul>
+          </details>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty">Not currently serving in any unit on ValorLink.</p>
+      {% endif %}
+
+      {% if record.former %}
+      <h2 class="section">Former Service</h2>
+      <div class="posting-grid">
+        {% for p in record.former %}
+        <div class="posting posting-former">
+          <div class="posting-head">
+            <a class="posting-unit" href="{{ p.url }}">{{ p.unit }}</a>
+            {% if p.discharge_type == 'honorable' %}<span class="discharge-badge d-honorable">Honorable</span>
+            {% elif p.discharge_type == 'dishonorable' %}<span class="discharge-badge d-dishonorable">Dishonorable</span>
+            {% else %}<span class="rankchip">former</span>{% endif %}
+          </div>
+          <div class="posting-rank">{{ p.rank }} · {{ p.company }}</div>
+          <div class="posting-sub">Enlisted {{ p.joined|fmt_date }}</div>
+          {% if p.awards %}
+          <div class="posting-awards">{% for a in p.awards %}<span class="award-chip">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
+          {% endif %}
+          {% if is_owner and p.history %}
+          <details class="posting-history">
+            <summary>Full history ({{ p.history|length }})</summary>
+            <ul class="feed">{% for h in p.history %}<li><span class="feed-text">{{ h.entry }}</span> <time class="feed-when">{{ h.date|fmt_date }}</time></li>{% endfor %}</ul>
+          </details>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if record.milestones %}
+      <h2 class="section">Milestones</h2>
+      <ul class="feed">
+        {% for m in record.milestones %}
+        <li class="feed-{{ m.kind }}">
+          <span class="feed-dot"></span>
+          <span class="feed-text">{{ m.text }}</span>
+          <time class="feed-when">{% if m.at %}{{ m.at|fmt_date }}{% endif %}</time>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

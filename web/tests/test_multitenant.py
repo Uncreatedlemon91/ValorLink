@@ -585,6 +585,74 @@ def test_platform_broadcast_requires_platform_admin():
             PendingAction.action == PLATFORM_BROADCAST).count() == 0
 
 
+def _seed_soldier(uid):
+    """A member serving in 5thva and dishonorably discharged from 2ndus."""
+    from db.models import Member, ServiceHistoryEntry
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Member(discord_id=uid, callsign="Trooper", rank="Sergeant",
+                     company="Alpha", status="active"))
+        s.commit()
+    with sessionmaker_for(unit_db_url_for_slug("2ndus"))() as s:
+        s.add(Member(discord_id=uid, callsign="Trooper", rank="Corporal",
+                     company="Bravo", status="discharged", discharge_type="dishonorable"))
+        s.add(ServiceHistoryEntry(
+            member_id=uid, entry="Dishonorably discharged. Reason: repeated misconduct."))
+        s.commit()
+
+
+def test_service_record_owner_sees_everything():
+    uid = 7001
+    _seed_soldier(uid)
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": uid, "name": "Trooper", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+    r = c.get("/me", headers={"host": APEX}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/u/{uid}"
+    html = c.get(f"/u/{uid}", headers={"host": APEX}).text
+    assert "5th Virginia" in html and "2nd United States" in html
+    assert "Dishonorable" in html      # discharge type
+    assert "misconduct" in html        # owner sees the written reason
+
+
+def test_service_record_recruiter_sees_type_not_reason():
+    uid = 7002
+    _seed_soldier(uid)
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9100, "name": "Rec", "tier": "recruiter"},
+           headers={"host": APEX}, follow_redirects=False)
+    html = c.get(f"/u/{uid}", headers={"host": APEX}).text
+    assert "Dishonorable" in html       # vetting signal is shown
+    assert "misconduct" not in html     # but never the reason
+
+
+def test_service_record_public_gated_by_optin():
+    uid = 7003
+    _seed_soldier(uid)
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9200, "name": "Nobody", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+    r = c.get(f"/u/{uid}", headers={"host": APEX})
+    assert r.status_code == 403 and "Private Record" in r.text
+    from tenancy.registry import set_profile_public
+    set_profile_public(uid, True)
+    html = c.get(f"/u/{uid}", headers={"host": APEX}).text
+    assert "5th Virginia" in html       # positive record now visible
+    assert "Dishonorable" not in html   # discharge type stays hidden from the public
+    assert "misconduct" not in html
+
+
+def test_service_record_visibility_toggle():
+    uid = 7004
+    _seed_soldier(uid)
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": uid, "name": "Trooper", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+    token = _csrf(c, f"/u/{uid}", {"host": APEX})
+    c.post("/me/visibility", data={"csrf": token, "public": "1"}, headers={"host": APEX})
+    from tenancy.registry import profile_is_public
+    assert profile_is_public(uid) is True
+
+
 import re  # noqa: E402
 
 

@@ -4,6 +4,7 @@
     <a href="/" class="{{ 'on' if p == '/' }}">ValorLink</a>
     <a href="/find" class="{{ 'on' if p == '/find' }}">Find a Unit</a>
     {% if user %}<a href="/my-units" class="{{ 'on' if p == '/my-units' }}">My Units</a>{% endif %}
+    {% if user %}<a href="/me" class="{{ 'on' if p == '/me' or p.startswith('/u/') }}">My Record</a>{% endif %}
     {% if user %}<a href="/register" class="{{ 'on' if p == '/register' }}">Raise a Unit</a>{% endif %}
   </div>
   <div class="topbar-right">

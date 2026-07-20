@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Service Record</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+</head>
+<body>
+  <div class="sheet">
+    {% include "_apex_topbar.html" %}
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>Service Record</h1>
+    </header>
+    <main class="wrap">
+      <div class="hollow">
+        <div class="mark">✵</div>
+        {% if record is defined and record and not record.found %}
+          <h3>No Record Found</h3>
+          <p>This member isn't on the roster of any unit on ValorLink.</p>
+        {% elif needs_login %}
+          <h3>Sign In to View</h3>
+          <p>This service record isn't public. Sign in — if you're a recruiter,
+          you'll see the vetting view.</p>
+          <p style="margin-top:14px;"><a class="btn btn-strong" href="/auth/discord/login">Sign in with Discord</a></p>
+        {% else %}
+          <h3>Private Record</h3>
+          <p>This member keeps their service record private. Recruiters at a unit
+          can see the vetting view when someone applies.</p>
+        {% endif %}
+      </div>
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

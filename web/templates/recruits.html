@@ -44,7 +44,7 @@ first contact to decision.
     {% for c in col.cards %}
     <article class="recruit-card">
       <div class="recruit-name">{{ c.callsign }}</div>
-      <div class="recruit-meta">Applied {{ c.created_at|fmt_date }}</div>
+      <div class="recruit-meta">Applied {{ c.created_at|fmt_date }}{% if can_decide %} · <a href="/u/{{ c.discord_id }}">service record ›</a>{% endif %}</div>
 
       {% if can_decide and c.parsed_answers %}
       <details class="recruit-answers">
