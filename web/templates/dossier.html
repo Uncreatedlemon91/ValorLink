@@ -2,7 +2,10 @@
 {% block title %}{{ member.callsign }}{% endblock %}
 {% block content %}
 
-<p style="margin-top:16px;"><a class="backlink" href="/muster">‹ back to the muster roll</a></p>
+<p style="margin-top:16px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+  <a class="backlink" href="/muster">‹ back to the muster roll</a>
+  <a class="backlink" href="/u/{{ member.discord_id }}">cross-unit service record ›</a>
+</p>
 
 <div class="dossier-head">
   <div class="name">

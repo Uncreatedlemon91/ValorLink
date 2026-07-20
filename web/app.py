@@ -2446,6 +2446,27 @@ def alliance_page(request: Request, slug: str):
     return templates.TemplateResponse(request, "alliance.html", ctx)
 
 
+# --- Player lookup -------------------------------------------------------- #
+@app.get("/players", response_class=HTMLResponse)
+def players(request: Request, q: str = ""):
+    """Search members across every unit by name (or jump straight to a Discord
+    ID), each linking to their cross-unit service record."""
+    q = q.strip()
+    # A pasted Discord ID goes straight to that record.
+    if q.isdigit() and len(q) >= 5:
+        return RedirectResponse(f"/u/{q}", status_code=303)
+    results = profiles.search_players(q) if len(q) >= 2 else []
+    ctx = {
+        "request": request,
+        "user": auth.current_user(request),
+        "flash": request.session.pop("flash", []),
+        "q": q,
+        "results": results,
+        "searched": len(q) >= 2,
+    }
+    return templates.TemplateResponse(request, "players.html", ctx)
+
+
 # --- Cross-unit service record ------------------------------------------- #
 @app.get("/me")
 def my_service_record(request: Request):

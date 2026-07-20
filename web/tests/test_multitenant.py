@@ -728,6 +728,30 @@ def test_service_record_survives_unit_deletion():
     assert "archived" in html                # marked as a disbanded unit
 
 
+def test_player_lookup_searches_across_units():
+    from db.models import Member
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Member(discord_id=8001, callsign="Beauregard", rank="Private",
+                     company="Alpha", status="active"))
+        s.commit()
+    with sessionmaker_for(unit_db_url_for_slug("2ndus"))() as s:
+        s.add(Member(discord_id=8001, callsign="Beauregard", rank="Corporal",
+                     company="Bravo", status="active"))
+        s.commit()
+    c = TestClient(app)
+    html = c.get("/players", params={"q": "beau"}, headers={"host": APEX}).text
+    assert "Beauregard" in html
+    assert 'href="/u/8001"' in html          # links to the service record
+    assert "2 units" in html                  # aggregated across both units
+
+
+def test_player_lookup_by_discord_id_redirects():
+    c = TestClient(app)
+    r = c.get("/players", params={"q": "12345678"}, headers={"host": APEX},
+              follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/u/12345678"
+
+
 def test_service_record_not_found_is_404():
     c = TestClient(app)
     r = c.get("/u/999999", headers={"host": APEX})

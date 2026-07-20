@@ -852,6 +852,14 @@ body.theme-modern .alliance-chip { background: rgba(255,255,255,0.05); }
 body.theme-modern .allies-strip { background: rgba(255,255,255,0.035); }
 body.theme-modern .posting { background: rgba(255,255,255,0.035); }
 body.theme-modern .award-chip { background: rgba(255,255,255,0.05); }
+.rec-link { color: var(--ink-faint); text-decoration: none; font-size: 13px; margin-left: 4px; }
+.rec-link:hover { color: var(--seal); text-decoration: none; }
+.player-search { display: flex; gap: 8px; max-width: 520px; margin: 4px 0 10px; }
+.player-search input { flex: 1; padding: 8px 12px; border: 1px solid var(--rule-strong); border-radius: 4px; background: var(--paper); color: var(--ink); font-size: 15px; }
+a.player-hit { text-decoration: none; color: var(--ink); display: block; transition: box-shadow .15s, transform .15s; }
+a.player-hit:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); transform: translateY(-2px); text-decoration: none; }
+a.player-hit .posting-unit { display: flex; align-items: center; gap: 8px; }
+body.theme-modern .player-search input { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
 body.theme-modern .d-honorable { background: rgba(63,107,58,0.2); color: #a8d3a2; border-color: rgba(63,107,58,0.4); }
 body.theme-modern .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6a6ad; border-color: rgba(124,31,43,0.45); }
 

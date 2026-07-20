@@ -37,6 +37,47 @@ LEVEL_PUBLIC = "public"
 _PROMOTION_RE = re.compile(r"^Promoted from .+ to (.+?) by ")
 
 
+def search_players(query: str, limit: int = 40) -> list[dict]:
+    """Find members across every unit by callsign, aggregated by Discord ID.
+    Search-driven (no full enumeration) — returns matches with the units each
+    serves in, linkable to their service record."""
+    from tenancy.registry import registry_session
+
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    with registry_session() as rs:
+        tenants = [(t.name, t.db_url) for t in all_tenants(rs)]
+
+    found: dict[int, dict] = {}
+    for unit_name, db_url in tenants:
+        try:
+            with sessionmaker_for(db_url)() as s:
+                rows = (
+                    s.query(Member)
+                    .filter(Member.callsign.ilike(f"%{q}%"))
+                    .limit(200)
+                    .all()
+                )
+                for m in rows:
+                    entry = found.get(m.discord_id)
+                    if entry is None:
+                        entry = {"discord_id": m.discord_id, "name": m.callsign,
+                                 "avatar": m.avatar, "units": [], "active": False}
+                        found[m.discord_id] = entry
+                    entry["units"].append(unit_name)
+                    if m.status == "active":
+                        entry["active"] = True
+                        entry["name"] = m.callsign
+                        if m.avatar:
+                            entry["avatar"] = m.avatar
+        except Exception:  # noqa: BLE001 -- skip an unreadable unit
+            continue
+
+    results = sorted(found.values(), key=lambda r: (not r["active"], r["name"].lower()))
+    return results[:limit]
+
+
 def viewer_level(viewer: dict | None, target_id: int) -> str:
     """How much of ``target_id``'s record ``viewer`` may see. Every record is
     public, so this never denies access — it only picks the detail level."""
