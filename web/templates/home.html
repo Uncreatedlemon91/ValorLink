@@ -66,6 +66,14 @@
           <span class="nav-card-go">Sign in with Discord →</span>
         </a>
         {% endif %}
+        {% if is_platform_admin %}
+        <a class="nav-card nav-card-admin" href="/admin/platform">
+          <div class="nav-card-icon">⚙</div>
+          <h3>Platform Dashboard</h3>
+          <p>Every unit's health, broadcast an update to all units, and manage the platform.</p>
+          <span class="nav-card-go">Open dashboard →</span>
+        </a>
+        {% endif %}
       </div>
 
       <h2 class="section">What ValorLink Gives You</h2>

@@ -49,11 +49,17 @@ DEFAULT_TERMS = {
 
 # Visual themes (CSS skins), chosen per unit.
 THEME_CHOICES = [
-    ("parchment", "Parchment (period)"),
-    ("modern", "Modern (dark)"),
+    ("parchment", "Parchment (period light)"),
+    ("linen", "Linen (clean light)"),
+    ("modern", "Modern (dark slate)"),
+    ("midnight", "Midnight (dark navy)"),
+    ("forest", "Forest (dark olive)"),
+    ("ember", "Ember (dark warm)"),
 ]
 DEFAULT_THEME = "parchment"
 THEMES = {value for value, _ in THEME_CHOICES}
+# Themes that use the dark component family (get the extra `theme-dark` class).
+DARK_THEMES = {"modern", "midnight", "forest", "ember"}
 
 # Words an admin can override, in display order, with a friendly editor label.
 # (event_types is handled separately as a comma-separated list.)

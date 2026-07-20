@@ -146,7 +146,7 @@ nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
   padding: 1px 6px; border-radius: 1px; margin-left: 4px;
 }
 .topbar .unit-switcher summary { padding: 1px 8px; }
-body.theme-modern .topbar { background: rgba(255,255,255,0.03); }
+body.theme-dark .topbar { background: rgba(255,255,255,0.03); }
 nav.rail a {
   position: relative;
   color: var(--ink-soft);
@@ -167,7 +167,7 @@ nav.rail a:hover::after { transform: scaleX(.55); }
 nav.rail a.active { color: var(--oxblood); }
 nav.rail a.active::after { transform: scaleX(1); }
 nav.rail .pip { transition: none; }
-body.theme-modern nav.rail a:hover { background: rgba(255,255,255,0.05); }
+body.theme-dark nav.rail a:hover { background: rgba(255,255,255,0.05); }
 
 /* Category dropdowns in the section nav */
 .nav-group { position: relative; }
@@ -210,8 +210,8 @@ body.theme-modern nav.rail a:hover { background: rgba(255,255,255,0.05); }
 .nav-menu a::after { display: none; }
 .nav-menu a:hover { background: rgba(0,0,0,0.05); color: var(--seal); }
 .nav-menu a.here { color: var(--seal); font-weight: 700; }
-body.theme-modern .nav-top:hover { background: rgba(255,255,255,0.05); }
-body.theme-modern .nav-menu a:hover { background: rgba(255,255,255,0.07); }
+body.theme-dark .nav-top:hover { background: rgba(255,255,255,0.05); }
+body.theme-dark .nav-menu a:hover { background: rgba(255,255,255,0.07); }
 
 /* Cross-links back to the platform, shown on a unit's pages */
 .plat-links { margin-right: auto; display: inline-flex; gap: 16px; }
@@ -722,7 +722,7 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 .approve-as { display: flex; flex-wrap: wrap; gap: 6px; }
 .approve-as label { display: flex; flex-direction: column; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); gap: 2px; }
 .approve-as select { font-size: 12px; padding: 2px 4px; border: 1px solid var(--rule-strong); border-radius: 3px; background: var(--paper); color: var(--ink); }
-body.theme-modern .approve-as select { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
+body.theme-dark .approve-as select { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
 .btn-ghost {
   background: transparent; color: var(--ink-soft); border: 1px solid var(--rule-strong);
 }
@@ -747,7 +747,7 @@ body.theme-modern .approve-as select { background: #14171b; color: #d8dde3; bord
   background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 3px;
   padding: 22px 24px; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.45);
 }
-body.theme-modern .modal { background: #1c2025; }
+body.theme-dark .modal { background: #1c2025; }
 .modal-msg { margin: 0 0 18px; color: var(--ink); font-size: 15px; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
@@ -787,8 +787,8 @@ body.theme-modern .modal { background: #1c2025; }
 .unit-blurb { margin: 6px 0 12px; }
 .unit-card .unit-meta { justify-content: center; margin: 6px 0 16px; }
 .unit-actions { justify-content: center; gap: 10px; margin-top: auto; }
-body.theme-modern .unit-logo { border-color: #14171b; }
-body.theme-modern .unit-logo-ph { background: rgba(255,255,255,0.05); }
+body.theme-dark .unit-logo { border-color: #14171b; }
+body.theme-dark .unit-logo-ph { background: rgba(255,255,255,0.05); }
 
 /* Member avatars */
 .avatar {
@@ -855,10 +855,11 @@ body.theme-modern .unit-logo-ph { background: rgba(255,255,255,0.05); }
 .je-rsvp form { margin: 0; }
 .je-schedule summary { cursor: pointer; font-size: 12px; color: var(--ink-soft); }
 .tab-pip { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--seal); color: #fff; font-size: 10px; line-height: 16px; text-align: center; vertical-align: middle; }
-body.theme-modern .alliance-chip { background: rgba(255,255,255,0.05); }
-body.theme-modern .allies-strip { background: rgba(255,255,255,0.035); }
-body.theme-modern .posting { background: rgba(255,255,255,0.035); }
-body.theme-modern .award-chip { background: rgba(255,255,255,0.05); }
+body.theme-dark .alliance-chip { background: rgba(255,255,255,0.05); }
+body.theme-dark .allies-strip { background: rgba(255,255,255,0.035); }
+body.theme-dark .posting { background: rgba(255,255,255,0.035); }
+body.theme-dark .award-chip { background: rgba(255,255,255,0.05); }
+.nav-card-admin { border-color: var(--union); background: rgba(31,58,95,0.04); }
 .rec-link { color: var(--ink-faint); text-decoration: none; font-size: 13px; margin-left: 4px; }
 .rec-link:hover { color: var(--seal); text-decoration: none; }
 .player-search { display: flex; gap: 8px; max-width: 520px; margin: 4px 0 10px; }
@@ -866,9 +867,9 @@ body.theme-modern .award-chip { background: rgba(255,255,255,0.05); }
 a.player-hit { text-decoration: none; color: var(--ink); display: block; transition: box-shadow .15s, transform .15s; }
 a.player-hit:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); transform: translateY(-2px); text-decoration: none; }
 a.player-hit .posting-unit { display: flex; align-items: center; gap: 8px; }
-body.theme-modern .player-search input { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
-body.theme-modern .d-honorable { background: rgba(63,107,58,0.2); color: #a8d3a2; border-color: rgba(63,107,58,0.4); }
-body.theme-modern .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6a6ad; border-color: rgba(124,31,43,0.45); }
+body.theme-dark .player-search input { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
+body.theme-dark .d-honorable { background: rgba(63,107,58,0.2); color: #a8d3a2; border-color: rgba(63,107,58,0.4); }
+body.theme-dark .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6a6ad; border-color: rgba(124,31,43,0.45); }
 
 /* Custom wording editor (Command Tent) */
 .term-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }
@@ -1024,11 +1025,12 @@ body.theme-modern .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6
 }
 
 /* =========================================================================
-   Theme: Modern (dark) — a flat, tactical skin. Selected per unit via
-   body.theme-modern. Overrides the design tokens and the parchment surfaces;
-   the per-unit --seal (brand colour) still flows through as the accent.
+   Dark theme family — a flat, tactical skin shared by every dark theme
+   (body.theme-dark). Individual dark themes below set only the palette vars
+   they change; these component overrides adapt via the design tokens. The
+   per-unit --seal (brand colour) still flows through as the accent.
    ========================================================================= */
-body.theme-modern {
+body.theme-dark {
   --paper:        #1c2025;
   --paper-2:      #14171b;
   --paper-edge:   #2b3138;
@@ -1040,70 +1042,103 @@ body.theme-modern {
   --oxblood:      #d24d60;
   --brass:        #c69a4a;
   --brass-bright: #d8ab52;
+  --page-bg:      #0e1113;
   --serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
            "Helvetica Neue", Arial, sans-serif;
-  background-color: #0e1113;
+  background-color: var(--page-bg);
   background-image: none;
 }
-body.theme-modern .sheet {
-  background: linear-gradient(180deg, #1c2025 0%, #14171b 100%);
-  box-shadow: 0 0 0 1px #2b3138, 0 20px 50px rgba(0,0,0,0.55);
+body.theme-dark .sheet {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+  box-shadow: 0 0 0 1px var(--paper-edge), 0 20px 50px rgba(0,0,0,0.55);
 }
-body.theme-modern .sheet::before { box-shadow: none; }   /* drop the aged vignette */
-body.theme-modern .banner { border-bottom: 2px solid var(--rule-strong); }
-body.theme-modern .crest { filter: saturate(0.6); }
+body.theme-dark .sheet::before { box-shadow: none; }   /* drop the aged vignette */
+
+/* --- Individual dark themes: palette-only, everything else inherited --- */
+body.theme-midnight {           /* deep navy — a night watch */
+  --paper: #16233b; --paper-2: #101a2e; --paper-edge: #2a3d5c;
+  --ink: #e4ebf5; --ink-soft: #aebdd4; --ink-faint: #7386a3;
+  --rule: #223650; --rule-strong: #35507a; --page-bg: #0a1120;
+  --oxblood: #6ea8e6; --brass: #c9a24a; --brass-bright: #dcb356;
+}
+body.theme-forest {             /* dark olive — a field encampment */
+  --paper: #18241b; --paper-2: #111a13; --paper-edge: #2b3f2f;
+  --ink: #e6ede2; --ink-soft: #b3c4ab; --ink-faint: #7d9075;
+  --rule: #26382a; --rule-strong: #3e5a45; --page-bg: #0a130d;
+  --oxblood: #74b062; --brass: #b7a24a; --brass-bright: #cbb456;
+}
+body.theme-ember {              /* warm charcoal — firelight */
+  --paper: #241a17; --paper-2: #1a110f; --paper-edge: #3d2a24;
+  --ink: #f0e6df; --ink-soft: #cbb6aa; --ink-faint: #9c8175;
+  --rule: #382823; --rule-strong: #58403a; --page-bg: #140b09;
+  --oxblood: #e0673f; --brass: #c99a52; --brass-bright: #dcab5e;
+}
+
+/* --- Light alternative: clean linen (no parchment aging) --------------- */
+body.theme-linen {
+  --paper: #f5f5f3; --paper-2: #e9e9e6; --paper-edge: #d7d7d2;
+  --ink: #23262b; --ink-soft: #51555c; --ink-faint: #8a8d94;
+  --rule: #d9d9d4; --rule-strong: #b9b9b2;
+  --serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+           "Helvetica Neue", Arial, sans-serif;
+}
+body.theme-linen .sheet { background: #ffffff; }
+body.theme-linen .sheet::before { box-shadow: none; }
+body.theme-linen .banner { background: #fafafa; }
+body.theme-dark .banner { border-bottom: 2px solid var(--rule-strong); }
+body.theme-dark .crest { filter: saturate(0.6); }
 
 /* Surfaces that were painted with translucent parchment */
-body.theme-modern .order-card,
-body.theme-modern .stat,
-body.theme-modern .setup-card,
-body.theme-modern .pipe-col,
-body.theme-modern .announce-card,
-body.theme-modern .recruit-card,
-body.theme-modern .bulk-bar,
-body.theme-modern .medallion,
-body.theme-modern .recruit-notes,
-body.theme-modern .dossier-bio,
-body.theme-modern .day-chip {
+body.theme-dark .order-card,
+body.theme-dark .stat,
+body.theme-dark .setup-card,
+body.theme-dark .pipe-col,
+body.theme-dark .announce-card,
+body.theme-dark .recruit-card,
+body.theme-dark .bulk-bar,
+body.theme-dark .medallion,
+body.theme-dark .recruit-notes,
+body.theme-dark .dossier-bio,
+body.theme-dark .day-chip {
   background: rgba(255,255,255,0.035);
   border-color: var(--rule-strong);
 }
-body.theme-modern .medallion.seal { background: rgba(210,77,96,0.10); }
+body.theme-dark .medallion.seal { background: rgba(210,77,96,0.10); }
 
 /* Form controls */
-body.theme-modern input,
-body.theme-modern select,
-body.theme-modern textarea,
-body.theme-modern .rowform input,
-body.theme-modern .roster-tools input,
-body.theme-modern .roster-tools select,
-body.theme-modern .bulk-group select,
-body.theme-modern .bulk-group input {
+body.theme-dark input,
+body.theme-dark select,
+body.theme-dark textarea,
+body.theme-dark .rowform input,
+body.theme-dark .roster-tools input,
+body.theme-dark .roster-tools select,
+body.theme-dark .bulk-group select,
+body.theme-dark .bulk-group input {
   background: #0f1316;
   color: var(--ink);
   border-color: var(--rule-strong);
 }
-body.theme-modern option { background: #14171b; color: var(--ink); }
+body.theme-dark option { background: #14171b; color: var(--ink); }
 
 /* Tables + zebra */
-body.theme-modern .ledger th { border-bottom-color: var(--rule-strong); }
-body.theme-modern .ledger td { border-bottom-color: var(--rule); }
-body.theme-modern .ledger tbody tr:hover { background: rgba(255,255,255,0.03); }
+body.theme-dark .ledger th { border-bottom-color: var(--rule-strong); }
+body.theme-dark .ledger td { border-bottom-color: var(--rule); }
+body.theme-dark .ledger tbody tr:hover { background: rgba(255,255,255,0.03); }
 
 /* Buttons: plain buttons go outline-on-dark; strong/accent keep --seal */
-body.theme-modern .btn {
+body.theme-dark .btn {
   background: rgba(255,255,255,0.05);
   color: var(--ink);
   border-color: var(--rule-strong);
 }
-body.theme-modern .btn:hover { background: rgba(255,255,255,0.10); }
-body.theme-modern .btn-strong { color: #fff; }
+body.theme-dark .btn:hover { background: rgba(255,255,255,0.10); }
+body.theme-dark .btn-strong { color: #fff; }
 
 /* Flash + meter tweaks for contrast */
-body.theme-modern .flash { background: rgba(255,255,255,0.04); }
-body.theme-modern .flash-ok { background: rgba(63,107,58,0.18); }
-body.theme-modern .flash-error { background: rgba(210,77,96,0.15); }
-body.theme-modern .meter { background: #0f1316; }
+body.theme-dark .flash { background: rgba(255,255,255,0.04); }
+body.theme-dark .flash-ok { background: rgba(63,107,58,0.18); }
+body.theme-dark .flash-error { background: rgba(210,77,96,0.15); }
+body.theme-dark .meter { background: #0f1316; }
 
 /* ---- Unit switcher (header) -------------------------------------------- */
 .unit-switcher { position: relative; }
@@ -1133,17 +1168,17 @@ body.theme-modern .meter { background: #0f1316; }
 .uswitch-item:hover { background: rgba(0,0,0,0.05); text-decoration: none; }
 .uswitch-item.current { background: rgba(0,0,0,0.06); font-weight: 700; cursor: default; }
 .uswitch-name { font-size: 13px; }
-body.theme-modern .uswitch-item:hover { background: rgba(255,255,255,0.06); }
-body.theme-modern .uswitch-item.current { background: rgba(255,255,255,0.08); }
+body.theme-dark .uswitch-item:hover { background: rgba(255,255,255,0.06); }
+body.theme-dark .uswitch-item.current { background: rgba(255,255,255,0.08); }
 
 /* ---- Bot action queue (Command Tent) ---------------------------------- */
 .setup-progress.is-fail { color: var(--oxblood); font-weight: 700; }
 .queue-card .row-fail td { background: rgba(124,31,43,0.06); }
 .q-err { color: var(--oxblood); font-size: 12px; font-style: italic; }
 .rate.rate-ok { color: #3f6b3a; }
-body.theme-modern .queue-card,
-body.theme-modern .funnel { background: rgba(255,255,255,0.035); border-color: var(--rule-strong); }
-body.theme-modern .queue-card .row-fail td { background: rgba(210,77,96,0.10); }
+body.theme-dark .queue-card,
+body.theme-dark .funnel { background: rgba(255,255,255,0.035); border-color: var(--rule-strong); }
+body.theme-dark .queue-card .row-fail td { background: rgba(210,77,96,0.10); }
 
 /* ---- Recruitment funnel ----------------------------------------------- */
 .funnel {
@@ -1156,7 +1191,7 @@ body.theme-modern .queue-card .row-fail td { background: rgba(210,77,96,0.10); }
 .funnel-bar { height: 16px; background: var(--paper-2); border: 1px solid var(--rule-strong); border-radius: 3px; overflow: hidden; }
 .funnel-fill { display: block; height: 100%; background: var(--seal); min-width: 2px; }
 .funnel-count { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--seal); }
-body.theme-modern .funnel-bar { background: #0f1316; }
+body.theme-dark .funnel-bar { background: #0f1316; }
 
 @media (max-width: 560px) {
   .funnel-row { grid-template-columns: 96px 1fr 32px; }
@@ -1183,7 +1218,7 @@ body.theme-modern .funnel-bar { background: #0f1316; }
 }
 .audit-src.src-web { color: var(--brass); border-color: var(--brass); }
 .audit-target { margin-left: 6px; font-size: 12px; color: var(--seal); white-space: nowrap; }
-body.theme-modern .audit-filter .chip-on { color: #fff; }
+body.theme-dark .audit-filter .chip-on { color: #fff; }
 
 /* ---- Headquarters dashboard cards ------------------------------------- */
 .hq-dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 22px 0; }
@@ -1211,8 +1246,8 @@ a.hq-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(
   display: flex; align-items: center; justify-content: center;
   font-family: var(--serif); font-weight: 700; color: var(--seal); font-size: 15px;
 }
-body.theme-modern .hq-card { background: rgba(255,255,255,0.035); }
-body.theme-modern .ring span { background: #14171b; }
+body.theme-dark .hq-card { background: rgba(255,255,255,0.035); }
+body.theme-dark .ring span { background: #14171b; }
 
 /* ---- Onboarding card (HQ, admins, setup incomplete) ------------------- */
 .onboard {
@@ -1244,7 +1279,7 @@ body.theme-modern .ring span { background: #14171b; }
 .onboard-step.is-next .onboard-label { font-weight: 700; }
 .onboard-step a.onboard-label { color: var(--seal); }
 .onboard-cta { display: inline-block; margin-top: 16px; }
-body.theme-modern .onboard { background: rgba(255,255,255,0.04); box-shadow: none; }
+body.theme-dark .onboard { background: rgba(255,255,255,0.04); box-shadow: none; }
 .onboard-step .onboard-cmd { grid-column: 2; margin-top: 3px; }
 
 /* ---- Copyable command box (Discord bootstrap, etc.) ------------------- */
@@ -1264,8 +1299,8 @@ body.theme-modern .onboard { background: rgba(255,255,255,0.04); box-shadow: non
 .bootstrap-note { margin: 12px 0 2px; }
 .bootstrap-lead { margin: 0 0 2px; }
 .bootstrap-hint { font-size: 12.5px; color: var(--ink-faint); margin: 4px 0 0; }
-body.theme-modern .cmd-text { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
-body.theme-modern .cmd-copy { border-color: #2a2f36; }
+body.theme-dark .cmd-text { background: #14171b; color: #d8dde3; border-color: #2a2f36; }
+body.theme-dark .cmd-copy { border-color: #2a2f36; }
 
 /* ---- Apex navigation (platform pages) --------------------------------- */
 .apex-nav {
@@ -1314,8 +1349,8 @@ body.theme-modern .cmd-copy { border-color: #2a2f36; }
 .my-unit .unit-meta { justify-content: center; margin: 4px 0 12px; }
 .my-unit .nav-card-go { display: block; }
 
-body.theme-modern .nav-card,
-body.theme-modern .feature { background: rgba(255,255,255,0.035); border-color: var(--rule-strong); }
+body.theme-dark .nav-card,
+body.theme-dark .feature { background: rgba(255,255,255,0.035); border-color: var(--rule-strong); }
 
 /* ---- Home landing: hero + search -------------------------------------- */
 .home-hero { text-align: center; padding: 20px 0 8px; }
@@ -1336,8 +1371,8 @@ body.theme-modern .feature { background: rgba(255,255,255,0.035); border-color: 
 .home-games .chip:hover { border-color: var(--seal); color: var(--seal); text-decoration: none; }
 .home-games .chip-all { border-color: var(--seal); color: var(--seal); font-weight: 700; }
 .section .tally a { color: var(--seal); }
-body.theme-modern .home-search input,
-body.theme-modern .home-games .chip { background: rgba(255,255,255,0.04); }
+body.theme-dark .home-search input,
+body.theme-dark .home-games .chip { background: rgba(255,255,255,0.04); }
 
 /* ---- Directory: search, filters, game sections ------------------------ */
 .dir-tools {
@@ -1379,9 +1414,9 @@ body.theme-modern .home-games .chip { background: rgba(255,255,255,0.04); }
   padding: 2px 8px; border: 1px solid var(--rule); border-radius: 10px; color: var(--ink-faint);
 }
 .tagchip.tag-game { border-color: var(--seal); color: var(--seal); font-weight: 700; }
-body.theme-modern .dir-search,
-body.theme-modern .dir-sort,
-body.theme-modern .dir-filters .chip { background: rgba(255,255,255,0.04); }
+body.theme-dark .dir-search,
+body.theme-dark .dir-sort,
+body.theme-dark .dir-filters .chip { background: rgba(255,255,255,0.04); }
 
 /* ---- Tabs (roster, Command Tent) -------------------------------------- */
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1.5px solid var(--rule-strong); margin: 6px 0 18px; }
@@ -1405,7 +1440,7 @@ body.theme-modern .dir-filters .chip { background: rgba(255,255,255,0.04); }
 .tab-panel.on { display: block; animation: tabfade .26s ease; }
 @keyframes tabfade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 .lead-star { color: var(--seal); }
-body.theme-modern .tab:hover { background: rgba(255,255,255,0.05); }
+body.theme-dark .tab:hover { background: rgba(255,255,255,0.05); }
 
 /* ---- Secondary assignments -------------------------------------------- */
 .assign-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
@@ -1425,7 +1460,7 @@ body.theme-modern .tab:hover { background: rgba(255,255,255,0.05); }
   font-size: 15px; line-height: 1; padding: 0 0 0 2px;
 }
 .chip-x:hover { color: var(--oxblood); }
-body.theme-modern .assign-chip { background: rgba(255,255,255,0.04); }
+body.theme-dark .assign-chip { background: rgba(255,255,255,0.04); }
 
 /* ---- Event announcement lead-time picker ------------------------------ */
 .lead-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

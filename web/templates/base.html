@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
   <style>:root { --seal: {{ brand_color }}; }</style>
 </head>
-<body class="theme-{{ theme|default('parchment') }}">
+<body class="theme-{{ theme|default('parchment') }}{{ ' theme-dark' if (theme or 'parchment') in DARK_THEMES }}">
   <div class="sheet" style="--seal: {{ brand_color }};">
     <div class="topbar" id="topbar">
       <div class="topbar-left">

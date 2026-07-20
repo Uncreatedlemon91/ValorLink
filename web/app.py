@@ -104,6 +104,7 @@ def _asset_version() -> str:
 
 
 templates.env.globals["css_v"] = _asset_version()
+templates.env.globals["DARK_THEMES"] = terminology.DARK_THEMES
 templates.env.globals["tier_at_least"] = auth.tier_at_least
 templates.env.globals["TIER_RECRUITER"] = auth.TIER_RECRUITER
 templates.env.globals["TIER_OFFICER"] = auth.TIER_OFFICER
@@ -441,6 +442,7 @@ def _render_home(request: Request):
         "flash": request.session.pop("flash", []),
         "now": datetime.utcnow(),
         "activity": _platform_activity(),
+        "is_platform_admin": _is_platform_admin(user),
     }
     return templates.TemplateResponse(request, "home.html", ctx)
 
