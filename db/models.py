@@ -219,6 +219,9 @@ class GuildConfig(Base):
 
     regiment_name = Column(String, nullable=False, default="Unconfigured Regiment")
     regiment_motto = Column(String, nullable=True)
+    # Optional short tag prefixed onto every member's Discord nickname, e.g.
+    # "5thVA" → "5thVA A Cpl. John". Empty means no unit tag.
+    unit_tag = Column(String, nullable=True)
     discord_invite = Column(String, nullable=True)  # public invite to the unit's Discord
     crest = Column(Text, nullable=True)             # unit emblem, stored as a data URI
     brand_color = Column(Integer, nullable=False, default=0x2F3136)
@@ -280,6 +283,9 @@ class Company(Base):
     name = Column(String, nullable=False, unique=True)
     role_id = Column(BigInteger, nullable=True)
     is_default = Column(Boolean, nullable=False, default=False)
+    # Optional short tag shown in the nickname for members of this company,
+    # sitting between the unit tag and the rank, e.g. "A" or "Co.B".
+    tag = Column(String, nullable=True)
 
 
 class PendingAction(Base):

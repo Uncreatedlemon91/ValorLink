@@ -3,10 +3,11 @@ from discord import app_commands
 from discord.ext import commands
 
 from db.base import db_session
-from db.models import Company, Rank
+from db.models import Company, Member, Rank
 from utils.checks import is_bot_admin, is_officer
 from utils.embeds import base_embed
 from utils.settings import CHANNEL_KEYS, ROLE_KEYS, get_config
+from utils.sync import resync_nickname
 
 
 async def role_key_autocomplete(interaction: discord.Interaction, current: str):
@@ -93,6 +94,29 @@ class Settings(commands.Cog):
             cfg.regiment_motto = motto
             session.commit()
         await interaction.response.send_message(f"Regiment motto set to **{motto}**.", ephemeral=True)
+
+    @config_group.command(name="set_unit_tag", description="Set the tag prefixed onto every member's nickname (blank to clear)")
+    @is_bot_admin()
+    async def config_set_unit_tag(self, interaction: discord.Interaction, tag: str = ""):
+        tag = tag.strip()
+        if len(tag) > 16:
+            return await interaction.response.send_message(
+                "The unit tag must be 16 characters or fewer.", ephemeral=True)
+        with db_session() as session:
+            get_config(session).unit_tag = tag or None
+            member_ids = [row[0] for row in session.query(Member.discord_id).filter(
+                Member.status != "discharged")]
+            session.commit()
+        await interaction.response.send_message(
+            (f"Unit tag set to **{tag}**." if tag else "Unit tag cleared.")
+            + f" Rebuilding {len(member_ids)} nickname(s)…", ephemeral=True)
+        await self._rebuild_nicknames(interaction.guild, member_ids)
+
+    async def _rebuild_nicknames(self, guild: discord.Guild, member_ids: list[int]):
+        for discord_id in member_ids:
+            member = guild.get_member(discord_id)
+            if member:
+                await resync_nickname(member)
 
     @config_group.command(name="set_color", description="Set the brand color used in embeds (hex, e.g. #2F3136)")
     @is_bot_admin()
@@ -261,13 +285,19 @@ class Settings(commands.Cog):
         name: str,
         role: discord.Role | None = None,
         is_default: bool = False,
+        tag: str = "",
     ):
+        tag = tag.strip()
+        if len(tag) > 16:
+            return await interaction.response.send_message(
+                "The company tag must be 16 characters or fewer.", ephemeral=True)
         with db_session() as session:
             if session.query(Company).filter(Company.name == name).one_or_none():
                 return await interaction.response.send_message(f"Company **{name}** already exists.", ephemeral=True)
             if is_default:
                 session.query(Company).update({Company.is_default: False})
-            session.add(Company(name=name, role_id=role.id if role else None, is_default=is_default))
+            session.add(Company(name=name, role_id=role.id if role else None,
+                                is_default=is_default, tag=tag or None))
             session.commit()
         await interaction.response.send_message(f"Company **{name}** added.", ephemeral=True)
 
@@ -298,6 +328,27 @@ class Settings(commands.Cog):
         await interaction.response.send_message(
             f"Company **{name}** role set to {role.mention if role else '*none*'}.", ephemeral=True
         )
+
+    @company_group.command(name="set_tag", description="Set (or clear) a company's nickname tag")
+    @app_commands.autocomplete(name=company_name_autocomplete)
+    @is_bot_admin()
+    async def company_set_tag(self, interaction: discord.Interaction, name: str, tag: str = ""):
+        tag = tag.strip()
+        if len(tag) > 16:
+            return await interaction.response.send_message(
+                "The company tag must be 16 characters or fewer.", ephemeral=True)
+        with db_session() as session:
+            record = session.query(Company).filter(Company.name == name).one_or_none()
+            if record is None:
+                return await interaction.response.send_message(f"Unknown company: {name}", ephemeral=True)
+            record.tag = tag or None
+            member_ids = [row[0] for row in session.query(Member.discord_id).filter(
+                Member.company == name, Member.status != "discharged")]
+            session.commit()
+        await interaction.response.send_message(
+            (f"Company **{name}** tag set to **{tag}**." if tag else f"Company **{name}** tag cleared.")
+            + f" Rebuilding {len(member_ids)} nickname(s)…", ephemeral=True)
+        await self._rebuild_nicknames(interaction.guild, member_ids)
 
     @company_group.command(name="set_default", description="Set the company assigned to new enlistees")
     @app_commands.autocomplete(name=company_name_autocomplete)

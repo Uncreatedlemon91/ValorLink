@@ -34,6 +34,7 @@ IMPORT_ROSTER = "import_roster"         # create records for current Discord mem
 ASSIGN_ROLE = "assign_role"             # add a secondary-assignment Discord role
 UNASSIGN_ROLE = "unassign_role"         # remove a secondary-assignment Discord role
 PLATFORM_BROADCAST = "platform_broadcast"  # platform-wide update posted to admin log
+RESYNC_NICKNAMES = "resync_nicknames"   # rebuild member nicknames after a tag change
 
 # Statuses
 PENDING = "pending"

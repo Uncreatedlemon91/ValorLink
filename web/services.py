@@ -862,7 +862,8 @@ def _parse_id(value: str) -> int | None:
 
 
 def update_identity(session, name: str, motto: str, brand_hex: str,
-                    inactivity_days: int, theme: str = "", discord_invite: str = "") -> str:
+                    inactivity_days: int, theme: str = "", discord_invite: str = "",
+                    unit_tag: str = "") -> str:
     from utils.terminology import THEMES
     cfg = get_config(session)
     name = name.strip()
@@ -877,14 +878,24 @@ def update_identity(session, name: str, motto: str, brand_hex: str,
     invite = discord_invite.strip()
     if invite and not invite.startswith(("https://", "http://")):
         raise ActionError("The Discord invite must be a full link, e.g. https://discord.gg/abc123.")
+    unit_tag = unit_tag.strip()
+    if len(unit_tag) > 16:
+        raise ActionError("The unit tag must be 16 characters or fewer.")
+    tag_changed = (cfg.unit_tag or "") != (unit_tag or "")
     cfg.regiment_name = name
     cfg.regiment_motto = motto.strip() or None
     cfg.brand_color = color & 0xFFFFFF
     cfg.inactivity_days_threshold = inactivity_days
     cfg.discord_invite = invite or None
+    cfg.unit_tag = unit_tag or None
     if theme and theme in THEMES:
         cfg.theme = theme
+    # A new unit tag means every member's nickname needs rebuilding in Discord.
+    if tag_changed:
+        queue.enqueue(session, queue.RESYNC_NICKNAMES, {})
     session.commit()
+    if tag_changed:
+        return "Identity updated. Rebuilding member nicknames in Discord…"
     return "Identity updated."
 
 
@@ -1006,25 +1017,40 @@ def rank_move(session, rank_id: int, direction: str) -> str:
 
 
 # --- Admin: companies ---------------------------------------------------- #
-def company_add(session, name: str, role_id: str = "", is_default: bool = False) -> str:
+def company_add(session, name: str, role_id: str = "", is_default: bool = False,
+                tag: str = "") -> str:
     name = name.strip()
     if not name:
         raise ActionError("A company needs a name.")
     if session.query(Company).filter(Company.name == name).one_or_none():
         raise ActionError(f"Company '{name}' already exists.")
+    tag = tag.strip()
+    if len(tag) > 16:
+        raise ActionError("The company tag must be 16 characters or fewer.")
     if is_default:
         session.query(Company).update({Company.is_default: False})
-    session.add(Company(name=name, role_id=_parse_id(role_id), is_default=is_default))
+    session.add(Company(name=name, role_id=_parse_id(role_id), is_default=is_default,
+                        tag=tag or None))
     session.commit()
     return f"Company '{name}' added."
 
 
-def company_update(session, company_id: int, role_id: str) -> str:
+def company_update(session, company_id: int, role_id: str, tag: str = "") -> str:
     company = session.get(Company, company_id)
     if company is None:
         raise ActionError("Unknown company.")
+    tag = tag.strip()
+    if len(tag) > 16:
+        raise ActionError("The company tag must be 16 characters or fewer.")
+    tag_changed = (company.tag or "") != (tag or "")
     company.role_id = _parse_id(role_id)
+    company.tag = tag or None
+    # Changing the tag means every member of this company needs a new nickname.
+    if tag_changed:
+        queue.enqueue(session, queue.RESYNC_NICKNAMES, {"company": company.name})
     session.commit()
+    if tag_changed:
+        return f"Company '{company.name}' updated. Rebuilding member nicknames…"
     return f"Company '{company.name}' updated."
 
 

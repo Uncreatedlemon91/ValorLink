@@ -109,6 +109,13 @@
         <div class="field"><label>Name</label><input name="regiment_name" required value="{{ cfg.regiment_name }}"></div>
         <div class="field"><label>Motto</label><input name="motto" value="{{ cfg.regiment_motto or '' }}"></div>
         <div class="field">
+          <label>Unit tag <span class="opt">(nickname prefix)</span></label>
+          <input name="unit_tag" value="{{ cfg.unit_tag or '' }}" maxlength="16" placeholder="e.g. 5thVA">
+          <span class="order-note">Added to every member's Discord nickname:
+            <b>{{ cfg.unit_tag or 'Tag' }} A Cpl. Name</b> — unit tag, then company tag, rank, name.
+            Leave blank for none. Changing it rebuilds every member's nickname.</span>
+        </div>
+        <div class="field">
           <label>Discord invite <span class="opt">(recruiting)</span></label>
           <input name="discord_invite" value="{{ cfg.discord_invite or '' }}" placeholder="https://discord.gg/yourinvite">
           <span class="order-note">When set, the site's Apply / Enlist buttons send recruits straight to your Discord instead of the web form.</span>
@@ -270,7 +277,7 @@
 
   <h2 class="section" id="companies">Companies</h2>
   <table class="ledger admin-table">
-    <thead><tr><th>Company</th><th>Role ID</th><th>Default</th><th></th></tr></thead>
+    <thead><tr><th>Company</th><th>Role ID &amp; tag</th><th>Default</th><th></th></tr></thead>
     <tbody>
     {% for c in companies %}
       <tr>
@@ -278,7 +285,8 @@
         <td>
           <form class="rowform" method="post" action="/admin/companies/{{ c.id }}/update">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <input name="role_id" value="{{ c.role_id or '' }}" size="14" placeholder="role ID" inputmode="numeric">
+            <input name="role_id" value="{{ c.role_id or '' }}" size="12" placeholder="role ID" inputmode="numeric">
+            <input name="tag" value="{{ c.tag or '' }}" size="6" maxlength="16" placeholder="tag" title="Nickname tag, e.g. A">
             <button class="btn btn-small" type="submit">Save</button>
           </form>
         </td>
@@ -304,6 +312,7 @@
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <div class="field-row">
         <div class="field" style="flex:2;"><label>Name</label><input name="name" required placeholder="Color Company"></div>
+        <div class="field"><label>Tag <span class="opt">(opt.)</span></label><input name="tag" maxlength="16" placeholder="A"></div>
         <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
       </div>
       <div class="field"><label class="checkline"><input type="checkbox" name="is_default" value="1"> Make this the default company for new enlistees</label></div>

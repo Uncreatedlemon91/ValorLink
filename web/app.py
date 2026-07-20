@@ -1910,11 +1910,12 @@ def post_identity(
     inactivity_days: int = Form(...),
     theme: str = Form(""),
     discord_invite: str = Form(""),
+    unit_tag: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
     return _do(request, csrf, services.update_identity,
                regiment_name, motto, brand_color, inactivity_days, theme, discord_invite,
-               redirect="/command-tent")
+               unit_tag, redirect="/command-tent")
 
 
 CREST_MAX_BYTES = 256 * 1024
@@ -2078,9 +2079,10 @@ def post_company_add(
     name: str = Form(...),
     role_id: str = Form(""),
     is_default: str = Form(""),
+    tag: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
-    return _do(request, csrf, services.company_add, name, role_id, bool(is_default),
+    return _do(request, csrf, services.company_add, name, role_id, bool(is_default), tag,
                redirect="/command-tent")
 
 
@@ -2090,9 +2092,11 @@ def post_company_update(
     company_id: int,
     csrf: str = Form(...),
     role_id: str = Form(""),
+    tag: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
-    return _do(request, csrf, services.company_update, company_id, role_id, redirect="/command-tent")
+    return _do(request, csrf, services.company_update, company_id, role_id, tag,
+               redirect="/command-tent")
 
 
 @app.post("/admin/companies/{company_id}/default")

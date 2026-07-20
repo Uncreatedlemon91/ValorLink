@@ -1238,6 +1238,65 @@ def test_digest_disabled_does_not_post():
     channel.send.assert_not_awaited()
 
 
+def test_build_nickname_composes_tags():
+    from utils.sync import build_nickname
+    assert build_nickname("5thVA", "A", "Cpl", "John") == "5thVA A Cpl. John"
+    assert build_nickname("", "", "Cpl", "John") == "Cpl. John"        # historical format
+    assert build_nickname("5thVA", "", "Pvt", "John") == "5thVA Pvt. John"
+    assert build_nickname("", "B", "Sgt", "Jane") == "B Sgt. Jane"
+    # over Discord's 32-char cap: prefix kept, name trimmed
+    out = build_nickname("REGIMENT", "COMPANY", "Cpl", "A Very Long Callsign Indeed")
+    assert len(out) <= 32 and out.startswith("REGIMENT COMPANY Cpl.")
+
+
+def test_unit_tag_update_enqueues_resync():
+    client = TestClient(app)
+    _login(client, "admin")
+    client.post("/admin/identity",
+                data={"csrf": _csrf(client, "/command-tent"), "regiment_name": "5th Virginia",
+                      "brand_color": "#123456", "inactivity_days": "30", "unit_tag": "5thVA"})
+    with SessionLocal() as s:
+        assert get_config(s).unit_tag == "5thVA"
+    assert len(_actions(queue.RESYNC_NICKNAMES)) == 1
+    # saving again with the same tag does not re-queue
+    client.post("/admin/identity",
+                data={"csrf": _csrf(client, "/command-tent"), "regiment_name": "5th Virginia",
+                      "brand_color": "#123456", "inactivity_days": "30", "unit_tag": "5thVA"})
+    assert len(_actions(queue.RESYNC_NICKNAMES)) == 1
+
+
+def test_company_tag_update_enqueues_scoped_resync():
+    import json
+    client = TestClient(app)
+    _login(client, "admin")
+    with SessionLocal() as s:
+        cid = s.query(Company).filter_by(name="Alpha").one().id
+    client.post(f"/admin/companies/{cid}/update",
+                data={"csrf": _csrf(client, "/command-tent"), "role_id": "", "tag": "A"})
+    with SessionLocal() as s:
+        assert s.get(Company, cid).tag == "A"
+    acts = _actions(queue.RESYNC_NICKNAMES)
+    assert acts and json.loads(acts[0].payload)["company"] == "Alpha"
+
+
+def test_bridge_resync_rebuilds_member_nickname():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).unit_tag = "5thVA"
+        s.query(Company).filter_by(name="Alpha").one().tag = "A"
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    member = MagicMock()
+    member.id = MEMBER_ID
+    member.edit = AsyncMock()
+    guild = MagicMock()
+    guild.get_member.return_value = member
+    asyncio.run(bridge._do_resync_nicknames(guild, {}))
+    member.edit.assert_awaited_once()
+    assert member.edit.call_args.kwargs["nick"] == "5thVA A Pvt. Testman"
+
+
 def test_bridge_posts_platform_broadcast_to_admin_log():
     from cogs.bridge import Bridge
     with SessionLocal() as s:
