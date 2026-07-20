@@ -39,6 +39,7 @@ from db.models import (
     Rank,
     ServiceHistoryEntry,
 )
+from tenancy import alliances as alliance_mod
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -378,6 +379,10 @@ def _directory_data():
                 "apply_url": f"https://{t.slug}.{base_domain}/apply",
             })
 
+    amap = alliance_mod.alliances_map([u["slug"] for u in units])
+    for u in units:
+        u["alliances"] = amap.get(u["slug"], [])
+
     units.sort(key=lambda u: (not u["recruiting"], -(u["members"] or 0), u["name"].lower()))
 
     OTHER = "Other"
@@ -595,6 +600,8 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         setup=setup,
         setup_steps=setup_steps,
     )
+    if os.getenv("PLATFORM_BASE_DOMAIN"):
+        ctx["allies"] = alliance_mod.alliances_for_unit(resolve_tenant(request).slug)
     return templates.TemplateResponse(request, "headquarters.html", ctx)
 
 
@@ -1358,7 +1365,73 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         queue_actions=services.list_recent_actions(session),
         queue_counts=services.action_queue_counts(session),
     )
+    # Alliances are a cross-unit (platform) feature; only meaningful when units
+    # share a platform. Scoped to this unit's own memberships and invitations.
+    if os.getenv("PLATFORM_BASE_DOMAIN"):
+        slug = resolve_tenant(request).slug
+        ctx["alliances"] = alliance_mod.alliances_for_unit(slug)
+        ctx["alliance_invites"] = alliance_mod.pending_invites_for_unit(slug)
+        ctx["unit_slug"] = slug
+        ctx["base_domain"] = os.getenv("PLATFORM_BASE_DOMAIN")
     return templates.TemplateResponse(request, "command_tent.html", ctx)
+
+
+def _do_alliance(request: Request, csrf: str, fn, *args):
+    """Run an alliance action (CSRF + error handling) and redirect back."""
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    try:
+        _flash(request, fn(*args), "ok")
+    except alliance_mod.AllianceError as exc:
+        _flash(request, str(exc), "error")
+    return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/alliances/create")
+def post_alliance_create(
+    request: Request,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    slug: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    me = resolve_tenant(request).slug
+    return _do_alliance(request, csrf, alliance_mod.create_alliance, name, slug, me)
+
+
+@app.post("/admin/alliances/{alliance_id}/invite")
+def post_alliance_invite(
+    request: Request,
+    alliance_id: int,
+    csrf: str = Form(...),
+    target: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    me = resolve_tenant(request).slug
+    return _do_alliance(request, csrf, alliance_mod.invite_unit, alliance_id, target, me)
+
+
+@app.post("/admin/alliances/{alliance_id}/accept")
+def post_alliance_accept(
+    request: Request,
+    alliance_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    me = resolve_tenant(request).slug
+    return _do_alliance(request, csrf, alliance_mod.accept_invite, alliance_id, me)
+
+
+@app.post("/admin/alliances/{alliance_id}/leave")
+def post_alliance_leave(
+    request: Request,
+    alliance_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    me = resolve_tenant(request).slug
+    return _do_alliance(request, csrf, alliance_mod.leave_alliance, alliance_id, me)
 
 
 @app.post("/admin/actions/{action_id}/retry")
@@ -2340,6 +2413,37 @@ def platform_admin(request: Request):
         },
     }
     return templates.TemplateResponse(request, "platform_admin.html", ctx)
+
+
+# --- Alliances ------------------------------------------------------------ #
+@app.get("/alliance/{slug}", response_class=HTMLResponse)
+def alliance_page(request: Request, slug: str):
+    """Public page for an alliance: its member units and combined strength."""
+    detail = alliance_mod.alliance_detail(slug)
+    ctx = {
+        "request": request,
+        "user": auth.current_user(request),
+        "flash": request.session.pop("flash", []),
+    }
+    if detail is None:
+        return templates.TemplateResponse(request, "alliance_not_found.html", ctx,
+                                          status_code=404)
+    base = os.getenv("PLATFORM_BASE_DOMAIN")
+    total = 0
+    with registry_session() as rs:
+        for m in detail["members"]:
+            t = tenant_by_slug(rs, m["slug"])
+            if t is None:
+                continue
+            info = _unit_directory_info(t.db_url)
+            m["members"] = info.get("members")
+            m["crest"] = info.get("crest")
+            m["brand_color"] = brand_hex(t.brand_color)
+            m["url"] = f"https://{m['slug']}.{base}/" if base else "/"
+            total += info.get("members") or 0
+    detail["strength"] = total
+    ctx["alliance"] = detail
+    return templates.TemplateResponse(request, "alliance.html", ctx)
 
 
 # --- Cross-unit service record ------------------------------------------- #

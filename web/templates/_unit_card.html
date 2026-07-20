@@ -19,6 +19,11 @@
     {% for t in u.tags %}<span class="tagchip">{{ t }}</span>{% endfor %}
   </div>
   {% endif %}
+  {% if u.alliances %}
+  <div class="unit-alliances">
+    {% for a in u.alliances %}<a class="alliance-chip" href="/alliance/{{ a.slug }}">⚔ {{ a.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
   {% if u.blurb %}<p class="unit-blurb">{{ u.blurb }}</p>{% endif %}
   <p class="unit-meta">
     {% if u.recruiting %}<span class="badge s-active">Recruiting</span>

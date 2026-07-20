@@ -15,6 +15,7 @@
   <button type="button" class="tab" data-tab="assignments">{{ terms.assignments }}</button>
   <button type="button" class="tab" data-tab="recruitment">Recruitment</button>
   {% if listing %}<button type="button" class="tab" data-tab="directory">Directory</button>{% endif %}
+  {% if unit_slug %}<button type="button" class="tab" data-tab="alliances">Alliances{% if alliance_invites %} <span class="tab-pip">{{ alliance_invites|length }}</span>{% endif %}</button>{% endif %}
 </div>
 
 {# ---- Setup ---------------------------------------------------------- #}
@@ -472,6 +473,64 @@
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save server</button></div>
     </form>
     <p class="order-note">After changing this, invite the bot to the new server (or restart it) so slash commands appear there.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---- Alliances ------------------------------------------------------ #}
+{% if unit_slug %}
+<section class="tab-panel" data-panel="alliances">
+  <h2 class="section">Alliances <span class="tally">coalitions your unit belongs to</span></h2>
+  <p class="lede">Partner with other units to field combined forces. Both sides
+  must agree: invite a unit and its admins accept before it joins.</p>
+
+  {% if alliance_invites %}
+  <h3 class="order-title" style="margin-top:1rem;">Pending Invitations</h3>
+  {% for inv in alliance_invites %}
+  <div class="order-card" style="max-width:640px;">
+    <div class="posting-head">
+      <span><b>{{ inv.name }}</b> <span class="muted">— invited by {{ inv.invited_by }}</span></span>
+      <span style="display:flex; gap:6px;">
+        <form method="post" action="/admin/alliances/{{ inv.id }}/accept"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small btn-strong" type="submit">Accept</button></form>
+        <form method="post" action="/admin/alliances/{{ inv.id }}/leave"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small" type="submit">Decline</button></form>
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if alliances %}
+  <h3 class="order-title" style="margin-top:1rem;">Your Alliances</h3>
+  {% for a in alliances %}
+  <div class="order-card" style="max-width:640px;">
+    <div class="posting-head">
+      <span><a href="/alliance/{{ a.slug }}"><b>{{ a.name }}</b></a>
+        {% if a.role == 'founder' %}<span class="rankchip">founder</span>{% endif %}</span>
+      <form method="post" action="/admin/alliances/{{ a.id }}/leave" data-confirm="Leave {{ a.name }}?"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small btn-danger" type="submit">Leave</button></form>
+    </div>
+    <div class="muted" style="margin:6px 0;">{{ a.count }} unit{{ 's' if a.count != 1 }}: {% for m in a.members %}{{ m.name }}{{ '' if loop.last else ' · ' }}{% endfor %}</div>
+    <form class="orders" method="post" action="/admin/alliances/{{ a.id }}/invite" style="margin-top:6px;">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field-row" style="align-items:flex-end;">
+        <div class="field" style="flex:2;"><label>Invite a unit <span class="opt">(their handle)</span></label><input name="target" required pattern="[a-z0-9-]{2,30}" placeholder="2ndus"></div>
+        <div class="field field-actions"><button class="btn btn-small btn-strong" type="submit">Send invite</button></div>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h3 class="order-title" style="margin-top:1rem;">Raise an Alliance</h3>
+  <div class="order-card" style="max-width:640px;">
+    <form class="orders" method="post" action="/admin/alliances/create">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field-row">
+        <div class="field" style="flex:2;"><label>Name</label><input name="name" required placeholder="Army of Northern Virginia"></div>
+        <div class="field"><label>Handle</label><input name="slug" required pattern="[a-z0-9-]{2,30}" placeholder="anv"></div>
+      </div>
+      <span class="order-note">Your unit founds it; invite others to join. Its page will be at <b>{{ base_domain }}/alliance/your-handle</b>.</span>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Raise alliance</button></div>
+    </form>
   </div>
 </section>
 {% endif %}

@@ -100,6 +100,15 @@
   {% endif %}
 </div>
 
+{% if allies %}
+<div class="allies-strip">
+  <span class="allies-label">⚔ Allied with</span>
+  {% for a in allies %}
+    <a class="alliance-chip" href="/alliance/{{ a.slug }}" title="{% for m in a.members %}{{ m.name }}{{ '' if loop.last else ', ' }}{% endfor %}">{{ a.name }} · {{ a.count }} unit{{ 's' if a.count != 1 }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if can_announce %}
 <details class="announce-card">
   <summary><span class="announce-title">Post Orders</span>

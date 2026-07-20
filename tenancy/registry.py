@@ -59,6 +59,35 @@ class Tenant(RegistryBase):
     tags = Column(String, nullable=True)    # comma-separated free tags (playstyle, region)
 
 
+class Alliance(RegistryBase):
+    """A coalition of units that have agreed to partner — a cross-unit group,
+    so it lives here in the control-plane alongside the units themselves."""
+
+    __tablename__ = "alliances"
+
+    id = Column(Integer, primary_key=True)
+    slug = Column(String, nullable=False, unique=True)   # URL + short tag
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class AllianceMember(RegistryBase):
+    """A unit's membership in an alliance. A membership is created as
+    ``invited`` and only becomes ``active`` once an admin of that unit accepts —
+    the mutual-consent handshake that stops a unit being claimed without say."""
+
+    __tablename__ = "alliance_members"
+
+    id = Column(Integer, primary_key=True)
+    alliance_id = Column(Integer, nullable=False)
+    unit_slug = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="member")     # founder | member
+    status = Column(String, nullable=False, default="invited")  # invited | active
+    invited_by_slug = Column(String, nullable=True)
+    joined_at = Column(DateTime, default=_utcnow)
+
+
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
 RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)

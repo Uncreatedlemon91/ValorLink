@@ -585,6 +585,68 @@ def test_platform_broadcast_requires_platform_admin():
             PendingAction.action == PLATFORM_BROADCAST).count() == 0
 
 
+def test_alliance_handshake_and_public_page():
+    from tenancy.alliances import alliance_detail
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
+           headers=_host("5thva"), follow_redirects=False)
+    tok = _csrf(c, "/command-tent", _host("5thva"))
+    c.post("/admin/alliances/create", data={"csrf": tok, "name": "Army of NV", "slug": "anv"},
+           headers=_host("5thva"))
+    d = alliance_detail("anv")
+    assert d and [m["slug"] for m in d["members"]] == ["5thva"]
+    aid = d["id"]
+    # invite 2ndus — it must not join until its own admin accepts
+    tok = _csrf(c, "/command-tent", _host("5thva"))
+    c.post(f"/admin/alliances/{aid}/invite", data={"csrf": tok, "target": "2ndus"},
+           headers=_host("5thva"))
+    assert [m["slug"] for m in alliance_detail("anv")["members"]] == ["5thva"]
+    # 2ndus admin accepts
+    c2 = TestClient(app)
+    c2.post("/auth/dev", data={"discord_id": 8, "name": "Col", "tier": "admin"},
+            headers=_host("2ndus"), follow_redirects=False)
+    tok2 = _csrf(c2, "/command-tent", _host("2ndus"))
+    c2.post(f"/admin/alliances/{aid}/accept", data={"csrf": tok2}, headers=_host("2ndus"))
+    assert sorted(m["slug"] for m in alliance_detail("anv")["members"]) == ["2ndus", "5thva"]
+    # public alliance page lists both units
+    html = c.get("/alliance/anv", headers={"host": APEX}).text
+    assert "5th Virginia" in html and "2nd United States" in html
+
+
+def test_alliance_only_members_can_invite():
+    from tenancy.alliances import alliance_detail, create_alliance
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    # 2ndus is not a member, so its admin cannot invite anyone to this alliance
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 8, "name": "Col", "tier": "admin"},
+           headers=_host("2ndus"), follow_redirects=False)
+    tok = _csrf(c, "/command-tent", _host("2ndus"))
+    c.post(f"/admin/alliances/{aid}/invite", data={"csrf": tok, "target": "5thva"},
+           headers=_host("2ndus"))
+    assert [m["slug"] for m in alliance_detail("anv")["members"]] == ["5thva"]
+
+
+def test_alliance_badge_in_directory():
+    from tenancy.alliances import accept_invite, create_alliance, invite_unit
+    create_alliance("Army of NV", "anv", "5thva")
+    from tenancy.alliances import alliance_detail
+    aid = alliance_detail("anv")["id"]
+    invite_unit(aid, "2ndus", "5thva")
+    accept_invite(aid, "2ndus")
+    c = TestClient(app)
+    html = c.get("/find", headers={"host": APEX}).text
+    assert "Army of NV" in html and 'href="/alliance/anv"' in html
+
+
+def test_alliance_dissolves_when_last_unit_leaves():
+    from tenancy.alliances import alliance_detail, create_alliance, leave_alliance
+    create_alliance("Solo", "solo", "5thva")
+    aid = alliance_detail("solo")["id"]
+    leave_alliance(aid, "5thva")
+    assert alliance_detail("solo") is None
+
+
 def _seed_soldier(uid):
     """A member serving (and promoted) in 5thva and dishonorably discharged
     from 2ndus."""

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — {{ alliance.name }}</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+</head>
+<body>
+  <div class="sheet">
+    {% include "_apex_topbar.html" %}
+    <header class="banner">
+      <div class="crest">⚔ ✶ ⚔</div>
+      <h1>{{ alliance.name }}</h1>
+      <p class="motto">Coalition of {{ alliance.members|length }} unit{{ 's' if alliance.members|length != 1 }}
+        {% if alliance.strength %}· {{ alliance.strength }} strong{% endif %}</p>
+    </header>
+    <main class="wrap">
+      {% if alliance.description %}<p class="lede">{{ alliance.description }}</p>{% endif %}
+
+      <div class="stat-strip">
+        <div class="stat"><span class="stat-num">{{ alliance.members|length }}</span><span class="stat-cap">member units</span></div>
+        <div class="stat"><span class="stat-num">{{ alliance.strength }}</span><span class="stat-cap">combined strength</span></div>
+        <div class="stat"><span class="stat-num">{% if alliance.created_at %}{{ alliance.created_at.year }}{% else %}—{% endif %}</span><span class="stat-cap">formed</span></div>
+      </div>
+
+      <h2 class="section">Member Units</h2>
+      <div class="posting-grid">
+        {% for m in alliance.members %}
+        <div class="posting" style="border-top-color: {{ m.brand_color or 'var(--seal)' }};">
+          <div class="posting-head">
+            <a class="posting-unit" href="{{ m.url }}">{{ m.name }}</a>
+            {% if m.role == 'founder' %}<span class="rankchip">founder</span>{% endif %}
+          </div>
+          <div class="posting-sub">{% if m.members is not none %}{{ m.members }} active member{{ 's' if m.members != 1 }}{% else %}—{% endif %}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>
