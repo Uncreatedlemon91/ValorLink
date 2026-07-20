@@ -5,7 +5,8 @@ roster by the member's Discord ID — so a platform-wide "service record" is an
 aggregation over every unit's database for one Discord ID: where they serve
 now, where they've served, their promotions, awards, and how they left.
 
-Visibility is a hybrid (see ``viewer_level``):
+Every service record is public. Visibility only controls how much detail the
+viewer sees (see ``viewer_level``):
 
 * **owner**     — the member themselves: everything, including the written
                   reasons behind discharges and the full per-unit history.
@@ -13,16 +14,16 @@ Visibility is a hybrid (see ``viewer_level``):
                   the vetting view — service, ranks, tenure, awards, and the
                   *type* of any discharge (honorable / dishonorable), but never
                   the written reasons or disciplinary notes.
-* **public**    — anyone, but only for members who opted their record public:
-                  the positive record — units, ranks, tenure, awards. No
+* **public**    — everyone else, including signed-out visitors: the positive
+                  record — units, ranks, tenure, awards, and promotions. No
                   discharge type, no reasons.
 """
 from __future__ import annotations
 
 import os
+import re
 
 from db.models import AwardType, Member, MemberAward, ServiceHistoryEntry
-from tenancy.registry import profile_is_public
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
 
@@ -30,10 +31,14 @@ LEVEL_OWNER = "owner"
 LEVEL_RECRUITER = "recruiter"
 LEVEL_PUBLIC = "public"
 
+# Promotion entries are written in a fixed shape by both the web and the bot:
+# "Promoted from <old> to <new> by <actor>." — pull the new rank, drop the rest.
+_PROMOTION_RE = re.compile(r"^Promoted from .+ to (.+?) by ")
 
-def viewer_level(viewer: dict | None, target_id: int) -> str | None:
-    """How much of ``target_id``'s record ``viewer`` may see, or None if it's
-    not visible to them at all."""
+
+def viewer_level(viewer: dict | None, target_id: int) -> str:
+    """How much of ``target_id``'s record ``viewer`` may see. Every record is
+    public, so this never denies access — it only picks the detail level."""
     from web import auth  # local import avoids a load-time cycle
 
     if viewer and str(viewer.get("id")) == str(target_id):
@@ -42,9 +47,7 @@ def viewer_level(viewer: dict | None, target_id: int) -> str | None:
     recruiter_floor = auth._ORDER[auth.TIER_RECRUITER]
     if any(auth._ORDER.get(t, 0) >= recruiter_floor for t in tiers.values()):
         return LEVEL_RECRUITER
-    if profile_is_public(target_id):
-        return LEVEL_PUBLIC
-    return None
+    return LEVEL_PUBLIC
 
 
 def _unit_url(slug: str, is_default: bool) -> str:
@@ -66,6 +69,17 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
     awards = [{"name": at.name, "emoji": at.emoji, "date": ma.date_awarded}
               for ma, at in award_rows]
 
+    # Structured, reason-free promotions parsed from the service history — the
+    # new rank and date only, safe to show at any level.
+    promotions = []
+    discharged_at = None
+    for h in member.service_history:
+        m = _PROMOTION_RE.match(h.entry or "")
+        if m:
+            promotions.append({"rank": m.group(1).rstrip("."), "date": h.date})
+        elif "discharged" in (h.entry or "").lower():
+            discharged_at = h.date  # the date only, never the written reason
+
     posting = {
         "unit": tenant.name,
         "slug": tenant.slug,
@@ -76,6 +90,8 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
         "joined": member.joined_date,
         "rank_since": member.rank_since,
         "awards": awards,
+        "promotions": promotions,
+        "discharged_at": discharged_at if member.status == "discharged" else None,
         "discharge_type": None,
         "history": [],
     }
@@ -137,6 +153,9 @@ def build_service_record(discord_id: int, level: str) -> dict:
         if p["joined"]:
             milestones.append({"at": p["joined"], "kind": "enlisted",
                                "unit": p["unit"], "text": f"Enlisted in {p['unit']}"})
+        for pr in p["promotions"]:
+            milestones.append({"at": pr["date"], "kind": "promote", "unit": p["unit"],
+                               "text": f"Promoted to {pr['rank']} · {p['unit']}"})
         for a in p["awards"]:
             if a["date"]:
                 milestones.append({"at": a["date"], "kind": "award", "unit": p["unit"],
@@ -144,7 +163,8 @@ def build_service_record(discord_id: int, level: str) -> dict:
         if p["status"] == "discharged":
             dt = p.get("discharge_type")
             label = f"{dt.title()} discharge" if dt else "Departed"
-            milestones.append({"at": p["rank_since"], "kind": "discharge", "unit": p["unit"],
+            milestones.append({"at": p.get("discharged_at") or p["rank_since"],
+                               "kind": "discharge", "unit": p["unit"],
                                "text": f"{label} · {p['unit']}"})
     milestones.sort(key=lambda m: (m["at"] is None, m["at"]))
 

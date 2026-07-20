@@ -59,20 +59,6 @@ class Tenant(RegistryBase):
     tags = Column(String, nullable=True)    # comma-separated free tags (playstyle, region)
 
 
-class ProfilePrefs(RegistryBase):
-    """A platform-wide member's cross-unit profile settings, keyed by their
-    Discord ID (stable across every unit). Only holds visibility preferences;
-    the service record itself is aggregated live from each unit's database."""
-
-    __tablename__ = "profile_prefs"
-
-    discord_id = Column(BigInteger, primary_key=True)
-    # When true, the member's positive service record (units, ranks, awards) is
-    # visible to anyone. Recruiters can always see the vetting view regardless.
-    public = Column(Boolean, nullable=False, default=False)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
-
-
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
 RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)
@@ -110,21 +96,3 @@ def registry_session():
         yield session
     finally:
         session.close()
-
-
-def profile_is_public(discord_id: int) -> bool:
-    """Whether this member has opted their service record into public view."""
-    with registry_session() as s:
-        prefs = s.get(ProfilePrefs, discord_id)
-        return bool(prefs and prefs.public)
-
-
-def set_profile_public(discord_id: int, public: bool) -> None:
-    with registry_session() as s:
-        prefs = s.get(ProfilePrefs, discord_id)
-        if prefs is None:
-            prefs = ProfilePrefs(discord_id=discord_id, public=public)
-            s.add(prefs)
-        else:
-            prefs.public = public
-        s.commit()

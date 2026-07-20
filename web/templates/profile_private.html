@@ -16,19 +16,8 @@
     <main class="wrap">
       <div class="hollow">
         <div class="mark">✵</div>
-        {% if record is defined and record and not record.found %}
-          <h3>No Record Found</h3>
-          <p>This member isn't on the roster of any unit on ValorLink.</p>
-        {% elif needs_login %}
-          <h3>Sign In to View</h3>
-          <p>This service record isn't public. Sign in — if you're a recruiter,
-          you'll see the vetting view.</p>
-          <p style="margin-top:14px;"><a class="btn btn-strong" href="/auth/discord/login">Sign in with Discord</a></p>
-        {% else %}
-          <h3>Private Record</h3>
-          <p>This member keeps their service record private. Recruiters at a unit
-          can see the vetting view when someone applies.</p>
-        {% endif %}
+        <h3>No Record Found</h3>
+        <p>This member isn't on the roster of any unit on ValorLink.</p>
       </div>
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
     </main>

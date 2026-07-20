@@ -586,11 +586,14 @@ def test_platform_broadcast_requires_platform_admin():
 
 
 def _seed_soldier(uid):
-    """A member serving in 5thva and dishonorably discharged from 2ndus."""
+    """A member serving (and promoted) in 5thva and dishonorably discharged
+    from 2ndus."""
     from db.models import Member, ServiceHistoryEntry
     with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
         s.add(Member(discord_id=uid, callsign="Trooper", rank="Sergeant",
                      company="Alpha", status="active"))
+        s.add(ServiceHistoryEntry(
+            member_id=uid, entry="Promoted from Corporal to Sergeant by Colonel Reed."))
         s.commit()
     with sessionmaker_for(unit_db_url_for_slug("2ndus"))() as s:
         s.add(Member(discord_id=uid, callsign="Trooper", rank="Corporal",
@@ -625,32 +628,23 @@ def test_service_record_recruiter_sees_type_not_reason():
     assert "misconduct" not in html     # but never the reason
 
 
-def test_service_record_public_gated_by_optin():
+def test_service_record_is_public_positive_only():
     uid = 7003
     _seed_soldier(uid)
     c = TestClient(app)
-    c.post("/auth/dev", data={"discord_id": 9200, "name": "Nobody", "tier": "none"},
-           headers={"host": APEX}, follow_redirects=False)
+    # a signed-out visitor: every record is public, no login needed
     r = c.get(f"/u/{uid}", headers={"host": APEX})
-    assert r.status_code == 403 and "Private Record" in r.text
-    from tenancy.registry import set_profile_public
-    set_profile_public(uid, True)
-    html = c.get(f"/u/{uid}", headers={"host": APEX}).text
-    assert "5th Virginia" in html       # positive record now visible
-    assert "Dishonorable" not in html   # discharge type stays hidden from the public
-    assert "misconduct" not in html
+    assert r.status_code == 200
+    assert "5th Virginia" in r.text            # positive record visible to anyone
+    assert "Promoted to Sergeant" in r.text    # promotions shown to everyone
+    assert "Dishonorable" not in r.text        # discharge type hidden from the public
+    assert "misconduct" not in r.text          # reasons never shown
 
 
-def test_service_record_visibility_toggle():
-    uid = 7004
-    _seed_soldier(uid)
+def test_service_record_not_found_is_404():
     c = TestClient(app)
-    c.post("/auth/dev", data={"discord_id": uid, "name": "Trooper", "tier": "none"},
-           headers={"host": APEX}, follow_redirects=False)
-    token = _csrf(c, f"/u/{uid}", {"host": APEX})
-    c.post("/me/visibility", data={"csrf": token, "public": "1"}, headers={"host": APEX})
-    from tenancy.registry import profile_is_public
-    assert profile_is_public(uid) is True
+    r = c.get("/u/999999", headers={"host": APEX})
+    assert r.status_code == 404 and "No Record Found" in r.text
 
 
 import re  # noqa: E402
