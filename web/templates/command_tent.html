@@ -114,6 +114,10 @@
           <span class="order-note">Added to every member's Discord nickname:
             <b>{{ cfg.unit_tag or 'Tag' }} A Cpl. Name</b> — unit tag, then company tag, rank, name.
             Leave blank for none. Changing it rebuilds every member's nickname.</span>
+          <span class="order-note">For the bot to rename members, its role must sit
+            <b>above</b> your rank and company roles and have the <b>Manage Nicknames</b>
+            permission. Discord never lets a bot rename the <b>server owner</b>, so the
+            owner's nickname won't change — that's a Discord limitation.</span>
         </div>
         <div class="field">
           <label>Discord invite <span class="opt">(recruiting)</span></label>
