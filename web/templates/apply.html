@@ -16,7 +16,7 @@
   <p class="lede">Your application is already in — an officer will be in touch.</p>
 {% elif not user %}
   <p class="lede">Sign in with Discord to apply.</p>
-  <a class="btn btn-strong btn-lg" href="/login">Sign in with Discord</a>
+  <a class="btn btn-strong btn-lg" href="/auth/discord/login">Sign in with Discord</a>
 {% else %}
   <p class="lede">Applying as <b>{{ user.name }}</b>. A recruiter reviews every application.</p>
   <div class="order-card" style="max-width:640px;">
