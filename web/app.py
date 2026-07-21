@@ -1291,8 +1291,6 @@ def _setup_checklist(session: Session, cfg) -> list[dict]:
          "#roles", "Recruiters approve or deny applicants.", None),
         ("Set the Roster channel", bool(cfg.roster_channel_id),
          "#channels", "Where the live roster embed is posted and kept current.", None),
-        ("Set the Recruitment channel", bool(cfg.recruitment_channel_id),
-         "#channels", "Where enlistment applications land for review.", None),
         ("Build the rank ladder", rank_count >= 2,
          "#ranks", "You need ranks before you can promote anyone.", None),
         ("Add a company", company_count >= 1,

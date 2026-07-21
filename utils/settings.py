@@ -25,7 +25,6 @@ ROLE_KEYS = {
 }
 
 CHANNEL_KEYS = {
-    "recruitment": "recruitment_channel_id",
     "personnel_forum": "personnel_forum_id",
     "roster": "roster_channel_id",
     "mod_log": "mod_log_channel_id",

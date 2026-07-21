@@ -35,11 +35,3 @@ def next_rank(session, name: str) -> str | None:
         return None
     i = names.index(name)
     return names[i + 1] if i + 1 < len(names) else None
-
-
-def prev_rank(session, name: str) -> str | None:
-    names = rank_names(session)
-    if name not in names:
-        return None
-    i = names.index(name)
-    return names[i - 1] if i > 0 else None

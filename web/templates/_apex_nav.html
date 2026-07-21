@@ -1,7 +1,0 @@
-<nav class="apex-nav">
-  {% set p = request.url.path %}
-  <a href="/" class="{{ 'on' if p == '/' }}">Home</a>
-  <a href="/find" class="{{ 'on' if p == '/find' }}">Find a Unit</a>
-  {% if user %}<a href="/my-units" class="{{ 'on' if p == '/my-units' }}">My Units</a>{% endif %}
-  {% if user %}<a href="/register" class="{{ 'on' if p == '/register' }}">Raise a Unit</a>{% endif %}
-</nav>
