@@ -782,7 +782,8 @@ def mark_attendance(session, actor: dict, event_id: int, member_id: int, status:
 
 
 # --- Awards -------------------------------------------------------------- #
-def create_award_type(session, actor: dict, name: str, description: str = "", emoji: str = "") -> str:
+def create_award_type(session, actor: dict, name: str, description: str = "",
+                      emoji: str = "", image: str | None = None) -> str:
     name = name.strip()
     if not name:
         raise ActionError("The award needs a name.")
@@ -793,6 +794,7 @@ def create_award_type(session, actor: dict, name: str, description: str = "", em
             name=name,
             description=description.strip() or None,
             emoji=emoji.strip() or None,
+            image=image,
             created_by=actor["id"],
         )
     )
@@ -823,7 +825,7 @@ def grant_award(session, actor: dict, discord_id: int, award_type_id: int, notes
     queue.enqueue(
         session,
         queue.AWARD_GRANTED,
-        {"discord_id": discord_id,
+        {"discord_id": discord_id, "award_type_id": award_type_id, "award_name": award.name,
          "billboard": f"**{member.callsign}** has been awarded **{award.name}**."},
         actor_id=actor["id"],
     )
@@ -945,7 +947,26 @@ def set_digest_enabled(session, enabled: bool) -> str:
 
 
 # --- Admin: ranks -------------------------------------------------------- #
-def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str = "") -> str:
+def set_rank_image(session, rank_id: int, image: str | None) -> str:
+    rank = session.get(Rank, rank_id)
+    if rank is None:
+        raise ActionError("Unknown rank.")
+    rank.image = image
+    session.commit()
+    return (f"Insignia set for {rank.name}." if image else f"Insignia removed from {rank.name}.")
+
+
+def set_award_image(session, award_type_id: int, image: str | None) -> str:
+    award = session.get(AwardType, award_type_id)
+    if award is None:
+        raise ActionError("Unknown honor.")
+    award.image = image
+    session.commit()
+    return (f"Image set for {award.name}." if image else f"Image removed from {award.name}.")
+
+
+def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str = "",
+             image: str | None = None) -> str:
     name = name.strip()
     abbreviation = abbreviation.strip()
     if not name or not abbreviation:
@@ -960,6 +981,7 @@ def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str
             tier=tier.strip() or None,
             role_id=_parse_id(role_id),
             position=(top.position + 1) if top else 0,
+            image=image,
         )
     )
     session.commit()

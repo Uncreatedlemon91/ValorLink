@@ -143,6 +143,8 @@ class AwardType(Base):
     name = Column(String, nullable=False, unique=True)
     description = Column(Text, nullable=True)
     emoji = Column(String, nullable=True)
+    # Optional medal/insignia image (data URI); the bot shows it in the award embed.
+    image = Column(Text, nullable=True)
     created_by = Column(BigInteger, nullable=False)
 
     awards = relationship("MemberAward", back_populates="award_type", cascade="all, delete-orphan")
@@ -273,6 +275,8 @@ class Rank(Base):
     tier = Column(String, nullable=True)
     role_id = Column(BigInteger, nullable=True)
     position = Column(Integer, nullable=False, unique=True)
+    # Optional insignia image (data URI); the bot shows it in the promotion embed.
+    image = Column(Text, nullable=True)
 
 
 class Company(Base):

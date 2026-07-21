@@ -2078,17 +2078,46 @@ def post_award_revoke(
 
 
 @app.post("/honors/award-type")
-def post_award_type(
+async def post_award_type(
     request: Request,
     csrf: str = Form(...),
     name: str = Form(...),
     description: str = Form(""),
     emoji: str = Form(""),
+    image: UploadFile = File(None),
     user: dict = Depends(auth.require_officer),
 ):
     actor = {"id": user["id"], "name": user["name"]}
-    return _do(request, csrf, services.create_award_type, actor, name, description, emoji,
+    try:
+        uri = await _image_data_uri(image) if image and image.filename else None
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/honors", status_code=303)
+    return _do(request, csrf, services.create_award_type, actor, name, description, emoji, uri,
                redirect="/honors")
+
+
+@app.post("/admin/awards/{award_type_id}/image")
+async def post_award_image(
+    request: Request,
+    award_type_id: int,
+    csrf: str = Form(...),
+    remove: str = Form(""),
+    image: UploadFile = File(None),
+    user: dict = Depends(auth.require_officer),
+):
+    if remove:
+        return _do(request, csrf, services.set_award_image, award_type_id, None,
+                   redirect="/honors")
+    if not (image and image.filename):
+        _flash(request, "Choose an image to upload.", "error")
+        return RedirectResponse("/honors", status_code=303)
+    try:
+        uri = await _image_data_uri(image)
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/honors", status_code=303)
+    return _do(request, csrf, services.set_award_image, award_type_id, uri, redirect="/honors")
 
 
 # --- Admin: identity / roles / channels ----------------------------------- #
@@ -2112,6 +2141,18 @@ def post_identity(
 
 CREST_MAX_BYTES = 256 * 1024
 CREST_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+async def _image_data_uri(upload) -> str:
+    """Validate an uploaded image and return it as a data URI. Raises ValueError
+    with a user-facing message on a bad type or oversize file."""
+    if (upload.content_type or "") not in CREST_TYPES:
+        raise ValueError("The image must be a PNG, JPEG, WebP, or GIF.")
+    data = await upload.read()
+    if len(data) > CREST_MAX_BYTES:
+        raise ValueError("The image must be under 256 KB.")
+    import base64
+    return f"data:{upload.content_type};base64,{base64.b64encode(data).decode()}"
 
 
 @app.post("/admin/crest")
@@ -2215,17 +2256,46 @@ def post_digest(
 
 # --- Admin: ranks --------------------------------------------------------- #
 @app.post("/admin/ranks/add")
-def post_rank_add(
+async def post_rank_add(
     request: Request,
     csrf: str = Form(...),
     name: str = Form(...),
     abbreviation: str = Form(...),
     tier: str = Form(""),
     role_id: str = Form(""),
+    image: UploadFile = File(None),
     user: dict = Depends(auth.require_admin),
 ):
-    return _do(request, csrf, services.rank_add, name, abbreviation, tier, role_id,
+    try:
+        uri = await _image_data_uri(image) if image and image.filename else None
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    return _do(request, csrf, services.rank_add, name, abbreviation, tier, role_id, uri,
                redirect="/command-tent")
+
+
+@app.post("/admin/ranks/{rank_id}/image")
+async def post_rank_image(
+    request: Request,
+    rank_id: int,
+    csrf: str = Form(...),
+    remove: str = Form(""),
+    image: UploadFile = File(None),
+    user: dict = Depends(auth.require_admin),
+):
+    if remove:
+        return _do(request, csrf, services.set_rank_image, rank_id, None,
+                   redirect="/command-tent")
+    if not (image and image.filename):
+        _flash(request, "Choose an image to upload.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    try:
+        uri = await _image_data_uri(image)
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    return _do(request, csrf, services.set_rank_image, rank_id, uri, redirect="/command-tent")
 
 
 @app.post("/admin/ranks/{rank_id}/update")

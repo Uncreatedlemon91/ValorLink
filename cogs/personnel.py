@@ -176,7 +176,15 @@ class Personnel(commands.Cog):
             if citation:
                 billboard_msg += f" {citation}"
 
-        await post_billboard(interaction.guild, billboard_msg)
+        with db_session() as session:
+            rank_row = rank_utils.rank_by_name(session, rank)
+            rank_image = rank_row.image if rank_row else None
+        if rank_image:
+            from utils.billboard import post_billboard_notice
+            await post_billboard_notice(interaction.guild, billboard_msg,
+                                        image_uri=rank_image, title=rank)
+        else:
+            await post_billboard(interaction.guild, billboard_msg)
         await interaction.response.send_message(msg)
 
     @app_commands.command(name="set_rank", description="Silently correct a member's rank (no public announcement)")

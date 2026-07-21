@@ -860,6 +860,11 @@ body.theme-dark .allies-strip { background: rgba(255,255,255,0.035); }
 body.theme-dark .posting { background: rgba(255,255,255,0.035); }
 body.theme-dark .award-chip { background: rgba(255,255,255,0.05); }
 .nav-card-admin { border-color: var(--union); background: rgba(31,58,95,0.04); }
+.medal-img { height: 26px; width: 26px; object-fit: contain; vertical-align: middle; margin-right: 6px; }
+.insignia-img { height: 22px; width: 22px; object-fit: contain; vertical-align: middle; margin-right: 5px; }
+.rank-name-cell { display: flex; align-items: center; gap: 2px; }
+.medal-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 5px; }
+.medal-upload input[type=file] { font-size: 11px; max-width: 190px; }
 .rec-link { color: var(--ink-faint); text-decoration: none; font-size: 13px; margin-left: 4px; }
 .rec-link:hover { color: var(--seal); text-decoration: none; }
 .player-search { display: flex; gap: 8px; max-width: 520px; margin: 4px 0 10px; }

@@ -102,6 +102,8 @@ class Awards(commands.Cog):
             session.commit()
             callsign = target.callsign
             label = f"{(award_row.emoji + ' ') if award_row.emoji else ''}{award_row.name}"
+            award_name = award_row.name
+            award_image = award_row.image
 
         await interaction.response.send_message(f"{member.mention} was awarded **{label}**.")
 
@@ -111,7 +113,13 @@ class Awards(commands.Cog):
         except Exception:
             pass
 
-        await post_billboard(interaction.guild, f"**{callsign}** has been awarded **{award_row.name}**.")
+        billboard = f"**{callsign}** has been awarded **{award_name}**."
+        if award_image:
+            from utils.billboard import post_billboard_notice
+            await post_billboard_notice(interaction.guild, billboard,
+                                        image_uri=award_image, title=award_name)
+        else:
+            await post_billboard(interaction.guild, billboard)
 
     @app_commands.command(name="award_remove", description="Revoke an award/qualification from a member")
     @app_commands.autocomplete(award_type=award_type_autocomplete)

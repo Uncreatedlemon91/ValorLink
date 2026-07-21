@@ -1342,6 +1342,81 @@ def test_bridge_platform_broadcast_skips_unit_without_admin_log():
     # nothing to post to; the call is a no-op that doesn't raise
 
 
+_PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 48
+
+
+def test_rank_add_with_insignia_image():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    r = client.post("/admin/ranks/add",
+                    data={"csrf": token, "name": "Colonel", "abbreviation": "Col"},
+                    files={"image": ("i.png", _PNG, "image/png")})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        rank = s.query(Rank).filter_by(name="Colonel").one()
+        assert rank.image and rank.image.startswith("data:image/png;base64,")
+
+
+def test_award_type_with_image_and_grant_carries_id():
+    import json
+    from web import services
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/honors")
+    client.post("/honors/award-type",
+                data={"csrf": token, "name": "Valor Star"},
+                files={"image": ("m.png", _PNG, "image/png")})
+    with SessionLocal() as s:
+        award = s.query(AwardType).filter_by(name="Valor Star").one()
+        assert award.image.startswith("data:image/png")
+        atid = award.id
+        services.grant_award(s, {"id": 1, "name": "O"}, MEMBER_ID, atid)
+    acts = _actions(queue.AWARD_GRANTED)
+    assert acts and json.loads(acts[0].payload)["award_type_id"] == atid
+
+
+def test_bridge_promotion_with_insignia_posts_embed_and_file():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).billboard_channel_id = 777
+        s.query(Rank).filter_by(name="Sergeant").one().image = "data:image/png;base64,QUJD"
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._refresh = AsyncMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_member.return_value = None
+    guild.get_channel.return_value = channel
+    asyncio.run(bridge._do_sync_rank(guild, {"discord_id": MEMBER_ID, "callsign": "Testman",
+                                             "new_rank": "Sergeant", "billboard": "promoted"}))
+    channel.send.assert_awaited_once()
+    assert "file" in channel.send.call_args.kwargs and "embed" in channel.send.call_args.kwargs
+
+
+def test_bridge_award_with_image_posts_embed_and_file():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).billboard_channel_id = 777
+        award = s.query(AwardType).filter_by(name="Marksman").one()
+        award.image = "data:image/png;base64,QUJD"
+        s.commit()
+        atid = award.id
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    bridge._refresh = AsyncMock()
+    channel = MagicMock()
+    channel.send = AsyncMock()
+    guild = MagicMock()
+    guild.get_channel.return_value = channel
+    asyncio.run(bridge._do_award_granted(guild, {"discord_id": MEMBER_ID, "award_type_id": atid,
+                                                 "award_name": "Marksman", "billboard": "awarded"}))
+    channel.send.assert_awaited_once()
+    assert "file" in channel.send.call_args.kwargs
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for t in tests:

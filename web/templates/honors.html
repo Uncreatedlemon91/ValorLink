@@ -8,13 +8,17 @@
 {% if tier_at_least(user, TIER_OFFICER) %}
 <div class="order-card" style="max-width:640px; margin-top:14px;">
   <h3 class="order-title">Institute a New Honor</h3>
-  <form class="orders" method="post" action="/honors/award-type">
+  <form class="orders" method="post" action="/honors/award-type" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <div class="field-row">
       <div class="field" style="flex:3;"><label>Name</label><input name="name" required placeholder="Marksman's Cord"></div>
       <div class="field" style="flex:1;"><label>Emoji <span class="opt">(opt.)</span></label><input name="emoji" placeholder="🎯"></div>
     </div>
     <div class="field"><label>Description <span class="opt">(optional)</span></label><input name="description" placeholder="Awarded for exemplary conduct at the firing line."></div>
+    <div class="field"><label>Medal image <span class="opt">(optional)</span></label>
+      <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+      <span class="order-note">Shown in the bot's award announcement. PNG/JPEG/WebP/GIF, under 256 KB.</span>
+    </div>
     <div class="field field-actions"><button class="btn btn-strong" type="submit">Add to catalogue</button></div>
   </form>
 </div>
@@ -24,10 +28,19 @@
   {% for row in catalogue %}
     <div class="company-block">
       <h3 class="company-name">
-        {% if row.award.emoji %}{{ row.award.emoji }} {% endif %}{{ row.award.name }}
+        {% if row.award.image %}<img class="medal-img" src="{{ row.award.image }}" alt="">
+        {% elif row.award.emoji %}{{ row.award.emoji }} {% endif %}{{ row.award.name }}
         <span class="count">({{ row.holders|length }})</span>
       </h3>
       {% if row.award.description %}<p class="lede" style="margin:2px 0 6px;">{{ row.award.description }}</p>{% endif %}
+      {% if tier_at_least(user, TIER_OFFICER) %}
+      <form class="medal-upload" method="post" action="/admin/awards/{{ row.award.id }}/image" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+        <button class="btn btn-small" type="submit">{{ 'Replace image' if row.award.image else 'Add image' }}</button>
+        {% if row.award.image %}<button class="btn btn-small btn-danger" type="submit" name="remove" value="1">Remove</button>{% endif %}
+      </form>
+      {% endif %}
       {% if row.holders %}
         <table class="ledger">
           <thead><tr><th>Recipient</th><th class="num">Conferred</th></tr></thead>

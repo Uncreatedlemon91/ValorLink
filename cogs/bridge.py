@@ -21,6 +21,7 @@ from db.base import db_session
 from db.context import reset_current_db_url, set_current_db_url
 from db.models import (
     AttendanceRecord,
+    AwardType,
     Candidacy,
     Company,
     DisciplinaryRecord,
@@ -32,7 +33,7 @@ from db.models import (
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants
 from utils import queue
-from utils.billboard import post_billboard
+from utils.billboard import post_billboard, post_billboard_notice
 from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config
 from utils.sync import resync_nickname, sync_company, sync_rank
@@ -487,7 +488,14 @@ class Bridge(commands.Cog):
             await sync_rank(member, p["callsign"], p.get("old_rank"), p["new_rank"])
         await self._refresh(guild, p["discord_id"], roster=True)
         if p.get("billboard"):
-            await post_billboard(guild, p["billboard"])
+            with db_session() as session:
+                rank = session.query(Rank).filter(Rank.name == p["new_rank"]).one_or_none()
+                image = rank.image if rank else None
+            if image:
+                await post_billboard_notice(guild, p["billboard"],
+                                            image_uri=image, title=p["new_rank"])
+            else:
+                await post_billboard(guild, p["billboard"])
 
     async def _do_sync_company(self, guild, p):
         member = guild.get_member(p["discord_id"])
@@ -717,7 +725,16 @@ class Bridge(commands.Cog):
     async def _do_award_granted(self, guild, p):
         await self._refresh(guild, p["discord_id"])
         if p.get("billboard"):
-            await post_billboard(guild, p["billboard"])
+            image = None
+            if p.get("award_type_id"):
+                with db_session() as session:
+                    award = session.get(AwardType, p["award_type_id"])
+                    image = award.image if award else None
+            if image:
+                await post_billboard_notice(guild, p["billboard"],
+                                            image_uri=image, title=p.get("award_name"))
+            else:
+                await post_billboard(guild, p["billboard"])
 
     async def _do_award_revoked(self, guild, p):
         await self._refresh(guild, p["discord_id"])
