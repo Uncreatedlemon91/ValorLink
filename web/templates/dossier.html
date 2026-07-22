@@ -12,7 +12,7 @@
     <div class="dossier-id">
       <img class="avatar avatar-lg" src="{{ member|avatar_url(128) }}" alt="" loading="lazy">
       <div>
-        <div class="rank">{{ member.rank }}{% if rank and rank.abbreviation %} &middot; {{ rank.abbreviation }}{% endif %}</div>
+        <div class="rank">{% if rank and rank.image %}<img class="insignia-img" src="{{ rank.image }}" alt="">{% endif %}{{ member.rank }}{% if rank and rank.abbreviation %} &middot; {{ rank.abbreviation }}{% endif %}</div>
         <h1>{{ member.callsign }}</h1>
         <span class="badge s-{{ member.status }}">{{ member.status|status_label }}</span>
       </div>

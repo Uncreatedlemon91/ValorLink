@@ -1372,6 +1372,21 @@ def test_roster_shows_rank_insignia():
     assert "data:image/png;base64," in r.text
 
 
+def test_dossier_muster_and_promotions_show_rank_insignia():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+    client.post(f"/admin/ranks/{rid}/image",
+                data={"csrf": token},
+                files={"image": ("i.png", _PNG, "image/png")})
+
+    assert "data:image/png;base64," in client.get(f"/dossier/{MEMBER_ID}").text
+    assert "data:image/png;base64," in client.get("/muster").text
+    assert "data:image/png;base64," in client.get("/promotions").text
+
+
 def test_rank_rename_updates_members_holding_it():
     client = TestClient(app)
     _login(client, "admin")

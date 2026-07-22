@@ -41,7 +41,7 @@
             <a class="posting-unit" href="{{ p.url }}">{{ p.unit }}</a>
             <span class="rankchip">{{ p.status }}</span>
           </div>
-          <div class="posting-rank">{{ p.rank }} · {{ p.company }}</div>
+          <div class="posting-rank">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }} · {{ p.company }}</div>
           <div class="posting-sub">Enlisted {{ p.joined|fmt_date }}{% if p.rank_since %} · {{ p.rank }} since {{ p.rank_since|fmt_date }}{% endif %}</div>
           {% if p.awards %}
           <div class="posting-awards">{% for a in p.awards %}<span class="award-chip">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
@@ -72,7 +72,7 @@
             {% elif p.archived %}<span class="rankchip">archived</span>
             {% else %}<span class="rankchip">former</span>{% endif %}
           </div>
-          <div class="posting-rank">{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
+          <div class="posting-rank">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
           <div class="posting-sub">{% if p.joined %}Enlisted {{ p.joined|fmt_date }}{% endif %}{% if p.archived %} · unit since disbanded{% endif %}</div>
           {% if p.awards %}
           <div class="posting-awards">{% for a in p.awards %}<span class="award-chip">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>

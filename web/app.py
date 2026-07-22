@@ -817,6 +817,7 @@ def muster(request: Request, session: Session = Depends(get_session)):
     ctx = _base_context(request, session)
 
     rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
     status_rank = {"active": 0, "loa": 1, "inactive": 2, "discharged": 3}
     members = session.query(Member).all()
     members.sort(
@@ -838,6 +839,7 @@ def muster(request: Request, session: Session = Depends(get_session)):
         filter_statuses=statuses_present,
         can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
         company_options=services.company_options(session),
+        rank_images=rank_images,
     )
     return templates.TemplateResponse(request, "muster.html", ctx)
 
@@ -1169,12 +1171,14 @@ def promotions(request: Request, session: Session = Depends(get_session)):
 
     rows.sort(key=lambda r: (not r["eligible"], -r["days_in_rank"], r["member"].callsign.lower()))
     eligible_count = sum(1 for r in rows if r["eligible"])
+    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
     ctx.update(
         rows=rows,
         eligible_count=eligible_count,
         min_days=PROMOTION_MIN_DAYS_IN_RANK,
         min_att_pct=round(PROMOTION_MIN_ATTENDANCE * 100),
         can_promote=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+        rank_images=rank_images,
     )
     return templates.TemplateResponse(request, "promotions.html", ctx)
 

@@ -27,6 +27,7 @@ from db.models import AwardType, Member, MemberAward, ServiceHistoryEntry
 from tenancy.career import career_events_for
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
+from utils import ranks as rank_utils
 
 LEVEL_OWNER = "owner"
 LEVEL_RECRUITER = "recruiter"
@@ -122,11 +123,13 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
         elif "discharged" in (h.entry or "").lower():
             discharged_at = h.date  # the date only, never the written reason
 
+    rank_row = rank_utils.rank_by_name(session, member.rank)
     posting = {
         "unit": tenant.name,
         "slug": tenant.slug,
         "url": _unit_url(tenant.slug, tenant.is_default),
         "rank": member.rank,
+        "rank_image": rank_row.image if rank_row else None,
         "company": member.company,
         "status": member.status,
         "joined": member.joined_date,

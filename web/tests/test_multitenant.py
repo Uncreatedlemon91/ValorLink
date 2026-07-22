@@ -792,6 +792,20 @@ def test_service_record_is_public_positive_only():
     assert "misconduct" not in r.text          # reasons never shown
 
 
+def test_service_record_shows_rank_insignia_from_the_owning_unit():
+    from db.models import Rank
+    uid = 7004
+    _seed_soldier(uid)
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Rank(name="Sergeant", abbreviation="Sgt", position=0,
+                    image="data:image/png;base64,AAAA"))
+        s.commit()
+    c = TestClient(app)
+    r = c.get(f"/u/{uid}", headers={"host": APEX})
+    assert r.status_code == 200
+    assert "data:image/png;base64,AAAA" in r.text
+
+
 def test_service_record_survives_unit_deletion():
     """A member's service in a deleted unit is preserved via the durable log."""
     from db.models import Member, ServiceHistoryEntry
