@@ -22,7 +22,7 @@
           <tbody>
           {% for m in company.members %}
             <tr>
-              <td>{{ m.rank }}</td>
+              <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
               <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a></td>
               <td class="num muted">{{ m.joined_date|fmt_date }}</td>
             </tr>
@@ -57,7 +57,7 @@
         <tbody>
         {% for m in g.members %}
           <tr>
-            <td>{{ m.rank }}</td>
+            <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
             <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a></td>
             <td class="muted">{{ m.company }}</td>
           </tr>

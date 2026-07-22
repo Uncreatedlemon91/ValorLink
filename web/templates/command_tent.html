@@ -241,7 +241,6 @@
         <td class="callsign">
           <div class="rank-name-cell">
             {% if r.image %}<img class="insignia-img" src="{{ r.image }}" alt="">{% endif %}
-            <span>{{ r.name }}</span>
           </div>
           <form class="medal-upload" method="post" action="/admin/ranks/{{ r.id }}/image" enctype="multipart/form-data">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -253,6 +252,7 @@
         <td colspan="3">
           <form class="rowform" method="post" action="/admin/ranks/{{ r.id }}/update">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input name="name" value="{{ r.name }}" size="12" required placeholder="name">
             <input name="abbreviation" value="{{ r.abbreviation }}" size="6" required>
             <input name="tier" value="{{ r.tier or '' }}" size="10" placeholder="tier">
             <input name="role_id" value="{{ r.role_id or '' }}" size="12" placeholder="role ID" inputmode="numeric">
