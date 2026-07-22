@@ -988,18 +988,29 @@ def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str
     return f"Rank '{name}' added at the top of the ladder."
 
 
-def rank_update(session, rank_id: int, abbreviation: str, tier: str, role_id: str) -> str:
+def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, role_id: str) -> str:
     rank = session.get(Rank, rank_id)
     if rank is None:
         raise ActionError("Unknown rank.")
+    name = name.strip()
     abbreviation = abbreviation.strip()
+    if not name:
+        raise ActionError("A rank needs a name.")
     if not abbreviation:
         raise ActionError("A rank needs an abbreviation.")
+    if name != rank.name and session.query(Rank).filter(Rank.name == name).one_or_none():
+        raise ActionError(f"Rank '{name}' already exists.")
+    old_name = rank.name
+    rank.name = name
     rank.abbreviation = abbreviation
     rank.tier = tier.strip() or None
     rank.role_id = _parse_id(role_id)
+    if name != old_name:
+        session.query(Member).filter(Member.rank == old_name).update(
+            {Member.rank: name}, synchronize_session=False
+        )
     session.commit()
-    return f"Rank '{rank.name}' updated."
+    return f"Rank '{old_name}' updated." if name == old_name else f"Rank '{old_name}' renamed to '{name}'."
 
 
 def rank_remove(session, rank_id: int) -> str:

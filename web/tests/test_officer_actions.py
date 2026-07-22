@@ -1358,6 +1358,35 @@ def test_rank_add_with_insignia_image():
         assert rank.image and rank.image.startswith("data:image/png;base64,")
 
 
+def test_roster_shows_rank_insignia():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+    client.post(f"/admin/ranks/{rid}/image",
+                data={"csrf": token},
+                files={"image": ("i.png", _PNG, "image/png")})
+    r = client.get("/roster")
+    assert r.status_code == 200
+    assert "data:image/png;base64," in r.text
+
+
+def test_rank_rename_updates_members_holding_it():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+    r = client.post(f"/admin/ranks/{rid}/update",
+                    data={"csrf": token, "name": "Recruit", "abbreviation": "Rec", "tier": ""})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        rank = s.get(Rank, rid)
+        assert rank.name == "Recruit" and rank.abbreviation == "Rec"
+        assert s.get(Member, MEMBER_ID).rank == "Recruit"
+
+
 def test_award_type_with_image_and_grant_carries_id():
     import json
     from web import services

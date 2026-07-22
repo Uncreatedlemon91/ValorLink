@@ -771,6 +771,7 @@ def roster(request: Request, session: Session = Depends(get_session), tab: str =
 
     members = session.query(Member).filter(Member.status == "active").all()
     rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
 
     by_company: dict[str, list[Member]] = defaultdict(list)
     for m in members:
@@ -805,6 +806,7 @@ def roster(request: Request, session: Session = Depends(get_session), tab: str =
         assignment_groups=assignment_groups,
         has_assignments=bool(assignment_groups),
         active_tab=("assignments" if tab == "assignments" else "company"),
+        rank_images=rank_images,
     )
     return templates.TemplateResponse(request, "roster.html", ctx)
 
@@ -2301,12 +2303,13 @@ def post_rank_update(
     request: Request,
     rank_id: int,
     csrf: str = Form(...),
+    name: str = Form(...),
     abbreviation: str = Form(...),
     tier: str = Form(""),
     role_id: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
-    return _do(request, csrf, services.rank_update, rank_id, abbreviation, tier, role_id,
+    return _do(request, csrf, services.rank_update, rank_id, name, abbreviation, tier, role_id,
                redirect="/command-tent")
 
 
