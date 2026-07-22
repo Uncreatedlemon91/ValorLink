@@ -23,7 +23,18 @@
           {% for m in company.members %}
             <tr>
               <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
-              <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a></td>
+              <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
+                {% if can_manage %}
+                <details class="rename-toggle">
+                  <summary title="Rename">✎</summary>
+                  <form class="rowform" method="post" action="/members/{{ m.discord_id }}/callsign">
+                    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                    <input name="callsign" value="{{ m.callsign }}" size="16" required>
+                    <button class="btn btn-small" type="submit">Save</button>
+                  </form>
+                </details>
+                {% endif %}
+              </td>
               <td class="num muted">{{ m.joined_date|fmt_date }}</td>
             </tr>
           {% endfor %}
@@ -58,7 +69,18 @@
         {% for m in g.members %}
           <tr>
             <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
-            <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a></td>
+            <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
+              {% if can_manage %}
+              <details class="rename-toggle">
+                <summary title="Rename">✎</summary>
+                <form class="rowform" method="post" action="/members/{{ m.discord_id }}/callsign">
+                  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                  <input name="callsign" value="{{ m.callsign }}" size="16" required>
+                  <button class="btn btn-small" type="submit">Save</button>
+                </form>
+              </details>
+              {% endif %}
+            </td>
             <td class="muted">{{ m.company }}</td>
           </tr>
         {% endfor %}

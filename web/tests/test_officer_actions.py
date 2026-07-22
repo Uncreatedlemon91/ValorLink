@@ -1272,7 +1272,8 @@ def test_company_tag_update_enqueues_scoped_resync():
     with SessionLocal() as s:
         cid = s.query(Company).filter_by(name="Alpha").one().id
     client.post(f"/admin/companies/{cid}/update",
-                data={"csrf": _csrf(client, "/command-tent"), "role_id": "", "tag": "A"})
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Alpha",
+                      "role_id": "", "tag": "A"})
     with SessionLocal() as s:
         assert s.get(Company, cid).tag == "A"
     acts = _actions(queue.RESYNC_NICKNAMES)
@@ -1403,6 +1404,46 @@ def test_rank_rename_updates_members_holding_it():
         assert s.get(Member, MEMBER_ID).rank == "Recruit"
     acts = _actions(queue.RESYNC_NICKNAMES)
     assert acts and json.loads(acts[0].payload)["rank"] == "Recruit"
+
+
+def test_company_rename_updates_members_holding_it():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        cid = s.query(Company).filter_by(name="Alpha").one().id
+    r = client.post(f"/admin/companies/{cid}/update",
+                    data={"csrf": token, "name": "Alpha Company", "role_id": "", "tag": ""})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Company, cid).name == "Alpha Company"
+        assert s.get(Member, MEMBER_ID).company == "Alpha Company"
+    # a pure rename (tag unchanged) doesn't need a nickname rebuild
+    assert not _actions(queue.RESYNC_NICKNAMES)
+
+
+def test_rename_member_from_roster():
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/roster")
+    html = client.get("/roster").text
+    assert 'action="/members/%s/callsign"' % MEMBER_ID in html
+    r = client.post(f"/members/{MEMBER_ID}/callsign", data={"csrf": token, "callsign": "Renamed"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Member, MEMBER_ID).callsign == "Renamed"
+    assert "Renamed" in client.get("/roster").text
+    assert _actions(queue.RESYNC_NICKNAMES)
+
+
+def test_rename_member_requires_officer():
+    client = TestClient(app)
+    _login(client, "none")
+    html = client.get("/roster").text
+    assert "/callsign" not in html
+    r = client.post(f"/members/{MEMBER_ID}/callsign", data={"csrf": "x", "callsign": "Nope"},
+                    follow_redirects=False)
+    assert r.status_code == 403
 
 
 def test_rank_abbreviation_only_change_enqueues_scoped_resync():
