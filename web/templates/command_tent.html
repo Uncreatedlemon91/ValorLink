@@ -246,7 +246,21 @@
         </td>
         <td colspan="3">
           <span class="edit-summary">{{ r.abbreviation }}{% if r.tier %} &middot; {{ r.tier }}{% endif %}{% if r.role_id %} &middot; role <span class="role-id">{{ r.role_id }}</span>{% endif %}</span>
-          <button type="button" class="btn btn-small js-edit-open" data-target="tpl-rank-{{ r.id }}">Edit</button>
+        </td>
+        <td class="num">
+          <div class="inline-actions">
+            <form method="post" action="/admin/ranks/{{ r.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><button class="btn btn-small" type="submit" title="Move up">▲</button></form>
+            <form method="post" action="/admin/ranks/{{ r.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><button class="btn btn-small" type="submit" title="Move down">▼</button></form>
+          </div>
+        </td>
+        <td class="num">
+          <div class="inline-actions">
+            <form method="post" action="/admin/ranks/{{ r.id }}/remove" data-confirm="Remove {{ r.name }}?">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="btn btn-small btn-danger" type="submit">Remove</button>
+            </form>
+            <button type="button" class="btn btn-small js-edit-open" data-target="tpl-rank-{{ r.id }}">Edit</button>
+          </div>
           <template id="tpl-rank-{{ r.id }}">
             <h3 class="order-title">Edit Rank</h3>
             <form class="orders" method="post" action="/admin/ranks/{{ r.id }}/update" enctype="multipart/form-data">
@@ -271,18 +285,6 @@
               </div>
             </form>
           </template>
-        </td>
-        <td class="num">
-          <div class="inline-actions">
-            <form method="post" action="/admin/ranks/{{ r.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="up"><button class="btn btn-small" type="submit" title="Move up">▲</button></form>
-            <form method="post" action="/admin/ranks/{{ r.id }}/move"><input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="direction" value="down"><button class="btn btn-small" type="submit" title="Move down">▼</button></form>
-          </div>
-        </td>
-        <td class="num">
-          <form method="post" action="/admin/ranks/{{ r.id }}/remove" data-confirm="Remove {{ r.name }}?">
-            <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <button class="btn btn-small btn-danger" type="submit">Remove</button>
-          </form>
         </td>
       </tr>
     {% endfor %}
@@ -321,7 +323,21 @@
           {{ c.name }}
           {% if c.tag %}<span class="badge abbr">{{ c.tag }}</span>{% endif %}
           <span class="edit-summary">{% if c.role_id %}role {{ c.role_id }}{% endif %}</span>
-          <button type="button" class="btn btn-small js-edit-open" data-target="tpl-company-{{ c.id }}">Edit</button>
+        </td>
+        <td>
+          {% if c.is_default %}<span class="badge abbr">Default</span>
+          {% else %}
+            <form method="post" action="/admin/companies/{{ c.id }}/default"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small" type="submit">Make default</button></form>
+          {% endif %}
+        </td>
+        <td class="num">
+          <div class="inline-actions">
+            <form method="post" action="/admin/companies/{{ c.id }}/remove" data-confirm="Remove {{ c.name }}?">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="btn btn-small btn-danger" type="submit">Remove</button>
+            </form>
+            <button type="button" class="btn btn-small js-edit-open" data-target="tpl-company-{{ c.id }}">Edit</button>
+          </div>
           <template id="tpl-company-{{ c.id }}">
             <h3 class="order-title">Edit Company</h3>
             <form class="orders" method="post" action="/admin/companies/{{ c.id }}/update">
@@ -337,18 +353,6 @@
               </div>
             </form>
           </template>
-        </td>
-        <td>
-          {% if c.is_default %}<span class="badge abbr">Default</span>
-          {% else %}
-            <form method="post" action="/admin/companies/{{ c.id }}/default"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button class="btn btn-small" type="submit">Make default</button></form>
-          {% endif %}
-        </td>
-        <td class="num">
-          <form method="post" action="/admin/companies/{{ c.id }}/remove" data-confirm="Remove {{ c.name }}?">
-            <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <button class="btn btn-small btn-danger" type="submit">Remove</button>
-          </form>
         </td>
       </tr>
     {% endfor %}
