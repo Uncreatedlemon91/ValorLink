@@ -303,6 +303,19 @@
         });
       });
     })();
+
+    // Show the picked filename on a .file-btn (styled file input) instead of
+    // the browser's default "No file chosen" clutter.
+    (function () {
+      document.querySelectorAll('.file-btn input[type=file]').forEach(function (input) {
+        var label = input.nextElementSibling;
+        if (!label) return;
+        var placeholder = label.textContent;
+        input.addEventListener('change', function () {
+          label.textContent = input.files[0] ? input.files[0].name : placeholder;
+        });
+      });
+    })();
   </script>
 </body>
 </html>

@@ -243,19 +243,13 @@
             {% if r.image %}<img class="insignia-img" src="{{ r.image }}" alt="">{% endif %}
             <span>{{ r.name }}</span>
           </div>
-          <form class="medal-upload" method="post" action="/admin/ranks/{{ r.id }}/image" enctype="multipart/form-data">
-            <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
-            <button class="btn btn-small" type="submit">{{ 'Replace' if r.image else 'Insignia' }}</button>
-            {% if r.image %}<button class="btn btn-small btn-danger" type="submit" name="remove" value="1" title="Remove insignia">✕</button>{% endif %}
-          </form>
         </td>
         <td colspan="3">
-          <span class="edit-summary">{{ r.abbreviation }}{% if r.tier %} &middot; {{ r.tier }}{% endif %}{% if r.role_id %} &middot; role {{ r.role_id }}{% endif %}</span>
+          <span class="edit-summary">{{ r.abbreviation }}{% if r.tier %} &middot; {{ r.tier }}{% endif %}{% if r.role_id %} &middot; role <span class="role-id">{{ r.role_id }}</span>{% endif %}</span>
           <button type="button" class="btn btn-small js-edit-open" data-target="tpl-rank-{{ r.id }}">Edit</button>
           <template id="tpl-rank-{{ r.id }}">
             <h3 class="order-title">Edit Rank</h3>
-            <form class="orders" method="post" action="/admin/ranks/{{ r.id }}/update">
+            <form class="orders" method="post" action="/admin/ranks/{{ r.id }}/update" enctype="multipart/form-data">
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <div class="field"><label>Name</label><input name="name" value="{{ r.name }}" required></div>
               <div class="field-row">
@@ -263,6 +257,14 @@
                 <div class="field"><label>Tier <span class="opt">(opt.)</span></label><input name="tier" value="{{ r.tier or '' }}" placeholder="tier"></div>
               </div>
               <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" value="{{ r.role_id or '' }}" inputmode="numeric" placeholder="role ID"></div>
+              <div class="field">
+                <label>Insignia <span class="opt">(optional)</span></label>
+                <label class="btn btn-small file-btn" style="align-self:flex-start;">
+                  <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+                  <span class="file-name">{{ 'Replace image' if r.image else 'Choose Image' }}</span>
+                </label>
+                {% if r.image %}<label class="checkline"><input type="checkbox" name="remove_image" value="1"> Remove current insignia</label>{% endif %}
+              </div>
               <div class="field field-actions">
                 <button type="button" class="btn js-edit-cancel">Cancel</button>
                 <button type="submit" class="btn btn-strong">Save</button>
@@ -299,7 +301,10 @@
         <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
       </div>
       <div class="field"><label>Insignia image <span class="opt">(optional)</span></label>
-        <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+        <label class="btn btn-small file-btn" style="align-self:flex-start;">
+          <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+          <span class="file-name">Choose Image</span>
+        </label>
         <span class="order-note">Shown in the bot's promotion announcement. Under 256 KB.</span>
       </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Add rank</button></div>
