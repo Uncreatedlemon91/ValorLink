@@ -807,6 +807,7 @@ def roster(request: Request, session: Session = Depends(get_session), tab: str =
         has_assignments=bool(assignment_groups),
         active_tab=("assignments" if tab == "assignments" else "company"),
         rank_images=rank_images,
+        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
     )
     return templates.TemplateResponse(request, "roster.html", ctx)
 
@@ -1704,6 +1705,19 @@ def post_rank(
                redirect=f"/dossier/{discord_id}")
 
 
+@app.post("/members/{discord_id}/callsign")
+def post_callsign(
+    request: Request,
+    discord_id: int,
+    csrf: str = Form(...),
+    callsign: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.rename_member, actor, discord_id, callsign,
+               redirect="/roster")
+
+
 @app.post("/members/{discord_id}/company")
 def post_company(
     request: Request,
@@ -2358,11 +2372,12 @@ def post_company_update(
     request: Request,
     company_id: int,
     csrf: str = Form(...),
+    name: str = Form(...),
     role_id: str = Form(""),
     tag: str = Form(""),
     user: dict = Depends(auth.require_admin),
 ):
-    return _do(request, csrf, services.company_update, company_id, role_id, tag,
+    return _do(request, csrf, services.company_update, company_id, name, role_id, tag,
                redirect="/command-tent")
 
 

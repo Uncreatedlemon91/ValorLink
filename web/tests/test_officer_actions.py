@@ -1272,7 +1272,8 @@ def test_company_tag_update_enqueues_scoped_resync():
     with SessionLocal() as s:
         cid = s.query(Company).filter_by(name="Alpha").one().id
     client.post(f"/admin/companies/{cid}/update",
-                data={"csrf": _csrf(client, "/command-tent"), "role_id": "", "tag": "A"})
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Alpha",
+                      "role_id": "", "tag": "A"})
     with SessionLocal() as s:
         assert s.get(Company, cid).tag == "A"
     acts = _actions(queue.RESYNC_NICKNAMES)
@@ -1388,6 +1389,7 @@ def test_dossier_muster_and_promotions_show_rank_insignia():
 
 
 def test_rank_rename_updates_members_holding_it():
+    import json
     client = TestClient(app)
     _login(client, "admin")
     token = _csrf(client, "/command-tent")
@@ -1400,6 +1402,91 @@ def test_rank_rename_updates_members_holding_it():
         rank = s.get(Rank, rid)
         assert rank.name == "Recruit" and rank.abbreviation == "Rec"
         assert s.get(Member, MEMBER_ID).rank == "Recruit"
+    acts = _actions(queue.RESYNC_NICKNAMES)
+    assert acts and json.loads(acts[0].payload)["rank"] == "Recruit"
+
+
+def test_company_rename_updates_members_holding_it():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        cid = s.query(Company).filter_by(name="Alpha").one().id
+    r = client.post(f"/admin/companies/{cid}/update",
+                    data={"csrf": token, "name": "Alpha Company", "role_id": "", "tag": ""})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Company, cid).name == "Alpha Company"
+        assert s.get(Member, MEMBER_ID).company == "Alpha Company"
+    # a pure rename (tag unchanged) doesn't need a nickname rebuild
+    assert not _actions(queue.RESYNC_NICKNAMES)
+
+
+def test_rename_member_from_roster():
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/roster")
+    html = client.get("/roster").text
+    assert 'action="/members/%s/callsign"' % MEMBER_ID in html
+    r = client.post(f"/members/{MEMBER_ID}/callsign", data={"csrf": token, "callsign": "Renamed"})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.get(Member, MEMBER_ID).callsign == "Renamed"
+    assert "Renamed" in client.get("/roster").text
+    assert _actions(queue.RESYNC_NICKNAMES)
+
+
+def test_rename_member_requires_officer():
+    client = TestClient(app)
+    _login(client, "none")
+    html = client.get("/roster").text
+    assert "/callsign" not in html
+    r = client.post(f"/members/{MEMBER_ID}/callsign", data={"csrf": "x", "callsign": "Nope"},
+                    follow_redirects=False)
+    assert r.status_code == 403
+
+
+def test_rank_abbreviation_only_change_enqueues_scoped_resync():
+    import json
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+    r = client.post(f"/admin/ranks/{rid}/update",
+                    data={"csrf": token, "name": "Private", "abbreviation": "Rec", "tier": ""})
+    assert r.status_code == 200
+    acts = _actions(queue.RESYNC_NICKNAMES)
+    assert acts and json.loads(acts[0].payload)["rank"] == "Private"
+
+    # saving again unchanged does not re-queue
+    token = _csrf(client, "/command-tent")
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": token, "name": "Private", "abbreviation": "Rec", "tier": ""})
+    assert len(_actions(queue.RESYNC_NICKNAMES)) == 1
+
+
+def test_bridge_resync_scoped_to_rank():
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        s.add(Member(discord_id=601, callsign="Other", rank="Corporal", company="Alpha",
+                     status="active"))
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+    private_member = MagicMock()
+    private_member.id = MEMBER_ID
+    private_member.edit = AsyncMock()
+    corporal_member = MagicMock()
+    corporal_member.id = 601
+    corporal_member.edit = AsyncMock()
+    guild = MagicMock()
+    guild.get_member.side_effect = lambda did: (
+        private_member if did == MEMBER_ID else corporal_member if did == 601 else None
+    )
+    asyncio.run(bridge._do_resync_nicknames(guild, {"rank": "Private"}))
+    private_member.edit.assert_awaited_once()
+    corporal_member.edit.assert_not_called()
 
 
 def test_award_type_with_image_and_grant_carries_id():

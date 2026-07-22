@@ -663,6 +663,17 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   padding: 5px 7px;
 }
 .admin-table td { vertical-align: middle; }
+
+/* Inline rename toggle (roster/muster callsign edit) */
+.rename-toggle { display: inline-block; vertical-align: middle; margin-left: 6px; }
+.rename-toggle summary {
+  cursor: pointer; list-style: none; color: var(--ink-soft); font-size: 12px;
+  padding: 1px 5px; border: 1px solid transparent; border-radius: 1px;
+}
+.rename-toggle summary::-webkit-details-marker { display: none; }
+.rename-toggle summary:hover { color: var(--ink); border-color: var(--rule-strong); }
+.rename-toggle[open] summary { color: var(--brass); }
+.rename-toggle .rowform { margin-top: 4px; }
 .admin-table .inline-actions form { margin: 0; }
 
 /* Announcements composer (Headquarters) */

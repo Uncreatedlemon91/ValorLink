@@ -95,6 +95,26 @@ def list_audit(session, category: str = "", limit: int = 200) -> list[AuditEntry
     return q.order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit).all()
 
 
+# --- Profile --------------------------------------------------------------- #
+def rename_member(session, actor: dict, discord_id: int, new_callsign: str) -> str:
+    record = _member(session, discord_id)
+    new_callsign = new_callsign.strip()
+    if not new_callsign:
+        raise ActionError("A callsign can't be blank.")
+    if len(new_callsign) > 60:
+        raise ActionError("Callsigns are limited to 60 characters.")
+    old_callsign = record.callsign
+    if new_callsign == old_callsign:
+        raise ActionError(f"{old_callsign} is already using that callsign.")
+    record.callsign = new_callsign
+    _audit(session, actor, "roster", f"Renamed {old_callsign} to {new_callsign}.",
+           target_id=discord_id)
+    queue.enqueue(session, queue.RESYNC_NICKNAMES, {"discord_id": discord_id},
+                  actor_id=actor["id"])
+    session.commit()
+    return f"{old_callsign} renamed to {new_callsign}."
+
+
 # --- Rank ---------------------------------------------------------------- #
 def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str = "") -> str:
     new_record = rank_utils.rank_by_name(session, new_rank)
@@ -1001,6 +1021,7 @@ def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, 
     if name != rank.name and session.query(Rank).filter(Rank.name == name).one_or_none():
         raise ActionError(f"Rank '{name}' already exists.")
     old_name = rank.name
+    abbr_changed = abbreviation != rank.abbreviation
     rank.name = name
     rank.abbreviation = abbreviation
     rank.tier = tier.strip() or None
@@ -1009,6 +1030,10 @@ def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, 
         session.query(Member).filter(Member.rank == old_name).update(
             {Member.rank: name}, synchronize_session=False
         )
+    # A new name or abbreviation means every member holding this rank has a
+    # stale abbreviation baked into their Discord nickname until rebuilt.
+    if name != old_name or abbr_changed:
+        queue.enqueue(session, queue.RESYNC_NICKNAMES, {"rank": name})
     session.commit()
     return f"Rank '{old_name}' updated." if name == old_name else f"Rank '{old_name}' renamed to '{name}'."
 
@@ -1070,23 +1095,36 @@ def company_add(session, name: str, role_id: str = "", is_default: bool = False,
     return f"Company '{name}' added."
 
 
-def company_update(session, company_id: int, role_id: str, tag: str = "") -> str:
+def company_update(session, company_id: int, name: str, role_id: str, tag: str = "") -> str:
     company = session.get(Company, company_id)
     if company is None:
         raise ActionError("Unknown company.")
+    name = name.strip()
+    if not name:
+        raise ActionError("A company needs a name.")
+    if name != company.name and session.query(Company).filter(Company.name == name).one_or_none():
+        raise ActionError(f"Company '{name}' already exists.")
     tag = tag.strip()
     if len(tag) > 16:
         raise ActionError("The company tag must be 16 characters or fewer.")
     tag_changed = (company.tag or "") != (tag or "")
+    old_name = company.name
+    company.name = name
     company.role_id = _parse_id(role_id)
     company.tag = tag or None
+    if name != old_name:
+        session.query(Member).filter(Member.company == old_name).update(
+            {Member.company: name}, synchronize_session=False
+        )
     # Changing the tag means every member of this company needs a new nickname.
     if tag_changed:
-        queue.enqueue(session, queue.RESYNC_NICKNAMES, {"company": company.name})
+        queue.enqueue(session, queue.RESYNC_NICKNAMES, {"company": name})
     session.commit()
+    msg = (f"Company '{old_name}' updated." if name == old_name
+           else f"Company '{old_name}' renamed to '{name}'.")
     if tag_changed:
-        return f"Company '{company.name}' updated. Rebuilding member nicknames…"
-    return f"Company '{company.name}' updated."
+        msg += " Rebuilding member nicknames…"
+    return msg
 
 
 def company_set_default(session, company_id: int) -> str:
