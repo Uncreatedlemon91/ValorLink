@@ -1359,14 +1359,44 @@ def test_rank_add_with_insignia_image():
         assert rank.image and rank.image.startswith("data:image/png;base64,")
 
 
+def test_rank_update_can_set_keep_and_remove_image():
+    client = TestClient(app)
+    _login(client, "admin")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+
+    # setting an image alongside the other fields in one save
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Private",
+                      "abbreviation": "Pvt", "tier": ""},
+                files={"image": ("i.png", _PNG, "image/png")})
+    with SessionLocal() as s:
+        assert s.get(Rank, rid).image and s.get(Rank, rid).image.startswith("data:image/png;base64,")
+
+    # a text-only save (no file attached) leaves the existing image alone
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Private",
+                      "abbreviation": "Pvt", "tier": "Enlisted"})
+    with SessionLocal() as s:
+        rank = s.get(Rank, rid)
+        assert rank.tier == "Enlisted" and rank.image
+
+    # checking "remove current insignia" clears it
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "Private",
+                      "abbreviation": "Pvt", "tier": "Enlisted", "remove_image": "1"})
+    with SessionLocal() as s:
+        assert s.get(Rank, rid).image is None
+
+
 def test_roster_shows_rank_insignia():
     client = TestClient(app)
     _login(client, "admin")
     token = _csrf(client, "/command-tent")
     with SessionLocal() as s:
         rid = s.query(Rank).filter_by(name="Private").one().id
-    client.post(f"/admin/ranks/{rid}/image",
-                data={"csrf": token},
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": token, "name": "Private", "abbreviation": "Pvt", "tier": ""},
                 files={"image": ("i.png", _PNG, "image/png")})
     r = client.get("/roster")
     assert r.status_code == 200
@@ -1379,8 +1409,8 @@ def test_dossier_muster_and_promotions_show_rank_insignia():
     token = _csrf(client, "/command-tent")
     with SessionLocal() as s:
         rid = s.query(Rank).filter_by(name="Private").one().id
-    client.post(f"/admin/ranks/{rid}/image",
-                data={"csrf": token},
+    client.post(f"/admin/ranks/{rid}/update",
+                data={"csrf": token, "name": "Private", "abbreviation": "Pvt", "tier": ""},
                 files={"image": ("i.png", _PNG, "image/png")})
 
     assert "data:image/png;base64," in client.get(f"/dossier/{MEMBER_ID}").text

@@ -2293,31 +2293,8 @@ async def post_rank_add(
                redirect="/command-tent")
 
 
-@app.post("/admin/ranks/{rank_id}/image")
-async def post_rank_image(
-    request: Request,
-    rank_id: int,
-    csrf: str = Form(...),
-    remove: str = Form(""),
-    image: UploadFile = File(None),
-    user: dict = Depends(auth.require_admin),
-):
-    if remove:
-        return _do(request, csrf, services.set_rank_image, rank_id, None,
-                   redirect="/command-tent")
-    if not (image and image.filename):
-        _flash(request, "Choose an image to upload.", "error")
-        return RedirectResponse("/command-tent", status_code=303)
-    try:
-        uri = await _image_data_uri(image)
-    except ValueError as exc:
-        _flash(request, str(exc), "error")
-        return RedirectResponse("/command-tent", status_code=303)
-    return _do(request, csrf, services.set_rank_image, rank_id, uri, redirect="/command-tent")
-
-
 @app.post("/admin/ranks/{rank_id}/update")
-def post_rank_update(
+async def post_rank_update(
     request: Request,
     rank_id: int,
     csrf: str = Form(...),
@@ -2325,10 +2302,17 @@ def post_rank_update(
     abbreviation: str = Form(...),
     tier: str = Form(""),
     role_id: str = Form(""),
+    remove_image: str = Form(""),
+    image: UploadFile = File(None),
     user: dict = Depends(auth.require_admin),
 ):
+    try:
+        uri = await _image_data_uri(image) if image and image.filename else None
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/command-tent", status_code=303)
     return _do(request, csrf, services.rank_update, rank_id, name, abbreviation, tier, role_id,
-               redirect="/command-tent")
+               uri, bool(remove_image), redirect="/command-tent")
 
 
 @app.post("/admin/ranks/{rank_id}/move")

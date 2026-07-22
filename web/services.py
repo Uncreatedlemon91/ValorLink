@@ -966,16 +966,6 @@ def set_digest_enabled(session, enabled: bool) -> str:
             else "Weekly officer digest turned off.")
 
 
-# --- Admin: ranks -------------------------------------------------------- #
-def set_rank_image(session, rank_id: int, image: str | None) -> str:
-    rank = session.get(Rank, rank_id)
-    if rank is None:
-        raise ActionError("Unknown rank.")
-    rank.image = image
-    session.commit()
-    return (f"Insignia set for {rank.name}." if image else f"Insignia removed from {rank.name}.")
-
-
 def set_award_image(session, award_type_id: int, image: str | None) -> str:
     award = session.get(AwardType, award_type_id)
     if award is None:
@@ -985,6 +975,7 @@ def set_award_image(session, award_type_id: int, image: str | None) -> str:
     return (f"Image set for {award.name}." if image else f"Image removed from {award.name}.")
 
 
+# --- Admin: ranks -------------------------------------------------------- #
 def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str = "",
              image: str | None = None) -> str:
     name = name.strip()
@@ -1008,7 +999,8 @@ def rank_add(session, name: str, abbreviation: str, tier: str = "", role_id: str
     return f"Rank '{name}' added at the top of the ladder."
 
 
-def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, role_id: str) -> str:
+def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, role_id: str,
+                image: str | None = None, remove_image: bool = False) -> str:
     rank = session.get(Rank, rank_id)
     if rank is None:
         raise ActionError("Unknown rank.")
@@ -1026,6 +1018,10 @@ def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, 
     rank.abbreviation = abbreviation
     rank.tier = tier.strip() or None
     rank.role_id = _parse_id(role_id)
+    if remove_image:
+        rank.image = None
+    elif image:
+        rank.image = image
     if name != old_name:
         session.query(Member).filter(Member.rank == old_name).update(
             {Member.rank: name}, synchronize_session=False
