@@ -663,17 +663,8 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   padding: 5px 7px;
 }
 .admin-table td { vertical-align: middle; }
-
-/* Inline rename toggle (roster/muster callsign edit) */
-.rename-toggle { display: inline-block; vertical-align: middle; margin-left: 6px; }
-.rename-toggle summary {
-  cursor: pointer; list-style: none; color: var(--ink-soft); font-size: 12px;
-  padding: 1px 5px; border: 1px solid transparent; border-radius: 1px;
-}
-.rename-toggle summary::-webkit-details-marker { display: none; }
-.rename-toggle summary:hover { color: var(--ink); border-color: var(--rule-strong); }
-.rename-toggle[open] summary { color: var(--brass); }
-.rename-toggle .rowform { margin-top: 4px; }
+.edit-summary { color: var(--ink-soft); font-size: 13px; margin-right: 8px; }
+.js-edit-open { margin-left: 4px; }
 .admin-table .inline-actions form { margin: 0; }
 
 /* Announcements composer (Headquarters) */
@@ -761,6 +752,9 @@ body.theme-dark .approve-as select { background: #14171b; color: #d8dde3; border
 body.theme-dark .modal { background: #1c2025; }
 .modal-msg { margin: 0 0 18px; color: var(--ink); font-size: 15px; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal-edit { max-width: 440px; text-align: left; }
+.modal-edit .order-title { margin: 0 0 4px; }
+.modal-edit .field-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* Responsive tables: let wide ledgers scroll instead of breaking the layout */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 4px 0; }

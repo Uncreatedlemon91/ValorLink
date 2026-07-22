@@ -272,6 +272,37 @@
         });
       });
     })();
+
+    // Generic "Edit" modal: a button marked .js-edit-open clones the
+    // <template> named in its data-target into a shared overlay, so table
+    // rows show a compact summary until an officer chooses to edit them.
+    // Forms inside submit normally (full page reload), same as every other
+    // form on the site.
+    (function () {
+      var triggers = document.querySelectorAll('.js-edit-open');
+      if (!triggers.length) return;
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = '<div class="modal modal-edit" role="dialog" aria-modal="true"></div>';
+      document.body.appendChild(overlay);
+      var box = overlay.querySelector('.modal-edit');
+      function hide() { overlay.classList.remove('open'); box.innerHTML = ''; }
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) hide(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+      triggers.forEach(function (btn) {
+        var tpl = document.getElementById(btn.dataset.target);
+        if (!tpl) return;
+        btn.addEventListener('click', function () {
+          box.innerHTML = '';
+          box.appendChild(tpl.content.cloneNode(true));
+          var cancel = box.querySelector('.js-edit-cancel');
+          if (cancel) cancel.addEventListener('click', hide);
+          overlay.classList.add('open');
+          var firstInput = box.querySelector('input, select, textarea');
+          if (firstInput) firstInput.focus();
+        });
+      });
+    })();
   </script>
 </body>
 </html>
