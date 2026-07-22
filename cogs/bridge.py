@@ -752,14 +752,18 @@ class Bridge(commands.Cog):
         await channel.send(embed=embed)
 
     async def _do_resync_nicknames(self, guild, p):
-        """Rebuild member nicknames after a unit or company tag changed. An
-        optional ``company`` in the payload narrows it to that company's
-        members; otherwise every non-discharged member is refreshed."""
+        """Rebuild member nicknames after a unit or company tag changed, or a
+        rank's name/abbreviation was edited. An optional ``company`` or
+        ``rank`` in the payload narrows it to those members; otherwise every
+        non-discharged member is refreshed."""
         company = p.get("company")
+        rank = p.get("rank")
         with db_session() as session:
             q = session.query(Member.discord_id).filter(Member.status != "discharged")
             if company:
                 q = q.filter(Member.company == company)
+            if rank:
+                q = q.filter(Member.rank == rank)
             member_ids = [row[0] for row in q]
         for discord_id in member_ids:
             member = guild.get_member(discord_id)

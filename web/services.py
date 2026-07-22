@@ -1001,6 +1001,7 @@ def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, 
     if name != rank.name and session.query(Rank).filter(Rank.name == name).one_or_none():
         raise ActionError(f"Rank '{name}' already exists.")
     old_name = rank.name
+    abbr_changed = abbreviation != rank.abbreviation
     rank.name = name
     rank.abbreviation = abbreviation
     rank.tier = tier.strip() or None
@@ -1009,6 +1010,10 @@ def rank_update(session, rank_id: int, name: str, abbreviation: str, tier: str, 
         session.query(Member).filter(Member.rank == old_name).update(
             {Member.rank: name}, synchronize_session=False
         )
+    # A new name or abbreviation means every member holding this rank has a
+    # stale abbreviation baked into their Discord nickname until rebuilt.
+    if name != old_name or abbr_changed:
+        queue.enqueue(session, queue.RESYNC_NICKNAMES, {"rank": name})
     session.commit()
     return f"Rank '{old_name}' updated." if name == old_name else f"Rank '{old_name}' renamed to '{name}'."
 
