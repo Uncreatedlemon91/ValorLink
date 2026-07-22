@@ -22,8 +22,8 @@ This is a shortlist for your judgement, not an automatic promotion.</p>
     <tr class="{{ 'promo-ready' if r.eligible }}">
       <td class="callsign"><a href="/dossier/{{ r.member.discord_id }}">{{ r.member.callsign }}</a>
         {% if r.eligible %}<span class="promo-badge">ready</span>{% endif %}</td>
-      <td>{{ r.member.rank }}</td>
-      <td class="promo-next">{{ r.next_rank }}</td>
+      <td>{% if rank_images.get(r.member.rank) %}<img class="insignia-img" src="{{ rank_images[r.member.rank] }}" alt="">{% endif %} {{ r.member.rank }}</td>
+      <td class="promo-next">{% if rank_images.get(r.next_rank) %}<img class="insignia-img" src="{{ rank_images[r.next_rank] }}" alt="">{% endif %} {{ r.next_rank }}</td>
       <td class="num {{ '' if r.meets_time else 'promo-short' }}">{{ r.days_in_rank }}d</td>
       <td class="num {{ '' if r.meets_att else 'promo-short' }}">
         {% if r.attendance.pct is not none %}{{ r.attendance.pct }}%{% else %}<span class="muted">—</span>{% endif %}
