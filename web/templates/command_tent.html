@@ -245,13 +245,16 @@
           </div>
           <form class="medal-upload" method="post" action="/admin/ranks/{{ r.id }}/image" enctype="multipart/form-data">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+            <label class="btn btn-small file-btn">
+              <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+              <span class="file-name">Choose Image</span>
+            </label>
             <button class="btn btn-small" type="submit">{{ 'Replace' if r.image else 'Insignia' }}</button>
             {% if r.image %}<button class="btn btn-small btn-danger" type="submit" name="remove" value="1" title="Remove insignia">✕</button>{% endif %}
           </form>
         </td>
         <td colspan="3">
-          <span class="edit-summary">{{ r.abbreviation }}{% if r.tier %} &middot; {{ r.tier }}{% endif %}{% if r.role_id %} &middot; role {{ r.role_id }}{% endif %}</span>
+          <span class="edit-summary">{{ r.abbreviation }}{% if r.tier %} &middot; {{ r.tier }}{% endif %}{% if r.role_id %} &middot; role <span class="role-id">{{ r.role_id }}</span>{% endif %}</span>
           <button type="button" class="btn btn-small js-edit-open" data-target="tpl-rank-{{ r.id }}">Edit</button>
           <template id="tpl-rank-{{ r.id }}">
             <h3 class="order-title">Edit Rank</h3>
@@ -299,7 +302,10 @@
         <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
       </div>
       <div class="field"><label>Insignia image <span class="opt">(optional)</span></label>
-        <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+        <label class="btn btn-small file-btn" style="align-self:flex-start;">
+          <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+          <span class="file-name">Choose Image</span>
+        </label>
         <span class="order-note">Shown in the bot's promotion announcement. Under 256 KB.</span>
       </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Add rank</button></div>
