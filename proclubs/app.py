@@ -105,7 +105,12 @@ def matches(club_id):
     platform = request.args.get("platform", "")
     match_type = request.args.get("matchType", "leagueMatch")
     try:
-        data = ea_client.matches_stats(platform, club_id, match_type)
+        count = int(request.args.get("count", 10))
+    except ValueError:
+        return jsonify({"error": "count must be an integer"}), 400
+    count = max(1, min(count, 30))  # EA doesn't return much beyond ~30 anyway
+    try:
+        data = ea_client.matches_stats(platform, club_id, match_type, max_results=count)
     except ea_client.EAApiError as exc:
         return error_response(exc)
     return jsonify(data)

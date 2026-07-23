@@ -80,7 +80,7 @@ async function loadClub(clubId, platform) {
     api(`/api/clubs/${clubId}/overview?platform=${platform}`),
     api(`/api/clubs/${clubId}/standings?platform=${platform}`),
     api(`/api/clubs/${clubId}/members?platform=${platform}`),
-    api(`/api/clubs/${clubId}/matches?platform=${platform}&matchType=leagueMatch`),
+    api(`/api/clubs/${clubId}/matches?platform=${platform}&matchType=leagueMatch&count=10`),
   ]);
 
   latestMatches = matches.status === 'fulfilled' ? matches.value || [] : [];
@@ -88,8 +88,26 @@ async function loadClub(clubId, platform) {
   renderOverview(overview);
   renderStandings(standings);
   renderMembers(members);
-  renderMatches(matches);
+  renderMatches(matches, 'leagueMatch', 10);
   setStatus('');
+}
+
+// Re-fetches just the Matches tab with new matchType/count controls, without
+// reloading the other three tabs. Also refreshes latestMatches, so a
+// goalkeeper's save breakdown on the Members tab reflects whatever sample
+// is currently loaded here.
+async function reloadMatches(matchType, count) {
+  const panel = document.getElementById('tab-matches');
+  panel.style.opacity = '0.5'; // hold the previous render while refetching
+  try {
+    const data = await api(
+      `/api/clubs/${currentClubId}/matches?platform=${currentPlatform}&matchType=${matchType}&count=${count}`
+    );
+    latestMatches = data || [];
+    renderMatches({ status: 'fulfilled', value: data }, matchType, count);
+  } catch (err) {
+    renderMatches({ status: 'rejected', reason: err }, matchType, count);
+  }
 }
 
 function panelError(panel, result) {
@@ -561,12 +579,65 @@ function goalkeeperSectionHtml(idx) {
   `;
 }
 
-function renderMatches(result) {
+const MATCH_TYPES = [
+  { value: 'leagueMatch', label: 'League' },
+  { value: 'playoffMatch', label: 'Playoff' },
+  { value: 'friendlyMatch', label: 'Friendly' },
+];
+const MATCH_COUNTS = [10, 20, 30];
+
+function matchControlsHtml(matchType, count) {
+  const typeOptions = MATCH_TYPES.map(
+    (t) => `<option value="${t.value}" ${t.value === matchType ? 'selected' : ''}>${t.label}</option>`
+  ).join('');
+  const countOptions = MATCH_COUNTS.map(
+    (c) => `<option value="${c}" ${c === count ? 'selected' : ''}>${c} matches</option>`
+  ).join('');
+  return `
+    <div class="search-row match-controls">
+      <select id="match-type-select">${typeOptions}</select>
+      <select id="match-count-select">${countOptions}</select>
+      <p class="chart-caption">EA's API may cap how many matches it returns regardless of this selector.</p>
+    </div>
+  `;
+}
+
+function wireMatchControls(matchType, count) {
+  document.getElementById('match-type-select').addEventListener('change', (e) => {
+    reloadMatches(e.target.value, count);
+  });
+  document.getElementById('match-count-select').addEventListener('change', (e) => {
+    reloadMatches(matchType, Number(e.target.value));
+  });
+}
+
+// Team-level totals for OUR club from one match's per-player breakdown --
+// used for the shots/pass-accuracy trend charts and the MOTM leaderboard.
+function teamMatchAggregate(rawMatch) {
+  const roster = Object.values(rawMatch.players?.[currentClubId] || {});
+  return {
+    shots: roster.reduce((s, p) => s + num(p.shots), 0),
+    passesMade: roster.reduce((s, p) => s + num(p.passesmade), 0),
+    passAttempts: roster.reduce((s, p) => s + num(p.passattempts), 0),
+    redCards: roster.reduce((s, p) => s + num(p.redcards), 0),
+    motm: roster.find((p) => num(p.mom) === 1)?.playername ?? null,
+  };
+}
+
+function renderMatches(result, matchType = 'leagueMatch', count = 10) {
   const panel = document.getElementById('tab-matches');
-  if (result.status !== 'fulfilled') return panelError(panel, result);
+  if (result.status !== 'fulfilled') {
+    panel.style.opacity = '1';
+    panel.innerHTML = `${matchControlsHtml(matchType, count)}<p style="color:#e05a5a">${esc(result.reason.message)}</p>`;
+    wireMatchControls(matchType, count);
+    return;
+  }
   const matches = result.value || [];
+  panel.style.opacity = '1';
+
   if (!matches.length) {
-    panel.innerHTML = '<p>No recent matches found.</p>';
+    panel.innerHTML = `${matchControlsHtml(matchType, count)}<p>No matches found for this filter.</p>`;
+    wireMatchControls(matchType, count);
     return;
   }
 
@@ -582,17 +653,26 @@ function renderMatches(result) {
       const oppScore = num(oppClub?.goals);
       const outcome = usClub?.wins === '1' ? 'W' : usClub?.losses === '1' ? 'L' : 'D';
       const when = m.timeAgo ? `${m.timeAgo.number} ${m.timeAgo.unit} ago` : '-';
-      return { when, outcome, usScore, oppScore, oppName };
+      const forfeit = usClub?.winnerByDnf === '1' || oppClub?.winnerByDnf === '1';
+      const cleanSheet = !forfeit && oppScore === 0;
+      const team = teamMatchAggregate(m);
+      return { when, outcome, usScore, oppScore, oppName, forfeit, cleanSheet, team };
     });
 
     const rows = parsed
       .map(
-        (p, i) =>
-          `<tr class="match-row" data-idx="${i}" tabindex="0"><td>${p.when}</td><td>${p.outcome}</td><td>${p.usScore} - ${p.oppScore}</td><td>${esc(p.oppName)}</td></tr>`
+        (p, i) => `
+      <tr class="match-row" data-idx="${i}" tabindex="0">
+        <td>${p.when}</td>
+        <td>${p.outcome}${p.forfeit ? ' <span class="badge badge-warn">FF</span>' : ''}</td>
+        <td>${p.usScore} - ${p.oppScore}</td>
+        <td>${esc(p.oppName)}</td>
+      </tr>`
       )
       .join('');
 
     panel.innerHTML = `
+      ${matchControlsHtml(matchType, count)}
       <div class="chart-row">
         <div class="chart-card">
           <h3>Goal Differential</h3>
@@ -604,11 +684,38 @@ function renderMatches(result) {
           <div id="chart-results"></div>
         </div>
       </div>
+      <div class="chart-row">
+        <div class="chart-card">
+          <h3>Shots per Match</h3>
+          <div id="chart-shots"></div>
+          <p class="chart-caption">Oldest &rarr; most recent. Team total, forfeits excluded.</p>
+        </div>
+        <div class="chart-card">
+          <h3>Pass Accuracy per Match</h3>
+          <div id="chart-passacc"></div>
+        </div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-card">
+          <h3>Man of the Match (this sample)</h3>
+          <div id="chart-motm"></div>
+        </div>
+        <div class="chart-card">
+          <h3>This stretch</h3>
+          <div class="stat-grid compact">
+            ${statCard('Clean Sheets', parsed.filter((p) => p.cleanSheet).length)}
+            ${statCard('Forfeits', parsed.filter((p) => p.forfeit).length)}
+            ${statCard('Red Cards (team)', parsed.reduce((s, p) => s + p.team.redCards, 0))}
+          </div>
+        </div>
+      </div>
       <p class="chart-caption">Click a match for each player's individual stats from that game.</p>
       <table>
         <thead><tr><th>When</th><th>Result</th><th>Score</th><th>Opponent</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+
+    wireMatchControls(matchType, count);
 
     panel.querySelectorAll('.match-row').forEach((row) => {
       const idx = Number(row.dataset.idx);
@@ -622,10 +729,26 @@ function renderMatches(result) {
     });
 
     const oldestFirst = [...parsed].reverse();
+    const nonForfeit = oldestFirst.filter((p) => !p.forfeit);
+
     Charts.divergingBarChart(document.getElementById('chart-goaldiff'), {
       data: oldestFirst.map((p) => ({ label: p.oppName, value: p.usScore - p.oppScore })),
       positiveColor: 'var(--series-1)',
       negativeColor: 'var(--series-8)',
+    });
+
+    Charts.trendBarChart(document.getElementById('chart-shots'), {
+      data: nonForfeit.map((p) => ({ label: `vs ${p.oppName}`, value: p.team.shots })),
+      color: 'var(--series-1)',
+    });
+
+    Charts.trendBarChart(document.getElementById('chart-passacc'), {
+      data: nonForfeit.map((p) => ({
+        label: `vs ${p.oppName}`,
+        value: p.team.passAttempts ? Math.round((p.team.passesMade / p.team.passAttempts) * 100) : 0,
+      })),
+      color: 'var(--series-2)',
+      unit: '%',
     });
 
     const wins = parsed.filter((p) => p.outcome === 'W').length;
@@ -638,10 +761,24 @@ function renderMatches(result) {
         { label: 'Ties', value: ties, color: 'var(--status-neutral)' },
       ],
     });
+
+    const motmCounts = {};
+    parsed.forEach((p) => {
+      if (p.team.motm) motmCounts[p.team.motm] = (motmCounts[p.team.motm] || 0) + 1;
+    });
+    const motmData = Object.entries(motmCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([label, value]) => ({ label, value }));
+    Charts.hBarChart(document.getElementById('chart-motm'), {
+      data: motmData,
+      color: 'var(--series-5)',
+    });
   } catch (err) {
     // The matches schema is undocumented and unofficial -- fall back to raw
     // JSON if the shape doesn't match what we expect.
-    panel.innerHTML = `<p style="color:var(--muted)">Couldn't parse match data into a table, showing raw response:</p><pre>${JSON.stringify(matches, null, 2)}</pre>`;
+    panel.innerHTML = `${matchControlsHtml(matchType, count)}<p style="color:var(--muted)">Couldn't parse match data into a table, showing raw response:</p><pre>${JSON.stringify(matches, null, 2)}</pre>`;
+    wireMatchControls(matchType, count);
   }
 }
 
@@ -657,16 +794,32 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
   const rowsHtml = roster
     .map((p) => {
       const passPct = num(p.passattempts) ? `${Math.round((num(p.passesmade) / num(p.passattempts)) * 100)}%` : '-';
+      const tacklePct = num(p.tackleattempts)
+        ? `${Math.round((num(p.tacklesmade) / num(p.tackleattempts)) * 100)}%`
+        : '-';
+      const minutes = Math.round(num(p.secondsPlayed ?? p.gameTime) / 60);
       const saves = p.pos === 'goalkeeper' ? p.saves ?? '0' : '-';
+      const badges = [
+        num(p.mom) === 1 ? '<span class="badge badge-motm">MOTM</span>' : '',
+        num(p.redcards) > 0 ? '<span class="badge badge-warn">RC</span>' : '',
+        num(p.cleansheetsgk) === 1 || num(p.cleansheetsdef) === 1
+          ? '<span class="badge badge-good">CS</span>'
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
       return `<tr>
         <td>${esc(p.playername ?? '-')}</td>
         <td>${esc(p.pos ?? '-')}</td>
+        <td>${minutes || '-'}</td>
         <td>${p.rating ?? '-'}</td>
         <td>${p.goals ?? '-'}</td>
         <td>${p.assists ?? '-'}</td>
         <td>${p.shots ?? '-'}</td>
         <td>${passPct}</td>
+        <td>${tacklePct}</td>
         <td>${saves}</td>
+        <td>${badges || '-'}</td>
       </tr>`;
     })
     .join('');
@@ -675,7 +828,12 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
     <div class="chart-card match-roster">
       <h3>${clubName}${isOwnClub ? ' (You)' : ''}</h3>
       <table class="mini-table">
-        <thead><tr><th>Name</th><th>Pos</th><th>Rtg</th><th>G</th><th>A</th><th>Shots</th><th>Pass%</th><th>Saves</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Name</th><th>Pos</th><th>Min</th><th>Rtg</th><th>G</th><th>A</th>
+            <th>Shots</th><th>Pass%</th><th>Tkl%</th><th>Saves</th><th></th>
+          </tr>
+        </thead>
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>`;

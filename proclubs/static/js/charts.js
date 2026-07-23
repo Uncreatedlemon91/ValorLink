@@ -190,6 +190,38 @@ const Charts = (() => {
     container.appendChild(svg);
   }
 
+  // Trend bar chart -- a magnitude per match across many matches (shots,
+  // pass accuracy, %), narrow bars so 10-30 points still fit comfortably.
+  // Single hue: one series, no legend needed.
+  function trendBarChart(container, { data, color, unit = '' }) {
+    container.innerHTML = '';
+    if (!data.length) return emptyState(container);
+
+    const max = Math.max(...data.map((d) => d.value), 1);
+    const barW = 14;
+    const gap = 8;
+    const chartH = 110;
+    const width = data.length * (barW + gap) + gap;
+
+    const svg = svgEl('svg', { viewBox: `0 0 ${width} ${chartH}`, width: '100%', height: chartH });
+    svg.appendChild(svgEl('line', { x1: 0, y1: chartH, x2: width, y2: chartH, class: 'chart-baseline' }));
+
+    data.forEach((d, i) => {
+      const x = gap + i * (barW + gap);
+      const h = Math.max((d.value / max) * (chartH - 10), 2);
+      const y = chartH - h;
+
+      const rect = svgEl('rect', { x, y, width: barW, height: h, rx: 3, class: 'chart-bar' });
+      rect.style.fill = color;
+
+      attachHover(rect, () => [{ label: d.label, value: `${d.value}${unit}`, color }]);
+
+      svg.appendChild(rect);
+    });
+
+    container.appendChild(svg);
+  }
+
   // Diverging bar chart -- goal differential per match, centered on a zero
   // baseline. blue = positive, red = negative (the palette's diverging pair).
   function divergingBarChart(container, { data, unit = '', positiveColor, negativeColor }) {
@@ -309,5 +341,5 @@ const Charts = (() => {
     container.appendChild(svg);
   }
 
-  return { hBarChart, vBarChart, divergingBarChart, donutChart, sparkline, legend, emptyState };
+  return { hBarChart, vBarChart, trendBarChart, divergingBarChart, donutChart, sparkline, legend, emptyState };
 })();

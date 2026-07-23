@@ -380,7 +380,7 @@ pre {
 }
 
 .match-roster {
-  flex: 1 1 320px;
+  flex: 1 1 460px;
 }
 
 .mini-table {
@@ -390,4 +390,37 @@ pre {
 .mini-table th,
 .mini-table td {
   padding: 0.35rem 0.5rem;
+  white-space: nowrap;
+}
+
+.match-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.match-controls select {
+  width: auto;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0a0f0c;
+}
+
+.badge-motm {
+  background: var(--series-4);
+}
+
+.badge-warn {
+  background: var(--status-warning);
+}
+
+.badge-good {
+  background: var(--status-good);
+  color: #fff;
 }
