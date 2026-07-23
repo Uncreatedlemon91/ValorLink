@@ -443,6 +443,7 @@ def _render_home(request: Request):
         "now": datetime.utcnow(),
         "activity": _platform_activity(),
         "is_platform_admin": _is_platform_admin(user),
+        "invite_url": _bot_invite_url(),
     }
     return templates.TemplateResponse(request, "home.html", ctx)
 

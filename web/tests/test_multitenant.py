@@ -84,6 +84,26 @@ def test_apex_home_is_informative_with_navigation():
     assert "My Units" in html
 
 
+def test_home_shows_invite_bot_link_when_configured():
+    c = TestClient(app)
+    # no DISCORD_CLIENT_ID configured -> no invite card
+    html = c.get("/", headers={"host": APEX}).text
+    assert "Invite the Bot" not in html
+
+    old = os.environ.get("DISCORD_CLIENT_ID")
+    os.environ["DISCORD_CLIENT_ID"] = "999888777"
+    try:
+        html = c.get("/", headers={"host": APEX}).text
+        assert "Invite the Bot" in html
+        assert "client_id=999888777" in html
+        assert "discord.com/oauth2/authorize" in html
+    finally:
+        if old is None:
+            os.environ.pop("DISCORD_CLIENT_ID", None)
+        else:
+            os.environ["DISCORD_CLIENT_ID"] = old
+
+
 def test_home_shows_my_units_nav_when_signed_in():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 7, "name": "Gen", "tier": "admin"},
