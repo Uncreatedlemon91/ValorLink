@@ -522,6 +522,23 @@
     <p class="order-note">Your portal: <a href="{{ listing.url }}">{{ listing.url }}</a></p>
   </div>
 
+  <h2 class="section">Web Address <span class="tally">your unit's subdomain</span></h2>
+  <div class="order-card" style="max-width:640px;">
+    <form class="orders" method="post" action="/admin/slug"
+          data-confirm="Change your web address? Anyone with the old link — bookmarks, saved Discord invites, shared URLs — will get a 404 immediately. This can't be undone automatically.">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field">
+        <label>Subdomain</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input name="slug" required maxlength="30" pattern="[a-z0-9][a-z0-9-]{0,28}[a-z0-9]?" value="{{ listing.slug }}" style="max-width:220px;">
+          <span class="muted">.{{ listing.base_domain }}</span>
+        </div>
+        <span class="order-note">Lowercase letters, numbers, and hyphens only. Changing this moves your site to the new address right away — old links stop working, and the old handle isn't held for you.</span>
+      </div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Change web address</button></div>
+    </form>
+  </div>
+
   <h2 class="section">Discord Server <span class="tally">which server the bot manages</span></h2>
   <div class="order-card" style="max-width:640px;">
     <form class="orders" method="post" action="/admin/discord-link">

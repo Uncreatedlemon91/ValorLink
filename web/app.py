@@ -1370,6 +1370,8 @@ def command_tent(request: Request, session: Session = Depends(get_session),
                     "listed": row.listed,
                     "discord_guild_id": row.discord_guild_id or "",
                     "url": f"https://{row.slug}.{os.getenv('PLATFORM_BASE_DOMAIN')}/",
+                    "slug": row.slug,
+                    "base_domain": os.getenv("PLATFORM_BASE_DOMAIN"),
                 }
 
     ctx.update(
@@ -3026,6 +3028,45 @@ def post_listing(
         else:
             _flash(request, "This unit isn't in the registry.", "error")
     return RedirectResponse("/command-tent", status_code=303)
+
+
+@app.post("/admin/slug")
+def post_slug(
+    request: Request,
+    csrf: str = Form(...),
+    slug: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    base_domain = os.getenv("PLATFORM_BASE_DOMAIN")
+    if not base_domain:
+        _flash(request, "Subdomains aren't used in single-unit mode.", "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    from tenancy.provision import ProvisionError, rename_unit_slug
+    tenant = resolve_tenant(request)
+    old_slug = tenant.slug
+    try:
+        new_slug = rename_unit_slug(old_slug, slug)
+    except ProvisionError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse("/command-tent", status_code=303)
+    # The session's per-unit tier map is keyed by slug, so without this the
+    # acting admin would look like a visitor on their own unit's new address
+    # until they signed in again.
+    sess_user = request.session.get("user")
+    if sess_user:
+        tiers = sess_user.get("tiers")
+        if tiers and old_slug in tiers:
+            tiers[new_slug] = tiers.pop(old_slug)
+        if sess_user.get("tenant") == old_slug:
+            sess_user["tenant"] = new_slug
+    # The current host no longer resolves to this unit once its slug has
+    # changed, so send the admin to the new subdomain rather than a relative
+    # path (which would 404 against the old, now-unclaimed handle).
+    _flash(request, f"Web address changed to {new_slug}.{base_domain} — update any saved links.", "ok")
+    return RedirectResponse(f"https://{new_slug}.{base_domain}/command-tent", status_code=303)
 
 
 @app.post("/admin/import-roster")

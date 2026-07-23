@@ -279,6 +279,73 @@ def test_admin_edits_discord_server_id():
         assert tenant_by_slug(s, "2ndus").discord_guild_id is None
 
 
+def test_admin_changes_web_address():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 7, "name": "Gen. Test", "tier": "admin"},
+           headers=_host("2ndus"), follow_redirects=False)
+    token = _csrf(c, "/command-tent", _host("2ndus"))
+    r = c.post("/admin/slug", data={"csrf": token, "slug": "second-us"},
+               headers=_host("2ndus"), follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "https://second-us.valorlink.co/command-tent"
+    with registry_session() as s:
+        assert tenant_by_slug(s, "second-us") is not None
+        assert tenant_by_slug(s, "2ndus") is None
+    # a taken handle is refused, and the old handle keeps resolving
+    token = _csrf(c, "/command-tent", _host("second-us"))
+    r = c.post("/admin/slug", data={"csrf": token, "slug": "5thva"},
+               headers=_host("second-us"), follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/command-tent"
+    with registry_session() as s:
+        assert tenant_by_slug(s, "second-us") is not None
+
+
+def test_slug_rename_cascades_across_alliance_tables():
+    from datetime import datetime
+    from tenancy.alliances import accept_invite, alliance_detail, create_alliance, invite_unit
+    from tenancy.alliance_events import create_event, rsvp, upcoming_events
+    from tenancy.provision import rename_unit_slug
+    from tenancy.registry import AllianceEvent, AllianceMember, AllianceRSVP
+
+    create_alliance("Army of NV", "anv", "5thva")
+    aid = alliance_detail("anv")["id"]
+    invite_unit(aid, "2ndus", "5thva")
+    accept_invite(aid, "2ndus")
+    create_event(aid, "5thva", "Battle", "Line Battle",
+                 datetime(2099, 1, 1, 19, 0), "", 1)
+    eid = upcoming_events(aid)[0]["id"]
+    rsvp(eid, 55, "2ndus", "accepted")
+
+    rename_unit_slug("5thva", "fifth-va")
+
+    with registry_session() as s:
+        assert s.query(AllianceMember).filter_by(unit_slug="5thva").count() == 0
+        assert s.query(AllianceMember).filter_by(unit_slug="fifth-va").count() == 1
+        assert s.query(AllianceEvent).filter_by(host_slug="fifth-va").count() == 1
+        assert s.query(AllianceRSVP).filter_by(unit_slug="2ndus").count() == 1
+    # the alliance still resolves the unit under its new handle
+    assert sorted(m["slug"] for m in alliance_detail("anv")["members"]) == ["2ndus", "fifth-va"]
+
+
+def test_rename_unit_slug_rejects_bad_input():
+    from tenancy.provision import ProvisionError, rename_unit_slug
+    try:
+        rename_unit_slug("5thva", "2ndus")
+        assert False, "a taken handle should be refused"
+    except ProvisionError as exc:
+        assert "already taken" in str(exc)
+    try:
+        rename_unit_slug("5thva", "5thva")
+        assert False, "renaming to the same handle should be refused"
+    except ProvisionError as exc:
+        assert "already this unit" in str(exc)
+    try:
+        rename_unit_slug("ghost", "whatever")
+        assert False, "an unknown unit should be refused"
+    except ProvisionError as exc:
+        assert "No unit" in str(exc)
+
+
 def test_discord_invite_replaces_web_apply():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 7, "name": "Adm", "tier": "admin"},
