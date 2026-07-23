@@ -2958,7 +2958,7 @@ def tls_allow(domain: str = ""):
 
     base = os.getenv("PLATFORM_BASE_DOMAIN")
     d = (domain or "").strip().lower().rstrip(".")
-    if not base or d in (base, f"www.{base}"):
+    if not base or d in (base, f"www.{base}", f"proclubs.{base}"):
         return Response(status_code=200)
     slug = slug_from_host(d)
     if slug and tenant_by_slug_ctx(slug):
