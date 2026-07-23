@@ -338,17 +338,11 @@ time. `proclubs-poll.timer` (already installed by `install.sh` above) fires
 `poll.py` hourly, which snapshots every club listed in
 `proclubs/tracked_clubs.json` into `proclubs/data/history.db` (its own
 SQLite file, plain stdlib `sqlite3` -- no extra dependency, not shared with
-anything else). Set it up:
+anything else). `tracked_clubs.json` ships in the repo already set up for
+Pr1mE6ers, so it's in place as soon as you `git pull` -- nothing to create.
+Just run it once to confirm it works, instead of waiting an hour:
 
 ```bash
-cat > /opt/valorlink/proclubs/tracked_clubs.json <<'JSON'
-[
-  { "platform": "common-gen5", "clubId": "7810354", "label": "Pr1mE6ers" }
-]
-JSON
-chown valorlink:valorlink /opt/valorlink/proclubs/tracked_clubs.json
-
-# Run it once now to confirm it works, instead of waiting an hour:
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/poll.py
 ```
 
