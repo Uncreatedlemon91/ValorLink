@@ -1216,6 +1216,7 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
     # The signed-in member's own RSVP, so they can set it from the web.
     viewer = ctx["user"]
     my_rsvp = None
+    my_slot_id = None
     can_rsvp = False
     if viewer:
         me = session.get(Member, int(viewer["id"]))
@@ -1223,6 +1224,13 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
             can_rsvp = True
             mine = next((r for r in event.attendance_records if r.member_id == me.discord_id), None)
             my_rsvp = mine.status if mine else None
+            my_slot_id = mine.slot_id if mine else None
+
+    # How many "accepted" RSVPs each signup slot currently holds.
+    slot_counts: dict[int, int] = defaultdict(int)
+    for rec in event.attendance_records:
+        if rec.status == "accepted" and rec.slot_id:
+            slot_counts[rec.slot_id] += 1
 
     # Roster for the bulk attendance grid: every active/on-leave member with
     # their current recorded standing (blank if not yet marked).
@@ -1249,6 +1257,8 @@ def event_detail(request: Request, event_id: int, session: Session = Depends(get
         event_types=terminology.resolve_terms(get_config(session).terminology_custom)["event_types"],
         can_rsvp=can_rsvp,
         my_rsvp=my_rsvp,
+        my_slot_id=my_slot_id,
+        slot_counts=dict(slot_counts),
         is_past=event.scheduled_at < datetime.utcnow(),
         outcome_options=services.EVENT_OUTCOMES,
     )
@@ -1947,7 +1957,7 @@ def post_deny(
 
 # --- Events & attendance -------------------------------------------------- #
 @app.post("/muster-calls/create")
-def post_create_event(
+async def post_create_event(
     request: Request,
     csrf: str = Form(...),
     name: str = Form(...),
@@ -1958,10 +1968,18 @@ def post_create_event(
     repeat_weeks: str = Form("1"),
     lead_value: str = Form("0"),
     lead_unit: str = Form("days"),
+    description: str = Form(""),
+    color_hex: str = Form(""),
+    image: UploadFile = File(None),
     user: dict = Depends(auth.require_officer),
 ):
     if not auth.verify_csrf(request, csrf):
         _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/muster-calls", status_code=303)
+    try:
+        uri = await _image_data_uri(image) if image and image.filename else None
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
         return RedirectResponse("/muster-calls", status_code=303)
     actor = {"id": user["id"], "name": user["name"]}
     with _tenant_session(request) as session:
@@ -1970,6 +1988,7 @@ def post_create_event(
                 session, actor, name, event_type, f"{date} {time}",
                 tz_offset=tz_offset, repeat_weeks=repeat_weeks,
                 lead_value=lead_value, lead_unit=lead_unit,
+                description=description, image=uri, color_hex=color_hex,
             )
             _flash(request, f"'{name}' announced.", "ok")
             return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
@@ -1984,6 +2003,7 @@ def post_rsvp(
     event_id: int,
     csrf: str = Form(...),
     status: str = Form(...),
+    slot_id: str = Form(""),
     next: str = Form(""),
 ):
     # Return to wherever the RSVP was made from (Headquarters or the call page).
@@ -1996,7 +2016,8 @@ def post_rsvp(
         return RedirectResponse(dest, status_code=303)
     with _tenant_session(request) as session:
         try:
-            _flash(request, services.rsvp(session, event_id, int(user["id"]), status), "ok")
+            sid = int(slot_id) if slot_id.strip() else None
+            _flash(request, services.rsvp(session, event_id, int(user["id"]), status, sid), "ok")
         except services.ActionError as exc:
             _flash(request, str(exc), "error")
     return RedirectResponse(dest, status_code=303)
@@ -2045,7 +2066,7 @@ async def post_bulk_attendance(
 
 
 @app.post("/muster-calls/{event_id}/update")
-def post_update_event(
+async def post_update_event(
     request: Request,
     event_id: int,
     csrf: str = Form(...),
@@ -2054,11 +2075,21 @@ def post_update_event(
     date: str = Form(...),
     time: str = Form(...),
     tz_offset: str = Form("0"),
+    description: str = Form(""),
+    color_hex: str = Form(""),
+    remove_image: str = Form(""),
+    image: UploadFile = File(None),
     user: dict = Depends(auth.require_officer),
 ):
+    try:
+        uri = await _image_data_uri(image) if image and image.filename else None
+    except ValueError as exc:
+        _flash(request, str(exc), "error")
+        return RedirectResponse(f"/muster-calls/{event_id}", status_code=303)
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.update_event, actor, event_id, name, event_type,
-               f"{date} {time}", tz_offset, redirect=f"/muster-calls/{event_id}")
+               f"{date} {time}", tz_offset, description, color_hex, uri, bool(remove_image),
+               redirect=f"/muster-calls/{event_id}")
 
 
 @app.post("/muster-calls/{event_id}/delete")
@@ -2070,6 +2101,48 @@ def post_delete_event(
 ):
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.delete_event, actor, event_id, redirect="/muster-calls")
+
+
+@app.post("/muster-calls/{event_id}/slots/add")
+def post_add_event_slot(
+    request: Request,
+    event_id: int,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    capacity: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.add_event_slot, actor, event_id, name, capacity,
+               redirect=f"/muster-calls/{event_id}")
+
+
+@app.post("/muster-calls/{event_id}/slots/{slot_id}/update")
+def post_update_event_slot(
+    request: Request,
+    event_id: int,
+    slot_id: int,
+    csrf: str = Form(...),
+    name: str = Form(...),
+    capacity: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.update_event_slot, actor, slot_id, name, capacity,
+               redirect=f"/muster-calls/{event_id}")
+
+
+@app.post("/muster-calls/{event_id}/slots/{slot_id}/remove")
+def post_remove_event_slot(
+    request: Request,
+    event_id: int,
+    slot_id: int,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    actor = {"id": user["id"], "name": user["name"]}
+    return _do(request, csrf, services.remove_event_slot, actor, slot_id,
+               redirect=f"/muster-calls/{event_id}")
 
 
 # --- Awards --------------------------------------------------------------- #

@@ -21,6 +21,13 @@
 <time datetime="{{ announce_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ announce_at|fmt_date(true) }}</time>.</p>
 {% endif %}
 
+{% if event.image %}
+<div style="margin-top:16px;"><img src="{{ event.image }}" alt="" style="max-width:100%;max-height:280px;border:1px solid var(--rule-strong);"></div>
+{% endif %}
+{% if event.description %}
+<p class="lede" style="white-space:pre-wrap;margin-top:12px;">{{ event.description }}</p>
+{% endif %}
+
 {% if event.after_action %}
 <div class="order-card" style="margin-top:16px;max-width:720px;">
   <h3 class="order-title">After-Action Report</h3>
@@ -39,9 +46,47 @@
   {% endfor %}
 </div>
 
+{% if event.slots %}
+<h2 class="section">Signup Roles <span class="tally">tap Sign Up below to claim one</span></h2>
+<div class="tally-row">
+  {% for slot in event.slots %}
+    {% set filled = slot_counts.get(slot.id, 0) %}
+    {% set full = slot.capacity and filled >= slot.capacity %}
+    <div class="medallion{{ ' warn' if full }}">
+      <div class="num">{{ filled }}{% if slot.capacity %}/{{ slot.capacity }}{% endif %}</div>
+      <div class="lbl">{{ slot.name }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if can_rsvp %}
-<h2 class="section">Your Reply <span class="tally">{% if my_rsvp %}you {{ my_rsvp|attendance_label|lower }}{% else %}not yet answered{% endif %}</span></h2>
+<h2 class="section">Your Reply <span class="tally">{% if my_rsvp %}you {{ my_rsvp|attendance_label|lower }}{% if my_slot_id %}{% for slot in event.slots %}{% if slot.id == my_slot_id %} — {{ slot.name }}{% endif %}{% endfor %}{% endif %}{% else %}not yet answered{% endif %}</span></h2>
 <div class="rsvp-row">
+  {% if event.slots %}
+  <form method="post" action="/muster-calls/{{ event.id }}/rsvp" class="rowform">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="status" value="accepted">
+    <select name="slot_id" required>
+      <option value="" disabled {{ 'selected' if not my_slot_id }}>Choose a role…</option>
+      {% for slot in event.slots %}
+        {% set filled = slot_counts.get(slot.id, 0) %}
+        {% set full = slot.capacity and filled >= slot.capacity %}
+        <option value="{{ slot.id }}" {{ 'selected' if my_slot_id == slot.id }} {{ 'disabled' if full and my_slot_id != slot.id }}>
+          {{ slot.name }} ({{ filled }}{% if slot.capacity %}/{{ slot.capacity }}{% endif %}){% if full %} — full{% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-approve {{ 'rsvp-current' if my_rsvp == 'accepted' }}" type="submit">Sign Up</button>
+  </form>
+  {% for value, label, cls in [('tentative', 'Tentative', 'btn'), ('declined', 'Decline', 'btn-danger')] %}
+    <form method="post" action="/muster-calls/{{ event.id }}/rsvp">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="status" value="{{ value }}">
+      <button class="btn {{ cls }} {{ 'rsvp-current' if my_rsvp == value }}" type="submit">{{ label }}</button>
+    </form>
+  {% endfor %}
+  {% else %}
   {% set choices = [('accepted', 'Accept', 'btn-approve'), ('tentative', 'Tentative', 'btn'), ('declined', 'Decline', 'btn-danger')] %}
   {% for value, label, cls in choices %}
     <form method="post" action="/muster-calls/{{ event.id }}/rsvp">
@@ -50,6 +95,7 @@
       <button class="btn {{ cls }} {{ 'rsvp-current' if my_rsvp == value }}" type="submit">{{ label }}</button>
     </form>
   {% endfor %}
+  {% endif %}
 </div>
 {% endif %}
 
@@ -99,10 +145,60 @@
   })();
 </script>
 
+<h2 class="section">Signup Roles <span class="tally">capacity-limited roles, replacing the flat Accept RSVP</span></h2>
+<div class="order-card">
+  {% if event.slots %}
+  <table class="ledger no-sort">
+    <thead><tr><th>Role</th><th class="num">Filled</th><th></th></tr></thead>
+    <tbody>
+    {% for slot in event.slots %}
+      <tr>
+        <td class="callsign">{{ slot.name }}</td>
+        <td class="num">{{ slot_counts.get(slot.id, 0) }}{% if slot.capacity %} / {{ slot.capacity }}{% else %} <span class="muted">(unlimited)</span>{% endif %}</td>
+        <td class="num">
+          <div class="inline-actions">
+            <form method="post" action="/muster-calls/{{ event.id }}/slots/{{ slot.id }}/remove"
+                  data-confirm="Remove the '{{ slot.name }}' role? Anyone signed up for it keeps a plain Accept RSVP.">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="btn btn-small btn-danger" type="submit">Remove</button>
+            </form>
+            <button type="button" class="btn btn-small js-edit-open" data-target="tpl-slot-{{ slot.id }}">Edit</button>
+          </div>
+          <template id="tpl-slot-{{ slot.id }}">
+            <h3 class="order-title">Edit Role</h3>
+            <form class="orders" method="post" action="/muster-calls/{{ event.id }}/slots/{{ slot.id }}/update">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <div class="field"><label>Name</label><input name="name" value="{{ slot.name }}" required></div>
+              <div class="field"><label>Capacity <span class="opt">(blank = unlimited)</span></label><input name="capacity" value="{{ slot.capacity or '' }}" inputmode="numeric"></div>
+              <div class="field field-actions">
+                <button type="button" class="btn js-edit-cancel">Cancel</button>
+                <button type="submit" class="btn btn-strong">Save</button>
+              </div>
+            </form>
+          </template>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="order-note">No signup roles yet — RSVP is a plain Accept/Tentative/Decline. Add a role below
+  to switch to a capacity-limited signup sheet instead.</p>
+  {% endif %}
+  <form class="orders" method="post" action="/muster-calls/{{ event.id }}/slots/add" style="margin-top:10px;max-width:480px;">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div class="field-row">
+      <div class="field" style="flex:2;"><label>Role name</label><input name="name" required placeholder="Riflemen"></div>
+      <div class="field"><label>Capacity <span class="opt">(opt.)</span></label><input name="capacity" inputmode="numeric" placeholder="10"></div>
+    </div>
+    <div class="field field-actions"><button class="btn btn-strong" type="submit">Add role</button></div>
+  </form>
+</div>
+
 <div class="orders-grid" style="margin-top:26px;">
   <div class="order-card">
     <h3 class="order-title">Edit {{ terms.event }}</h3>
-    <form class="orders" method="post" action="/muster-calls/{{ event.id }}/update" id="edit-event">
+    <form class="orders" method="post" action="/muster-calls/{{ event.id }}/update" id="edit-event" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <input type="hidden" name="tz_offset" id="edit-tz" value="0">
       <div class="field"><label>Occasion</label><input name="name" required value="{{ event.name }}"></div>
@@ -116,9 +212,28 @@
         <div class="field"><label>Date</label><input name="date" id="edit-date" type="date" required></div>
         <div class="field"><label>Time <span class="opt">(your local time)</span></label><input name="time" id="edit-time" type="time" required></div>
       </div>
+      <div class="field">
+        <label>Details <span class="opt">(optional)</span></label>
+        <textarea name="description" rows="3">{{ event.description or '' }}</textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Accent colour <span class="opt">(optional)</span></label>
+          <input name="color_hex" value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else '' }}" placeholder="#7C1F2B">
+        </div>
+        <div class="field">
+          <label>Image <span class="opt">(optional)</span></label>
+          <label class="btn btn-small file-btn" style="align-self:flex-start;">
+            <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+            <span class="file-name">{{ 'Replace image' if event.image else 'Choose Image' }}</span>
+          </label>
+          {% if event.image %}<label class="checkline"><input type="checkbox" name="remove_image" value="1"> Remove current image</label>{% endif %}
+        </div>
+      </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save changes</button></div>
     </form>
-    <p class="order-note">Rescheduling updates the Discord announcement and re-arms the reminder.</p>
+    <p class="order-note">Rescheduling updates the Discord announcement and re-arms the reminder. Leave the
+    accent colour blank to use the unit's own brand colour.</p>
   </div>
 
   {% if is_past %}

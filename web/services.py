@@ -26,6 +26,7 @@ from db.models import (
     Company,
     DisciplinaryRecord,
     Event,
+    EventSlot,
     Member,
     MemberAssignment,
     MemberAward,
@@ -615,7 +616,9 @@ def _lead_minutes(value: str | int, unit: str) -> int | None:
 
 def create_event(session, actor: dict, name: str, event_type: str, when: str,
                  tz_offset: str | int = 0, repeat_weeks: str | int = 1,
-                 lead_value: str | int = 0, lead_unit: str = "days") -> int:
+                 lead_value: str | int = 0, lead_unit: str = "days",
+                 description: str = "", image: str | None = None,
+                 color_hex: str = "") -> int:
     from utils.terminology import resolve_terms
     name = name.strip()
     if not name:
@@ -640,12 +643,15 @@ def create_event(session, actor: dict, name: str, event_type: str, when: str,
         weeks = 1
     base = local + timedelta(minutes=offset)
     lead = _lead_minutes(lead_value, lead_unit)
+    color = _parse_hex_color(color_hex)
+    description = description.strip() or None
 
     first_id = None
     for i in range(weeks):
         scheduled = base + timedelta(weeks=i)
         event = Event(name=name, event_type=event_type, scheduled_at=scheduled,
-                      created_by=actor["id"], announce_lead_minutes=lead)
+                      created_by=actor["id"], announce_lead_minutes=lead,
+                      description=description, image=image, color=color)
         session.add(event)
         session.commit()
         session.refresh(event)
@@ -678,9 +684,11 @@ def _parse_when(when: str, tz_offset: str | int = 0) -> datetime:
 
 
 def update_event(session, actor: dict, event_id: int, name: str, event_type: str,
-                 when: str, tz_offset: str | int = 0) -> str:
-    """Edit an existing event's name, type, and schedule. Re-renders the
-    Discord announcement embed if one was posted."""
+                 when: str, tz_offset: str | int = 0, description: str = "",
+                 color_hex: str = "", image: str | None = None,
+                 remove_image: bool = False) -> str:
+    """Edit an existing event's name, schedule, and rich-post details.
+    Re-renders the Discord announcement embed if one was posted."""
     from utils.terminology import resolve_terms
     event = session.get(Event, event_id)
     if event is None:
@@ -694,6 +702,12 @@ def update_event(session, actor: dict, event_id: int, name: str, event_type: str
     event.name = name
     event.event_type = event_type
     event.scheduled_at = _parse_when(when, tz_offset)
+    event.description = description.strip() or None
+    event.color = _parse_hex_color(color_hex)
+    if remove_image:
+        event.image = None
+    elif image:
+        event.image = image
     # A rescheduled event should remind afresh.
     event.reminder_sent_at = None
     if event.message_id:
@@ -722,6 +736,79 @@ def delete_event(session, actor: dict, event_id: int) -> str:
     session.delete(event)
     session.commit()
     return f"'{name}' deleted."
+
+
+# --- Event signup slots ---------------------------------------------------- #
+# A slot is a named, optionally capacity-limited role (e.g. "Riflemen (10)").
+# An event with no slots keeps the plain accept/tentative/decline RSVP; one
+# or more slots switches sign-up in Discord and on the web to picking a role.
+def add_event_slot(session, actor: dict, event_id: int, name: str, capacity: str = "") -> str:
+    event = session.get(Event, event_id)
+    if event is None:
+        raise ActionError("That event no longer exists.")
+    name = name.strip()
+    if not name:
+        raise ActionError("A signup role needs a name.")
+    cap = _parse_capacity(capacity)
+    top = (
+        session.query(EventSlot)
+        .filter(EventSlot.event_id == event_id)
+        .order_by(EventSlot.position.desc())
+        .first()
+    )
+    session.add(EventSlot(event_id=event_id, name=name, capacity=cap,
+                          position=(top.position + 1) if top else 0))
+    if event.message_id:
+        queue.enqueue(session, queue.REFRESH_EVENT, {"event_id": event_id}, actor_id=actor["id"])
+    session.commit()
+    return f"'{name}' added to the signup sheet."
+
+
+def update_event_slot(session, actor: dict, slot_id: int, name: str, capacity: str = "") -> str:
+    slot = session.get(EventSlot, slot_id)
+    if slot is None:
+        raise ActionError("That signup role no longer exists.")
+    name = name.strip()
+    if not name:
+        raise ActionError("A signup role needs a name.")
+    slot.name = name
+    slot.capacity = _parse_capacity(capacity)
+    event = session.get(Event, slot.event_id)
+    if event and event.message_id:
+        queue.enqueue(session, queue.REFRESH_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+    session.commit()
+    return f"'{name}' updated."
+
+
+def remove_event_slot(session, actor: dict, slot_id: int) -> str:
+    slot = session.get(EventSlot, slot_id)
+    if slot is None:
+        raise ActionError("That signup role no longer exists.")
+    name = slot.name
+    event = session.get(Event, slot.event_id)
+    # Members signed up for this role fall back to a plain "accepted" RSVP
+    # rather than losing their spot outright.
+    session.query(AttendanceRecord).filter(AttendanceRecord.slot_id == slot_id).update(
+        {AttendanceRecord.slot_id: None}, synchronize_session=False
+    )
+    session.delete(slot)
+    if event and event.message_id:
+        queue.enqueue(session, queue.REFRESH_EVENT, {"event_id": event.id}, actor_id=actor["id"])
+    session.commit()
+    return f"'{name}' removed from the signup sheet."
+
+
+def _parse_capacity(value: str) -> int | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        n = int(value)
+    except ValueError:
+        raise ActionError("Capacity must be a whole number, or blank for unlimited.")
+    if n < 1:
+        raise ActionError("Capacity must be at least 1, or blank for unlimited.")
+    return n
 
 
 def bulk_mark_attendance(session, actor: dict, event_id: int,
@@ -883,6 +970,18 @@ def _parse_id(value: str) -> int | None:
         return int(value)
     except ValueError:
         raise ActionError(f"'{value}' isn't a valid Discord ID (should be all digits).")
+
+
+def _parse_hex_color(value: str) -> int | None:
+    """Blank keeps/clears the override (falls back to the unit's brand color
+    for events); anything else must be a valid hex color."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value.lstrip("#"), 16) & 0xFFFFFF
+    except ValueError:
+        raise ActionError(f"'{value}' isn't a valid hex colour, e.g. #7C1F2B.")
 
 
 def update_identity(session, name: str, motto: str, brand_hex: str,
@@ -1238,9 +1337,10 @@ def unassign_member(session, actor: dict, discord_id: int, assignment_id: int) -
 
 
 # --- Member self-service: RSVP ------------------------------------------- #
-def rsvp(session, event_id: int, discord_id: int, status: str) -> str:
+def rsvp(session, event_id: int, discord_id: int, status: str, slot_id: int | None = None) -> str:
     """A member's own RSVP to a muster call, from the web (mirrors the Discord
-    RSVP buttons)."""
+    RSVP buttons/signup select). If the event has signup slots, an "accepted"
+    RSVP must name one with room left; tentative/decline never carry a slot."""
     if status not in RSVP_STATUSES:
         raise ActionError("Choose accept, tentative, or decline.")
     event = session.get(Event, event_id)
@@ -1250,6 +1350,24 @@ def rsvp(session, event_id: int, discord_id: int, status: str) -> str:
     if member is None:
         raise ActionError("Only enlisted members of this unit can RSVP.")
 
+    has_slots = bool(event.slots)
+    slot = None
+    if status == "accepted" and has_slots:
+        slot = session.get(EventSlot, slot_id) if slot_id else None
+        if slot is None or slot.event_id != event_id:
+            raise ActionError("Choose a signup role.")
+        if slot.capacity is not None:
+            filled = (
+                session.query(AttendanceRecord)
+                .filter(AttendanceRecord.event_id == event_id,
+                        AttendanceRecord.slot_id == slot.id,
+                        AttendanceRecord.status == "accepted",
+                        AttendanceRecord.member_id != discord_id)
+                .count()
+            )
+            if filled >= slot.capacity:
+                raise ActionError(f"'{slot.name}' is full. Choose another role.")
+
     record = (
         session.query(AttendanceRecord)
         .filter(AttendanceRecord.event_id == event_id, AttendanceRecord.member_id == discord_id)
@@ -1257,12 +1375,17 @@ def rsvp(session, event_id: int, discord_id: int, status: str) -> str:
     )
     if record:
         record.status = status
+        record.slot_id = slot.id if slot else None
         record.responded_at = datetime.utcnow()
     else:
-        session.add(AttendanceRecord(event_id=event_id, member_id=discord_id, status=status))
+        session.add(AttendanceRecord(event_id=event_id, member_id=discord_id, status=status,
+                                     slot_id=slot.id if slot else None))
     member.last_active_date = datetime.utcnow()
     session.commit()
-    return f"You {RSVP_STATUSES[status]}."
+    if event.message_id:
+        queue.enqueue(session, queue.REFRESH_EVENT, {"event_id": event_id})
+    suffix = f" for **{slot.name}**" if slot else ""
+    return f"You {RSVP_STATUSES[status]}{suffix}."
 
 
 # --- Public applications (cross-unit) ------------------------------------ #
