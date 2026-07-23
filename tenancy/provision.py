@@ -65,6 +65,47 @@ def create_unit(slug: str, name: str, guild_id: int | None = None,
     return url
 
 
+def rename_unit_slug(old_slug: str, new_slug: str) -> str:
+    """Change a unit's subdomain handle. Cascades the rename across every
+    registry table that references it as a plain string (alliance
+    membership, joint events, RSVPs), the same way a rank/company rename
+    updates every member holding it -- otherwise the unit would silently
+    drop out of its own alliances. The unit's private database and its
+    Discord guild link are untouched; only the routing handle changes.
+
+    Old links to the previous subdomain start 404ing immediately -- there's
+    no redirect and the freed handle isn't reserved, so warn the caller
+    before calling this."""
+    from tenancy.registry import AllianceEvent, AllianceMember, AllianceRSVP, Tenant, registry_session
+    from tenancy.resolve import tenant_by_slug
+    from tenancy.routing import invalidate
+
+    new_slug = normalize_slug(new_slug)
+    with registry_session() as session:
+        tenant = tenant_by_slug(session, old_slug)
+        if tenant is None:
+            raise ProvisionError(f"No unit '{old_slug}' exists.")
+        if new_slug == old_slug:
+            raise ProvisionError("That's already this unit's handle.")
+        if tenant_by_slug(session, new_slug):
+            raise ProvisionError(f"The handle '{new_slug}' is already taken.")
+
+        tenant.slug = new_slug
+        session.query(AllianceMember).filter(AllianceMember.unit_slug == old_slug).update(
+            {AllianceMember.unit_slug: new_slug}, synchronize_session=False
+        )
+        session.query(AllianceEvent).filter(AllianceEvent.host_slug == old_slug).update(
+            {AllianceEvent.host_slug: new_slug}, synchronize_session=False
+        )
+        session.query(AllianceRSVP).filter(AllianceRSVP.unit_slug == old_slug).update(
+            {AllianceRSVP.unit_slug: new_slug}, synchronize_session=False
+        )
+        session.commit()
+
+    invalidate()
+    return new_slug
+
+
 def slug_available(slug: str) -> tuple[bool, str]:
     """Whether a handle is free to use, for a live check on the form."""
     from tenancy.registry import registry_session
