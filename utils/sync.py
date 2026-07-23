@@ -17,14 +17,22 @@ from utils.settings import company_by_name, get_config
 DISCORD_NICK_MAX = 32
 
 
+def build_prefix(unit_tag: str, company_tag: str, rank_abbr: str) -> str:
+    """The tag/rank portion of the nickname alone, e.g. ``5thVA A Cpl.`` --
+    shared by build_nickname and by the echo-suppression in cogs/roster.py
+    that strips the bot's own prefix back off a nickname change that echoes
+    through Discord, so it doesn't get baked into the stored callsign."""
+    prefix_parts = [p for p in (unit_tag.strip(), company_tag.strip()) if p]
+    if rank_abbr:
+        prefix_parts.append(f"{rank_abbr.strip()}.")
+    return " ".join(prefix_parts)
+
+
 def build_nickname(unit_tag: str, company_tag: str, rank_abbr: str, callsign: str) -> str:
     """Assemble ``UnitTag CompanyTag Rank. Name`` from the pieces, dropping any
     empty tag and keeping within Discord's 32-character limit. The name is
     trimmed before the tags/rank so the prefix survives when space is tight."""
-    prefix_parts = [p for p in (unit_tag.strip(), company_tag.strip()) if p]
-    if rank_abbr:
-        prefix_parts.append(f"{rank_abbr.strip()}.")
-    prefix = " ".join(prefix_parts)
+    prefix = build_prefix(unit_tag, company_tag, rank_abbr)
     if not prefix:
         return callsign[:DISCORD_NICK_MAX]
     room = DISCORD_NICK_MAX - len(prefix) - 1  # 1 for the space before the name
@@ -53,6 +61,19 @@ def _nickname_pieces(session, discord_id: int, callsign: str | None,
     company_record = company_by_name(session, company_name) if company_name else None
     company_tag = (company_record.tag or "") if company_record else ""
     return unit_tag, company_tag, rank_abbr, callsign
+
+
+def current_prefix(session, discord_id: int, rank_name: str | None = None,
+                    company_name: str | None = None) -> str:
+    """The tag/rank prefix the bot would currently write for this member (or
+    for the given rank/company, e.g. a not-yet-enrolled member being
+    imported), so a caller can strip the bot's own prefix back off a
+    nickname that echoes through Discord or gets pulled in at import time --
+    otherwise it gets baked into the stored callsign and duplicated the next
+    time a rank/company sync rebuilds the nickname on top of it."""
+    unit_tag, company_tag, rank_abbr, _ = _nickname_pieces(
+        session, discord_id, None, rank_name, company_name)
+    return build_prefix(unit_tag, company_tag, rank_abbr)
 
 
 async def _apply_nickname(member: discord.Member, callsign: str | None = None,

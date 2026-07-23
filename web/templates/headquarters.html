@@ -40,28 +40,35 @@
 </section>
 {% endif %}
 
+<div class="hq-overview">
 <div class="tally-row">
   <div class="medallion seal">
+    <div class="ico">★</div>
     <div class="num">{{ counts.active }}</div>
     <div class="lbl">Present for Duty</div>
   </div>
   <div class="medallion">
+    <div class="ico">⚇</div>
     <div class="num">{{ counts.enrolled }}</div>
     <div class="lbl">Total Enrolled</div>
   </div>
   <div class="medallion">
+    <div class="ico">☾</div>
     <div class="num">{{ counts.loa }}</div>
     <div class="lbl">On Furlough</div>
   </div>
-  <div class="medallion">
+  <div class="medallion{{ ' warn' if counts.inactive }}">
+    <div class="ico">✕</div>
     <div class="num">{{ counts.inactive }}</div>
     <div class="lbl">Absent</div>
   </div>
-  <div class="medallion">
+  <div class="medallion{{ ' info' if pending|length }}">
+    <div class="ico">⚑</div>
     <div class="num">{{ pending|length }}</div>
     <div class="lbl">At the Gate</div>
   </div>
   <div class="medallion">
+    <div class="ico">✦</div>
     <div class="num">{{ company_count }}</div>
     <div class="lbl">Companies</div>
   </div>
@@ -74,6 +81,19 @@
       <div class="hq-card-title"><a href="/muster-calls/{{ next_event.id }}">{{ next_event.name }}</a></div>
       <div class="hq-countdown" data-countdown="{{ next_event.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">soon</div>
       <div class="hq-card-sub">{{ next_event.scheduled_at|fmt_date(true) }}</div>
+      {% if is_member %}
+      <div class="hq-rsvp">
+        {% set mine = my_rsvps.get(next_event.id) %}
+        {% for value, label in rsvp_choices %}
+          <form method="post" action="/muster-calls/{{ next_event.id }}/rsvp">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="status" value="{{ value }}">
+            <input type="hidden" name="next" value="/">
+            <button class="btn btn-small {{ 'btn-strong' if mine == value else 'btn-ghost' }}" type="submit">{{ label }}</button>
+          </form>
+        {% endfor %}
+      </div>
+      {% endif %}
     {% else %}
       <div class="hq-card-empty">Nothing on the books</div>
     {% endif %}
@@ -85,7 +105,7 @@
       <div class="spark">
         {% for s in spark %}<span class="spark-bar" style="height: {{ (s.present / (spark_max or 1) * 100)|round }}%;" title="{{ s.name }}: {{ s.present }} present"></span>{% endfor %}
       </div>
-      <div class="hq-card-sub">present · last {{ spark|length }} call{{ 's' if spark|length != 1 }}</div>
+      <div class="hq-card-sub">{% if spark_pct is not none %}{{ spark_pct }}% avg · {% endif %}present · last {{ spark|length }} call{{ 's' if spark|length != 1 }}</div>
     {% else %}
       <div class="hq-card-empty">No calls held yet</div>
     {% endif %}
@@ -98,6 +118,7 @@
     <div class="hq-card-sub">Finish setting up ›</div>
   </a>
   {% endif %}
+</div>
 </div>
 
 {% if allies %}
@@ -130,11 +151,11 @@
 </details>
 {% endif %}
 
-<div class="cols" style="margin-top: 34px;">
+<div class="cols hq-cols" style="margin-top: 34px;">
   <section>
     <h2 class="section">Next {{ terms.events_nav }}</h2>
     {% if upcoming %}
-      <table class="ledger">
+      <table class="ledger no-sort hq-events">
         <thead><tr><th>Occasion</th><th>Kind</th><th class="num">When</th>{% if is_member %}<th>Your RSVP</th>{% endif %}</tr></thead>
         <tbody>
         {% for ev in upcoming %}
@@ -167,7 +188,7 @@
   <section>
     <h2 class="section">At the Gate</h2>
     {% if pending %}
-      <table class="ledger">
+      <table class="ledger no-sort hq-events">
         <thead><tr><th>Applicant</th><th class="num">Applied</th></tr></thead>
         <tbody>
         {% for c in pending %}

@@ -1249,6 +1249,23 @@ def test_build_nickname_composes_tags():
     assert len(out) <= 32 and out.startswith("REGIMENT COMPANY Cpl.")
 
 
+def test_current_prefix_matches_build_nickname():
+    from utils.sync import build_nickname, current_prefix
+    with SessionLocal() as s:
+        get_config(s).unit_tag = "5thVA"
+        s.query(Company).filter_by(name="Alpha").one().tag = "A"
+        s.commit()
+    with SessionLocal() as s:
+        prefix = current_prefix(s, MEMBER_ID)
+        nick = build_nickname("5thVA", "A", "Pvt", "Testman")
+    assert prefix == "5thVA A Pvt."
+    assert nick == f"{prefix} Testman"
+    # an explicit rank/company override (e.g. importing a not-yet-enrolled
+    # member at their eventual default rank) works without a Member row
+    with SessionLocal() as s:
+        assert current_prefix(s, 999999, "Corporal", "Alpha") == "5thVA A Cpl."
+
+
 def test_unit_tag_update_enqueues_resync():
     client = TestClient(app)
     _login(client, "admin")
@@ -1278,6 +1295,108 @@ def test_company_tag_update_enqueues_scoped_resync():
         assert s.get(Company, cid).tag == "A"
     acts = _actions(queue.RESYNC_NICKNAMES)
     assert acts and json.loads(acts[0].payload)["company"] == "Alpha"
+
+
+def test_rank_sync_echo_does_not_duplicate_nickname_tags():
+    """Regression test: a rank sync writes a tagged nickname to Discord;
+    Discord echoes that edit back through on_member_update. The echo must
+    not bake the tags into the stored callsign, or the next sync would
+    prepend a fresh tag onto an already-tagged name (the reported bug)."""
+    import cogs.roster as roster_mod
+    from cogs.roster import Roster
+    from utils.sync import sync_rank
+
+    url = os.environ["DATABASE_URL"]
+    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster)
+    roster_mod.db_url_for_guild = lambda gid: url
+    roster_mod.bind_guild = lambda gid: roster_mod.set_current_db_url(url)
+    roster_mod.refresh_roster = AsyncMock()
+    try:
+        with SessionLocal() as s:
+            get_config(s).unit_tag = "5thVA"
+            s.query(Company).filter_by(name="Alpha").one().tag = "A"
+            s.get(Member, MEMBER_ID).rank = "Corporal"
+            s.commit()
+
+        member = MagicMock()
+        member.id = MEMBER_ID
+        member.edit = AsyncMock()
+        member.guild = MagicMock()
+        member.guild.id = 1
+
+        # First sync (Private -> Corporal) produces a tagged nickname.
+        asyncio.run(sync_rank(member, "Testman", "Private", "Corporal"))
+        nick1 = member.edit.call_args.kwargs["nick"]
+        assert nick1 == "5thVA A Cpl. Testman"
+
+        # Discord echoes the bot's own edit back through on_member_update.
+        cog = object.__new__(Roster)
+        cog.bot = MagicMock()
+        before, after = MagicMock(), MagicMock()
+        before.nick = None
+        after.nick = nick1
+        after.name = "testman_user"
+        after.id = MEMBER_ID
+        after.guild = member.guild
+        asyncio.run(cog.on_member_update(before, after))
+        with SessionLocal() as s:
+            assert s.get(Member, MEMBER_ID).callsign == "Testman"
+
+        # A second sync (promotion to Sergeant) must not duplicate the tags.
+        with SessionLocal() as s:
+            s.get(Member, MEMBER_ID).rank = "Sergeant"
+            s.commit()
+        asyncio.run(sync_rank(member, "Testman", "Corporal", "Sergeant"))
+        nick2 = member.edit.call_args.kwargs["nick"]
+        assert nick2 == "5thVA A Sgt. Testman"
+        assert nick2.count("5thVA") == 1
+    finally:
+        (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster) = saved
+
+
+def test_bridge_import_roster_strips_existing_tag_prefix():
+    """A member being imported may already carry the exact tag/rank prefix
+    this unit would assign anyway (e.g. re-importing after a reset) -- that
+    prefix must be stripped so it isn't baked into the callsign and
+    duplicated the first time a rank/company sync rebuilds the nickname."""
+    from cogs.bridge import Bridge
+    with SessionLocal() as s:
+        get_config(s).unit_tag = "5thVA"
+        s.query(Company).filter_by(name="Alpha").one().tag = "A"
+        s.commit()
+    bridge = object.__new__(Bridge)
+    bridge.bot = MagicMock()
+
+    def mk(uid, name, nick=None):
+        m = MagicMock()
+        m.id = uid
+        m.bot = False
+        m.name = name
+        m.nick = nick
+        m.display_name = nick or name
+        m.roles = []
+        m.avatar = None
+        return m
+
+    people = [mk(600, "tagged_user", nick="5thVA A Pvt. Newbie")]
+
+    async def fake_fetch(limit=None):
+        for m in people:
+            yield m
+
+    guild = MagicMock()
+    guild.fetch_members = fake_fetch
+    guild.get_role.return_value = None
+    guild.get_channel.return_value = None
+
+    async def run():
+        await bridge._dispatch(guild, queue.IMPORT_ROSTER,
+                               {"actor_id": 1, "role_id": None,
+                                "default_rank": "Private", "default_company": "Alpha"})
+    asyncio.run(run())
+
+    with SessionLocal() as s:
+        assert s.get(Member, 600).callsign == "Newbie"
 
 
 def test_bridge_resync_rebuilds_member_nickname():

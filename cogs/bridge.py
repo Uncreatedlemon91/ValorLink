@@ -36,7 +36,7 @@ from utils import queue
 from utils.billboard import post_billboard, post_billboard_notice
 from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config
-from utils.sync import resync_nickname, sync_company, sync_rank
+from utils.sync import current_prefix, resync_nickname, sync_company, sync_rank
 
 log = logging.getLogger("valorlink.bridge")
 
@@ -835,9 +835,18 @@ class Bridge(commands.Cog):
                         existing.avatar = avatar
                         session.commit()
                     continue
+                # Strip a pre-existing tag/rank prefix (e.g. re-importing after
+                # a reset, or a nickname someone set by hand following the same
+                # convention) so it isn't baked into the callsign and
+                # duplicated the first time a rank/company sync rebuilds it.
+                prefix = current_prefix(session, member.id, default_rank, default_company)
+                clean_callsign = (
+                    callsign[len(prefix):].strip()
+                    if prefix and callsign.startswith(prefix) else callsign
+                )
                 session.add(Member(
                     discord_id=member.id,
-                    callsign=callsign or member.name,
+                    callsign=clean_callsign or member.name,
                     rank=default_rank,
                     company=default_company,
                     status="active",

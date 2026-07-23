@@ -45,7 +45,7 @@
     </div>
 
     <header class="banner">
-      {% if crest %}<img class="crest-img" src="{{ crest }}" alt="">{% else %}<div class="crest">★ ✶ ★</div>{% endif %}
+      {% if crest %}<img class="crest-img" src="{{ crest }}" alt="">{% else %}<div class="crest-badge">{{ regiment_name[0]|upper }}</div>{% endif %}
       <h1>{{ regiment_name }}</h1>
       {% if regiment_motto %}<p class="motto">“{{ regiment_motto }}”</p>{% endif %}
       <div class="estd">{{ terms.tagline }}</div>
