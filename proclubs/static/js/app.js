@@ -76,12 +76,16 @@ async function loadClub(clubId, platform) {
   clubView.classList.remove('hidden');
   setStatus('Loading club...');
 
-  const [overview, standings, members, matches] = await Promise.allSettled([
-    api(`/api/clubs/${clubId}/overview?platform=${platform}`),
-    api(`/api/clubs/${clubId}/standings?platform=${platform}`),
-    api(`/api/clubs/${clubId}/members?platform=${platform}`),
-    api(`/api/clubs/${clubId}/matches?platform=${platform}&matchType=leagueMatch&count=10`),
-  ]);
+  const [overview, standings, members, matches, historyDivision, historyMatches, historyPlayers] =
+    await Promise.allSettled([
+      api(`/api/clubs/${clubId}/overview?platform=${platform}`),
+      api(`/api/clubs/${clubId}/standings?platform=${platform}`),
+      api(`/api/clubs/${clubId}/members?platform=${platform}`),
+      api(`/api/clubs/${clubId}/matches?platform=${platform}&matchType=leagueMatch&count=10`),
+      api(`/api/clubs/${clubId}/history/division?platform=${platform}`),
+      api(`/api/clubs/${clubId}/history/matches?platform=${platform}`),
+      api(`/api/clubs/${clubId}/history/players?platform=${platform}`),
+    ]);
 
   latestMatches = matches.status === 'fulfilled' ? matches.value || [] : [];
 
@@ -89,6 +93,7 @@ async function loadClub(clubId, platform) {
   renderStandings(standings);
   renderMembers(members);
   renderMatches(matches, 'leagueMatch', 10);
+  renderHistory(historyDivision, historyMatches, historyPlayers);
   setStatus('');
 }
 
@@ -870,4 +875,117 @@ function toggleMatchDetail(row, rawMatch) {
 
   detailRow.appendChild(td);
   row.after(detailRow);
+}
+
+// The History tab reads from our own accumulated SQLite copy (see
+// db.py/poll.py), not a live EA call -- so it can show trends beyond
+// whatever slice of matches EA currently happens to expose. It only ever
+// gets deeper going forward from whenever a club was first tracked; there's
+// no backfill, and the UI says so rather than implying more than we have.
+function renderHistory(divisionResult, matchesResult, playersResult) {
+  const panel = document.getElementById('tab-history');
+  if (divisionResult.status !== 'fulfilled') return panelError(panel, divisionResult);
+
+  const trackedSince = divisionResult.value.trackedSince;
+  if (!trackedSince) {
+    panel.innerHTML = `
+      <p>This club isn't being tracked yet, so there's no history to show.</p>
+      <p class="chart-caption">
+        History only accumulates going forward from when a club is added to
+        this server's tracked-clubs list -- it can't be backfilled from
+        before that, since EA doesn't expose match data that old.
+      </p>
+    `;
+    return;
+  }
+
+  const snapshots = divisionResult.value.snapshots || [];
+  const matches = matchesResult.status === 'fulfilled' ? matchesResult.value.matches || [] : [];
+  const players = playersResult.status === 'fulfilled' ? playersResult.value.players || [] : [];
+
+  const since = new Date(trackedSince * 1000).toLocaleDateString();
+  const playerOptions = players.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+
+  panel.innerHTML = `
+    <p class="chart-caption">
+      Tracking since ${since} &middot; ${matches.length} match${matches.length === 1 ? '' : 'es'}
+      captured so far. This deepens over time -- it isn't backfilled.
+    </p>
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3>Skill Rating Over Time</h3>
+        <div id="chart-hist-rating"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Cumulative Win Rate</h3>
+        <div id="chart-hist-record"></div>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3>Player Trend (full tracked history)</h3>
+        <select id="history-player-select">
+          <option value="">Choose a player...</option>
+          ${playerOptions}
+        </select>
+        <div id="chart-hist-player" style="margin-top: 0.75rem"></div>
+      </div>
+    </div>
+  `;
+
+  const ratingEl = document.getElementById('chart-hist-rating');
+  if (snapshots.length) {
+    Charts.trendBarChart(ratingEl, {
+      data: snapshots.map((s) => ({
+        label: new Date(s.captured_at * 1000).toLocaleString(),
+        value: num(s.skill_rating),
+      })),
+      color: 'var(--series-1)',
+    });
+  } else {
+    Charts.emptyState(ratingEl, 'Not enough snapshots yet -- check back after the next poll.');
+  }
+
+  const recordEl = document.getElementById('chart-hist-record');
+  if (matches.length) {
+    let wins = 0;
+    const cumData = matches.map((m, i) => {
+      if (m.outcome === 'W') wins += 1;
+      return { label: `vs ${m.opp_name}`, value: Math.round((wins / (i + 1)) * 100) };
+    });
+    Charts.trendBarChart(recordEl, { data: cumData, color: 'var(--status-good)', unit: '%' });
+  } else {
+    Charts.emptyState(recordEl, 'No matches captured yet -- check back after the next poll.');
+  }
+
+  document.getElementById('history-player-select').addEventListener('change', (e) => {
+    loadPlayerHistory(e.target.value);
+  });
+}
+
+async function loadPlayerHistory(name) {
+  const container = document.getElementById('chart-hist-player');
+  if (!name) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = '<p class="chart-empty">Loading...</p>';
+  try {
+    const data = await api(
+      `/api/clubs/${currentClubId}/history/players?platform=${currentPlatform}&name=${encodeURIComponent(name)}`
+    );
+    const rows = data.matches || [];
+    if (!rows.length) {
+      Charts.emptyState(container, 'No tracked matches for this player yet.');
+      return;
+    }
+    container.innerHTML = '<div id="chart-hist-player-inner"></div>';
+    Charts.sparkline(document.getElementById('chart-hist-player-inner'), {
+      values: rows.map((r) => num(r.rating)),
+      color: 'var(--series-3)',
+      formatValue: (v) => v.toFixed(1),
+    });
+  } catch (err) {
+    container.innerHTML = `<p style="color:#e05a5a">${esc(err.message)}</p>`;
+  }
 }

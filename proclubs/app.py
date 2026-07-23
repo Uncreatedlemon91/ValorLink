@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, request
 
+import db
 import ea_client
 
 app = Flask(__name__)
@@ -114,6 +115,53 @@ def matches(club_id):
     except ea_client.EAApiError as exc:
         return error_response(exc)
     return jsonify(data)
+
+
+# --- Locally-accumulated history (see poll.py + db.py) --------------------
+# Everything above this line is a live proxy over whatever slice of data EA
+# currently exposes. These three routes instead read from our own SQLite
+# copy, built up by a scheduled poller -- so they can show trends beyond
+# EA's rolling match window. trackedSince is null if we've never
+# successfully polled this exact club/platform.
+
+
+@app.route("/api/clubs/<club_id>/history/division")
+def history_division(club_id):
+    platform = request.args.get("platform", "")
+    return jsonify(
+        {
+            "trackedSince": db.tracked_since(platform, club_id),
+            "snapshots": db.division_history(platform, club_id),
+        }
+    )
+
+
+@app.route("/api/clubs/<club_id>/history/matches")
+def history_matches(club_id):
+    platform = request.args.get("platform", "")
+    match_type = request.args.get("matchType") or None
+    return jsonify(
+        {
+            "trackedSince": db.tracked_since(platform, club_id),
+            "matches": db.match_history(platform, club_id, match_type),
+        }
+    )
+
+
+@app.route("/api/clubs/<club_id>/history/players")
+def history_players(club_id):
+    platform = request.args.get("platform", "")
+    name = request.args.get("name", "").strip()
+    tracked_since = db.tracked_since(platform, club_id)
+    if name:
+        return jsonify(
+            {
+                "trackedSince": tracked_since,
+                "player": name,
+                "matches": db.player_trend(platform, club_id, name),
+            }
+        )
+    return jsonify({"trackedSince": tracked_since, "players": db.player_names(platform, club_id)})
 
 
 if __name__ == "__main__":

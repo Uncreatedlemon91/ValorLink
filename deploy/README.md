@@ -20,6 +20,7 @@ Files in this folder:
 | `valorlink-bot.service` | `/etc/systemd/system/` (via `install.sh`) |
 | `valorlink-web.service` | `/etc/systemd/system/` (via `install.sh`) |
 | `valorlink-proclubs.service` | `/etc/systemd/system/` (via `install.sh`, optional -- see below) |
+| `proclubs-poll.service` / `.timer` | `/etc/systemd/system/` (via `install.sh`, optional -- see below) |
 | `install.sh` | run in place with `sudo` |
 | `Caddyfile` | `/etc/caddy/Caddyfile` |
 | `.env.production.example` | copy to `/opt/valorlink/.env` |
@@ -329,6 +330,34 @@ other two services:
 systemctl status valorlink-proclubs
 journalctl -u valorlink-proclubs -f
 ```
+
+**History tracking (optional, on top of the above).** EA's API only exposes
+a rolling window of recent matches and no historical division data at all,
+so real season-long trend charts need us to start accumulating a copy over
+time. `proclubs-poll.timer` (already installed by `install.sh` above) fires
+`poll.py` hourly, which snapshots every club listed in
+`proclubs/tracked_clubs.json` into `proclubs/data/history.db` (its own
+SQLite file, plain stdlib `sqlite3` -- no extra dependency, not shared with
+anything else). Set it up:
+
+```bash
+cat > /opt/valorlink/proclubs/tracked_clubs.json <<'JSON'
+[
+  { "platform": "common-gen5", "clubId": "7810354", "label": "Pr1mE6ers" }
+]
+JSON
+chown valorlink:valorlink /opt/valorlink/proclubs/tracked_clubs.json
+
+# Run it once now to confirm it works, instead of waiting an hour:
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/poll.py
+```
+
+Add more clubs later by editing that file (one more `{...}` entry) --
+no code change, no redeploy, just takes effect on the next poll. Check on
+it with `systemctl list-timers proclubs-poll.timer` and
+`journalctl -u proclubs-poll`. History only accumulates going forward from
+whenever a club is added here -- there's no way to backfill matches EA has
+already evicted from its own rolling window.
 
 **Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
 delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming

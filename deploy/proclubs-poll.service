@@ -1,0 +1,12 @@
+[Unit]
+Description=Pro Clubs Tracker history poller
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Its own venv, same as valorlink-proclubs.service -- no .env needed, this
+# script has no secrets.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 poll.py
