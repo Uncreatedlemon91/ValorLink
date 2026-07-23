@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -16,7 +15,7 @@ from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config, list_companies
-from utils.sync import sync_company
+from utils.sync import current_prefix, sync_company
 
 ROSTER_MESSAGE_KEY = "roster_message_id"
 ACTIVITY_TOUCH_COOLDOWN = timedelta(hours=1)
@@ -171,19 +170,24 @@ class Roster(commands.Cog):
 
     async def _apply_display_name(self, guild: discord.Guild, member_id: int, raw: str):
         """Update a member's callsign from a Discord display name (server nick
-        or username), if it changed. Strips the rank prefix the bot writes
-        (e.g. "Pvt. ") so a bot-driven nickname edit round-trips to the same
-        callsign and doesn't loop."""
+        or username), if it changed. Strips the bot's own tag/rank prefix
+        (e.g. "5thVA A Cpl. ") first, so a bot-driven nickname edit
+        round-trips to the same callsign instead of getting baked in and
+        duplicated the next time a rank/company sync rebuilds the nickname."""
         if db_url_for_guild(guild.id) is None:
             return  # not a registered unit
-        callsign = re.sub(r'^\w+\.\s*', '', raw or '').strip()
-        if not callsign:
+        raw = (raw or "").strip()
+        if not raw:
             return
         token = bind_guild(guild.id)
         try:
             with db_session() as session:
                 record = session.get(Member, member_id)
-                if record is None or record.callsign == callsign:
+                if record is None:
+                    return
+                prefix = current_prefix(session, member_id)
+                callsign = raw[len(prefix):].strip() if prefix and raw.startswith(prefix) else raw
+                if not callsign or record.callsign == callsign:
                     return
                 record.callsign = callsign
                 session.commit()
