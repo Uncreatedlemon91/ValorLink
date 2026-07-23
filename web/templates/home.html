@@ -66,6 +66,14 @@
           <span class="nav-card-go">Sign in with Discord →</span>
         </a>
         {% endif %}
+        {% if invite_url %}
+        <a class="nav-card" href="{{ invite_url }}">
+          <div class="nav-card-icon">➕</div>
+          <h3>Invite the Bot</h3>
+          <p>Add the ValorLink bot to your Discord server to sync roles, nicknames, and the live roster.</p>
+          <span class="nav-card-go">Invite to Discord →</span>
+        </a>
+        {% endif %}
         {% if is_platform_admin %}
         <a class="nav-card nav-card-admin" href="/admin/platform">
           <div class="nav-card-icon">⚙</div>
