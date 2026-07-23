@@ -299,7 +299,13 @@ shared database, no shared `.env`. Safe to install, skip, or remove without
 affecting anything above.
 
 ```bash
-# 1. DNS: add an A record for proclubs.valorlink.co -> the droplet IP.
+# 1. DNS: add an A record for proclubs.apps.valorlink.co -> the droplet IP.
+#    (Deliberately a nested, two-label subdomain -- a single-label host like
+#    proclubs.valorlink.co textually matches the *.valorlink.co wildcard used
+#    for tenancy units below, and Caddy's automatic HTTPS can end up
+#    provisioning a hostname covered by both an eager block and that
+#    wildcard's on-demand policy via NEITHER path -- no cert, no clear error.
+#    Nesting it sidesteps that entirely.)
 
 # 2. Its own venv (deliberately not /opt/valorlink/.venv):
 cd /opt/valorlink
@@ -310,14 +316,14 @@ sudo -u valorlink proclubs/.venv/bin/pip install -r proclubs/requirements.txt
 # 3. Install/start the service (install.sh already includes it):
 sudo bash deploy/install.sh
 
-# 4. Caddy: the proclubs.valorlink.co block is already in Caddyfile.platform
-#    (or Caddyfile, if you're not running platform mode). Copy whichever
-#    you use to /etc/caddy/Caddyfile, then:
+# 4. Caddy: the proclubs.apps.valorlink.co block is already in
+#    Caddyfile.platform (or Caddyfile, if you're not running platform mode).
+#    Copy whichever you use to /etc/caddy/Caddyfile, then:
 sudo systemctl reload caddy
 ```
 
-Visit `https://proclubs.valorlink.co`. Check it independently of the other
-two services:
+Visit `https://proclubs.apps.valorlink.co`. Check it independently of the
+other two services:
 
 ```bash
 systemctl status valorlink-proclubs

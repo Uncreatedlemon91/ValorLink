@@ -28,10 +28,16 @@ valorlink.co, www.valorlink.co {
 }
 
 # Pro Clubs Tracker -- a separate, unrelated service (not a tenancy unit).
-# Explicit host, not covered by the on_demand_tls wildcard above, so it gets
-# a normal ACME cert independent of the /tls-allow gate. Needs its own DNS
-# A record: proclubs.valorlink.co -> the same droplet IP.
-proclubs.valorlink.co {
+# Deliberately a NESTED subdomain (two labels before valorlink.co): a
+# single-label host here (e.g. proclubs.valorlink.co) textually matches the
+# *.valorlink.co wildcard above, and Caddy's automatic-HTTPS handling of a
+# hostname covered by both an eager explicit block and a wildcard on-demand
+# block on the same server can end up provisioning it via NEITHER path --
+# no eager obtain, no on-demand ask call, just a bare TLS failure. Nesting
+# it avoids the wildcard match entirely, so this gets an uncontested normal
+# ACME cert. Needs its own DNS A record: proclubs.apps.valorlink.co -> the
+# same droplet IP.
+proclubs.apps.valorlink.co {
     encode zstd gzip
     reverse_proxy 127.0.0.1:8001
 }

@@ -6,7 +6,7 @@ overview, recent matches, member stats, and divisional standings.
 
 This runs as its own independent service alongside the ValorLink bot/web app
 -- separate venv, separate systemd unit, separate subdomain
-(`proclubs.valorlink.co`), no shared database or code. See
+(`proclubs.apps.valorlink.co`), no shared database or code. See
 [`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
 
 ## Important caveats
