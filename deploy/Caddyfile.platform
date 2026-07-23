@@ -26,3 +26,12 @@ valorlink.co, www.valorlink.co {
     encode zstd gzip
     reverse_proxy 127.0.0.1:8000
 }
+
+# Pro Clubs Tracker -- a separate, unrelated service (not a tenancy unit).
+# Explicit host, not covered by the on_demand_tls wildcard above, so it gets
+# a normal ACME cert independent of the /tls-allow gate. Needs its own DNS
+# A record: proclubs.valorlink.co -> the same droplet IP.
+proclubs.valorlink.co {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8001
+}

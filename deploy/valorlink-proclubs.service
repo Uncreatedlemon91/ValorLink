@@ -1,0 +1,19 @@
+[Unit]
+Description=ValorLink Pro Clubs Tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Deliberately its own venv (not /opt/valorlink/.venv) -- fully isolated from
+# the bot/web app's dependencies. No .env needed: this service has no secrets.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/gunicorn app:app \
+    --workers 2 --bind 127.0.0.1:8001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pro Clubs Tracker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <header>
+    <h1>Pro Clubs Tracker</h1>
+    <form id="search-form">
+      <input id="club-name" type="text" placeholder="Club name" value="Pr1mE6ers" required />
+      <select id="platform">
+        {% for code, label in platforms.items() %}
+        <option value="{{ code }}" {% if code == 'common-gen5' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Search</button>
+    </form>
+  </header>
+
+  <section id="search-results" class="hidden">
+    <h2>Select a club</h2>
+    <ul id="results-list"></ul>
+  </section>
+
+  <section id="club-view" class="hidden">
+    <div id="club-header"></div>
+    <nav id="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="matches">Matches</button>
+      <button data-tab="members">Members</button>
+      <button data-tab="standings">Standings</button>
+    </nav>
+    <div id="tab-overview" class="tab-panel active"></div>
+    <div id="tab-matches" class="tab-panel"></div>
+    <div id="tab-members" class="tab-panel"></div>
+    <div id="tab-standings" class="tab-panel"></div>
+  </section>
+
+  <p id="status"></p>
+
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

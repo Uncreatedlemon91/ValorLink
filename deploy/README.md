@@ -19,6 +19,7 @@ Files in this folder:
 |---|---|
 | `valorlink-bot.service` | `/etc/systemd/system/` (via `install.sh`) |
 | `valorlink-web.service` | `/etc/systemd/system/` (via `install.sh`) |
+| `valorlink-proclubs.service` | `/etc/systemd/system/` (via `install.sh`, optional -- see below) |
 | `install.sh` | run in place with `sudo` |
 | `Caddyfile` | `/etc/caddy/Caddyfile` |
 | `.env.production.example` | copy to `/opt/valorlink/.env` |
@@ -167,6 +168,15 @@ sudo -u valorlink .venv/bin/alembic upgrade head
 sudo systemctl restart valorlink-bot valorlink-web
 ```
 
+If the Pro Clubs Tracker is installed (see below), also refresh its
+**separate** venv and restart it -- it's independent of the bot/web app, so a
+bot/web deploy never needs to touch it, and vice versa:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/pip install -r proclubs/requirements.txt
+sudo systemctl restart valorlink-proclubs
+```
+
 **Multi-unit deployments:** `alembic upgrade head` only migrates the default
 database. Each unit has its own database, so after a schema change run:
 
@@ -279,6 +289,44 @@ The one bot serves every unit's Discord: it drains each unit's action queue
 against that unit's guild, so web actions reach Discord for **all** units.
 (New units are picked up on the next bot restart, when it syncs commands to
 their guild — `sudo systemctl restart valorlink-bot`.)
+
+## Optional: Pro Clubs Tracker
+
+A separate, unrelated Flask app under [`proclubs/`](../proclubs) that proxies
+EA's unofficial Pro Clubs API. It shares the droplet but nothing else with
+the bot/web app: its own venv, its own systemd service, its own subdomain, no
+shared database, no shared `.env`. Safe to install, skip, or remove without
+affecting anything above.
+
+```bash
+# 1. DNS: add an A record for proclubs.valorlink.co -> the droplet IP.
+
+# 2. Its own venv (deliberately not /opt/valorlink/.venv):
+cd /opt/valorlink
+sudo -u valorlink python3 -m venv proclubs/.venv
+sudo -u valorlink proclubs/.venv/bin/pip install --upgrade pip
+sudo -u valorlink proclubs/.venv/bin/pip install -r proclubs/requirements.txt
+
+# 3. Install/start the service (install.sh already includes it):
+sudo bash deploy/install.sh
+
+# 4. Caddy: the proclubs.valorlink.co block is already in Caddyfile.platform
+#    (or Caddyfile, if you're not running platform mode). Copy whichever
+#    you use to /etc/caddy/Caddyfile, then:
+sudo systemctl reload caddy
+```
+
+Visit `https://proclubs.valorlink.co`. Check it independently of the other
+two services:
+
+```bash
+systemctl status valorlink-proclubs
+journalctl -u valorlink-proclubs -f
+```
+
+**Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
+delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming
+space -- none of that touches the bot, the web app, or their database.
 
 ## Troubleshooting
 
