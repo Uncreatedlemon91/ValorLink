@@ -33,6 +33,7 @@ from db.models import (  # noqa: E402
     Company,
     DisciplinaryRecord,
     Event,
+    EventSlot,
     Member,
     MemberAward,
     PendingAction,
@@ -592,6 +593,130 @@ def test_officer_can_create_event_and_mark_attendance():
         assert rec.status == "present"
 
 
+def test_create_event_with_color_image_description():
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/muster-calls")
+    r = client.post("/muster-calls/create",
+                    data={"csrf": token, "name": "Rich Post Drill", "event_type": "Drill",
+                          "date": "2099-01-02", "time": "19:00",
+                          "description": "Bring your rifles.", "color_hex": "#7C1F2B"},
+                    files={"image": ("i.png", _PNG, "image/png")})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        ev = s.query(Event).filter_by(name="Rich Post Drill").one()
+        assert ev.description == "Bring your rifles."
+        assert ev.color == 0x7C1F2B
+        assert ev.image and ev.image.startswith("data:image/png;base64,")
+
+
+def test_update_event_can_set_keep_and_remove_image():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        ev = Event(name="Editable Call", event_type="Drill",
+                   scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1)
+        s.add(ev); s.commit(); eid = ev.id
+
+    client.post(f"/muster-calls/{eid}/update",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "name": "Editable Call",
+                      "event_type": "Drill", "date": "2099-01-01", "time": "19:00",
+                      "description": "Details here.", "color_hex": "#123456"},
+                files={"image": ("i.png", _PNG, "image/png")})
+    with SessionLocal() as s:
+        ev = s.get(Event, eid)
+        assert ev.description == "Details here." and ev.color == 0x123456
+        assert ev.image and ev.image.startswith("data:image/png;base64,")
+
+    # a text-only save (no file, no remove flag) leaves the image alone
+    client.post(f"/muster-calls/{eid}/update",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "name": "Editable Call",
+                      "event_type": "Drill", "date": "2099-01-01", "time": "19:00",
+                      "description": "Updated details.", "color_hex": "#123456"})
+    with SessionLocal() as s:
+        ev = s.get(Event, eid)
+        assert ev.description == "Updated details." and ev.image
+
+    # remove_image clears it; blank color clears the override
+    client.post(f"/muster-calls/{eid}/update",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "name": "Editable Call",
+                      "event_type": "Drill", "date": "2099-01-01", "time": "19:00",
+                      "remove_image": "1"})
+    with SessionLocal() as s:
+        ev = s.get(Event, eid)
+        assert ev.image is None and ev.color is None
+
+
+def test_event_signup_slots_crud_and_capacity():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        ev = Event(name="Raid Night", event_type="Operation",
+                   scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1)
+        s.add(ev); s.commit(); eid = ev.id
+
+    # add two roles, one capacity-limited
+    client.post(f"/muster-calls/{eid}/slots/add",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "name": "Riflemen", "capacity": "1"})
+    client.post(f"/muster-calls/{eid}/slots/add",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "name": "Command", "capacity": ""})
+    with SessionLocal() as s:
+        slots = s.query(EventSlot).filter_by(event_id=eid).order_by(EventSlot.position).all()
+        assert [s_.name for s_ in slots] == ["Riflemen", "Command"]
+        rifle_id, command_id = slots[0].id, slots[1].id
+
+    # RSVPing is member self-service; switch to an enlisted member (MEMBER_ID)
+    _login(client, "none", discord_id=MEMBER_ID, name="Testman")
+
+    # a flat "accepted" RSVP is rejected once the event has slots
+    r = client.post(f"/muster-calls/{eid}/rsvp",
+                    data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "accepted"})
+    assert "Choose a signup role" in r.text
+
+    # signing up for a specific slot works
+    r = client.post(f"/muster-calls/{eid}/rsvp",
+                    data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "accepted",
+                          "slot_id": str(rifle_id)})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=MEMBER_ID).one()
+        assert rec.status == "accepted" and rec.slot_id == rifle_id
+
+    # a second member can't take the same (now full) capacity-1 slot
+    with SessionLocal() as s:
+        s.add(Member(discord_id=700, callsign="Second", rank="Private", company="Alpha", status="active"))
+        s.commit()
+    _login(client, "none", discord_id=700, name="Second")
+    r = client.post(f"/muster-calls/{eid}/rsvp",
+                    data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "accepted",
+                          "slot_id": str(rifle_id)})
+    assert "is full" in r.text
+    # but the unlimited role is fine
+    client.post(f"/muster-calls/{eid}/rsvp",
+                data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "accepted",
+                      "slot_id": str(command_id)})
+    with SessionLocal() as s:
+        rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=700).one()
+        assert rec.slot_id == command_id
+
+    # declining always clears any slot
+    r = client.post(f"/muster-calls/{eid}/rsvp",
+                    data={"csrf": _csrf(client, f"/muster-calls/{eid}"), "status": "declined"})
+    with SessionLocal() as s:
+        rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=700).one()
+        assert rec.status == "declined" and rec.slot_id is None
+
+    # removing a role clears it from anyone still holding it, without an error
+    _login(client, "officer")
+    r = client.post(f"/muster-calls/{eid}/slots/{rifle_id}/remove",
+                    data={"csrf": _csrf(client, f"/muster-calls/{eid}")})
+    assert r.status_code == 200
+    with SessionLocal() as s:
+        assert s.query(EventSlot).filter_by(id=rifle_id).count() == 0
+        rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=MEMBER_ID).one()
+        assert rec.slot_id is None  # freed, not deleted
+
+
 def test_bulk_company_transfer_and_note():
     client = TestClient(app)
     _login(client, "officer")
@@ -780,6 +905,100 @@ def test_bridge_announces_event_to_channel():
     bridge.bot.add_view.assert_called()
     with SessionLocal() as s:
         assert s.get(Event, event_id).message_id == 987654321
+
+
+def test_build_event_embed_with_color_image_description_and_slots():
+    from cogs.events import _build_event_embed, _rsvp_buckets
+
+    with SessionLocal() as s:
+        ev = Event(name="Raid", event_type="Operation",
+                   scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1,
+                   description="Bring rifles.", color=0x123456,
+                   image=f"data:image/png;base64,{__import__('base64').b64encode(_PNG).decode()}")
+        s.add(ev); s.commit(); eid = ev.id
+        s.add(EventSlot(event_id=eid, name="Riflemen", capacity=2, position=0))
+        s.commit()
+
+    with SessionLocal() as s:
+        event = s.get(Event, eid)
+        buckets = _rsvp_buckets(s, eid)
+        slots = s.query(EventSlot).filter_by(event_id=eid).all()
+        embed, file = _build_event_embed(event, buckets, slots, {slots[0].id: 1})
+
+    assert embed.color.value == 0x123456
+    assert "Bring rifles." in embed.description
+    assert embed.image.url == f"attachment://{file.filename}"
+    field_names = [f.name for f in embed.fields]
+    assert any("Riflemen (1/2)" in n for n in field_names)
+    assert not any(n.startswith("Accepted") for n in field_names)  # slots replace the flat bucket
+
+
+def test_build_event_embed_falls_back_to_brand_color_with_no_slots():
+    from cogs.events import _build_event_embed, _rsvp_buckets
+
+    with SessionLocal() as s:
+        get_config(s).brand_color = 0x7C1F2B
+        ev = Event(name="Plain Drill", event_type="Drill",
+                   scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1)
+        s.add(ev); s.commit(); eid = ev.id
+
+    with SessionLocal() as s:
+        event = s.get(Event, eid)
+        buckets = _rsvp_buckets(s, eid)
+        embed, file = _build_event_embed(event, buckets)
+
+    assert embed.color.value == 0x7C1F2B  # event.color is None -> base_embed's brand default
+    assert file is None
+    field_names = [f.name for f in embed.fields]
+    assert any(n.startswith("Accepted") for n in field_names)
+
+
+def test_slot_select_enforces_capacity_and_frees_slot_on_removal():
+    import cogs.events as events_mod
+    from cogs.events import RSVPView
+    from db.context import set_current_db_url
+
+    url = os.environ["DATABASE_URL"]
+    saved = events_mod.bind_guild
+    events_mod.bind_guild = lambda gid: set_current_db_url(url)
+    try:
+        with SessionLocal() as s:
+            ev = Event(name="Raid Night 2", event_type="Operation",
+                       scheduled_at=__import__("datetime").datetime(2099, 1, 1), created_by=1)
+            s.add(ev); s.commit(); eid = ev.id
+            slot = EventSlot(event_id=eid, name="Riflemen", capacity=1, position=0)
+            s.add(slot); s.commit(); slot_id = slot.id
+            s.add(Member(discord_id=701, callsign="First", rank="Private", company="Alpha", status="active"))
+            s.commit()
+
+        view = RSVPView(eid, [slot], {})
+
+        def interaction_for(discord_id):
+            i = MagicMock()
+            i.guild_id = 1
+            i.user.id = discord_id
+            i.response.send_message = AsyncMock()
+            i.response.edit_message = AsyncMock()
+            i.followup.send = AsyncMock()
+            return i
+
+        asyncio.run(view.set_slot(interaction_for(701), str(slot_id)))
+        with SessionLocal() as s:
+            rec = s.query(AttendanceRecord).filter_by(event_id=eid, member_id=701).one()
+            assert rec.status == "accepted" and rec.slot_id == slot_id
+
+        # a second member is turned away — the slot is full
+        with SessionLocal() as s:
+            s.add(Member(discord_id=702, callsign="Second", rank="Private", company="Alpha", status="active"))
+            s.commit()
+        i2 = interaction_for(702)
+        asyncio.run(view.set_slot(i2, str(slot_id)))
+        i2.response.send_message.assert_awaited_once()
+        assert "full" in i2.response.send_message.call_args.args[0]
+        with SessionLocal() as s:
+            assert s.query(AttendanceRecord).filter_by(event_id=eid, member_id=702).count() == 0
+    finally:
+        events_mod.bind_guild = saved
 
 
 def test_failed_action_shows_and_retries():

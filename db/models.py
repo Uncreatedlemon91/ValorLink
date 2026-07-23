@@ -113,9 +113,33 @@ class Event(Base):
     announce_lead_minutes = Column(Integer, nullable=True)
     announced = Column(Boolean, nullable=False, default=False, server_default="0")
 
+    description = Column(Text, nullable=True)      # organizer-authored details shown in the embed
+    image = Column(Text, nullable=True)             # data: URI, shown as the embed's main image
+    color = Column(Integer, nullable=True)          # per-event accent color; NULL falls back to brand_color
+
     attendance_records = relationship(
         "AttendanceRecord", back_populates="event", cascade="all, delete-orphan"
     )
+    slots = relationship(
+        "EventSlot", back_populates="event", cascade="all, delete-orphan",
+        order_by="EventSlot.position",
+    )
+
+
+class EventSlot(Base):
+    """A named, optionally capacity-limited signup role on an event (e.g.
+    "Riflemen (10)", "Command (2)"). An event with no slots keeps the plain
+    accept/tentative/decline RSVP; one or more slots switches sign-up to
+    picking a role instead of a flat RSVP."""
+    __tablename__ = "event_slots"
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    name = Column(String, nullable=False)
+    capacity = Column(Integer, nullable=True)      # NULL = unlimited
+    position = Column(Integer, nullable=False, default=0)
+
+    event = relationship("Event", back_populates="slots")
 
 
 class AttendanceRecord(Base):
@@ -126,10 +150,12 @@ class AttendanceRecord(Base):
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     member_id = Column(BigInteger, ForeignKey("members.discord_id"), nullable=False)
     status = Column(String, nullable=False, default="pending")  # accepted|declined|tentative|present|absent|excused
+    slot_id = Column(Integer, ForeignKey("event_slots.id"), nullable=True)
     responded_at = Column(DateTime, default=_utcnow)
 
     event = relationship("Event", back_populates="attendance_records")
     member = relationship("Member", back_populates="attendance_records")
+    slot = relationship("EventSlot")
 
 
 class AwardType(Base):

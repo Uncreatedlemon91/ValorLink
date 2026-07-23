@@ -660,7 +660,8 @@ class Bridge(commands.Cog):
         await self._dm(guild, p["discord_id"], p.get("dm", ""))
 
     async def _do_announce_event(self, guild, p):
-        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets
+        from db.models import EventSlot
+        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets, _slot_counts
 
         with db_session() as session:
             event = session.get(Event, p["event_id"])
@@ -668,15 +669,21 @@ class Bridge(commands.Cog):
                 return
             channel_id = get_config(session).announcements_channel_id
             buckets = _rsvp_buckets(session, event.id)
-            embed = _build_event_embed(event, buckets)
+            slots = (
+                session.query(EventSlot).filter(EventSlot.event_id == event.id)
+                .order_by(EventSlot.position).all()
+            )
+            counts = _slot_counts(session, event.id)
+            embed, file = _build_event_embed(event, buckets, slots, counts)
             event_id = event.id
 
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel is None:
             return  # no announcements channel configured; the event still lives on the site
 
-        view = RSVPView(event_id)
-        message = await channel.send(embed=embed, view=view)
+        view = RSVPView(event_id, slots, counts)
+        message = await (channel.send(embed=embed, view=view, file=file) if file
+                         else channel.send(embed=embed, view=view))
 
         with db_session() as session:
             row = session.get(Event, event_id)
@@ -688,14 +695,20 @@ class Bridge(commands.Cog):
         self.bot.add_view(view, message_id=message.id)
 
     async def _do_refresh_event(self, guild, p):
-        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets
+        from db.models import EventSlot
+        from cogs.events import RSVPView, _build_event_embed, _rsvp_buckets, _slot_counts
 
         with db_session() as session:
             event = session.get(Event, p["event_id"])
             if event is None or not event.message_id or not event.channel_id:
                 return
             buckets = _rsvp_buckets(session, event.id)
-            embed = _build_event_embed(event, buckets)
+            slots = (
+                session.query(EventSlot).filter(EventSlot.event_id == event.id)
+                .order_by(EventSlot.position).all()
+            )
+            counts = _slot_counts(session, event.id)
+            embed, file = _build_event_embed(event, buckets, slots, counts)
             channel_id, message_id, event_id = event.channel_id, event.message_id, event.id
 
         channel = guild.get_channel(channel_id)
@@ -705,9 +718,12 @@ class Bridge(commands.Cog):
             message = await channel.fetch_message(message_id)
         except discord.HTTPException:
             return
-        view = RSVPView(event_id)
+        view = RSVPView(event_id, slots, counts)
         try:
-            await message.edit(embed=embed, view=view)
+            if file:
+                await message.edit(embed=embed, view=view, attachments=[file])
+            else:
+                await message.edit(embed=embed, view=view)
             self.bot.add_view(view, message_id=message_id)
         except discord.HTTPException:
             pass

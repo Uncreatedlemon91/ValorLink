@@ -112,8 +112,9 @@ class ValorLink(commands.Bot):
         """Re-register interactive views for every unit, reading each unit's
         own database. A view's button callback binds its guild's database when
         clicked, so the same view class serves every unit correctly."""
-        from cogs.events import RSVPView
+        from cogs.events import RSVPView, _slot_counts
         from cogs.recruitment import InterviewView
+        from db.models import EventSlot
 
         with registry_session() as rs:
             units = [t.db_url for t in all_tenants(rs)]
@@ -124,7 +125,12 @@ class ValorLink(commands.Bot):
             try:
                 with db_session() as session:
                     for event in session.query(Event).filter(Event.message_id.isnot(None)).all():
-                        self.add_view(RSVPView(event.id), message_id=event.message_id)
+                        slots = (
+                            session.query(EventSlot).filter(EventSlot.event_id == event.id)
+                            .order_by(EventSlot.position).all()
+                        )
+                        counts = _slot_counts(session, event.id)
+                        self.add_view(RSVPView(event.id, slots, counts), message_id=event.message_id)
                         total_events += 1
                     for c in session.query(Candidacy).filter(Candidacy.message_id.isnot(None)).all():
                         self.add_view(InterviewView(c.discord_id, c.callsign), message_id=c.message_id)
