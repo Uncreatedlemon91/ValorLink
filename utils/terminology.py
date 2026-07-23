@@ -61,6 +61,18 @@ THEMES = {value for value, _ in THEME_CHOICES}
 # Themes that use the dark component family (get the extra `theme-dark` class).
 DARK_THEMES = {"modern", "midnight", "forest", "ember"}
 
+# A representative (paper, ink, brass) swatch per theme, for the visual theme
+# picker in the Command Tent -- kept in sync by hand with the palettes each
+# `body.theme-*` block sets in valorlink.css.
+THEME_SWATCHES = {
+    "parchment": ("#f2e7cf", "#2b2117", "#9c7a33"),
+    "linen":     ("#f5f5f3", "#23262b", "#9c7a33"),
+    "modern":    ("#1c2025", "#e7e9ec", "#c69a4a"),
+    "midnight":  ("#16233b", "#e4ebf5", "#c9a24a"),
+    "forest":    ("#18241b", "#e6ede2", "#b7a24a"),
+    "ember":     ("#241a17", "#f0e6df", "#c99a52"),
+}
+
 # Words an admin can override, in display order, with a friendly editor label.
 # (event_types is handled separately as a comma-separated list.)
 EDITABLE_KEYS = [

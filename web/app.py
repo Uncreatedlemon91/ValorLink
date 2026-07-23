@@ -570,10 +570,13 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         .all()
     )
     spark = [
-        {"name": e.name, "present": sum(1 for r in e.attendance_records if r.status == "present")}
+        {"name": e.name, "present": sum(1 for r in e.attendance_records if r.status == "present"),
+         "total": len(e.attendance_records)}
         for e in reversed(past_events)
     ]
     spark_max = max((s["present"] for s in spark), default=0)
+    spark_rates = [s["present"] / s["total"] for s in spark if s["total"]]
+    spark_pct = round(sum(spark_rates) / len(spark_rates) * 100) if spark_rates else None
     setup = None
     setup_steps = None
     if auth.tier_at_least(ctx["user"], auth.TIER_ADMIN):
@@ -600,6 +603,7 @@ def headquarters(request: Request, session: Session = Depends(get_session)):
         next_event=next_event,
         spark=spark,
         spark_max=spark_max,
+        spark_pct=spark_pct,
         setup=setup,
         setup_steps=setup_steps,
     )
@@ -1370,6 +1374,7 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         assignments=services.list_assignments(session),
         questions=services.list_recruitment_questions(session),
         theme_choices=terminology.THEME_CHOICES,
+        theme_swatches=terminology.THEME_SWATCHES,
         term_fields=terminology.EDITABLE_KEYS,
         has_custom_terms=bool(cfg.terminology_custom),
         listing=listing,
