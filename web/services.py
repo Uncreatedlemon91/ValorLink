@@ -116,6 +116,20 @@ def rename_member(session, actor: dict, discord_id: int, new_callsign: str) -> s
     return f"{old_callsign} renamed to {new_callsign}."
 
 
+def force_resync_nicknames(session) -> str:
+    """Rebuild and push every non-discharged member's Discord nickname from
+    their stored rank/company/callsign right now, regardless of whether
+    anything actually changed -- for confirming the whole roster matches
+    after a bulk cleanup, or recovering from nicknames that drifted while
+    the bot was offline or lacked permissions."""
+    count = session.query(Member).filter(Member.status != "discharged").count()
+    if count == 0:
+        raise ActionError("There are no active members to resync.")
+    queue.enqueue(session, queue.RESYNC_NICKNAMES, {})
+    session.commit()
+    return f"Rebuilding {count} member nickname(s) in Discord…"
+
+
 # --- Rank ---------------------------------------------------------------- #
 def change_rank(session, actor: dict, discord_id: int, new_rank: str, citation: str = "") -> str:
     new_record = rank_utils.rank_by_name(session, new_rank)

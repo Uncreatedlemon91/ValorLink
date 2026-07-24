@@ -2238,6 +2238,15 @@ def post_identity(
                unit_tag, redirect="/command-tent")
 
 
+@app.post("/admin/resync-nicknames")
+def post_resync_nicknames(
+    request: Request,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_admin),
+):
+    return _do(request, csrf, services.force_resync_nicknames, redirect="/command-tent")
+
+
 CREST_MAX_BYTES = 256 * 1024
 CREST_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 

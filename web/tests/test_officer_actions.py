@@ -1508,6 +1508,29 @@ def test_unit_tag_update_enqueues_resync():
     assert len(_actions(queue.RESYNC_NICKNAMES)) == 1
 
 
+def test_force_resync_nicknames_enqueues_unscoped_action():
+    import json
+    client = TestClient(app)
+    _login(client, "admin")
+    r = client.post("/admin/resync-nicknames", data={"csrf": _csrf(client, "/command-tent")})
+    assert r.status_code == 200
+    acts = _actions(queue.RESYNC_NICKNAMES)
+    assert len(acts) == 1
+    assert json.loads(acts[0].payload) == {}  # unscoped -- every active member
+
+    # a second click queues another pass rather than being deduplicated
+    client.post("/admin/resync-nicknames", data={"csrf": _csrf(client, "/command-tent")})
+    assert len(_actions(queue.RESYNC_NICKNAMES)) == 2
+
+
+def test_force_resync_nicknames_requires_admin():
+    client = TestClient(app)
+    _login(client, "officer")
+    r = client.post("/admin/resync-nicknames", data={"csrf": "x"}, follow_redirects=False)
+    assert r.status_code == 403
+    assert _actions(queue.RESYNC_NICKNAMES) == []
+
+
 def test_company_tag_update_enqueues_scoped_resync():
     import json
     client = TestClient(app)
