@@ -15,7 +15,7 @@ from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed, discord_ts
 from utils.settings import get_config, list_companies
-from utils.sync import current_prefix, sync_company
+from utils.sync import current_nickname, sync_company
 
 ROSTER_MESSAGE_KEY = "roster_message_id"
 ACTIVITY_TOUCH_COOLDOWN = timedelta(hours=1)
@@ -168,46 +168,48 @@ class Roster(commands.Cog):
                 record.status = "active"
             session.commit()
 
-    async def _apply_display_name(self, guild: discord.Guild, member_id: int, raw: str):
-        """Update a member's callsign from a Discord display name (server nick
-        or username), if it changed. Strips the bot's own tag/rank prefix
-        (e.g. "5thVA A Cpl. ") first, so a bot-driven nickname edit
-        round-trips to the same callsign instead of getting baked in and
-        duplicated the next time a rank/company sync rebuilds the nickname."""
+    async def _enforce_nickname(self, guild: discord.Guild, member_id: int):
+        """ValorLink is the source of truth for a member's display name: if
+        their Discord nickname doesn't match what ValorLink would currently
+        write for them -- a manual rename, a nickname cleared back to the
+        username, a username change with no nickname set -- snap it back
+        immediately instead of letting the roster drift to follow Discord."""
         if db_url_for_guild(guild.id) is None:
             return  # not a registered unit
-        raw = (raw or "").strip()
-        if not raw:
-            return
         token = bind_guild(guild.id)
         try:
             with db_session() as session:
-                record = session.get(Member, member_id)
-                if record is None:
+                if session.get(Member, member_id) is None:
                     return
-                prefix = current_prefix(session, member_id)
-                callsign = raw[len(prefix):].strip() if prefix and raw.startswith(prefix) else raw
-                if not callsign or record.callsign == callsign:
-                    return
-                record.callsign = callsign
-                session.commit()
-            await refresh_roster(guild)
+                expected = current_nickname(session, member_id)
         finally:
             reset_current_db_url(token)
+        if not expected:
+            return
+        member = guild.get_member(member_id)
+        if member is None or member.nick == expected:
+            return
+        try:
+            await member.edit(nick=expected)
+        except discord.HTTPException:
+            pass
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
-        # A server nickname change (set by the member, or cleared back to their
-        # username) updates their callsign.
+        # A nickname change -- self-service, an officer editing it directly in
+        # Discord, or clearing it back to the username -- gets snapped back to
+        # what the roster says. A nick that already matches (e.g. the bot's own
+        # rank/company sync echoing back) is left alone.
         if before.nick == after.nick:
             return
-        await self._apply_display_name(after.guild, after.id, after.nick or after.name)
+        await self._enforce_nickname(after.guild, after.id)
 
     @commands.Cog.listener()
     async def on_user_update(self, before: discord.User, after: discord.User):
-        # Username and avatar changes both arrive here. A username change updates
-        # the callsign (only where there's no server nickname, which takes
-        # precedence); an avatar change updates the stored avatar everywhere.
+        # Username and avatar changes both arrive here. A username change can
+        # surface as the display name for anyone without a server nickname, so
+        # it's re-enforced the same way as a nickname change; an avatar change
+        # updates the stored avatar everywhere.
         name_changed = before.name != after.name
         avatar_changed = before.avatar != after.avatar
         if not name_changed and not avatar_changed:
@@ -229,8 +231,8 @@ class Roster(commands.Cog):
                             session.commit()
                 finally:
                     reset_current_db_url(token)
-            if name_changed and not member.nick:
-                await self._apply_display_name(guild, after.id, after.name)
+            if name_changed:
+                await self._enforce_nickname(guild, after.id)
 
     @tasks.loop(hours=24)
     async def inactivity_check(self):

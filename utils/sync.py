@@ -81,6 +81,15 @@ def current_prefix(session, discord_id: int, rank_name: str | None = None,
     return build_prefix(unit_tag, company_tag, rank_abbr)
 
 
+def current_nickname(session, discord_id: int) -> str:
+    """The full nickname (tag/rank prefix + callsign) ValorLink would currently
+    write for this member, purely from stored data -- used to detect (and
+    correct) a Discord-side nickname that has drifted from the roster."""
+    unit_tag, company_tag, rank_abbr, callsign = _nickname_pieces(
+        session, discord_id, None, None, None)
+    return build_nickname(unit_tag, company_tag, rank_abbr, callsign)
+
+
 async def _apply_nickname(member: discord.Member, callsign: str | None = None,
                           rank_name: str | None = None, company_name: str | None = None):
     with db_session() as session:

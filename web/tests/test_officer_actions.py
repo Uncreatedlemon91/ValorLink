@@ -386,49 +386,56 @@ def test_bridge_import_roster_creates_new_members_only():
         assert s.query(Member).filter_by(discord_id=999).count() == 0  # bot skipped
 
 
-def test_discord_name_change_updates_callsign():
+def test_manual_discord_rename_gets_reverted():
+    """ValorLink is the source of truth for a member's display name: a manual
+    server nickname edit, or a username change with no nickname set, must be
+    snapped back to what the roster says rather than being written into it."""
     import cogs.roster as roster_mod
     from cogs.roster import Roster
 
     url = os.environ["DATABASE_URL"]
-    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster)
+    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild)
     roster_mod.db_url_for_guild = lambda gid: url
     roster_mod.bind_guild = lambda gid: roster_mod.set_current_db_url(url)
-    roster_mod.refresh_roster = AsyncMock()
     try:
         cog = object.__new__(Roster)
         cog.bot = MagicMock()
         guild = MagicMock(); guild.id = 1
+        member = MagicMock()
+        member.nick = "Pvt. Renamed"  # what Discord shows after the manual edit
+        member.edit = AsyncMock()
+        guild.get_member.return_value = member
 
-        # server nickname change → callsign follows (rank prefix stripped)
+        # a manual server nickname change is reverted; the roster is untouched
         before, after = MagicMock(), MagicMock()
         before.nick = "Pvt. Testman"; after.nick = "Pvt. Renamed"
-        after.name = "testman_user"; after.id = MEMBER_ID; after.guild = guild
+        after.id = MEMBER_ID; after.guild = guild
         asyncio.run(cog.on_member_update(before, after))
+        member.edit.assert_awaited_once_with(nick="Pvt. Testman")
         with SessionLocal() as s:
-            assert s.get(Member, MEMBER_ID).callsign == "Renamed"
+            assert s.get(Member, MEMBER_ID).callsign == "Testman"  # unchanged
 
-        # global username change, no server nickname → callsign follows
-        member = MagicMock(); member.nick = None
-        guild.get_member.return_value = member
+        # a nick that already matches what ValorLink would write is left alone
+        member.edit.reset_mock()
+        member.nick = "Pvt. Testman"
+        before2, after2 = MagicMock(), MagicMock()
+        before2.nick = None; after2.nick = "Pvt. Testman"
+        after2.id = MEMBER_ID; after2.guild = guild
+        asyncio.run(cog.on_member_update(before2, after2))
+        member.edit.assert_not_awaited()
+
+        # a username change with no server nickname set is enforced too
+        member.nick = None
         cog.bot.guilds = [guild]
         ub, ua = MagicMock(), MagicMock()
         ub.name = "old"; ua.name = "NewUser"; ua.id = MEMBER_ID
         ub.avatar = ua.avatar = None
         asyncio.run(cog.on_user_update(ub, ua))
+        member.edit.assert_awaited_once_with(nick="Pvt. Testman")
         with SessionLocal() as s:
-            assert s.get(Member, MEMBER_ID).callsign == "NewUser"
-
-        # username change is ignored when a server nickname is set (nick wins)
-        member.nick = "Pvt. KeepThis"
-        ub2, ua2 = MagicMock(), MagicMock()
-        ub2.name = "NewUser"; ua2.name = "Ignored"; ua2.id = MEMBER_ID
-        ub2.avatar = ua2.avatar = None
-        asyncio.run(cog.on_user_update(ub2, ua2))
-        with SessionLocal() as s:
-            assert s.get(Member, MEMBER_ID).callsign == "NewUser"  # unchanged
+            assert s.get(Member, MEMBER_ID).callsign == "Testman"  # still unchanged
     finally:
-        (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster) = saved
+        (roster_mod.db_url_for_guild, roster_mod.bind_guild) = saved
 
 
 def test_member_profile_and_loa_self_service():
@@ -1516,20 +1523,20 @@ def test_company_tag_update_enqueues_scoped_resync():
     assert acts and json.loads(acts[0].payload)["company"] == "Alpha"
 
 
-def test_rank_sync_echo_does_not_duplicate_nickname_tags():
+def test_rank_sync_echo_is_a_no_op():
     """Regression test: a rank sync writes a tagged nickname to Discord;
-    Discord echoes that edit back through on_member_update. The echo must
-    not bake the tags into the stored callsign, or the next sync would
-    prepend a fresh tag onto an already-tagged name (the reported bug)."""
+    Discord echoes that edit back through on_member_update. Since the echoed
+    nick already matches what ValorLink would write, the handler must not
+    issue a second, redundant edit -- and a later sync must not duplicate
+    the tags (the originally reported bug)."""
     import cogs.roster as roster_mod
     from cogs.roster import Roster
     from utils.sync import sync_rank
 
     url = os.environ["DATABASE_URL"]
-    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster)
+    saved = (roster_mod.db_url_for_guild, roster_mod.bind_guild)
     roster_mod.db_url_for_guild = lambda gid: url
     roster_mod.bind_guild = lambda gid: roster_mod.set_current_db_url(url)
-    roster_mod.refresh_roster = AsyncMock()
     try:
         with SessionLocal() as s:
             get_config(s).unit_tag = "5thVA"
@@ -1547,19 +1554,21 @@ def test_rank_sync_echo_does_not_duplicate_nickname_tags():
         asyncio.run(sync_rank(member, "Testman", "Private", "Corporal"))
         nick1 = member.edit.call_args.kwargs["nick"]
         assert nick1 == "5thVA A Cpl. Testman"
+        member.nick = nick1  # Discord now reflects the bot's own edit
 
         # Discord echoes the bot's own edit back through on_member_update.
         cog = object.__new__(Roster)
         cog.bot = MagicMock()
+        guild = member.guild
+        guild.get_member = MagicMock(return_value=member)
         before, after = MagicMock(), MagicMock()
         before.nick = None
         after.nick = nick1
-        after.name = "testman_user"
         after.id = MEMBER_ID
-        after.guild = member.guild
+        after.guild = guild
+        member.edit.reset_mock()
         asyncio.run(cog.on_member_update(before, after))
-        with SessionLocal() as s:
-            assert s.get(Member, MEMBER_ID).callsign == "Testman"
+        member.edit.assert_not_awaited()  # already matches -- no redundant edit
 
         # A second sync (promotion to Sergeant) must not duplicate the tags.
         with SessionLocal() as s:
@@ -1570,7 +1579,7 @@ def test_rank_sync_echo_does_not_duplicate_nickname_tags():
         assert nick2 == "5thVA A Sgt. Testman"
         assert nick2.count("5thVA") == 1
     finally:
-        (roster_mod.db_url_for_guild, roster_mod.bind_guild, roster_mod.refresh_roster) = saved
+        (roster_mod.db_url_for_guild, roster_mod.bind_guild) = saved
 
 
 def test_bridge_import_roster_strips_existing_tag_prefix():
