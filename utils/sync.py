@@ -56,10 +56,15 @@ def _nickname_pieces(session, discord_id: int, callsign: str | None,
 
     cfg = get_config(session)
     unit_tag = cfg.unit_tag or ""
+    # Rank/company are stored as free-text on Member rather than as foreign
+    # keys, so a stale value that no longer matches any Rank/Company row is
+    # possible (e.g. renamed outside the resync path). Fall back to the raw
+    # stored text in both cases so the tag stays visible rather than one of
+    # the two silently vanishing while the other shows the full name.
     rank_record = rank_utils.rank_by_name(session, rank_name) if rank_name else None
     rank_abbr = rank_record.abbreviation if rank_record else (rank_name or "")
     company_record = company_by_name(session, company_name) if company_name else None
-    company_tag = (company_record.tag or "") if company_record else ""
+    company_tag = (company_record.tag or "") if company_record else (company_name or "")
     return unit_tag, company_tag, rank_abbr, callsign
 
 

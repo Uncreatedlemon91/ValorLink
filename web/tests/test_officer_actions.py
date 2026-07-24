@@ -1834,6 +1834,64 @@ def test_rank_abbreviation_only_change_enqueues_scoped_resync():
     assert len(_actions(queue.RESYNC_NICKNAMES)) == 1
 
 
+def test_rank_remove_blocked_while_members_hold_it():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        rid = s.query(Rank).filter_by(name="Private").one().id
+    client.post(f"/admin/ranks/{rid}/remove", data={"csrf": token})
+    with SessionLocal() as s:
+        # still present -- removal was refused because Testman still holds it
+        assert s.get(Rank, rid) is not None
+        assert s.get(Member, MEMBER_ID).rank == "Private"
+
+    with SessionLocal() as s:
+        s.get(Member, MEMBER_ID).rank = "Corporal"
+        s.commit()
+    token = _csrf(client, "/command-tent")
+    client.post(f"/admin/ranks/{rid}/remove", data={"csrf": token})
+    with SessionLocal() as s:
+        assert s.get(Rank, rid) is None
+
+
+def test_company_remove_blocked_while_members_hold_it():
+    client = TestClient(app)
+    _login(client, "admin")
+    token = _csrf(client, "/command-tent")
+    with SessionLocal() as s:
+        cid = s.query(Company).filter_by(name="Alpha").one().id
+    client.post(f"/admin/companies/{cid}/remove", data={"csrf": token})
+    with SessionLocal() as s:
+        assert s.get(Company, cid) is not None
+        assert s.get(Member, MEMBER_ID).company == "Alpha"
+
+    with SessionLocal() as s:
+        s.get(Member, MEMBER_ID).company = "Bravo"
+        s.commit()
+    token = _csrf(client, "/command-tent")
+    client.post(f"/admin/companies/{cid}/remove", data={"csrf": token})
+    with SessionLocal() as s:
+        assert s.get(Company, cid) is None
+
+
+def test_nickname_pieces_falls_back_to_raw_name_when_orphaned():
+    """A member's stored rank/company can point at a name that no longer
+    resolves to any Rank/Company row (e.g. legacy data predating this
+    guard). Both fall back to the raw stored text so the tag stays visible
+    on the Discord nickname instead of one field vanishing outright."""
+    from utils.sync import _nickname_pieces
+    with SessionLocal() as s:
+        s.get(Member, MEMBER_ID).rank = "Nonexistent Rank"
+        s.get(Member, MEMBER_ID).company = "Nonexistent Company"
+        s.commit()
+    with SessionLocal() as s:
+        _unit_tag, company_tag, rank_abbr, _callsign = _nickname_pieces(
+            s, MEMBER_ID, None, None, None)
+    assert rank_abbr == "Nonexistent Rank"
+    assert company_tag == "Nonexistent Company"
+
+
 def test_bridge_resync_scoped_to_rank():
     from cogs.bridge import Bridge
     with SessionLocal() as s:

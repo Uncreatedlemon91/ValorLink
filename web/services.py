@@ -1138,9 +1138,15 @@ def rank_remove(session, rank_id: int) -> str:
     if rank is None:
         raise ActionError("Unknown rank.")
     name = rank.name
+    holders = session.query(Member).filter(Member.rank == name).count()
+    if holders:
+        raise ActionError(
+            f"'{name}' is still held by {holders} member(s). Reassign them to a different rank "
+            "before removing it, or their Discord nickname tag will fall out of sync with the roster."
+        )
     session.delete(rank)
     session.commit()
-    return f"Rank '{name}' removed. Members holding it keep the label until reassigned."
+    return f"Rank '{name}' removed."
 
 
 def rank_move(session, rank_id: int, direction: str) -> str:
@@ -1237,9 +1243,15 @@ def company_remove(session, company_id: int) -> str:
     if company is None:
         raise ActionError("Unknown company.")
     name = company.name
+    holders = session.query(Member).filter(Member.company == name).count()
+    if holders:
+        raise ActionError(
+            f"'{name}' still has {holders} member(s) assigned. Reassign them to a different company "
+            "before removing it, or their Discord nickname tag will fall out of sync with the roster."
+        )
     session.delete(company)
     session.commit()
-    return f"Company '{name}' removed. Members assigned to it keep the label until reassigned."
+    return f"Company '{name}' removed."
 
 
 # --- Secondary assignments ----------------------------------------------- #

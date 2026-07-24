@@ -203,11 +203,16 @@ class Settings(commands.Cog):
             record = session.query(Rank).filter(Rank.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown rank: {name}", ephemeral=True)
+            holders = session.query(Member).filter(Member.rank == name).count()
+            if holders:
+                return await interaction.response.send_message(
+                    f"**{name}** is still held by {holders} member(s). Reassign them to a different "
+                    "rank before removing it, or their Discord nickname tag will fall out of sync "
+                    "with the roster.", ephemeral=True
+                )
             session.delete(record)
             session.commit()
-        await interaction.response.send_message(
-            f"Rank **{name}** removed. Members holding it keep the label until reassigned.", ephemeral=True
-        )
+        await interaction.response.send_message(f"Rank **{name}** removed.", ephemeral=True)
 
     @rank_group.command(name="set_role", description="Bind (or clear) a rank's synced Discord role")
     @app_commands.autocomplete(name=rank_name_autocomplete)
@@ -309,11 +314,16 @@ class Settings(commands.Cog):
             record = session.query(Company).filter(Company.name == name).one_or_none()
             if record is None:
                 return await interaction.response.send_message(f"Unknown company: {name}", ephemeral=True)
+            holders = session.query(Member).filter(Member.company == name).count()
+            if holders:
+                return await interaction.response.send_message(
+                    f"**{name}** still has {holders} member(s) assigned. Reassign them to a different "
+                    "company before removing it, or their Discord nickname tag will fall out of sync "
+                    "with the roster.", ephemeral=True
+                )
             session.delete(record)
             session.commit()
-        await interaction.response.send_message(
-            f"Company **{name}** removed. Members assigned to it keep the label until reassigned.", ephemeral=True
-        )
+        await interaction.response.send_message(f"Company **{name}** removed.", ephemeral=True)
 
     @company_group.command(name="set_role", description="Bind (or clear) a company's synced Discord role")
     @app_commands.autocomplete(name=company_name_autocomplete)
