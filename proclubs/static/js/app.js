@@ -142,17 +142,32 @@ function renderOverview(result) {
   const { info, stats } = result.value;
   const name = info?.name || `Club ${currentClubId}`;
   clubHeader.innerHTML = '';
+
+  const identity = document.createElement('div');
+  identity.className = 'club-hero-identity';
   const h2 = document.createElement('h2');
   h2.textContent = name;
   const idSpan = document.createElement('span');
-  idSpan.style.color = 'var(--muted)';
+  idSpan.className = 'club-hero-id';
   idSpan.textContent = `ID ${currentClubId}`;
-  clubHeader.append(h2, idSpan);
+  identity.append(h2, idSpan);
+  clubHeader.append(identity);
 
   if (!stats) {
     panel.innerHTML = '<p>No overall stats available for this club yet.</p>';
     return;
   }
+
+  const badges = document.createElement('div');
+  badges.className = 'club-hero-badges';
+  const recordBadge = document.createElement('span');
+  recordBadge.className = 'hero-badge';
+  recordBadge.textContent = `${stats.wins ?? 0}W ${stats.losses ?? 0}L ${stats.ties ?? 0}D`;
+  const ratingBadge = document.createElement('span');
+  ratingBadge.className = 'hero-badge accent';
+  ratingBadge.textContent = `${stats.skillRating ?? '-'} SR`;
+  badges.append(recordBadge, ratingBadge);
+  clubHeader.append(badges);
 
   panel.innerHTML = `
     <div class="chart-row">
@@ -521,6 +536,7 @@ function togglePlayerDetail(row, member) {
   } else {
     const passPct = agg.passAttempts ? Math.round((agg.passesMade / agg.passAttempts) * 100) : null;
     const tacklePct = agg.tackleAttempts ? Math.round((agg.tacklesMade / agg.tackleAttempts) * 100) : null;
+    const convPct = agg.shots ? Math.round((agg.goals / agg.shots) * 100) : null;
     const minutes = Math.round(agg.secondsPlayed / 60);
     perfSummary.innerHTML = `
       <div class="stat-grid compact">
@@ -528,6 +544,7 @@ function togglePlayerDetail(row, member) {
         ${statCard('Goals', agg.goals)}
         ${statCard('Assists', agg.assists)}
         ${statCard('Shots', agg.shots)}
+        ${statCard('Shot Conversion', convPct != null ? `${convPct}%` : '-')}
         ${statCard('Pass Accuracy', passPct != null ? `${passPct}%` : '-')}
         ${statCard('Tackle Accuracy', tacklePct != null ? `${tacklePct}%` : '-')}
         ${statCard('Minutes Played', minutes)}
@@ -699,6 +716,10 @@ function renderMatches(result, matchType = 'leagueMatch', count = 10) {
           <h3>Pass Accuracy per Match</h3>
           <div id="chart-passacc"></div>
         </div>
+        <div class="chart-card">
+          <h3>Shot Conversion per Match</h3>
+          <div id="chart-convrate"></div>
+        </div>
       </div>
       <div class="chart-row">
         <div class="chart-card">
@@ -756,6 +777,15 @@ function renderMatches(result, matchType = 'leagueMatch', count = 10) {
       unit: '%',
     });
 
+    Charts.trendBarChart(document.getElementById('chart-convrate'), {
+      data: nonForfeit.map((p) => ({
+        label: `vs ${p.oppName}`,
+        value: p.team.shots ? Math.round((p.usScore / p.team.shots) * 100) : 0,
+      })),
+      color: 'var(--series-3)',
+      unit: '%',
+    });
+
     const wins = parsed.filter((p) => p.outcome === 'W').length;
     const losses = parsed.filter((p) => p.outcome === 'L').length;
     const ties = parsed.filter((p) => p.outcome === 'D').length;
@@ -802,6 +832,7 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
       const tacklePct = num(p.tackleattempts)
         ? `${Math.round((num(p.tacklesmade) / num(p.tackleattempts)) * 100)}%`
         : '-';
+      const convPct = num(p.shots) ? `${Math.round((num(p.goals) / num(p.shots)) * 100)}%` : '-';
       const minutes = Math.round(num(p.secondsPlayed ?? p.gameTime) / 60);
       const saves = p.pos === 'goalkeeper' ? p.saves ?? '0' : '-';
       const badges = [
@@ -821,6 +852,7 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
         <td>${p.goals ?? '-'}</td>
         <td>${p.assists ?? '-'}</td>
         <td>${p.shots ?? '-'}</td>
+        <td>${convPct}</td>
         <td>${passPct}</td>
         <td>${tacklePct}</td>
         <td>${saves}</td>
@@ -836,7 +868,7 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
         <thead>
           <tr>
             <th>Name</th><th>Pos</th><th>Min</th><th>Rtg</th><th>G</th><th>A</th>
-            <th>Shots</th><th>Pass%</th><th>Tkl%</th><th>Saves</th><th></th>
+            <th>Shots</th><th>Conv%</th><th>Pass%</th><th>Tkl%</th><th>Saves</th><th></th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -989,3 +1021,8 @@ async function loadPlayerHistory(name) {
     container.innerHTML = `<p style="color:#e05a5a">${esc(err.message)}</p>`;
   }
 }
+
+// Land straight on the regiment's own club instead of making everyone search
+// for it every visit -- the search box above still works for looking up
+// anyone else's club.
+loadClub('7810354', 'common-gen5');
