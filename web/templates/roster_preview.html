@@ -61,7 +61,7 @@
     {% for company in companies %}
       <div class="company-block pf-company" data-company="{{ company.name }}">
         <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
-        <table class="ledger pf-table">
+        <table class="ledger pf-table no-sort">
           <thead>
             <tr>
               <th class="pf-expand-col"></th>
@@ -99,11 +99,11 @@
                   <div class="pf-stat-grid">
                     <div><div class="k">Callsign</div><div class="v">{{ m.callsign }}</div></div>
                     <div><div class="k">Rank</div><div class="v">{{ m.rank }}</div></div>
-                    <div><div class="k">Company</div><div class="v">{{ m.company }}</div></div>
+                    <div class="pf-stat-wide"><div class="k">Company</div><div class="v">{{ m.company }}</div></div>
                     <div><div class="k">Standing</div><div class="v"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></div></div>
+                    <div><div class="k">Rank Since</div><div class="v">{{ m.rank_since|fmt_date }}</div></div>
                     <div><div class="k">Enrolled</div><div class="v">{{ m.joined_date|fmt_date }}</div></div>
                     <div><div class="k">Last Seen</div><div class="v">{{ m.last_active_date|fmt_date }}</div></div>
-                    <div><div class="k">Rank Since</div><div class="v">{{ m.rank_since|fmt_date }}</div></div>
                   </div>
 
                   <div class="pf-edit-forms">
