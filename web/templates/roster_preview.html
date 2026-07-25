@@ -75,7 +75,7 @@
           </thead>
           <tbody>
           {% for m in company.members %}
-            <tr data-discord-id="{{ m.discord_id }}" data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
+            <tr class="{{ 'pf-row-alt' if loop.index0 is odd }}" data-discord-id="{{ m.discord_id }}" data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
                 data-rank="{{ m.rank }}" data-standing="{{ m.status }}">
               <td class="pf-expand-col">
                 <button type="button" class="pf-expand-btn" aria-expanded="false" aria-controls="member-{{ m.discord_id }}" title="Quick view">▸</button>
