@@ -973,6 +973,7 @@ def roster_preview(request: Request, session: Session = Depends(get_session)):
         display_names=display_names,
         rank_images=rank_images,
         filter_ranks=[r for r in rank_utils.rank_names(session) if any(m.rank == r for m in members)],
+        rank_options=rank_utils.rank_names(session),
         company_options=[c.name for c in list_companies(session)],
         can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
     )
@@ -1778,6 +1779,15 @@ def _do(request: Request, csrf: str, fn, *args, redirect: str):
     return RedirectResponse(redirect, status_code=303)
 
 
+def _member_edit_redirect(discord_id: int, redirect_to: str, default: str) -> str:
+    """Most member-edit forms redirect to the dossier by default; the Order
+    Book preview's inline quick-edit drawer opts into landing back on itself
+    (at the member's own row) instead. Only a known-safe target is honored."""
+    if redirect_to == "/roster/preview":
+        return f"/roster/preview#member-{discord_id}"
+    return default
+
+
 @app.post("/members/{discord_id}/rank")
 def post_rank(
     request: Request,
@@ -1786,12 +1796,13 @@ def post_rank(
     rank: str = Form(...),
     citation: str = Form(""),
     mode: str = Form("promote"),
+    redirect_to: str = Form(""),
     user: dict = Depends(auth.require_officer),
 ):
     actor = {"id": user["id"], "name": user["name"]}
     fn = services.set_rank if mode == "set" else services.change_rank
     return _do(request, csrf, fn, actor, discord_id, rank, citation,
-               redirect=f"/dossier/{discord_id}")
+               redirect=_member_edit_redirect(discord_id, redirect_to, f"/dossier/{discord_id}"))
 
 
 @app.post("/members/{discord_id}/callsign")
@@ -1800,11 +1811,12 @@ def post_callsign(
     discord_id: int,
     csrf: str = Form(...),
     callsign: str = Form(...),
+    redirect_to: str = Form(""),
     user: dict = Depends(auth.require_officer),
 ):
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.rename_member, actor, discord_id, callsign,
-               redirect="/roster")
+               redirect=_member_edit_redirect(discord_id, redirect_to, "/roster"))
 
 
 @app.post("/members/{discord_id}/company")
@@ -1813,11 +1825,12 @@ def post_company(
     discord_id: int,
     csrf: str = Form(...),
     company: str = Form(...),
+    redirect_to: str = Form(""),
     user: dict = Depends(auth.require_officer),
 ):
     actor = {"id": user["id"], "name": user["name"]}
     return _do(request, csrf, services.assign_company, actor, discord_id, company,
-               redirect=f"/dossier/{discord_id}")
+               redirect=_member_edit_redirect(discord_id, redirect_to, f"/dossier/{discord_id}"))
 
 
 @app.post("/members/{discord_id}/service-log")

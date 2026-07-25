@@ -4,10 +4,12 @@
 
 <h2 class="section">Order Book <span class="tally">{{ total }} on the books</span></h2>
 <p class="lede">Preview: {{ terms.active_roster }} and {{ terms.roster_nav }} merged into one page — search,
-  filter by standing, and (for officers) manage in bulk, without leaving this view. Nothing here
-  changes anything until you use the controls below.</p>
+  filter by standing, and (for officers) manage in bulk, without leaving this view. Click the
+  arrow next to a name for a quick look — and, for officers, a quick edit. Nothing here changes
+  anything until you use the controls below.</p>
 
 {% if companies %}
+  {% set total_cols = 7 if can_manage else 6 %}
   <div class="roster-tools" id="pf-tools">
     <input type="search" id="pf-search" placeholder="Search callsign…" autocomplete="off">
     <select id="pf-company">
@@ -32,6 +34,9 @@
   </div>
   <p class="roster-count" id="pf-count" style="margin:-8px 0 14px;"></p>
 
+  {# A single form can't legally nest the per-member quick-edit forms below,
+     so this one holds only the bulk-bar controls; the row checkboxes live
+     outside it in the tables and reference it via form="pf-bulk-form". #}
   <form method="post" action="/muster/bulk" id="pf-bulk-form">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="redirect_to" value="/roster/preview">
@@ -51,6 +56,7 @@
       </span>
     </div>
     {% endif %}
+  </form>
 
     {% for company in companies %}
       <div class="company-block pf-company" data-company="{{ company.name }}">
@@ -58,6 +64,7 @@
         <table class="ledger pf-table">
           <thead>
             <tr>
+              <th class="pf-expand-col"></th>
               {% if can_manage %}<th class="pick pf-col-manage"><input type="checkbox" class="pf-pick-all"></th>{% endif %}
               <th>Rank</th>
               <th>Callsign</th>
@@ -68,10 +75,13 @@
           </thead>
           <tbody>
           {% for m in company.members %}
-            <tr data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
+            <tr data-discord-id="{{ m.discord_id }}" data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
                 data-rank="{{ m.rank }}" data-standing="{{ m.status }}">
+              <td class="pf-expand-col">
+                <button type="button" class="pf-expand-btn" aria-expanded="false" aria-controls="member-{{ m.discord_id }}" title="Quick view">▸</button>
+              </td>
               {% if can_manage %}
-              <td class="pick pf-col-manage"><input type="checkbox" class="pf-row-pick" name="ids" value="{{ m.discord_id }}"></td>
+              <td class="pick pf-col-manage"><input type="checkbox" class="pf-row-pick" name="ids" value="{{ m.discord_id }}" form="pf-bulk-form"></td>
               {% endif %}
               <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
               <td class="callsign">
@@ -82,12 +92,63 @@
               <td class="num pf-col-manage">{{ m.joined_date|fmt_date }}</td>
               <td class="num pf-col-manage">{{ m.last_active_date|fmt_date }}</td>
             </tr>
+            <tr class="pf-drawer" id="member-{{ m.discord_id }}" data-discord-id="{{ m.discord_id }}">
+              <td colspan="{{ total_cols }}">
+                <div class="pf-drawer-inner"><div class="pf-drawer-content"><div class="pf-drawer-body">
+
+                  <div class="pf-stat-grid">
+                    <div><div class="k">Callsign</div><div class="v">{{ m.callsign }}</div></div>
+                    <div><div class="k">Rank</div><div class="v">{{ m.rank }}</div></div>
+                    <div><div class="k">Company</div><div class="v">{{ m.company }}</div></div>
+                    <div><div class="k">Standing</div><div class="v"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></div></div>
+                    <div><div class="k">Enrolled</div><div class="v">{{ m.joined_date|fmt_date }}</div></div>
+                    <div><div class="k">Last Seen</div><div class="v">{{ m.last_active_date|fmt_date }}</div></div>
+                    <div><div class="k">Rank Since</div><div class="v">{{ m.rank_since|fmt_date }}</div></div>
+                  </div>
+
+                  <div class="pf-edit-forms">
+                    {% if can_manage %}
+                    <form method="post" action="/members/{{ m.discord_id }}/callsign">
+                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                      <input type="hidden" name="redirect_to" value="/roster/preview">
+                      <div class="field"><label>Rename</label><input name="callsign" value="{{ m.callsign }}" required></div>
+                      <button class="btn btn-small" type="submit">Save</button>
+                    </form>
+                    <form method="post" action="/members/{{ m.discord_id }}/rank">
+                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                      <input type="hidden" name="redirect_to" value="/roster/preview">
+                      <input type="hidden" name="mode" value="set">
+                      <div class="field"><label>Rank <span class="opt">(silent)</span></label>
+                        <select name="rank">
+                          {% for r in rank_options %}<option value="{{ r }}" {{ 'selected' if r == m.rank }}>{{ r }}</option>{% endfor %}
+                        </select>
+                      </div>
+                      <button class="btn btn-small" type="submit">Save</button>
+                    </form>
+                    <form method="post" action="/members/{{ m.discord_id }}/company">
+                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                      <input type="hidden" name="redirect_to" value="/roster/preview">
+                      <div class="field"><label>Company</label>
+                        <select name="company">
+                          {% for c in company_options %}<option value="{{ c }}" {{ 'selected' if c == m.company }}>{{ c }}</option>{% endfor %}
+                        </select>
+                      </div>
+                      <button class="btn btn-small" type="submit">Save</button>
+                    </form>
+                    {% endif %}
+                    <div class="pf-drawer-foot">
+                      <a class="rec-link" href="/dossier/{{ m.discord_id }}">Full dossier{{ ' & more actions' if can_manage }} →</a>
+                    </div>
+                  </div>
+
+                </div></div></div>
+              </td>
+            </tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
     {% endfor %}
-  </form>
 
   <div class="hollow" id="pf-empty" hidden>
     <div class="mark">✵</div><h3>No Matches</h3><p>No one on the books matches those filters.</p>
@@ -116,6 +177,41 @@
                     .map(function (c) { return c.dataset.standing; });
       }
 
+      // --- quick-view drawer (accordion: one open at a time) -------------
+      function closeDrawer(id) {
+        var drawer = document.getElementById('member-' + id);
+        var row = document.querySelector('tr[data-discord-id="' + id + '"]:not(.pf-drawer)');
+        if (drawer) drawer.classList.remove('pf-drawer-open');
+        if (row) {
+          row.classList.remove('pf-row-open');
+          var btn = row.querySelector('.pf-expand-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+      }
+      function openDrawer(id) {
+        Array.prototype.slice.call(document.querySelectorAll('.pf-drawer.pf-drawer-open')).forEach(function (d) {
+          closeDrawer(d.dataset.discordId);
+        });
+        var drawer = document.getElementById('member-' + id);
+        var row = document.querySelector('tr[data-discord-id="' + id + '"]:not(.pf-drawer)');
+        if (!drawer || !row || row.classList.contains('pf-row-hidden')) return;
+        drawer.classList.add('pf-drawer-open');
+        row.classList.add('pf-row-open');
+        var btn = row.querySelector('.pf-expand-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+      }
+      document.querySelectorAll('.pf-expand-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var row = btn.closest('tr');
+          var id = row.dataset.discordId;
+          if (row.classList.contains('pf-row-open')) {
+            closeDrawer(id);
+          } else {
+            openDrawer(id);
+          }
+        });
+      });
+
       function apply() {
         var term = (search.value || '').trim().toLowerCase();
         var co = fCompany.value, rk = fRank.value;
@@ -125,13 +221,14 @@
 
         document.querySelectorAll('.pf-company').forEach(function (block) {
           var visible = 0;
-          block.querySelectorAll('tbody tr').forEach(function (tr) {
+          block.querySelectorAll('tbody tr:not(.pf-drawer)').forEach(function (tr) {
             total++;
             var ok = (!term || tr.dataset.name.indexOf(term) !== -1)
               && (!co || tr.dataset.company === co)
               && (!rk || tr.dataset.rank === rk)
               && standings.indexOf(tr.dataset.standing) !== -1;
             tr.classList.toggle('pf-row-hidden', !ok);
+            if (!ok) closeDrawer(tr.dataset.discordId);
             var pick = tr.querySelector('.pf-row-pick');
             if (pick && !ok) pick.checked = false;
             var inline = tr.querySelector('.pf-standing-inline');
@@ -174,7 +271,7 @@
         bulkCount.textContent = checked.length + ' selected';
         document.querySelectorAll('.pf-pick-all').forEach(function (pa) {
           var tbody = pa.closest('table').querySelector('tbody');
-          var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function (r) {
+          var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.pf-drawer)')).filter(function (r) {
             return !r.classList.contains('pf-row-hidden');
           });
           var picks = rows.map(function (r) { return r.querySelector('.pf-row-pick'); }).filter(Boolean);
@@ -183,11 +280,15 @@
           pa.indeterminate = pickedOn.length > 0 && pickedOn.length < picks.length;
         });
       }
-      document.getElementById('pf-bulk-form').addEventListener('change', function (e) {
+      document.addEventListener('change', function (e) {
+        // Row checkboxes live in the tables, not inside #pf-bulk-form (they
+        // can't -- it would mean nesting the per-member edit forms inside
+        // it) -- they associate with it via the form="pf-bulk-form"
+        // attribute instead, so this listens on the document.
         if (e.target.classList.contains('pf-row-pick')) refreshBulk();
         if (e.target.classList.contains('pf-pick-all')) {
           var tbody = e.target.closest('table').querySelector('tbody');
-          Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function (r) {
+          Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.pf-drawer)')).forEach(function (r) {
             if (r.classList.contains('pf-row-hidden')) return;
             var b = r.querySelector('.pf-row-pick');
             if (b) b.checked = e.target.checked;
@@ -197,6 +298,13 @@
       });
 
       apply();
+
+      if (location.hash.indexOf('#member-') === 0) {
+        var hashId = location.hash.slice('#member-'.length);
+        openDrawer(hashId);
+        var target = document.getElementById('member-' + hashId);
+        if (target) setTimeout(function () { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
+      }
     })();
   </script>
 {% else %}

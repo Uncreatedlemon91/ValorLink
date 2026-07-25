@@ -1009,6 +1009,38 @@ body.pf-manage-on .pf-col-manage { display: table-cell; }
 .pf-row-hidden { display: none; }
 .pf-company.pf-empty-filtered { display: none; }
 
+/* Order Book preview: quick-view drawer */
+.pf-expand-col { width: 22px; text-align: center; padding-right: 0 !important; }
+.pf-expand-btn {
+  background: none; border: none; cursor: pointer; color: var(--ink-faint);
+  font-size: 11px; padding: 2px 5px; line-height: 1; font-family: inherit;
+  transition: transform 0.18s ease, color 0.15s ease;
+}
+.pf-expand-btn:hover { color: var(--seal-ink); }
+tr.pf-row-open .pf-expand-btn { transform: rotate(90deg); color: var(--seal-ink); }
+.pf-drawer td { padding: 0; border-bottom: 1px solid var(--rule); }
+.pf-drawer-inner { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.22s ease; }
+.pf-drawer.pf-drawer-open .pf-drawer-inner { grid-template-rows: 1fr; }
+.pf-drawer-content { overflow: hidden; }
+.pf-drawer-body {
+  padding: 16px 28px 20px 54px; display: flex; flex-wrap: wrap; gap: 22px 32px;
+  background: rgba(0,0,0,0.02); border-top: 1px dashed var(--rule);
+}
+body.theme-dark .pf-drawer-body { background: rgba(255,255,255,0.02); }
+.pf-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 12px 20px; flex: 1 1 260px; min-width: 220px; align-content: start; }
+.pf-stat-grid .k { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+.pf-stat-grid .v { font-size: 14px; color: var(--ink); margin-top: 2px; }
+.pf-edit-forms { display: flex; flex-wrap: wrap; gap: 16px 24px; flex: 2 1 380px; }
+.pf-edit-forms form { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.pf-edit-forms .field { margin: 0; min-width: 120px; }
+.pf-edit-forms label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 3px; }
+.pf-edit-forms input, .pf-edit-forms select {
+  font-family: var(--serif); font-size: 13px; color: var(--ink);
+  background: rgba(255,253,246,0.85); border: 1px solid var(--rule-strong);
+  border-radius: 2px; padding: 5px 7px; width: 100%;
+}
+.pf-drawer-foot { flex-basis: 100%; margin-top: 4px; }
+
 /* Public "Join Us" recruiting page */
 .join-hero { text-align: center; margin: 8px 0 18px; }
 .join-title { font-family: var(--serif); font-size: 26px; color: var(--seal-ink); margin: 0 0 4px; letter-spacing: 0.02em; }

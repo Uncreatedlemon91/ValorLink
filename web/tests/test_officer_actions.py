@@ -1885,6 +1885,54 @@ def test_rename_member_from_roster():
     assert _actions(queue.RESYNC_NICKNAMES)
 
 
+def test_member_edits_redirect_back_to_preview_when_asked():
+    client = TestClient(app)
+    _login(client, "officer")
+
+    token = _csrf(client, "/roster/preview")
+    r = client.post(f"/members/{MEMBER_ID}/callsign",
+                    data={"csrf": token, "callsign": "Renamed", "redirect_to": "/roster/preview"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+
+    token = _csrf(client, "/roster/preview")
+    r = client.post(f"/members/{MEMBER_ID}/rank",
+                    data={"csrf": token, "rank": "Corporal", "mode": "set", "redirect_to": "/roster/preview"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+
+    token = _csrf(client, "/roster/preview")
+    r = client.post(f"/members/{MEMBER_ID}/company",
+                    data={"csrf": token, "company": "Bravo", "redirect_to": "/roster/preview"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+
+    # an unrecognized redirect_to is ignored, falling back to the normal target
+    token = _csrf(client, "/roster/preview")
+    r = client.post(f"/members/{MEMBER_ID}/callsign",
+                    data={"csrf": token, "callsign": "StillRenamed", "redirect_to": "https://evil.example/"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/roster"
+
+
+def test_roster_preview_drawer_has_quick_stats_and_edit_forms():
+    client = TestClient(app)
+    _login(client, "officer")
+    html = client.get("/roster/preview").text
+    assert f'id="member-{MEMBER_ID}"' in html
+    assert "RANK SINCE" not in html  # labels render lowercase, styled via CSS text-transform
+    assert "Rank Since" in html
+    assert f'action="/members/{MEMBER_ID}/callsign"' in html
+    assert f'action="/members/{MEMBER_ID}/rank"' in html
+    assert f'action="/members/{MEMBER_ID}/company"' in html
+    assert 'value="/roster/preview"' in html
+
+    _login(client, "none", discord_id=55, name="Rank and File")
+    html = client.get("/roster/preview").text
+    assert f'action="/members/{MEMBER_ID}/callsign"' not in html  # no edit forms for non-officers
+    assert "Full dossier" in html  # but the quick-view drawer itself still renders
+
+
 def test_rename_member_requires_officer():
     client = TestClient(app)
     _login(client, "none")
