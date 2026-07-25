@@ -23,7 +23,7 @@
           {% for m in company.members %}
             <tr>
               <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
-              <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
+              <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ display_names[m.discord_id] }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
                 {% if can_manage %}
                 <button type="button" class="btn btn-small js-edit-open" data-target="tpl-callsign-co-{{ m.discord_id }}" title="Rename">✎</button>
                 <template id="tpl-callsign-co-{{ m.discord_id }}">
@@ -73,7 +73,7 @@
         {% for m in g.members %}
           <tr>
             <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
-            <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ m.callsign }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
+            <td class="callsign"><a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ display_names[m.discord_id] }}</a> <a class="rec-link" href="/u/{{ m.discord_id }}" title="Cross-unit service record">↗</a>
               {% if can_manage %}
               <button type="button" class="btn btn-small js-edit-open" data-target="tpl-callsign-as-{{ m.discord_id }}" title="Rename">✎</button>
               <template id="tpl-callsign-as-{{ m.discord_id }}">

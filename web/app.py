@@ -47,6 +47,7 @@ from tenancy.units import sessionmaker_for
 from utils import queue
 from utils import ranks as rank_utils
 from utils import terminology
+from utils.sync import build_prefix
 from utils.settings import (
     CHANNEL_KEYS,
     ROLE_KEYS,
@@ -778,6 +779,19 @@ def roster(request: Request, session: Session = Depends(get_session), tab: str =
     rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
     rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
 
+    # Display-only: the same "UnitTag CompanyTag Rank. Callsign" the bot
+    # writes as a Discord nickname, shown on the roster for consistency.
+    # The underlying callsign stays untouched -- this is never written back.
+    unit_tag = get_config(session).unit_tag or ""
+    rank_abbrs = {r.name: r.abbreviation for r in rank_utils.all_ranks(session)}
+    company_tags = {c.name: (c.tag or "") for c in list_companies(session)}
+
+    def _tagged_name(m: Member) -> str:
+        prefix = build_prefix(unit_tag, company_tags.get(m.company, ""), rank_abbrs.get(m.rank, ""))
+        return f"{prefix} {m.callsign}".strip() if prefix else m.callsign
+
+    display_names = {m.discord_id: _tagged_name(m) for m in members}
+
     by_company: dict[str, list[Member]] = defaultdict(list)
     for m in members:
         by_company[m.company].append(m)
@@ -812,6 +826,7 @@ def roster(request: Request, session: Session = Depends(get_session), tab: str =
         has_assignments=bool(assignment_groups),
         active_tab=("assignments" if tab == "assignments" else "company"),
         rank_images=rank_images,
+        display_names=display_names,
         can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
     )
     return templates.TemplateResponse(request, "roster.html", ctx)
