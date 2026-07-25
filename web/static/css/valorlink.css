@@ -154,8 +154,30 @@ nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
 .topbar .rankchip {
   color: var(--brass); border: 1px solid var(--brass);
   padding: 1px 6px; border-radius: 1px; margin-left: 4px;
+  text-transform: uppercase;
 }
 .topbar .unit-switcher summary { padding: 1px 8px; }
+
+/* Two legible clusters instead of one run-on strip: who-you-are reads as
+   plain prose (the rest of the bar is all-caps nav-speak), the account
+   actions sit apart behind a divider so they scan as a distinct group --
+   and each cluster wraps as a whole on narrow screens instead of the
+   individual words breaking wherever they happen to run out of room. */
+.topbar-who {
+  color: var(--ink-faint); text-transform: none; letter-spacing: 0.01em;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.topbar-who b { color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.topbar-actions {
+  display: inline-flex; align-items: center; gap: 1px;
+  padding-left: 14px; border-left: 1px solid var(--rule);
+}
+.topbar-actions a { padding: 3px 8px; border-radius: 2px; }
+.topbar-actions a:hover { background: rgba(0,0,0,0.045); }
+body.theme-dark .topbar-actions a:hover { background: rgba(255,255,255,0.06); }
+@media (max-width: 640px) {
+  .topbar-actions { border-left: none; padding-left: 0; margin-left: -8px; }
+}
 body.theme-dark .topbar { background: rgba(255,255,255,0.03); }
 nav.rail a {
   position: relative;

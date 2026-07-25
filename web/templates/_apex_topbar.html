@@ -10,10 +10,10 @@
   </div>
   <div class="topbar-right">
     {% if user %}
-      <span class="who">Signed in as <b>{{ user.name }}</b></span>
-      <a href="/logout">Sign out</a>
+      <span class="topbar-who">Signed in as <b>{{ user.name }}</b></span>
+      <span class="topbar-actions"><a href="/logout">Sign out</a></span>
     {% else %}
-      <a href="/auth/discord/login">Sign in with Discord</a>
+      <span class="topbar-actions"><a href="/auth/discord/login">Sign in with Discord</a></span>
     {% endif %}
   </div>
 </div>

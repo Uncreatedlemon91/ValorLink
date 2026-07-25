@@ -33,13 +33,15 @@
           </details>
         {% endif %}
         {% if user %}
-          <span class="who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
-          <a href="/my-record">My record</a>
-          <a href="/me">Service record</a>
-          <a href="/logout">Sign out</a>
+          <span class="topbar-who">Signed in as <b>{{ user.name }}</b> <span class="rankchip">{{ user.tier }}</span></span>
+          <span class="topbar-actions">
+            <a href="/my-record">My record</a>
+            <a href="/me">Service record</a>
+            <a href="/logout">Sign out</a>
+          </span>
         {% else %}
-          <span class="who">Visitor</span>
-          <a href="/auth/discord/login">Officer sign-in</a>
+          <span class="topbar-who">Visitor</span>
+          <span class="topbar-actions"><a href="/auth/discord/login">Officer sign-in</a></span>
         {% endif %}
       </div>
     </div>
