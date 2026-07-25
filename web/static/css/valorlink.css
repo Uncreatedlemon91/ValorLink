@@ -1077,6 +1077,23 @@ body.theme-dark .pf-drawer-body {
 }
 .pf-drawer-foot { flex-basis: 100%; margin-top: 4px; }
 
+/* On phones, the site-wide "let dense tables scroll" rule
+   (.table-scroll > .ledger { min-width: 520px }) forces this table wide
+   enough that the callsign column swallows most of a row's visible width --
+   a tap meant to open the drawer then lands on the name link instead and
+   navigates away. In the default view (Manage off, just rank + callsign)
+   there's no dense-column reason to force that width, so let it size
+   naturally and fit the screen; Manage mode's extra columns still scroll. */
+@media (max-width: 640px) {
+  .table-scroll > .pf-table { min-width: 0; }
+  body.pf-manage-on .table-scroll > .pf-table { min-width: 520px; }
+  /* A fixed 2-column stat grid doesn't leave the "Present for Duty"-length
+     badge room to sit beside a second column without spilling into it
+     (badges don't wrap). One column per stat avoids that outright. */
+  .pf-drawer-body { padding-left: 24px; padding-right: 18px; gap: 18px 24px; }
+  .pf-stat-grid { grid-template-columns: 1fr; padding-left: 12px; }
+}
+
 /* Public "Join Us" recruiting page */
 .join-hero { text-align: center; margin: 8px 0 18px; }
 .join-title { font-family: var(--serif); font-size: 26px; color: var(--seal-ink); margin: 0 0 4px; letter-spacing: 0.02em; }

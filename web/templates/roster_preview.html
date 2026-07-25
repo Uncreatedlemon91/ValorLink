@@ -201,13 +201,25 @@
         if (btn) btn.setAttribute('aria-expanded', 'true');
       }
       // Clicking anywhere on a member's row toggles their drawer -- except
-      // the callsign link (still navigates to the dossier) and the bulk
-      // checkbox (still just picks the row). The expand arrow has no
-      // listener of its own; a click on it falls through to this one.
+      // the bulk checkbox (still just picks the row). The expand arrow has
+      // no listener of its own; a click on it falls through to this one.
+      // The callsign link still navigates to the dossier too, EXCEPT on a
+      // narrow screen: there the callsign column is wide enough to cover
+      // most of the row's visible width (the site scrolls dense tables on
+      // phones rather than squeezing them), so a tap meant to expand the
+      // drawer would almost always land on the name and navigate away
+      // instead. Below that width the name joins the row's toggle instead;
+      // "Full dossier" inside the open drawer still reaches the same page.
+      var NARROW = window.matchMedia('(max-width: 640px)');
       document.addEventListener('click', function (e) {
         var row = e.target.closest('.pf-table tbody tr:not(.pf-drawer)');
         if (!row) return;
-        if (e.target.closest('a, input[type="checkbox"]')) return;
+        if (e.target.closest('input[type="checkbox"]')) return;
+        var link = e.target.closest('a');
+        if (link) {
+          if (!NARROW.matches) return;
+          e.preventDefault();  // narrow screen: toggle instead of navigating
+        }
         var id = row.dataset.discordId;
         if (row.classList.contains('pf-row-open')) {
           closeDrawer(id);
