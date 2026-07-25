@@ -54,7 +54,7 @@
     <button type="button" class="nav-toggle" aria-controls="rail" aria-expanded="false">☰ Menu</button>
     <nav class="rail" id="rail">
       {% set path = request.url.path %}
-      {% set g_personnel = path in ['/roster', '/muster', '/honors', '/promotions', '/leave'] or path.startswith('/dossier') %}
+      {% set g_personnel = path in ['/roster', '/roster/preview', '/muster', '/honors', '/promotions', '/leave'] or path.startswith('/dossier') %}
       {% set g_events = path.startswith('/muster-calls') or path == '/attendance' %}
       {% set g_recruit = path in ['/recruits', '/join'] %}
       {% set g_manage = path in ['/audit', '/command-tent'] %}
@@ -67,6 +67,7 @@
           <a href="/roster" class="{{ 'here' if path == '/roster' }}">{{ terms.active_roster }}</a>
           <a href="/muster" class="{{ 'here' if path == '/muster' }}">{{ terms.roster_nav }}</a>
           <a href="/roster?tab=assignments">{{ terms.assignments }}</a>
+          {% if tier_at_least(user, TIER_OFFICER) %}<a href="/roster/preview" class="{{ 'here' if path == '/roster/preview' }}">Order Book (Preview)</a>{% endif %}
           <a href="/honors" class="{{ 'here' if path == '/honors' }}">{{ terms.honors }}</a>
           {% if tier_at_least(user, TIER_OFFICER) %}<a href="/promotions" class="{{ 'here' if path == '/promotions' }}">{{ terms.promotions }}</a>{% endif %}
           {% if tier_at_least(user, TIER_OFFICER) %}<a href="/leave" class="{{ 'here' if path == '/leave' }}">{{ terms.leave }}</a>{% endif %}

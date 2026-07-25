@@ -978,6 +978,11 @@ body.theme-dark .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6a6
   border: 1px solid var(--rule-strong); border-left: 4px solid var(--seal);
   background: rgba(255,253,246,0.7); border-radius: 2px;
 }
+/* The [hidden] attribute is set/cleared via JS as selection changes; an
+   author rule always outranks the UA default `[hidden]{display:none}`
+   regardless of source order, so `.bulk-bar{display:flex}` above would
+   otherwise keep it visible even while hidden is set. */
+.bulk-bar[hidden] { display: none; }
 .bulk-count { font-weight: 700; color: var(--seal-ink); font-size: 13px; letter-spacing: 0.04em; }
 .bulk-group { display: inline-flex; gap: 6px; align-items: center; }
 .bulk-group select, .bulk-group input {
@@ -986,6 +991,23 @@ body.theme-dark .d-dishonorable { background: rgba(124,31,43,0.22); color: #e6a6
   border-radius: 2px; padding: 5px 7px;
 }
 .ledger th.pick, .ledger td.pick { width: 28px; text-align: center; }
+
+/* Order Book preview: standing filter chips + collapsible manage columns */
+.standing-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.standing-filter .chip {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 5px 11px; border: 1px solid var(--rule-strong); border-radius: 12px;
+  color: var(--ink-soft); background: rgba(255,253,246,0.5); cursor: pointer;
+}
+.standing-filter .chip:hover { border-color: var(--seal); }
+.standing-filter .chip-on { background: var(--seal); color: var(--paper); border-color: var(--seal); }
+.standing-filter .chip .n { font-variant-numeric: tabular-nums; opacity: 0.75; margin-left: 4px; }
+body.theme-dark .standing-filter .chip-on { color: #fff; }
+.pf-col-manage { display: none; }
+body.pf-manage-on .pf-col-manage { display: table-cell; }
+.pf-standing-inline { font-size: 11px; margin-left: 8px; }
+.pf-row-hidden { display: none; }
+.pf-company.pf-empty-filtered { display: none; }
 
 /* Public "Join Us" recruiting page */
 .join-hero { text-align: center; margin: 8px 0 18px; }

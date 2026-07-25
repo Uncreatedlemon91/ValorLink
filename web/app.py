@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -865,6 +865,9 @@ def muster(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "muster.html", ctx)
 
 
+BULK_REDIRECT_TARGETS = {"/muster", "/roster/preview"}
+
+
 @app.post("/muster/bulk")
 def post_muster_bulk(
     request: Request,
@@ -873,14 +876,17 @@ def post_muster_bulk(
     ids: list[str] = Form(default=[]),
     company: str = Form(""),
     entry: str = Form(""),
+    redirect_to: str = Form("/muster"),
     user: dict = Depends(auth.require_officer),
 ):
     """Apply one action to several members at once. Each member is handled by
     the same service the single-member forms use (so Discord side-effects are
     queued identically); a per-member failure is counted, not fatal."""
+    redirect_to = redirect_to if redirect_to in BULK_REDIRECT_TARGETS else "/muster"
+
     if not auth.verify_csrf(request, csrf):
         _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/muster", status_code=303)
+        return RedirectResponse(redirect_to, status_code=303)
 
     member_ids = []
     for raw in ids:
@@ -890,7 +896,7 @@ def post_muster_bulk(
             continue
     if not member_ids:
         _flash(request, "No members were selected.", "error")
-        return RedirectResponse("/muster", status_code=303)
+        return RedirectResponse(redirect_to, status_code=303)
 
     actor = {"id": user["id"], "name": user["name"]}
     done, skipped = 0, 0
@@ -904,7 +910,7 @@ def post_muster_bulk(
                     services.service_log(session, actor, mid, entry)
                 else:
                     _flash(request, "Unknown bulk action.", "error")
-                    return RedirectResponse("/muster", status_code=303)
+                    return RedirectResponse(redirect_to, status_code=303)
                 done += 1
             except services.ActionError as exc:
                 # "already in X" / empty note etc. — expected, non-fatal.
@@ -920,7 +926,57 @@ def post_muster_bulk(
     if errors:
         msg += " " + " ".join(errors)
     _flash(request, msg, "ok" if done else "error")
-    return RedirectResponse("/muster", status_code=303)
+    return RedirectResponse(redirect_to, status_code=303)
+
+
+@app.get("/roster/preview", response_class=HTMLResponse)
+def roster_preview(request: Request, session: Session = Depends(get_session)):
+    """Design preview: Roster (grouped by company, tagged nicknames) and
+    Muster (every standing, search/filter, bulk actions) merged into one
+    page. Not linked from primary navigation while it's under review."""
+    ctx = _base_context(request, session)
+
+    cfg = get_config(session)
+    unit_tag = cfg.unit_tag or ""
+    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
+    rank_abbrs = {r.name: r.abbreviation for r in rank_utils.all_ranks(session)}
+    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
+    company_tags = {c.name: (c.tag or "") for c in list_companies(session)}
+
+    def _tagged_name(m: Member) -> str:
+        prefix = build_prefix(unit_tag, company_tags.get(m.company, ""), rank_abbrs.get(m.rank, ""))
+        return f"{prefix} {m.callsign}".strip() if prefix else m.callsign
+
+    members = session.query(Member).all()
+    display_names = {m.discord_id: _tagged_name(m) for m in members}
+    status_counts = Counter(m.status for m in members)
+
+    by_company: dict[str, list[Member]] = defaultdict(list)
+    for m in members:
+        by_company[m.company].append(m)
+
+    configured = [c.name for c in list_companies(session)]
+    order = configured + [c for c in by_company if c not in configured]
+
+    companies = []
+    for name in order:
+        roster_members = by_company.get(name)
+        if not roster_members:
+            continue
+        roster_members.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
+        companies.append({"name": name, "members": roster_members})
+
+    ctx.update(
+        companies=companies,
+        total=len(members),
+        status_counts=status_counts,
+        display_names=display_names,
+        rank_images=rank_images,
+        filter_ranks=[r for r in rank_utils.rank_names(session) if any(m.rank == r for m in members)],
+        company_options=[c.name for c in list_companies(session)],
+        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+    )
+    return templates.TemplateResponse(request, "roster_preview.html", ctx)
 
 
 def _render_dossier(request: Request, session: Session, member: Member, is_self: bool = False):

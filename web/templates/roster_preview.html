@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Order Book (Preview){% endblock %}
+{% block content %}
+
+<h2 class="section">Order Book <span class="tally">{{ total }} on the books</span></h2>
+<p class="lede">Preview: {{ terms.active_roster }} and {{ terms.roster_nav }} merged into one page — search,
+  filter by standing, and (for officers) manage in bulk, without leaving this view. Nothing here
+  changes anything until you use the controls below.</p>
+
+{% if companies %}
+  <div class="roster-tools" id="pf-tools">
+    <input type="search" id="pf-search" placeholder="Search callsign…" autocomplete="off">
+    <select id="pf-company">
+      <option value="">All companies</option>
+      {% for c in companies %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
+    </select>
+    <select id="pf-rank">
+      <option value="">All ranks</option>
+      {% for r in filter_ranks %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+    <div class="standing-filter" id="pf-standings">
+      {% for key in ['active', 'loa', 'inactive', 'discharged'] %}
+        <button type="button" class="chip{{ ' chip-on' if key == 'active' }}" data-standing="{{ key }}"
+                aria-pressed="{{ 'true' if key == 'active' else 'false' }}">
+          {{ key|status_label }} <span class="n">{{ status_counts.get(key, 0) }}</span>
+        </button>
+      {% endfor %}
+    </div>
+    <label class="checkline" style="margin-left:auto;">
+      <input type="checkbox" id="pf-manage"> Manage
+    </label>
+  </div>
+  <p class="roster-count" id="pf-count" style="margin:-8px 0 14px;"></p>
+
+  <form method="post" action="/muster/bulk" id="pf-bulk-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="redirect_to" value="/roster/preview">
+
+    {% if can_manage %}
+    <div class="bulk-bar" id="pf-bulkbar" hidden>
+      <span class="bulk-count" id="pf-bulk-count">0 selected</span>
+      <span class="bulk-group">
+        <select name="company">
+          {% for c in company_options %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-small" type="submit" name="action" value="company">Transfer</button>
+      </span>
+      <span class="bulk-group">
+        <input name="entry" placeholder="Service note…" maxlength="300">
+        <button class="btn btn-small" type="submit" name="action" value="note">Add note</button>
+      </span>
+    </div>
+    {% endif %}
+
+    {% for company in companies %}
+      <div class="company-block pf-company" data-company="{{ company.name }}">
+        <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
+        <table class="ledger pf-table">
+          <thead>
+            <tr>
+              {% if can_manage %}<th class="pick pf-col-manage"><input type="checkbox" class="pf-pick-all"></th>{% endif %}
+              <th>Rank</th>
+              <th>Callsign</th>
+              <th class="pf-col-manage">Standing</th>
+              <th class="num pf-col-manage">Enrolled</th>
+              <th class="num pf-col-manage">Last Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for m in company.members %}
+            <tr data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
+                data-rank="{{ m.rank }}" data-standing="{{ m.status }}">
+              {% if can_manage %}
+              <td class="pick pf-col-manage"><input type="checkbox" class="pf-row-pick" name="ids" value="{{ m.discord_id }}"></td>
+              {% endif %}
+              <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
+              <td class="callsign">
+                <a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ display_names[m.discord_id] }}</a>
+                <span class="pf-standing-inline muted"></span>
+              </td>
+              <td class="pf-col-manage"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
+              <td class="num pf-col-manage">{{ m.joined_date|fmt_date }}</td>
+              <td class="num pf-col-manage">{{ m.last_active_date|fmt_date }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  </form>
+
+  <div class="hollow" id="pf-empty" hidden>
+    <div class="mark">✵</div><h3>No Matches</h3><p>No one on the books matches those filters.</p>
+  </div>
+
+  <script>
+    (function () {
+      var search = document.getElementById('pf-search');
+      var fCompany = document.getElementById('pf-company');
+      var fRank = document.getElementById('pf-rank');
+      var chips = Array.prototype.slice.call(document.querySelectorAll('#pf-standings .chip'));
+      var manageBox = document.getElementById('pf-manage');
+      var count = document.getElementById('pf-count');
+      var empty = document.getElementById('pf-empty');
+      var bulkbar = document.getElementById('pf-bulkbar');
+      var bulkCount = document.getElementById('pf-bulk-count');
+      var body = document.body;
+
+      var STANDING_LABEL = {};
+      chips.forEach(function (c) {
+        STANDING_LABEL[c.dataset.standing] = c.textContent.replace(/\s*\d+\s*$/, '').trim();
+      });
+
+      function activeStandings() {
+        return chips.filter(function (c) { return c.getAttribute('aria-pressed') === 'true'; })
+                    .map(function (c) { return c.dataset.standing; });
+      }
+
+      function apply() {
+        var term = (search.value || '').trim().toLowerCase();
+        var co = fCompany.value, rk = fRank.value;
+        var standings = activeStandings();
+        var showPill = standings.length > 1 || standings.indexOf('active') === -1;
+        var shown = 0, total = 0;
+
+        document.querySelectorAll('.pf-company').forEach(function (block) {
+          var visible = 0;
+          block.querySelectorAll('tbody tr').forEach(function (tr) {
+            total++;
+            var ok = (!term || tr.dataset.name.indexOf(term) !== -1)
+              && (!co || tr.dataset.company === co)
+              && (!rk || tr.dataset.rank === rk)
+              && standings.indexOf(tr.dataset.standing) !== -1;
+            tr.classList.toggle('pf-row-hidden', !ok);
+            var pick = tr.querySelector('.pf-row-pick');
+            if (pick && !ok) pick.checked = false;
+            var inline = tr.querySelector('.pf-standing-inline');
+            if (inline) {
+              var st = tr.dataset.standing;
+              inline.textContent = (showPill && st !== 'active') ? STANDING_LABEL[st] : '';
+            }
+            if (ok) { visible++; shown++; }
+          });
+          block.classList.toggle('pf-empty-filtered', visible === 0);
+        });
+
+        empty.hidden = shown !== 0;
+        count.textContent = 'Showing ' + shown + ' of ' + total;
+        refreshBulk();
+      }
+
+      chips.forEach(function (c) {
+        c.addEventListener('click', function () {
+          c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+          c.classList.toggle('chip-on');
+          apply();
+        });
+      });
+      [search, fCompany, fRank].forEach(function (el) {
+        el.addEventListener('input', apply);
+        el.addEventListener('change', apply);
+      });
+      if (manageBox) {
+        manageBox.addEventListener('change', function () {
+          body.classList.toggle('pf-manage-on', manageBox.checked);
+          apply();
+        });
+      }
+
+      function refreshBulk() {
+        if (!bulkbar) return;
+        var checked = Array.prototype.slice.call(document.querySelectorAll('.pf-row-pick:checked'));
+        bulkbar.hidden = checked.length === 0;
+        bulkCount.textContent = checked.length + ' selected';
+        document.querySelectorAll('.pf-pick-all').forEach(function (pa) {
+          var tbody = pa.closest('table').querySelector('tbody');
+          var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function (r) {
+            return !r.classList.contains('pf-row-hidden');
+          });
+          var picks = rows.map(function (r) { return r.querySelector('.pf-row-pick'); }).filter(Boolean);
+          var pickedOn = picks.filter(function (p) { return p.checked; });
+          pa.checked = picks.length > 0 && pickedOn.length === picks.length;
+          pa.indeterminate = pickedOn.length > 0 && pickedOn.length < picks.length;
+        });
+      }
+      document.getElementById('pf-bulk-form').addEventListener('change', function (e) {
+        if (e.target.classList.contains('pf-row-pick')) refreshBulk();
+        if (e.target.classList.contains('pf-pick-all')) {
+          var tbody = e.target.closest('table').querySelector('tbody');
+          Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function (r) {
+            if (r.classList.contains('pf-row-hidden')) return;
+            var b = r.querySelector('.pf-row-pick');
+            if (b) b.checked = e.target.checked;
+          });
+          refreshBulk();
+        }
+      });
+
+      apply();
+    })();
+  </script>
+{% else %}
+  <div class="hollow">
+    <div class="mark">✶</div>
+    <h3>The Roster Stands Empty</h3>
+    <p>No soul is presently borne on the rolls.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

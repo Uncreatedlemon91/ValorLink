@@ -753,6 +753,55 @@ def test_bulk_company_transfer_and_note():
             assert notes >= 1
 
 
+def test_roster_preview_shows_every_standing_grouped_and_tagged():
+    client = TestClient(app)
+    _login(client, "admin")
+    with SessionLocal() as s:
+        get_config(s).unit_tag = "5thVA"
+        s.query(Company).filter_by(name="Bravo").one().tag = "B"
+        s.add(Member(discord_id=410, callsign="OnLeave", rank="Private", company="Bravo", status="loa"))
+        s.commit()
+    r = client.get("/roster/preview")
+    assert r.status_code == 200
+    assert "5thVA Pvt. Testman" in r.text            # Alpha has no tag -- unit tag + rank only
+    assert "5thVA B Pvt. OnLeave" in r.text           # Bravo's tag included, every standing shown
+    assert "pf-standings" in r.text                   # the standing filter chips render
+
+    # a non-officer sees the page but not the manage/bulk controls
+    _login(client, "none", discord_id=55, name="Rank and File")
+    r = client.get("/roster/preview")
+    assert r.status_code == 200
+    assert 'id="pf-bulkbar"' not in r.text
+    assert 'class="pf-pick-all"' not in r.text
+
+
+def test_roster_preview_bulk_redirects_back_to_preview():
+    client = TestClient(app)
+    _login(client, "officer")
+    with SessionLocal() as s:
+        s.add(Member(discord_id=420, callsign="Bulk3", rank="Private", company="Alpha", status="active"))
+        s.commit()
+    token = _csrf(client, "/roster/preview")
+    r = client.post("/muster/bulk",
+                    data={"csrf": token, "action": "company", "company": "Bravo",
+                          "ids": ["420"], "redirect_to": "/roster/preview"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/roster/preview"
+    with SessionLocal() as s:
+        assert s.get(Member, 420).company == "Bravo"
+
+
+def test_muster_bulk_rejects_unknown_redirect_target():
+    client = TestClient(app)
+    _login(client, "officer")
+    token = _csrf(client, "/muster")
+    r = client.post("/muster/bulk",
+                    data={"csrf": token, "action": "note", "entry": "x", "ids": [],
+                          "redirect_to": "https://evil.example/"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/muster"  # falls back, not the bogus target
+
+
 def test_bulk_action_requires_officer():
     client = TestClient(app)
     _login(client, "none", discord_id=9, name="Nobody")
