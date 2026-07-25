@@ -1,15 +1,106 @@
 {% extends "base.html" %}
 {% block title %}Order Book (Preview){% endblock %}
+
+{% macro member_table(scope, group_members, show_pick, total_cols) %}
+<table class="ledger pf-table no-sort">
+  <thead>
+    <tr>
+      <th class="pf-expand-col"></th>
+      {% if show_pick and can_manage %}<th class="pick pf-col-manage"><input type="checkbox" class="pf-pick-all"></th>{% endif %}
+      <th>Rank</th>
+      <th>Callsign</th>
+      <th class="pf-col-manage">Standing</th>
+      <th class="num pf-col-manage">Enrolled</th>
+      <th class="num pf-col-manage">Last Seen</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for m in group_members %}
+    <tr class="{{ 'pf-row-alt' if loop.index0 is odd }}" data-member-row="{{ m.discord_id }}" data-name="{{ m.callsign|lower }}"
+        data-company="{{ m.company }}" data-rank="{{ m.rank }}" data-standing="{{ m.status }}">
+      <td class="pf-expand-col">
+        <button type="button" class="pf-expand-btn" aria-expanded="false" aria-controls="member-{{ scope }}-{{ m.discord_id }}" title="Quick view">▸</button>
+      </td>
+      {% if show_pick and can_manage %}
+      <td class="pick pf-col-manage"><input type="checkbox" class="pf-row-pick" name="ids" value="{{ m.discord_id }}" form="pf-bulk-form"></td>
+      {% endif %}
+      <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
+      <td class="callsign">
+        <a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ display_names[m.discord_id] }}</a>
+        <span class="pf-standing-inline muted"></span>
+      </td>
+      <td class="pf-col-manage"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
+      <td class="num pf-col-manage">{{ m.joined_date|fmt_date }}</td>
+      <td class="num pf-col-manage">{{ m.last_active_date|fmt_date }}</td>
+    </tr>
+    <tr class="pf-drawer" id="member-{{ scope }}-{{ m.discord_id }}" data-member-row="{{ m.discord_id }}">
+      <td colspan="{{ total_cols }}">
+        <div class="pf-drawer-inner"><div class="pf-drawer-content"><div class="pf-drawer-body">
+
+          <div class="pf-stat-grid">
+            <div><div class="k">Callsign</div><div class="v">{{ m.callsign }}</div></div>
+            <div><div class="k">Rank</div><div class="v">{{ m.rank }}</div></div>
+            <div class="pf-stat-wide"><div class="k">Company</div><div class="v">{{ m.company }}</div></div>
+            <div><div class="k">Standing</div><div class="v"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></div></div>
+            <div><div class="k">Rank Since</div><div class="v">{{ m.rank_since|fmt_date }}</div></div>
+            <div><div class="k">Enrolled</div><div class="v">{{ m.joined_date|fmt_date }}</div></div>
+            <div><div class="k">Last Seen</div><div class="v">{{ m.last_active_date|fmt_date }}</div></div>
+          </div>
+
+          <div class="pf-edit-forms">
+            {% if can_manage %}
+            <form method="post" action="/members/{{ m.discord_id }}/callsign">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="redirect_to" value="/roster/preview">
+              <div class="field"><label>Rename</label><input name="callsign" value="{{ m.callsign }}" required></div>
+              <button class="btn btn-small" type="submit">Save</button>
+            </form>
+            <form method="post" action="/members/{{ m.discord_id }}/rank">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="redirect_to" value="/roster/preview">
+              <input type="hidden" name="mode" value="set">
+              <div class="field"><label>Rank <span class="opt">(silent)</span></label>
+                <select name="rank">
+                  {% for r in rank_options %}<option value="{{ r }}" {{ 'selected' if r == m.rank }}>{{ r }}</option>{% endfor %}
+                </select>
+              </div>
+              <button class="btn btn-small" type="submit">Save</button>
+            </form>
+            <form method="post" action="/members/{{ m.discord_id }}/company">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="redirect_to" value="/roster/preview">
+              <div class="field"><label>Company</label>
+                <select name="company">
+                  {% for c in company_options %}<option value="{{ c }}" {{ 'selected' if c == m.company }}>{{ c }}</option>{% endfor %}
+                </select>
+              </div>
+              <button class="btn btn-small" type="submit">Save</button>
+            </form>
+            {% endif %}
+            <div class="pf-drawer-foot">
+              <a class="rec-link" href="/dossier/{{ m.discord_id }}">Full dossier{{ ' & more actions' if can_manage }} →</a>
+            </div>
+          </div>
+
+        </div></div></div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
 {% block content %}
 
 <h2 class="section">Order Book <span class="tally">{{ total }} on the books</span></h2>
 <p class="lede">Preview: {{ terms.active_roster }} and {{ terms.roster_nav }} merged into one page — search,
   filter by standing, and (for officers) manage in bulk, without leaving this view. Click the
-  arrow next to a name for a quick look — and, for officers, a quick edit. Nothing here changes
+  arrow (or the row) for a quick look — and, for officers, a quick edit. Nothing here changes
   anything until you use the controls below.</p>
 
 {% if companies %}
-  {% set total_cols = 7 if can_manage else 6 %}
+  {% set co_cols = 7 if can_manage else 6 %}
+  {% set as_cols = 6 %}
   <div class="roster-tools" id="pf-tools">
     <input type="search" id="pf-search" placeholder="Search callsign…" autocomplete="off">
     <select id="pf-company">
@@ -58,97 +149,42 @@
     {% endif %}
   </form>
 
+  <div class="tabs" role="tablist">
+    <button class="tab {{ 'on' if active_tab == 'company' }}" data-tab="company" role="tab">By Company</button>
+    {% if has_assignments %}
+    <button class="tab {{ 'on' if active_tab == 'assignments' }}" data-tab="assignments" role="tab">By {{ terms.assignments }}</button>
+    {% endif %}
+  </div>
+
+  <section class="tab-panel {{ 'on' if active_tab == 'company' }}" data-panel="company">
     {% for company in companies %}
-      <div class="company-block pf-company" data-company="{{ company.name }}">
+      <div class="company-block pf-company pf-group" data-company="{{ company.name }}">
         <h3 class="company-name">{{ company.name }} <span class="count">({{ company.members|length }})</span></h3>
-        <table class="ledger pf-table no-sort">
-          <thead>
-            <tr>
-              <th class="pf-expand-col"></th>
-              {% if can_manage %}<th class="pick pf-col-manage"><input type="checkbox" class="pf-pick-all"></th>{% endif %}
-              <th>Rank</th>
-              <th>Callsign</th>
-              <th class="pf-col-manage">Standing</th>
-              <th class="num pf-col-manage">Enrolled</th>
-              <th class="num pf-col-manage">Last Seen</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for m in company.members %}
-            <tr class="{{ 'pf-row-alt' if loop.index0 is odd }}" data-discord-id="{{ m.discord_id }}" data-name="{{ m.callsign|lower }}" data-company="{{ company.name }}"
-                data-rank="{{ m.rank }}" data-standing="{{ m.status }}">
-              <td class="pf-expand-col">
-                <button type="button" class="pf-expand-btn" aria-expanded="false" aria-controls="member-{{ m.discord_id }}" title="Quick view">▸</button>
-              </td>
-              {% if can_manage %}
-              <td class="pick pf-col-manage"><input type="checkbox" class="pf-row-pick" name="ids" value="{{ m.discord_id }}" form="pf-bulk-form"></td>
-              {% endif %}
-              <td>{% if rank_images.get(m.rank) %}<img class="insignia-img" src="{{ rank_images[m.rank] }}" alt="">{% endif %} {{ m.rank }}</td>
-              <td class="callsign">
-                <a href="/dossier/{{ m.discord_id }}"><img class="avatar" src="{{ m|avatar_url }}" alt="" loading="lazy">{{ display_names[m.discord_id] }}</a>
-                <span class="pf-standing-inline muted"></span>
-              </td>
-              <td class="pf-col-manage"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></td>
-              <td class="num pf-col-manage">{{ m.joined_date|fmt_date }}</td>
-              <td class="num pf-col-manage">{{ m.last_active_date|fmt_date }}</td>
-            </tr>
-            <tr class="pf-drawer" id="member-{{ m.discord_id }}" data-discord-id="{{ m.discord_id }}">
-              <td colspan="{{ total_cols }}">
-                <div class="pf-drawer-inner"><div class="pf-drawer-content"><div class="pf-drawer-body">
-
-                  <div class="pf-stat-grid">
-                    <div><div class="k">Callsign</div><div class="v">{{ m.callsign }}</div></div>
-                    <div><div class="k">Rank</div><div class="v">{{ m.rank }}</div></div>
-                    <div class="pf-stat-wide"><div class="k">Company</div><div class="v">{{ m.company }}</div></div>
-                    <div><div class="k">Standing</div><div class="v"><span class="badge s-{{ m.status }}">{{ m.status|status_label }}</span></div></div>
-                    <div><div class="k">Rank Since</div><div class="v">{{ m.rank_since|fmt_date }}</div></div>
-                    <div><div class="k">Enrolled</div><div class="v">{{ m.joined_date|fmt_date }}</div></div>
-                    <div><div class="k">Last Seen</div><div class="v">{{ m.last_active_date|fmt_date }}</div></div>
-                  </div>
-
-                  <div class="pf-edit-forms">
-                    {% if can_manage %}
-                    <form method="post" action="/members/{{ m.discord_id }}/callsign">
-                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                      <input type="hidden" name="redirect_to" value="/roster/preview">
-                      <div class="field"><label>Rename</label><input name="callsign" value="{{ m.callsign }}" required></div>
-                      <button class="btn btn-small" type="submit">Save</button>
-                    </form>
-                    <form method="post" action="/members/{{ m.discord_id }}/rank">
-                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                      <input type="hidden" name="redirect_to" value="/roster/preview">
-                      <input type="hidden" name="mode" value="set">
-                      <div class="field"><label>Rank <span class="opt">(silent)</span></label>
-                        <select name="rank">
-                          {% for r in rank_options %}<option value="{{ r }}" {{ 'selected' if r == m.rank }}>{{ r }}</option>{% endfor %}
-                        </select>
-                      </div>
-                      <button class="btn btn-small" type="submit">Save</button>
-                    </form>
-                    <form method="post" action="/members/{{ m.discord_id }}/company">
-                      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-                      <input type="hidden" name="redirect_to" value="/roster/preview">
-                      <div class="field"><label>Company</label>
-                        <select name="company">
-                          {% for c in company_options %}<option value="{{ c }}" {{ 'selected' if c == m.company }}>{{ c }}</option>{% endfor %}
-                        </select>
-                      </div>
-                      <button class="btn btn-small" type="submit">Save</button>
-                    </form>
-                    {% endif %}
-                    <div class="pf-drawer-foot">
-                      <a class="rec-link" href="/dossier/{{ m.discord_id }}">Full dossier{{ ' & more actions' if can_manage }} →</a>
-                    </div>
-                  </div>
-
-                </div></div></div>
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
+        {{ member_table('co', company.members, true, co_cols) }}
       </div>
     {% endfor %}
+  </section>
+
+  {% if has_assignments %}
+  <section class="tab-panel {{ 'on' if active_tab == 'assignments' }}" data-panel="assignments">
+    <p class="lede">Every member holding a secondary assignment — leadership, staff, and details
+      drawn from across the companies — whatever their standing.</p>
+    {% for g in assignment_groups %}
+      <div class="company-block pf-assignment pf-group" data-company="">
+        <h3 class="company-name">
+          {% if g.assignment.is_leadership %}<span class="lead-star">★</span> {% endif %}{{ g.assignment.name }}
+          <span class="count">({{ g.members|length }})</span>
+        </h3>
+        {% if g.assignment.description %}<p class="lede" style="margin-top:0;">{{ g.assignment.description }}</p>{% endif %}
+        {% if g.members %}
+          {{ member_table('as' ~ g.assignment.id, g.members, false, as_cols) }}
+        {% else %}
+          <p class="empty">No one is assigned to this group yet.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </section>
+  {% endif %}
 
   <div class="hollow" id="pf-empty" hidden>
     <div class="mark">✵</div><h3>No Matches</h3><p>No one on the books matches those filters.</p>
@@ -178,24 +214,30 @@
       }
 
       // --- quick-view drawer (accordion: one open at a time) -------------
+      // A member can appear in both the Company tab and an Assignments
+      // group, each with its own scoped row+drawer pair (ids can't repeat
+      // in HTML). Lookups go by the shared data-member-row, scoped to
+      // whichever tab is currently visible -- opening a row in one tab
+      // shouldn't silently pre-expand that same member's hidden copy in
+      // the other tab too.
       function closeDrawer(id) {
-        var drawer = document.getElementById('member-' + id);
-        var row = document.querySelector('tr[data-discord-id="' + id + '"]:not(.pf-drawer)');
-        if (drawer) drawer.classList.remove('pf-drawer-open');
-        if (row) {
+        document.querySelectorAll('.tab-panel.on .pf-drawer[data-member-row="' + id + '"]').forEach(function (d) {
+          d.classList.remove('pf-drawer-open');
+        });
+        document.querySelectorAll('.tab-panel.on tr[data-member-row="' + id + '"]:not(.pf-drawer)').forEach(function (row) {
           row.classList.remove('pf-row-open');
           var btn = row.querySelector('.pf-expand-btn');
           if (btn) btn.setAttribute('aria-expanded', 'false');
-        }
+        });
       }
       function openDrawer(id) {
-        Array.prototype.slice.call(document.querySelectorAll('.pf-drawer.pf-drawer-open')).forEach(function (d) {
-          closeDrawer(d.dataset.discordId);
+        Array.prototype.slice.call(document.querySelectorAll('.tab-panel.on .pf-drawer.pf-drawer-open')).forEach(function (d) {
+          closeDrawer(d.dataset.memberRow);
         });
-        var drawer = document.getElementById('member-' + id);
-        var row = document.querySelector('tr[data-discord-id="' + id + '"]:not(.pf-drawer)');
-        if (!drawer || !row || row.classList.contains('pf-row-hidden')) return;
-        drawer.classList.add('pf-drawer-open');
+        var row = document.querySelector('.tab-panel.on tr[data-member-row="' + id + '"]:not(.pf-drawer)');
+        if (!row || row.classList.contains('pf-row-hidden')) return;
+        var drawer = document.querySelector('.tab-panel.on .pf-drawer[data-member-row="' + id + '"]');
+        if (drawer) drawer.classList.add('pf-drawer-open');
         row.classList.add('pf-row-open');
         var btn = row.querySelector('.pf-expand-btn');
         if (btn) btn.setAttribute('aria-expanded', 'true');
@@ -220,13 +262,26 @@
           if (!NARROW.matches) return;
           e.preventDefault();  // narrow screen: toggle instead of navigating
         }
-        var id = row.dataset.discordId;
+        var id = row.dataset.memberRow;
         if (row.classList.contains('pf-row-open')) {
           closeDrawer(id);
         } else {
           openDrawer(id);
         }
       });
+
+      // --- tabs ------------------------------------------------------- //
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+      function showTab(name) {
+        tabs.forEach(function (t) { t.classList.toggle('on', t.dataset.tab === name); });
+        panels.forEach(function (p) { p.classList.toggle('on', p.dataset.panel === name); });
+        try {
+          history.replaceState(null, '', name === 'company' ? '/roster/preview' : '/roster/preview?tab=' + name);
+        } catch (e) {}
+        apply();  // recount "Showing X of Y" for whichever panel is now visible
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
 
       function apply() {
         var term = (search.value || '').trim().toLowerCase();
@@ -235,16 +290,18 @@
         var showPill = standings.length > 1 || standings.indexOf('active') === -1;
         var shown = 0, total = 0;
 
-        document.querySelectorAll('.pf-company').forEach(function (block) {
+        document.querySelectorAll('.pf-group').forEach(function (block) {
+          var table = block.querySelector('.pf-table');
+          if (!table) return;  // an assignment with no one in it yet -- always show its "empty" note
+          var inActivePanel = !!block.closest('.tab-panel.on');
           var visible = 0;
           block.querySelectorAll('tbody tr:not(.pf-drawer)').forEach(function (tr) {
-            total++;
             var ok = (!term || tr.dataset.name.indexOf(term) !== -1)
               && (!co || tr.dataset.company === co)
               && (!rk || tr.dataset.rank === rk)
               && standings.indexOf(tr.dataset.standing) !== -1;
             tr.classList.toggle('pf-row-hidden', !ok);
-            if (!ok) closeDrawer(tr.dataset.discordId);
+            if (!ok) closeDrawer(tr.dataset.memberRow);
             var pick = tr.querySelector('.pf-row-pick');
             if (pick && !ok) pick.checked = false;
             var inline = tr.querySelector('.pf-standing-inline');
@@ -252,7 +309,11 @@
               var st = tr.dataset.standing;
               inline.textContent = (showPill && st !== 'active') ? STANDING_LABEL[st] : '';
             }
-            if (ok) { visible++; shown++; }
+            if (ok) {
+              visible++;
+              if (inActivePanel) shown++;
+            }
+            if (inActivePanel) total++;
           });
           block.classList.toggle('pf-empty-filtered', visible === 0);
         });
@@ -318,7 +379,7 @@
       if (location.hash.indexOf('#member-') === 0) {
         var hashId = location.hash.slice('#member-'.length);
         openDrawer(hashId);
-        var target = document.getElementById('member-' + hashId);
+        var target = document.querySelector('.tab-panel.on .pf-drawer[data-member-row="' + hashId + '"]');
         if (target) setTimeout(function () { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
       }
     })();

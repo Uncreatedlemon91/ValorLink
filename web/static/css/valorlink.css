@@ -1007,7 +1007,7 @@ body.theme-dark .standing-filter .chip-on { color: #fff; }
 body.pf-manage-on .pf-col-manage { display: table-cell; }
 .pf-standing-inline { font-size: 11px; margin-left: 8px; }
 .pf-row-hidden { display: none; }
-.pf-company.pf-empty-filtered { display: none; }
+.pf-group.pf-empty-filtered { display: none; }
 
 /* Order Book preview: a ledger page, not a spreadsheet -- zebra tint
    instead of ruled cells, filled pill badges, an ornamental company rule. */

@@ -1919,7 +1919,8 @@ def test_roster_preview_drawer_has_quick_stats_and_edit_forms():
     client = TestClient(app)
     _login(client, "officer")
     html = client.get("/roster/preview").text
-    assert f'id="member-{MEMBER_ID}"' in html
+    assert f'id="member-co-{MEMBER_ID}"' in html  # scoped: same member can also appear under an assignment
+    assert f'data-member-row="{MEMBER_ID}"' in html
     assert "RANK SINCE" not in html  # labels render lowercase, styled via CSS text-transform
     assert "Rank Since" in html
     assert f'action="/members/{MEMBER_ID}/callsign"' in html
@@ -1931,6 +1932,39 @@ def test_roster_preview_drawer_has_quick_stats_and_edit_forms():
     html = client.get("/roster/preview").text
     assert f'action="/members/{MEMBER_ID}/callsign"' not in html  # no edit forms for non-officers
     assert "Full dossier" in html  # but the quick-view drawer itself still renders
+
+
+def test_roster_preview_shows_assignments_tab():
+    from db.models import Assignment, MemberAssignment
+    client = TestClient(app)
+    _login(client, "admin")
+
+    # no assignments configured yet -- the tab doesn't render at all
+    html = client.get("/roster/preview").text
+    assert 'data-tab="assignments"' not in html
+
+    client.post("/admin/assignments/add",
+                data={"csrf": _csrf(client, "/command-tent"), "name": "High Command",
+                      "description": "Senior leadership", "is_leadership": "1"})
+    with SessionLocal() as s:
+        aid = s.query(Assignment).filter_by(name="High Command").one().id
+    client.post(f"/members/{MEMBER_ID}/assign", data={"csrf": _csrf(client), "assignment_id": aid})
+
+    # an LOA/inactive/discharged member still shows under the assignment,
+    # unlike the old /roster page which only ever listed those present
+    with SessionLocal() as s:
+        s.add(Member(discord_id=410, callsign="OnLeave", rank="Private", company="Alpha", status="loa"))
+        s.commit()
+    client.post("/members/410/assign", data={"csrf": _csrf(client), "assignment_id": aid})
+
+    html = client.get("/roster/preview?tab=assignments").text
+    assert "High Command" in html and "★" in html  # leadership star
+    assert "Testman" in html and "OnLeave" in html
+    # the same member gets a distinct, scoped drawer id from their Company-tab row
+    assert f'id="member-co-{MEMBER_ID}"' in html
+    assert f'id="member-as{aid}-{MEMBER_ID}"' in html
+    # no bulk checkbox column here, unlike the Company tab
+    assert f'value="{MEMBER_ID}" form="pf-bulk-form"' not in html.split('data-panel="assignments"')[1]
 
 
 def test_rename_member_requires_officer():

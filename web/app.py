@@ -930,7 +930,7 @@ def post_muster_bulk(
 
 
 @app.get("/roster/preview", response_class=HTMLResponse)
-def roster_preview(request: Request, session: Session = Depends(get_session)):
+def roster_preview(request: Request, session: Session = Depends(get_session), tab: str = "company"):
     """Design preview: Roster (grouped by company, tagged nicknames) and
     Muster (every standing, search/filter, bulk actions) merged into one
     page. Not linked from primary navigation while it's under review."""
@@ -966,8 +966,20 @@ def roster_preview(request: Request, session: Session = Depends(get_session)):
         roster_members.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
         companies.append({"name": name, "members": roster_members})
 
+    # Every standing, unlike the roster page's "present for duty only" --
+    # consistent with the rest of this merged view, and the standing chips
+    # narrow it the same way they narrow the company groups.
+    member_by_id = {m.discord_id: m for m in members}
+    assignment_groups = []
+    for a in services.list_assignments(session):
+        grp = [member_by_id[ma.member_id] for ma in a.members if ma.member_id in member_by_id]
+        grp.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
+        assignment_groups.append({"assignment": a, "members": grp})
+
     ctx.update(
         companies=companies,
+        assignment_groups=assignment_groups,
+        has_assignments=bool(assignment_groups),
         total=len(members),
         status_counts=status_counts,
         display_names=display_names,
@@ -976,6 +988,7 @@ def roster_preview(request: Request, session: Session = Depends(get_session)):
         rank_options=rank_utils.rank_names(session),
         company_options=[c.name for c in list_companies(session)],
         can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
+        active_tab=("assignments" if tab == "assignments" else "company"),
     )
     return templates.TemplateResponse(request, "roster_preview.html", ctx)
 
