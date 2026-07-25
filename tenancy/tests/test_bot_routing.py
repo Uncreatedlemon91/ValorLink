@@ -6,7 +6,7 @@ Runs under pytest or directly:  python -m tenancy.tests.test_bot_routing
 import asyncio
 import os
 import tempfile
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 _TMP = tempfile.mkdtemp(prefix="valorlink-bot-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/default.db"
@@ -226,6 +226,59 @@ def test_reconcile_retires_orphaned_units_on_startup():
         assert tenant_by_slug(s, "kickedoff") is None        # orphaned → retired
         assert tenant_by_slug(s, "brandnew") is not None     # too new → spared
         assert tenant_by_slug(s, "hqreconcile") is not None  # default → spared
+
+
+def test_guild_join_bootstraps_admin_role_for_owner():
+    from cogs.onboarding import Onboarding
+    from utils.settings import get_config
+
+    provision.create_unit("hotel", "Hotel", guild_id=888)
+
+    cog = object.__new__(Onboarding)
+    cog.bot = MagicMock()
+
+    owner = MagicMock()
+    owner.add_roles = AsyncMock()
+    owner.send = AsyncMock()
+
+    role = MagicMock(id=12345, name="ValorLink Admin")
+
+    guild = MagicMock()
+    guild.id = 888
+    guild.owner = owner
+    guild.create_role = AsyncMock(return_value=role)
+
+    asyncio.run(cog.on_guild_join(guild))
+
+    owner.add_roles.assert_awaited_once_with(role, reason="ValorLink setup: initial admin")
+    owner.send.assert_awaited_once()
+
+    tok = set_current_db_url(unit_db_url_for_slug("hotel"))
+    try:
+        with db_session() as s:
+            assert get_config(s).admin_role_id == 12345
+    finally:
+        reset_current_db_url(tok)
+
+    # bot removed and re-invited later: the unit already has an admin role,
+    # so it must not create (or hand out) a second one
+    guild.create_role.reset_mock()
+    owner.add_roles.reset_mock()
+    asyncio.run(cog.on_guild_join(guild))
+    guild.create_role.assert_not_awaited()
+    owner.add_roles.assert_not_awaited()
+
+
+def test_guild_join_ignores_unregistered_guilds():
+    from cogs.onboarding import Onboarding
+
+    cog = object.__new__(Onboarding)
+    guild = MagicMock()
+    guild.id = 424242  # never provisioned
+    guild.create_role = AsyncMock()
+
+    asyncio.run(cog.on_guild_join(guild))
+    guild.create_role.assert_not_awaited()
 
 
 def _run_all():
