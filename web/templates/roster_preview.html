@@ -200,16 +200,20 @@
         var btn = row.querySelector('.pf-expand-btn');
         if (btn) btn.setAttribute('aria-expanded', 'true');
       }
-      document.querySelectorAll('.pf-expand-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var row = btn.closest('tr');
-          var id = row.dataset.discordId;
-          if (row.classList.contains('pf-row-open')) {
-            closeDrawer(id);
-          } else {
-            openDrawer(id);
-          }
-        });
+      // Clicking anywhere on a member's row toggles their drawer -- except
+      // the callsign link (still navigates to the dossier) and the bulk
+      // checkbox (still just picks the row). The expand arrow has no
+      // listener of its own; a click on it falls through to this one.
+      document.addEventListener('click', function (e) {
+        var row = e.target.closest('.pf-table tbody tr:not(.pf-drawer)');
+        if (!row) return;
+        if (e.target.closest('a, input[type="checkbox"]')) return;
+        var id = row.dataset.discordId;
+        if (row.classList.contains('pf-row-open')) {
+          closeDrawer(id);
+        } else {
+          openDrawer(id);
+        }
       });
 
       function apply() {
