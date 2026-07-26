@@ -1091,7 +1091,19 @@ body.pf-manage-on .pf-col-manage { display: table-cell; }
   content: ""; flex: 1 1 auto; height: 1px; margin-top: 2px;
   background: linear-gradient(to right, var(--rule-strong), transparent);
 }
-.pf-table { border-collapse: separate; border-spacing: 0; margin-top: 10px; }
+/* table-layout: fixed + explicit widths on every column but Callsign, so
+   every company/assignment block's table lines up column-for-column --
+   each is a separate <table>, and left to auto-sizing, one group's longer
+   rank names or callsigns would shove its columns out of line with the
+   next group's. */
+.pf-table { border-collapse: separate; border-spacing: 0; margin-top: 10px; table-layout: fixed; }
+.pf-col-rank { width: 150px; }
+.pf-col-standing { width: 100px; }
+.pf-col-date { width: 100px; }
+@media (max-width: 640px) {
+  .pf-col-rank { width: 110px; }
+  .pf-col-standing, .pf-col-date { width: 90px; }
+}
 .pf-table thead th { border-bottom: 1px solid var(--rule-strong); }
 .pf-table tbody tr:not(.pf-drawer) { cursor: pointer; }
 .pf-table tbody tr:not(.pf-drawer) td { border-bottom: none; }
