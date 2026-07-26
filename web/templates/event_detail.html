@@ -218,14 +218,14 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Accent colour <span class="opt">(optional — blank uses the unit's own)</span></label>
+          <label>Accent colour <span class="opt">(optional)</span></label>
           <div class="color-field">
             <input type="color" class="color-swatch" id="edit-color-swatch"
                    value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else brand_color }}"
-                   tabindex="-1" aria-label="Pick an accent colour">
-            <input name="color_hex" id="edit-color-hex"
-                   value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else '' }}" placeholder="#7C1F2B"
-                   maxlength="7" autocomplete="off">
+                   data-default="{{ brand_color }}" aria-label="Pick an accent colour">
+            <input type="hidden" name="color_hex" id="edit-color-hex"
+                   value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else '' }}">
+            <button type="button" class="rec-link color-reset" id="edit-color-reset" {{ 'hidden' if event.color is none }}>Use the unit's colour</button>
           </div>
         </div>
         <div class="field">
@@ -240,7 +240,7 @@
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Save changes</button></div>
     </form>
     <p class="order-note">Rescheduling updates the Discord announcement and re-arms the reminder. Leave the
-    accent colour blank to use the unit's own brand colour.</p>
+    accent colour untouched (or use the reset link) to use the unit's own brand colour.</p>
   </div>
 
   {% if is_past %}
@@ -288,12 +288,18 @@
 
   (function () {
     var swatch = document.getElementById('edit-color-swatch');
-    var text = document.getElementById('edit-color-hex');
-    if (!swatch || !text) return;
-    var HEX = /^#[0-9a-f]{6}$/i;
-    if (HEX.test(text.value)) swatch.value = text.value;
-    swatch.addEventListener('input', function () { text.value = swatch.value.toUpperCase(); });
-    text.addEventListener('input', function () { if (HEX.test(text.value)) swatch.value = text.value; });
+    var hidden = document.getElementById('edit-color-hex');
+    var reset = document.getElementById('edit-color-reset');
+    if (!swatch || !hidden) return;
+    swatch.addEventListener('input', function () {
+      hidden.value = swatch.value.toUpperCase();
+      if (reset) reset.hidden = false;
+    });
+    if (reset) reset.addEventListener('click', function () {
+      hidden.value = '';
+      swatch.value = swatch.getAttribute('data-default') || swatch.value;
+      reset.hidden = true;
+    });
   })();
 </script>
 {% endif %}

@@ -26,10 +26,11 @@
     </div>
     <div class="field-row">
       <div class="field">
-        <label>Accent colour <span class="opt">(optional — blank uses the unit's own)</span></label>
+        <label>Accent colour <span class="opt">(optional)</span></label>
         <div class="color-field">
-          <input type="color" class="color-swatch" id="color-swatch" value="{{ brand_color }}" tabindex="-1" aria-label="Pick an accent colour">
-          <input name="color_hex" id="color-hex" placeholder="#7C1F2B" maxlength="7" autocomplete="off">
+          <input type="color" class="color-swatch" id="color-swatch" value="{{ brand_color }}" data-default="{{ brand_color }}" aria-label="Pick an accent colour">
+          <input type="hidden" name="color_hex" id="color-hex" value="">
+          <button type="button" class="rec-link color-reset" id="color-reset" hidden>Use the unit's colour</button>
         </div>
       </div>
       <div class="field">
@@ -68,18 +69,24 @@
   </form>
   <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the
   announcement with Accept / Tentative / Decline buttons to the announcements channel. Leave the accent
-  colour blank to use the unit's own brand colour. Signup roles with capacity limits can be added once
+  colour untouched to use the unit's own brand colour. Signup roles with capacity limits can be added once
   the event is created, from its own page.</p>
   <script>document.getElementById('tz-offset').value = new Date().getTimezoneOffset();</script>
   <script>
     (function () {
       var swatch = document.getElementById('color-swatch');
-      var text = document.getElementById('color-hex');
-      if (!swatch || !text) return;
-      var HEX = /^#[0-9a-f]{6}$/i;
-      if (HEX.test(text.value)) swatch.value = text.value;
-      swatch.addEventListener('input', function () { text.value = swatch.value.toUpperCase(); });
-      text.addEventListener('input', function () { if (HEX.test(text.value)) swatch.value = text.value; });
+      var hidden = document.getElementById('color-hex');
+      var reset = document.getElementById('color-reset');
+      if (!swatch || !hidden) return;
+      swatch.addEventListener('input', function () {
+        hidden.value = swatch.value.toUpperCase();
+        if (reset) reset.hidden = false;
+      });
+      if (reset) reset.addEventListener('click', function () {
+        hidden.value = '';
+        swatch.value = swatch.getAttribute('data-default') || swatch.value;
+        reset.hidden = true;
+      });
     })();
   </script>
 </details>

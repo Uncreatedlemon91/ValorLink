@@ -714,13 +714,12 @@ footer .fine { display: block; margin-top: 6px; font-size: 10px; letter-spacing:
 }
 .field-actions { margin-top: 2px; }
 
-/* Accent-colour picker: a native swatch next to the plain hex field it
-   drives, so filling it in doesn't require knowing the hex code up front.
-   The hex field is still what's actually submitted -- the swatch only
-   writes into it on interaction, so leaving it untouched still submits
-   blank (falls back to the unit's own brand colour) exactly as before. */
-.color-field { display: flex; align-items: stretch; gap: 8px; }
-.color-field input[name="color_hex"] { flex: 1 1 auto; width: auto; }
+/* Accent-colour picker: the swatch is the only visible control -- it
+   drives a hidden color_hex field, so there's no hex text box duplicating
+   it. Leaving the swatch untouched submits blank (falls back to the
+   unit's own brand colour); the reset link un-does a pick and goes back
+   to blank, since the swatch itself can't represent "unset". */
+.color-field { display: flex; align-items: center; gap: 10px; }
 .color-field .color-swatch {
   /* flex-basis (not width) drives sizing here on purpose: .orders input's
      width:100% outranks a plain .color-swatch selector on specificity, but
@@ -732,6 +731,7 @@ footer .fine { display: block; margin-top: 6px; font-size: 10px; letter-spacing:
 }
 .color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
 .color-swatch::-webkit-color-swatch { border: none; border-radius: 1px; }
+.color-reset { background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
 .color-swatch::-moz-color-swatch { border: none; border-radius: 1px; }
 body.theme-dark .color-swatch { background: rgba(255,255,255,0.06); }
 
