@@ -27,8 +27,16 @@ def normalize_slug(slug: str) -> str:
 
 def create_unit(slug: str, name: str, guild_id: int | None = None,
                 motto: str | None = None, blurb: str | None = None,
-                db_url: str | None = None) -> str:
-    """Register and provision a unit. Returns the unit's database URL."""
+                db_url: str | None = None, admin_role_id: int | None = None) -> str:
+    """Register and provision a unit. Returns the unit's database URL.
+
+    admin_role_id, if given, is stamped onto the new unit's own GuildConfig
+    (a per-unit DB row, not the registry) so whoever registers the unit can
+    name an existing Discord role for their admins up front -- otherwise the
+    only way into that unit's Command Tent is the bot-side /config set_role
+    bootstrap, which needs server Administrator permission and a bot that's
+    already been invited.
+    """
     from tenancy.registry import Tenant, registry_session
     from tenancy.resolve import tenant_by_guild, tenant_by_slug
     from tenancy.routing import invalidate
@@ -60,6 +68,19 @@ def create_unit(slug: str, name: str, guild_id: int | None = None,
             # Lost a race for the same handle (the slug column is UNIQUE).
             session.rollback()
             raise ProvisionError(f"The handle '{slug}' is already taken.")
+
+    if admin_role_id:
+        from db.base import db_session
+        from db.context import reset_current_db_url, set_current_db_url
+        from utils.settings import get_config
+
+        token = set_current_db_url(url)
+        try:
+            with db_session() as unit_session:
+                get_config(unit_session).admin_role_id = admin_role_id
+                unit_session.commit()
+        finally:
+            reset_current_db_url(token)
 
     invalidate()
     return url

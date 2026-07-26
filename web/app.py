@@ -3008,6 +3008,7 @@ def register_submit(
     slug: str = Form(...),
     name: str = Form(...),
     guild_id: str = Form(""),
+    admin_role_id: str = Form(""),
     motto: str = Form(""),
     blurb: str = Form(""),
 ):
@@ -3029,8 +3030,15 @@ def register_submit(
         except ValueError:
             _flash(request, "The Discord server ID must be all digits.", "error")
             return RedirectResponse("/register", status_code=303)
+    admin_rid = None
+    if admin_role_id.strip():
+        try:
+            admin_rid = int(admin_role_id.strip())
+        except ValueError:
+            _flash(request, "The admin role ID must be all digits.", "error")
+            return RedirectResponse("/register", status_code=303)
     try:
-        create_unit(slug, name, guild_id=gid, motto=motto, blurb=blurb)
+        create_unit(slug, name, guild_id=gid, motto=motto, blurb=blurb, admin_role_id=admin_rid)
     except ProvisionError as exc:
         _flash(request, str(exc), "error")
         return RedirectResponse("/register", status_code=303)

@@ -228,45 +228,69 @@ def test_reconcile_retires_orphaned_units_on_startup():
         assert tenant_by_slug(s, "hqreconcile") is not None  # default → spared
 
 
-def test_guild_join_bootstraps_admin_role_for_owner():
-    from cogs.onboarding import Onboarding
+def test_create_unit_stamps_admin_role_on_the_new_unit_db():
     from utils.settings import get_config
 
-    provision.create_unit("hotel", "Hotel", guild_id=888)
+    url = provision.create_unit("golfclub", "Golf Club", guild_id=887, admin_role_id=55555)
+
+    tok = set_current_db_url(url)
+    try:
+        with db_session() as s:
+            assert get_config(s).admin_role_id == 55555
+    finally:
+        reset_current_db_url(tok)
+
+
+def test_guild_join_leaves_a_working_admin_role_alone():
+    from cogs.onboarding import Onboarding
+
+    provision.create_unit("hotel", "Hotel", guild_id=888, admin_role_id=12345)
 
     cog = object.__new__(Onboarding)
     cog.bot = MagicMock()
 
     owner = MagicMock()
-    owner.add_roles = AsyncMock()
     owner.send = AsyncMock()
-
-    role = MagicMock(id=12345, name="ValorLink Admin")
 
     guild = MagicMock()
     guild.id = 888
     guild.owner = owner
-    guild.create_role = AsyncMock(return_value=role)
+    guild.get_role.return_value = MagicMock(id=12345)  # the configured role really exists here
 
     asyncio.run(cog.on_guild_join(guild))
+    owner.send.assert_not_awaited()
 
-    owner.add_roles.assert_awaited_once_with(role, reason="ValorLink setup: initial admin")
+
+def test_guild_join_warns_owner_when_admin_role_missing_or_invalid():
+    from cogs.onboarding import Onboarding
+
+    # registered with no admin role at all
+    provision.create_unit("india", "India", guild_id=889)
+    cog = object.__new__(Onboarding)
+    cog.bot = MagicMock()
+    owner = MagicMock()
+    owner.send = AsyncMock()
+    guild = MagicMock()
+    guild.id = 889
+    guild.owner = owner
+    guild.get_role.return_value = None
+
+    asyncio.run(cog.on_guild_join(guild))
     owner.send.assert_awaited_once()
+    assert "no admin role was set" in owner.send.call_args.args[0]
 
-    tok = set_current_db_url(unit_db_url_for_slug("hotel"))
-    try:
-        with db_session() as s:
-            assert get_config(s).admin_role_id == 12345
-    finally:
-        reset_current_db_url(tok)
+    # registered with a role id that doesn't exist in this server
+    provision.create_unit("juliet", "Juliet", guild_id=890, admin_role_id=99999)
+    owner2 = MagicMock()
+    owner2.send = AsyncMock()
+    guild2 = MagicMock()
+    guild2.id = 890
+    guild2.owner = owner2
+    guild2.get_role.return_value = None  # 99999 isn't a real role here
 
-    # bot removed and re-invited later: the unit already has an admin role,
-    # so it must not create (or hand out) a second one
-    guild.create_role.reset_mock()
-    owner.add_roles.reset_mock()
-    asyncio.run(cog.on_guild_join(guild))
-    guild.create_role.assert_not_awaited()
-    owner.add_roles.assert_not_awaited()
+    asyncio.run(cog.on_guild_join(guild2))
+    owner2.send.assert_awaited_once()
+    assert "doesn't match any role" in owner2.send.call_args.args[0]
 
 
 def test_guild_join_ignores_unregistered_guilds():

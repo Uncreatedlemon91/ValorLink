@@ -250,12 +250,17 @@ the architecture; the operational steps are:
      ```bash
      cd /opt/valorlink
      sudo -u valorlink .venv/bin/python -m tenancy.manage create \
-         --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id>
+         --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id> \
+         --admin-role <discord-role-id>
      ```
-   A new unit is live at `https://5thva.valorlink.co`. Its owner invites the
-   **one** ValorLink bot to their Discord server, then configures roles and
-   channels from the portal's Command Tent (the first `/config set_role
-   key:admin` in Discord bootstraps admin access).
+   A new unit is live at `https://5thva.valorlink.co`. Both paths take an
+   optional **admin role ID** — an *existing* Discord role in that server,
+   picked before the bot is even invited (right-click the role in Server
+   Settings → Roles → Copy Role ID). That's the recommended way to set it up:
+   the Command Tent works the moment the bot joins, nobody has to touch
+   Discord first. Skip it and the owner gets DMed a reminder once the bot
+   joins; they (or anyone with server Administrator permission) can still
+   bind one afterward with `/config set_role key:admin role:@YourRole`.
 
 **Removing a unit:** platform admins (`PLATFORM_ADMIN_IDS`) get a **Remove**
 control under **Raise a unit** (`/register`), or use the CLI:

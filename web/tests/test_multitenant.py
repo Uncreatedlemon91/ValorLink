@@ -414,6 +414,31 @@ def test_register_flow_and_tls_allow():
     assert c.get("/tls-allow", params={"domain": "ghost.valorlink.co"}).status_code == 404
 
 
+def test_register_stamps_admin_role_on_the_new_unit():
+    c = TestClient(app)
+    c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},
+           headers={"host": APEX}, follow_redirects=False)
+
+    token = _csrf(c, "/register", {"host": APEX})
+    r = c.post("/register",
+               data={"csrf": token, "slug": "adminco", "name": "Admin Co",
+                     "guild_id": "1001", "admin_role_id": "777888999"},
+               headers={"host": APEX})
+    assert r.status_code == 200 and "Unit Raised" in r.text
+    with sessionmaker_for(unit_db_url_for_slug("adminco"))() as s:
+        assert get_config(s).admin_role_id == 777888999
+
+    # a non-numeric admin role id is rejected, same as a bad guild id
+    token = _csrf(c, "/register", {"host": APEX})
+    r = c.post("/register",
+               data={"csrf": token, "slug": "badadmin", "name": "Bad Admin",
+                     "admin_role_id": "not-a-number"},
+               headers={"host": APEX})
+    assert r.status_code == 200 and "must be all digits" in r.text
+    with registry_session() as s:
+        assert tenant_by_slug(s, "badadmin") is None
+
+
 def test_register_check_reports_availability():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 9, "name": "Founder", "tier": "none"},

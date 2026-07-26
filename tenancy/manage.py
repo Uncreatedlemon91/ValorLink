@@ -1,7 +1,7 @@
 """Manage units (tenants) from the command line.
 
     python -m tenancy.manage init
-    python -m tenancy.manage create --slug 5thva --name "5th Virginia Volunteers" --guild 123456789
+    python -m tenancy.manage create --slug 5thva --name "5th Virginia Volunteers" --guild 123456789 --admin-role 998877665544332211
     python -m tenancy.manage list
     python -m tenancy.manage adopt-default --name "5th Virginia Volunteers"
 
@@ -30,6 +30,7 @@ def cmd_create(args):
         db_url = create_unit(
             args.slug, args.name, guild_id=args.guild,
             motto=args.motto, blurb=args.blurb, db_url=args.db_url,
+            admin_role_id=args.admin_role,
         )
     except ProvisionError as exc:
         sys.exit(str(exc))
@@ -37,6 +38,8 @@ def cmd_create(args):
     print(f"  database: {db_url}")
     if args.guild:
         print(f"  guild:    {args.guild}")
+    if args.admin_role:
+        print(f"  admin role: {args.admin_role}")
 
 
 def cmd_remove(args):
@@ -137,6 +140,8 @@ def main(argv=None):
     c.add_argument("--slug", required=True, help="subdomain label, e.g. 5thva")
     c.add_argument("--name", required=True, help="display name")
     c.add_argument("--guild", type=int, help="Discord guild id")
+    c.add_argument("--admin-role", type=int, dest="admin_role",
+                   help="Discord role id to bind as this unit's admin role")
     c.add_argument("--motto")
     c.add_argument("--blurb", help="public directory description")
     c.add_argument("--db-url", help="override the unit database URL")

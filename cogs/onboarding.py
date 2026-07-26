@@ -9,8 +9,9 @@ from utils.settings import get_config
 
 
 class Onboarding(commands.Cog):
-    """Greets new joins and tags them with the visitor role, and bootstraps a
-    brand-new unit's admin access the moment the bot joins its server.
+    """Greets new joins and tags them with the visitor role, and checks a
+    brand-new unit's admin access is actually wired up the moment the bot
+    joins its server.
 
     This is separate from the recruitment pipeline (cogs.recruitment) --
     onboarding fires for *every* join, recruitment only starts once someone
@@ -22,46 +23,39 @@ class Onboarding(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
-        """A unit registers on the website (linking a Discord server id)
-        before ever inviting the bot, so by the time the bot joins, this
-        guild already resolves to a unit -- but nobody in it holds the
-        ValorLink admin role yet, since that's normally configured from the
-        Command Tent, which itself requires the admin role. Break that
-        chicken-and-egg loop here: create the role and hand it to the
-        server owner, so they land in a working Command Tent immediately
-        instead of needing to run a slash command first. Only acts once --
-        a unit that already has an admin role configured is left alone,
-        including if the bot is removed and re-invited later."""
+        """A unit can name an existing Discord role for its admins when it
+        registers on the website, before the bot is even invited -- that's
+        the preferred path, since it means the Command Tent works the
+        moment the bot joins with nobody needing to run a command first.
+        This just checks that actually landed: if no admin role was set, or
+        the id given doesn't match a real role now that the bot can see the
+        server, DM the owner so they find out from a friendly message
+        instead of everyone getting silently refused later. Nothing here
+        creates or assigns a role -- that's on the unit to pick."""
         if db_url_for_guild(guild.id) is None:
             return
         token = bind_guild(guild.id)
         try:
             with db_session() as session:
                 cfg = get_config(session)
-                if cfg.admin_role_id:
-                    return
+                admin_role_id = cfg.admin_role_id
                 regiment_name = cfg.regiment_name
 
+            if admin_role_id and guild.get_role(admin_role_id):
+                return  # configured, and it's a real role in this server
+
+            detail = (
+                f"the admin role id you set (`{admin_role_id}`) doesn't match any role in this server"
+                if admin_role_id else
+                "no admin role was set when you registered"
+            )
             owner = guild.owner or await guild.fetch_owner()
             try:
-                role = await guild.create_role(
-                    name="ValorLink Admin",
-                    reason="ValorLink setup: bootstrap admin access for the unit's owner",
-                )
-                await owner.add_roles(role, reason="ValorLink setup: initial admin")
-            except discord.HTTPException:
-                return  # likely missing Manage Roles; nothing to bind
-
-            with db_session() as session:
-                get_config(session).admin_role_id = role.id
-                session.commit()
-
-            try:
                 await owner.send(
-                    f"**{regiment_name}** is set up! You've been given the **{role.name}** role, "
-                    "so you have full admin access in ValorLink. Head to the Command Tent on "
-                    "the website (or `/config`, `/rank`, and `/company` in Discord) to finish "
-                    "configuring your unit -- roles, channels, the rank ladder, and companies."
+                    f"**{regiment_name}** is set up, but {detail}, so nobody has Command Tent "
+                    "access yet. Fix it in Discord with server **Administrator** permission: "
+                    "`/config set_role key:admin role:@YourAdminRole`. Every command after that "
+                    "one can use the role itself instead."
                 )
             except discord.Forbidden:
                 pass
