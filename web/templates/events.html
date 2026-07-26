@@ -3,93 +3,128 @@
 {% block content %}
 
 {% if tier_at_least(user, TIER_OFFICER) %}
-<details class="announce-card ev-create">
-  <summary><span class="announce-title">{{ terms.event_create }}</span>
-    <span class="announce-sub">post a new call to the books</span></summary>
-  <form class="orders" method="post" action="/muster-calls/create" enctype="multipart/form-data">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    <input type="hidden" name="tz_offset" id="tz-offset" value="0">
-    <div class="field"><label>Occasion</label><input name="name" required placeholder="Regimental Drill"></div>
-    <div class="field">
-      <label>Kind</label>
-      <select name="event_type">
-        {% for t in terms.event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
-      </select>
+<div class="ev-cta">
+  <div class="ev-cta-grid"></div>
+  <div class="ev-cta-glow"></div>
+  <div class="ev-cta-inner">
+    <div class="ev-cta-text">
+      <div class="ev-cta-kicker">Muster Call</div>
+      <h3 class="ev-cta-title">Rally the Regiment</h3>
+      <p class="ev-cta-sub">Post a drill, battle, or operation — announced straight to Discord with RSVP buttons.</p>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Date</label><input name="date" type="date" required></div>
-      <div class="field"><label>Time <span class="opt">(your local time)</span></label><input name="time" type="time" required value="19:00"></div>
-    </div>
-    <div class="field">
-      <label>Details <span class="opt">(optional)</span></label>
-      <textarea name="description" rows="3" placeholder="Loadout, meeting point, rules — shown in the Discord post."></textarea>
-    </div>
-    <div class="field-row">
+    <button type="button" class="btn btn-hero-primary ev-cta-btn" id="ev-create-open">+ {{ terms.event_create }}</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ev-create-overlay">
+  <div class="modal modal-event modal-pop">
+    <button type="button" class="modal-close" id="ev-create-close" aria-label="Close">×</button>
+    <h3 class="order-title">{{ terms.event_create }}</h3>
+    <form class="orders" method="post" action="/muster-calls/create" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="tz_offset" id="tz-offset" value="0">
+      <div class="field"><label>Occasion</label><input name="name" required placeholder="Regimental Drill"></div>
       <div class="field">
-        <label>Accent colour <span class="opt">(optional)</span></label>
-        <div class="color-field">
-          <input type="color" class="color-swatch" id="color-swatch" value="{{ brand_color }}" data-default="{{ brand_color }}" aria-label="Pick an accent colour">
-          <input type="hidden" name="color_hex" id="color-hex" value="">
-          <button type="button" class="rec-link color-reset" id="color-reset" hidden>Use the unit's colour</button>
+        <label>Kind</label>
+        <select name="event_type">
+          {% for t in terms.event_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date</label><input name="date" type="date" required></div>
+        <div class="field"><label>Time <span class="opt">(your local time)</span></label><input name="time" type="time" required value="19:00"></div>
+      </div>
+      <div class="field">
+        <label>Details <span class="opt">(optional)</span></label>
+        <textarea name="description" rows="3" placeholder="Loadout, meeting point, rules — shown in the Discord post."></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Accent colour <span class="opt">(optional)</span></label>
+          <div class="color-field">
+            <input type="color" class="color-swatch" id="color-swatch" value="{{ brand_color }}" data-default="{{ brand_color }}" aria-label="Pick an accent colour">
+            <input type="hidden" name="color_hex" id="color-hex" value="">
+            <button type="button" class="rec-link color-reset" id="color-reset" hidden>Use the unit's colour</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Image <span class="opt">(optional)</span></label>
+          <label class="btn btn-small file-btn" style="align-self:flex-start;">
+            <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+            <span class="file-name">Choose Image</span>
+          </label>
         </div>
       </div>
       <div class="field">
-        <label>Image <span class="opt">(optional)</span></label>
-        <label class="btn btn-small file-btn" style="align-self:flex-start;">
-          <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
-          <span class="file-name">Choose Image</span>
-        </label>
-      </div>
-    </div>
-    <div class="field">
-      <label>Repeat</label>
-      <select name="repeat_weeks">
-        <option value="1">Just once</option>
-        <option value="4">Weekly, 4 times</option>
-        <option value="8">Weekly, 8 times</option>
-        <option value="12">Weekly, 12 times</option>
-      </select>
-      <span class="order-note">Schedules the same call at weekly intervals from the date above.</span>
-    </div>
-    <div class="field">
-      <label>Post to Discord</label>
-      <div class="lead-row">
-        <input name="lead_value" type="number" min="0" max="90" value="0" style="max-width:90px;">
-        <select name="lead_unit">
-          <option value="hours">hours</option>
-          <option value="days" selected>days</option>
-          <option value="weeks">weeks</option>
+        <label>Repeat</label>
+        <select name="repeat_weeks">
+          <option value="1">Just once</option>
+          <option value="4">Weekly, 4 times</option>
+          <option value="8">Weekly, 8 times</option>
+          <option value="12">Weekly, 12 times</option>
         </select>
-        <span class="lead-suffix">before the event</span>
+        <span class="order-note">Schedules the same call at weekly intervals from the date above.</span>
       </div>
-      <span class="order-note">Leave at <b>0</b> to announce immediately. Set a lead so a recurring
-      series posts one announcement at a time (e.g. <b>2 days</b> before each occurrence) instead of all at once.</span>
-    </div>
-    <div class="field field-actions"><button class="btn btn-strong" type="submit">{{ terms.event_create }}</button></div>
-  </form>
-  <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the
-  announcement with Accept / Tentative / Decline buttons to the announcements channel. Leave the accent
-  colour untouched to use the unit's own brand colour. Signup roles with capacity limits can be added once
-  the event is created, from its own page.</p>
-  <script>document.getElementById('tz-offset').value = new Date().getTimezoneOffset();</script>
-  <script>
-    (function () {
-      var swatch = document.getElementById('color-swatch');
-      var hidden = document.getElementById('color-hex');
-      var reset = document.getElementById('color-reset');
-      if (!swatch || !hidden) return;
-      swatch.addEventListener('input', function () {
-        hidden.value = swatch.value.toUpperCase();
-        if (reset) reset.hidden = false;
-      });
-      if (reset) reset.addEventListener('click', function () {
-        hidden.value = '';
-        swatch.value = swatch.getAttribute('data-default') || swatch.value;
-        reset.hidden = true;
-      });
-    })();
-  </script>
-</details>
+      <div class="field">
+        <label>Post to Discord</label>
+        <div class="lead-row">
+          <input name="lead_value" type="number" min="0" max="90" value="0" style="max-width:90px;">
+          <select name="lead_unit">
+            <option value="hours">hours</option>
+            <option value="days" selected>days</option>
+            <option value="weeks">weeks</option>
+          </select>
+          <span class="lead-suffix">before the event</span>
+        </div>
+        <span class="order-note">Leave at <b>0</b> to announce immediately. Set a lead so a recurring
+        series posts one announcement at a time (e.g. <b>2 days</b> before each occurrence) instead of all at once.</span>
+      </div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">{{ terms.event_create }}</button></div>
+    </form>
+    <p class="order-note">Enter the time in your own timezone — everyone sees it in theirs. The bot posts the
+    announcement with Accept / Tentative / Decline buttons to the announcements channel. Leave the accent
+    colour untouched to use the unit's own brand colour. Signup roles with capacity limits can be added once
+    the event is created, from its own page.</p>
+  </div>
+</div>
+<script>document.getElementById('tz-offset').value = new Date().getTimezoneOffset();</script>
+<script>
+  (function () {
+    var swatch = document.getElementById('color-swatch');
+    var hidden = document.getElementById('color-hex');
+    var reset = document.getElementById('color-reset');
+    if (!swatch || !hidden) return;
+    swatch.addEventListener('input', function () {
+      hidden.value = swatch.value.toUpperCase();
+      if (reset) reset.hidden = false;
+    });
+    if (reset) reset.addEventListener('click', function () {
+      hidden.value = '';
+      swatch.value = swatch.getAttribute('data-default') || swatch.value;
+      reset.hidden = true;
+    });
+  })();
+</script>
+<script>
+  (function () {
+    var openBtn = document.getElementById('ev-create-open');
+    var overlay = document.getElementById('ev-create-overlay');
+    var closeBtn = document.getElementById('ev-create-close');
+    if (!openBtn || !overlay) return;
+    function open() {
+      overlay.classList.add('open');
+      var first = overlay.querySelector('input:not([type=hidden]), select, textarea');
+      if (first) first.focus();
+    }
+    function close() { overlay.classList.remove('open'); }
+    openBtn.addEventListener('click', open);
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) close();
+    });
+  })();
+</script>
 {% endif %}
 
 <h2 class="section">{{ terms.event_upcoming }} <span class="tally">{{ upcoming|length }} on the books</span></h2>

@@ -942,6 +942,54 @@ body.theme-dark .modal { background: #1c2025; }
 .modal-edit .order-title { margin: 0 0 4px; }
 .modal-edit .field-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
+.modal-event { position: relative; max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto; text-align: left; }
+.modal-event .order-title { margin: 0 0 4px; padding-right: 24px; }
+.modal-close {
+  position: absolute; top: 12px; right: 12px; background: none; border: none;
+  font-size: 22px; line-height: 1; color: var(--ink-faint); cursor: pointer; padding: 2px 6px;
+}
+.modal-close:hover { color: var(--ink); }
+@keyframes modal-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.modal-overlay.open .modal-pop { animation: modal-pop 0.22s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .modal-overlay.open .modal-pop { animation: none; } }
+
+/* ---- Events list: hero-style call-to-action for the create-event modal - */
+.ev-cta {
+  position: relative; overflow: hidden; border-radius: 6px; margin: 8px 0 26px;
+  padding: 26px 28px; color: #f2e7cf;
+  background: radial-gradient(120% 160% at 15% -20%, #3a0f16 0%, #1a0a0d 55%, #0c0908 100%);
+}
+.ev-cta-grid {
+  position: absolute; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(242,231,207,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(242,231,207,0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(80% 130% at 20% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(80% 130% at 20% 0%, #000 40%, transparent 100%);
+}
+.ev-cta-glow {
+  position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(45% 90% at 85% 20%, rgba(184,147,63,0.28), transparent 65%);
+  animation: hero-pulse 9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .ev-cta-glow { animation: none; } }
+.ev-cta-inner {
+  position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap;
+}
+.ev-cta-kicker { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass-bright); margin-bottom: 4px; }
+.ev-cta-title { font-family: var(--serif); font-size: 24px; margin: 0 0 6px; color: #fbf3e2; }
+.ev-cta-sub { font-size: 13.5px; color: #c4b393; margin: 0; max-width: 44ch; }
+.ev-cta-btn { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 640px) {
+  .ev-cta-inner { flex-direction: column; align-items: flex-start; }
+  .ev-cta-btn { width: 100%; text-align: center; }
+}
+
 /* Responsive tables: let wide ledgers scroll instead of breaking the layout */
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 4px 0; }
 .table-scroll > .ledger { margin-top: 0; }
