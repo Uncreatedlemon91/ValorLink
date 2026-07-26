@@ -320,6 +320,15 @@ body.theme-dark .nav-menu a:hover { background: rgba(255,255,255,0.07); }
     position: static; transform: none; opacity: 1; visibility: visible; pointer-events: auto;
     min-width: 0; box-shadow: none; border: none; border-radius: 0; padding: 0; background: transparent;
   }
+  /* .nav-group.open/:hover/:focus-within .nav-menu (outside this media query)
+     sets transform: translateX(-50%) for the desktop dropdown -- it outranks
+     the plain .nav-menu reset above by specificity, so on a narrow screen it
+     was shoving the open submenu half its own width off the left edge. */
+  .nav-group.open .nav-menu,
+  .nav-group:hover .nav-menu,
+  .nav-group:focus-within .nav-menu {
+    transform: none;
+  }
   .nav-menu a { text-align: center; border-bottom: 1px solid var(--rule); padding: 11px 16px; font-size: 13px; }
 }
 @keyframes navdrop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
