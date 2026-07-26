@@ -78,7 +78,7 @@ def test_apex_home_is_informative_with_navigation():
     c = TestClient(app)
     html = c.get("/", headers={"host": APEX}).text
     # explains the platform and navigates to Find a Unit
-    assert "A home for your gaming unit" in html
+    assert "A private HQ for your regiment, clan, or squad" in html
     assert 'href="/find"' in html and "Find a Unit" in html
     # signed-out visitors are pointed at sign-in for My Units
     assert "My Units" in html
@@ -186,11 +186,12 @@ def test_login_is_scoped_across_units():
     c = TestClient(app)
     c.post("/auth/dev", data={"discord_id": 1, "name": "Col. Test", "tier": "officer"},
            headers=_host("5thva"), follow_redirects=False)
-    assert "Signed in as" in c.get("/", headers=_host("5thva")).text
+    html = c.get("/", headers=_host("5thva")).text
+    assert 'class="account-menu"' in html and "Col. Test" in html
     # a different unit sees a visitor
     # on a unit they don't belong to they're a visitor (the top bar shows it)
     other = c.get("/", headers=_host("2ndus")).text
-    assert "Sign in with Discord" in other and "Signed in as" not in other
+    assert "Sign in with Discord" in other and 'class="account-menu"' not in other
     # and an officer action on the other unit is refused
     r = c.post("/members/1/service-log", data={"csrf": "x", "entry": "hi"},
                headers=_host("2ndus"), follow_redirects=False)

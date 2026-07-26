@@ -773,101 +773,15 @@ def post_announce(
     return _do(request, csrf, services.post_announcement, actor, title, body, redirect="/")
 
 
-@app.get("/roster", response_class=HTMLResponse)
-def roster(request: Request, session: Session = Depends(get_session), tab: str = "company"):
-    ctx = _base_context(request, session)
-
-    members = session.query(Member).filter(Member.status == "active").all()
-    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
-    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
-
-    # Display-only: the same "UnitTag CompanyTag Rank. Callsign" the bot
-    # writes as a Discord nickname, shown on the roster for consistency.
-    # The underlying callsign stays untouched -- this is never written back.
-    unit_tag = get_config(session).unit_tag or ""
-    rank_abbrs = {r.name: r.abbreviation for r in rank_utils.all_ranks(session)}
-    company_tags = {c.name: (c.tag or "") for c in list_companies(session)}
-
-    def _tagged_name(m: Member) -> str:
-        prefix = build_prefix(unit_tag, company_tags.get(m.company, ""), rank_abbrs.get(m.rank, ""))
-        return f"{prefix} {m.callsign}".strip() if prefix else m.callsign
-
-    display_names = {m.discord_id: _tagged_name(m) for m in members}
-
-    by_company: dict[str, list[Member]] = defaultdict(list)
-    for m in members:
-        by_company[m.company].append(m)
-
-    configured = [c.name for c in list_companies(session)]
-    order = configured + [c for c in by_company if c not in configured]
-
-    companies = []
-    for name in order:
-        roster_members = by_company.get(name)
-        if not roster_members:
-            continue
-        roster_members.sort(key=lambda m: rank_order.get(m.rank, -1), reverse=True)
-        companies.append({"name": name, "members": roster_members})
-
-    # The same present-for-duty members, grouped by secondary assignment for the
-    # "By Assignment" tab. Leadership groups first, seniority within.
-    active_ids = {m.discord_id for m in members}
-    member_by_id = {m.discord_id: m for m in members}
-    assignment_groups = []
-    for a in services.list_assignments(session):
-        grp = sorted(
-            [member_by_id[ma.member_id] for ma in a.members if ma.member_id in active_ids],
-            key=lambda m: (-rank_order.get(m.rank, -1), m.callsign.lower()),
-        )
-        assignment_groups.append({"assignment": a, "members": grp})
-
-    ctx.update(
-        companies=companies,
-        active_total=len(members),
-        assignment_groups=assignment_groups,
-        has_assignments=bool(assignment_groups),
-        active_tab=("assignments" if tab == "assignments" else "company"),
-        rank_images=rank_images,
-        display_names=display_names,
-        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
-    )
-    return templates.TemplateResponse(request, "roster.html", ctx)
-
-
 @app.get("/muster", response_class=HTMLResponse)
-def muster(request: Request, session: Session = Depends(get_session)):
-    """The full muster roll — every enrolled soul, whatever their standing."""
-    ctx = _base_context(request, session)
-
-    rank_order = {name: i for i, name in enumerate(rank_utils.rank_names(session))}
-    rank_images = {r.name: r.image for r in rank_utils.all_ranks(session) if r.image}
-    status_rank = {"active": 0, "loa": 1, "inactive": 2, "discharged": 3}
-    members = session.query(Member).all()
-    members.sort(
-        key=lambda m: (
-            status_rank.get(m.status, 9),
-            -rank_order.get(m.rank, -1),
-            m.callsign.lower(),
-        )
-    )
-
-    companies_present = sorted({m.company for m in members})
-    ranks_present = [r for r in rank_utils.rank_names(session) if any(m.rank == r for m in members)]
-    statuses_present = sorted({m.status for m in members}, key=lambda s: status_rank.get(s, 9))
-    ctx.update(
-        members=members,
-        total=len(members),
-        filter_companies=companies_present,
-        filter_ranks=ranks_present,
-        filter_statuses=statuses_present,
-        can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
-        company_options=services.company_options(session),
-        rank_images=rank_images,
-    )
-    return templates.TemplateResponse(request, "muster.html", ctx)
+def muster_redirect(request: Request):
+    """Retired: the muster roll merged into /roster. Kept as a redirect for
+    old bookmarks and links."""
+    suffix = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(f"/roster{suffix}")
 
 
-BULK_REDIRECT_TARGETS = {"/muster", "/roster/preview"}
+BULK_REDIRECT_TARGETS = {"/roster"}
 
 
 @app.post("/muster/bulk")
@@ -878,13 +792,13 @@ def post_muster_bulk(
     ids: list[str] = Form(default=[]),
     company: str = Form(""),
     entry: str = Form(""),
-    redirect_to: str = Form("/muster"),
+    redirect_to: str = Form("/roster"),
     user: dict = Depends(auth.require_officer),
 ):
     """Apply one action to several members at once. Each member is handled by
     the same service the single-member forms use (so Discord side-effects are
     queued identically); a per-member failure is counted, not fatal."""
-    redirect_to = redirect_to if redirect_to in BULK_REDIRECT_TARGETS else "/muster"
+    redirect_to = redirect_to if redirect_to in BULK_REDIRECT_TARGETS else "/roster"
 
     if not auth.verify_csrf(request, csrf):
         _flash(request, "Your session expired. Please try that again.", "error")
@@ -931,11 +845,11 @@ def post_muster_bulk(
     return RedirectResponse(redirect_to, status_code=303)
 
 
-@app.get("/roster/preview", response_class=HTMLResponse)
-def roster_preview(request: Request, session: Session = Depends(get_session), tab: str = "company"):
-    """Design preview: Roster (grouped by company, tagged nicknames) and
-    Muster (every standing, search/filter, bulk actions) merged into one
-    page. Not linked from primary navigation while it's under review."""
+@app.get("/roster", response_class=HTMLResponse)
+def roster(request: Request, session: Session = Depends(get_session), tab: str = "company"):
+    """The unit's roster: every enrolled member (whatever their standing),
+    grouped by company or secondary assignment, with search/filter/bulk
+    actions and an inline quick-edit drawer per row."""
     ctx = _base_context(request, session)
 
     cfg = get_config(session)
@@ -992,7 +906,14 @@ def roster_preview(request: Request, session: Session = Depends(get_session), ta
         can_manage=auth.tier_at_least(ctx["user"], auth.TIER_OFFICER),
         active_tab=("assignments" if tab == "assignments" else "company"),
     )
-    return templates.TemplateResponse(request, "roster_preview.html", ctx)
+    return templates.TemplateResponse(request, "roster.html", ctx)
+
+
+@app.get("/roster/preview")
+def roster_preview_redirect(request: Request):
+    """Retired: this design is now the plain /roster page."""
+    suffix = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(f"/roster{suffix}")
 
 
 def _render_dossier(request: Request, session: Session, member: Member, is_self: bool = False):
@@ -1795,11 +1716,11 @@ def _do(request: Request, csrf: str, fn, *args, redirect: str):
 
 
 def _member_edit_redirect(discord_id: int, redirect_to: str, default: str) -> str:
-    """Most member-edit forms redirect to the dossier by default; the Order
-    Book preview's inline quick-edit drawer opts into landing back on itself
-    (at the member's own row) instead. Only a known-safe target is honored."""
-    if redirect_to == "/roster/preview":
-        return f"/roster/preview#member-{discord_id}"
+    """Most member-edit forms redirect to the dossier by default; the roster's
+    inline quick-edit drawer opts into landing back on itself (at the
+    member's own row) instead. Only a known-safe target is honored."""
+    if redirect_to == "/roster":
+        return f"/roster#member-{discord_id}"
     return default
 
 

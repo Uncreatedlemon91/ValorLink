@@ -511,7 +511,7 @@ def test_custom_terminology_overrides_and_reset():
     with SessionLocal() as s:
         assert "War Room" in (get_config(s).terminology_custom or "")
     nav = client.get("/").text
-    assert "War Room" in nav and "Muster Roll" in nav  # override applied, others intact
+    assert "War Room" in nav and "Assignments" in nav  # override applied, others intact
     assert ">Siege<" in client.get("/muster-calls").text
     # reset drops the overrides
     client.post("/admin/terminology/reset", data={"csrf": _csrf(client, "/command-tent")})
@@ -753,7 +753,7 @@ def test_bulk_company_transfer_and_note():
             assert notes >= 1
 
 
-def test_roster_preview_shows_every_standing_grouped_and_tagged():
+def test_roster_shows_every_standing_grouped_and_tagged():
     client = TestClient(app)
     _login(client, "admin")
     with SessionLocal() as s:
@@ -761,7 +761,7 @@ def test_roster_preview_shows_every_standing_grouped_and_tagged():
         s.query(Company).filter_by(name="Bravo").one().tag = "B"
         s.add(Member(discord_id=410, callsign="OnLeave", rank="Private", company="Bravo", status="loa"))
         s.commit()
-    r = client.get("/roster/preview")
+    r = client.get("/roster")
     assert r.status_code == 200
     assert "5thVA Pvt. Testman" in r.text            # Alpha has no tag -- unit tag + rank only
     assert "5thVA B Pvt. OnLeave" in r.text           # Bravo's tag included, every standing shown
@@ -769,24 +769,28 @@ def test_roster_preview_shows_every_standing_grouped_and_tagged():
 
     # a non-officer sees the page but not the manage/bulk controls
     _login(client, "none", discord_id=55, name="Rank and File")
-    r = client.get("/roster/preview")
+    r = client.get("/roster")
     assert r.status_code == 200
     assert 'id="pf-bulkbar"' not in r.text
     assert 'class="pf-pick-all"' not in r.text
 
+    # /roster/preview is a retired URL that now just redirects here
+    r = client.get("/roster/preview", follow_redirects=False)
+    assert r.status_code in (302, 303, 307) and r.headers["location"] == "/roster"
 
-def test_roster_preview_bulk_redirects_back_to_preview():
+
+def test_roster_bulk_redirects_back_to_roster():
     client = TestClient(app)
     _login(client, "officer")
     with SessionLocal() as s:
         s.add(Member(discord_id=420, callsign="Bulk3", rank="Private", company="Alpha", status="active"))
         s.commit()
-    token = _csrf(client, "/roster/preview")
+    token = _csrf(client, "/roster")
     r = client.post("/muster/bulk",
                     data={"csrf": token, "action": "company", "company": "Bravo",
-                          "ids": ["420"], "redirect_to": "/roster/preview"},
+                          "ids": ["420"], "redirect_to": "/roster"},
                     follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/roster/preview"
+    assert r.status_code == 303 and r.headers["location"] == "/roster"
     with SessionLocal() as s:
         assert s.get(Member, 420).company == "Bravo"
 
@@ -794,12 +798,12 @@ def test_roster_preview_bulk_redirects_back_to_preview():
 def test_muster_bulk_rejects_unknown_redirect_target():
     client = TestClient(app)
     _login(client, "officer")
-    token = _csrf(client, "/muster")
+    token = _csrf(client, "/roster")
     r = client.post("/muster/bulk",
                     data={"csrf": token, "action": "note", "entry": "x", "ids": [],
                           "redirect_to": "https://evil.example/"},
                     follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/muster"  # falls back, not the bogus target
+    assert r.status_code == 303 and r.headers["location"] == "/roster"  # falls back, not the bogus target
 
 
 def test_bulk_action_requires_officer():
@@ -1885,40 +1889,40 @@ def test_rename_member_from_roster():
     assert _actions(queue.RESYNC_NICKNAMES)
 
 
-def test_member_edits_redirect_back_to_preview_when_asked():
+def test_member_edits_redirect_back_to_roster_when_asked():
     client = TestClient(app)
     _login(client, "officer")
 
-    token = _csrf(client, "/roster/preview")
+    token = _csrf(client, "/roster")
     r = client.post(f"/members/{MEMBER_ID}/callsign",
-                    data={"csrf": token, "callsign": "Renamed", "redirect_to": "/roster/preview"},
+                    data={"csrf": token, "callsign": "Renamed", "redirect_to": "/roster"},
                     follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+    assert r.status_code == 303 and r.headers["location"] == f"/roster#member-{MEMBER_ID}"
 
-    token = _csrf(client, "/roster/preview")
+    token = _csrf(client, "/roster")
     r = client.post(f"/members/{MEMBER_ID}/rank",
-                    data={"csrf": token, "rank": "Corporal", "mode": "set", "redirect_to": "/roster/preview"},
+                    data={"csrf": token, "rank": "Corporal", "mode": "set", "redirect_to": "/roster"},
                     follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+    assert r.status_code == 303 and r.headers["location"] == f"/roster#member-{MEMBER_ID}"
 
-    token = _csrf(client, "/roster/preview")
+    token = _csrf(client, "/roster")
     r = client.post(f"/members/{MEMBER_ID}/company",
-                    data={"csrf": token, "company": "Bravo", "redirect_to": "/roster/preview"},
+                    data={"csrf": token, "company": "Bravo", "redirect_to": "/roster"},
                     follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == f"/roster/preview#member-{MEMBER_ID}"
+    assert r.status_code == 303 and r.headers["location"] == f"/roster#member-{MEMBER_ID}"
 
     # an unrecognized redirect_to is ignored, falling back to the normal target
-    token = _csrf(client, "/roster/preview")
+    token = _csrf(client, "/roster")
     r = client.post(f"/members/{MEMBER_ID}/callsign",
                     data={"csrf": token, "callsign": "StillRenamed", "redirect_to": "https://evil.example/"},
                     follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/roster"
 
 
-def test_roster_preview_drawer_has_quick_stats_and_edit_forms():
+def test_roster_drawer_has_quick_stats_and_edit_forms():
     client = TestClient(app)
     _login(client, "officer")
-    html = client.get("/roster/preview").text
+    html = client.get("/roster").text
     assert f'id="member-co-{MEMBER_ID}"' in html  # scoped: same member can also appear under an assignment
     assert f'data-member-row="{MEMBER_ID}"' in html
     assert "RANK SINCE" not in html  # labels render lowercase, styled via CSS text-transform
@@ -1926,21 +1930,21 @@ def test_roster_preview_drawer_has_quick_stats_and_edit_forms():
     assert f'action="/members/{MEMBER_ID}/callsign"' in html
     assert f'action="/members/{MEMBER_ID}/rank"' in html
     assert f'action="/members/{MEMBER_ID}/company"' in html
-    assert 'value="/roster/preview"' in html
+    assert 'value="/roster"' in html
 
     _login(client, "none", discord_id=55, name="Rank and File")
-    html = client.get("/roster/preview").text
+    html = client.get("/roster").text
     assert f'action="/members/{MEMBER_ID}/callsign"' not in html  # no edit forms for non-officers
     assert "Full dossier" in html  # but the quick-view drawer itself still renders
 
 
-def test_roster_preview_shows_assignments_tab():
+def test_roster_shows_assignments_tab():
     from db.models import Assignment, MemberAssignment
     client = TestClient(app)
     _login(client, "admin")
 
     # no assignments configured yet -- the tab doesn't render at all
-    html = client.get("/roster/preview").text
+    html = client.get("/roster").text
     assert 'data-tab="assignments"' not in html
 
     client.post("/admin/assignments/add",
@@ -1950,14 +1954,14 @@ def test_roster_preview_shows_assignments_tab():
         aid = s.query(Assignment).filter_by(name="High Command").one().id
     client.post(f"/members/{MEMBER_ID}/assign", data={"csrf": _csrf(client), "assignment_id": aid})
 
-    # an LOA/inactive/discharged member still shows under the assignment,
-    # unlike the old /roster page which only ever listed those present
+    # an LOA/inactive/discharged member still shows under the assignment --
+    # the roster lists every standing, not just those present for duty
     with SessionLocal() as s:
         s.add(Member(discord_id=410, callsign="OnLeave", rank="Private", company="Alpha", status="loa"))
         s.commit()
     client.post("/members/410/assign", data={"csrf": _csrf(client), "assignment_id": aid})
 
-    html = client.get("/roster/preview?tab=assignments").text
+    html = client.get("/roster?tab=assignments").text
     assert "High Command" in html and "★" in html  # leadership star
     assert "Testman" in html and "OnLeave" in html
     # the same member gets a distinct, scoped drawer id from their Company-tab row
