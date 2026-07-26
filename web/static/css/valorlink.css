@@ -1442,6 +1442,24 @@ body.theme-dark .meter { background: #0f1316; }
 body.theme-dark .uswitch-item:hover { background: rgba(255,255,255,0.06); }
 body.theme-dark .uswitch-item.current { background: rgba(255,255,255,0.08); }
 
+/* ---- Account menu (header) ---------------------------------------------
+   Collapses "Signed in as X [tier]" plus 1-3 account links -- previously
+   all permanently visible, the biggest source of topbar clutter -- into a
+   single click-to-reveal control, reusing the unit-switcher's dropdown. */
+.account-menu { position: relative; }
+.account-menu summary {
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 5px;
+  color: var(--ink-faint); padding: 2px 5px; border-radius: 2px; letter-spacing: 0.01em;
+}
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu summary b { color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.account-menu summary:hover { background: rgba(0,0,0,0.045); }
+.account-menu summary .uswitch-caret { color: var(--ink-faint); font-size: 9px; }
+.account-menu[open] summary { color: var(--ink); }
+.account-menu[open] summary b { color: var(--seal-ink); }
+.account-menu .uswitch-menu { min-width: 170px; }
+body.theme-dark .account-menu summary:hover { background: rgba(255,255,255,0.06); }
+
 /* ---- Bot action queue (Command Tent) ---------------------------------- */
 .setup-progress.is-fail { color: var(--oxblood); font-weight: 700; }
 .queue-card .row-fail td { background: rgba(124,31,43,0.06); }
