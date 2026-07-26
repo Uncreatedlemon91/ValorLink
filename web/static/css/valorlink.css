@@ -1091,12 +1091,18 @@ body.pf-manage-on .pf-col-manage { display: table-cell; }
   content: ""; flex: 1 1 auto; height: 1px; margin-top: 2px;
   background: linear-gradient(to right, var(--rule-strong), transparent);
 }
-/* table-layout: fixed + explicit widths on every column but Callsign, so
-   every company/assignment block's table lines up column-for-column --
-   each is a separate <table>, and left to auto-sizing, one group's longer
-   rank names or callsigns would shove its columns out of line with the
-   next group's. */
-.pf-table { border-collapse: separate; border-spacing: 0; margin-top: 10px; table-layout: fixed; }
+/* Explicit (generous) widths on every column but Callsign, so every
+   company/assignment block's table lines up column-for-column -- each is
+   a separate <table>, and left to auto-sizing, one group's longer rank
+   names or callsigns would shove its columns out of line with the next
+   group's. table-layout stays auto (fixed refused to hand Callsign's
+   unspecified column the leftover width in testing, leaving the table
+   stranded at content-width instead of filling the page); auto layout
+   still applies a wide-enough explicit width consistently as long as it
+   comfortably exceeds every table's actual content, and lets Callsign
+   expand to fill the rest exactly like it did before this column-width
+   pass was added. */
+.pf-table { border-collapse: separate; border-spacing: 0; margin-top: 10px; }
 .pf-col-rank { width: 150px; }
 .pf-col-standing { width: 100px; }
 .pf-col-date { width: 100px; }
