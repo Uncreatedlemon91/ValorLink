@@ -558,6 +558,57 @@ body.theme-dark .hq-overview { background: rgba(255,255,255,0.02); }
 .medal .m-name { font-weight: 700; }
 .medal .m-date { font-size: 11px; color: var(--ink-faint); }
 
+/* ---- Honors catalogue: trophy-case grid --------------------------------- */
+.honor-recent {
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--brass);
+  border-radius: 4px; background: rgba(255,253,246,0.5); padding: 14px 18px 6px; margin: 16px 0 28px;
+}
+.honor-recent-head {
+  display: flex; align-items: center; font-size: 12px; letter-spacing: 0.16em;
+  text-transform: uppercase; font-weight: 700; color: var(--ink);
+}
+body.theme-dark .honor-recent { background: rgba(255,255,255,0.035); }
+
+.honor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; margin-top: 8px; }
+.honor-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal); border-radius: 4px;
+  background: rgba(255,253,246,0.5); padding: 22px 18px 18px;
+  transition: box-shadow .15s ease, transform .15s ease;
+}
+.honor-card:hover { box-shadow: 0 8px 22px rgba(0,0,0,0.1); transform: translateY(-2px); }
+body.theme-dark .honor-card { background: rgba(255,255,255,0.035); }
+
+.honor-badge {
+  width: 76px; height: 76px; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 3px double var(--brass);
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.5), rgba(184,147,63,0.12));
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  overflow: hidden; flex-shrink: 0;
+}
+.honor-badge img { width: 100%; height: 100%; object-fit: contain; }
+.honor-badge-emoji { font-size: 34px; line-height: 1; }
+body.theme-dark .honor-badge { background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); }
+
+.honor-name { font-family: var(--serif); font-size: 17px; margin: 0 0 4px; color: var(--ink); }
+.honor-desc { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 8px; line-height: 1.5; }
+.honor-count {
+  font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-faint); margin-bottom: 14px;
+}
+.honor-holders { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.honor-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  padding: 3px 10px 3px 3px; border-radius: 14px; border: 1px solid var(--rule-strong);
+  color: var(--ink); text-decoration: none; background: var(--paper);
+}
+.honor-chip:hover { border-color: var(--seal); color: var(--seal-ink); text-decoration: none; }
+.honor-chip .avatar-sm { margin: 0; }
+.honor-chip-unknown { color: var(--ink-faint); font-style: italic; padding: 3px 10px; }
+.honor-chip-more { color: var(--ink-faint); border-style: dashed; cursor: default; padding: 3px 10px; }
+.honor-manage { margin-top: 14px; }
+
 /* ---- Buttons / links ---------------------------------------------------- */
 
 .btn {

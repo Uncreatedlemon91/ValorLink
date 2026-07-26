@@ -1288,15 +1288,25 @@ def honors(request: Request, session: Session = Depends(get_session)):
 
     award_types = session.query(AwardType).order_by(AwardType.name).all()
     catalogue = []
+    recent = []
     for at in award_types:
         holders = []
         for grant in at.awards:
             member = session.get(Member, grant.member_id)
             holders.append({"grant": grant, "member": member})
+            recent.append({"grant": grant, "member": member, "award": at})
         holders.sort(key=lambda h: (h["member"].callsign.lower() if h["member"] else "~"))
         catalogue.append({"award": at, "holders": holders})
 
-    ctx.update(catalogue=catalogue)
+    # Rarest (fewest holders) first, so the most exclusive honors lead the
+    # page; never-awarded types (0 holders isn't "exclusive", it's unused)
+    # sink to the end instead of hogging the front.
+    catalogue.sort(key=lambda row: (len(row["holders"]) == 0, len(row["holders"]), row["award"].name.lower()))
+
+    recent.sort(key=lambda r: r["grant"].date_awarded or datetime.min, reverse=True)
+    recent = recent[:8]
+
+    ctx.update(catalogue=catalogue, recent=recent)
     return templates.TemplateResponse(request, "honors.html", ctx)
 
 
