@@ -11,11 +11,31 @@
   <div class="sheet" style="--seal:#7c1f2b;">
     {% include "_apex_topbar.html" %}
 
-    <header class="banner">
-      <div class="crest">★ ✶ ★</div>
-      <h1>ValorLink</h1>
-      <p class="motto">The Muster Grounds</p>
-      <div class="estd">Command your unit · muster the field</div>
+    <header class="banner banner-home">
+      <div class="hero-grid"></div>
+      <div class="hero-glow"></div>
+      <div class="hero-inner">
+        <div class="crest">★ ✶ ★</div>
+        <h1>ValorLink</h1>
+        <p class="motto">Command your unit. Muster the field.</p>
+        <p class="hero-lead">A private HQ for your regiment, clan, or squad — roster, events, recruitment,
+        and a Discord bot that keeps it all in sync. One platform, every game.</p>
+        <div class="hero-cta">
+          <a class="btn btn-hero-primary" href="/find">Find a Unit →</a>
+          {% if user %}
+          <a class="btn btn-hero-ghost" href="/my-units">Go to My Units</a>
+          {% else %}
+          <a class="btn btn-hero-ghost" href="/auth/discord/login">Sign in with Discord</a>
+          {% endif %}
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><b>{{ total_units }}</b><span>unit{{ 's' if total_units != 1 }}</span></div>
+          <div class="hero-stat-sep"></div>
+          <div class="hero-stat"><b>{{ game_count }}</b><span>game{{ 's' if game_count != 1 }}</span></div>
+          <div class="hero-stat-sep"></div>
+          <div class="hero-stat hero-stat-live"><b>{{ recruiting_total }}</b><span>recruiting now</span></div>
+        </div>
+      </div>
     </header>
 
     <main class="wrap">
@@ -25,20 +45,7 @@
         </div>
       {% endif %}
 
-      <section class="home-intro">
-        <h2 class="home-hero-title">A home for your gaming unit</h2>
-        <p class="home-lead">ValorLink gives your regiment, clan, or squad a private headquarters —
-        a living roster with ranks and companies, event calls with RSVPs and attendance,
-        a recruitment pipeline, secondary assignments like High Command, and a Discord bot
-        that keeps roles and nicknames in sync. One platform, many units, across every game.</p>
-        <div class="home-stats">
-          <span><b>{{ total_units }}</b> unit{{ 's' if total_units != 1 }}</span>
-          <span><b>{{ game_count }}</b> game{{ 's' if game_count != 1 }}</span>
-          <span><b>{{ recruiting_total }}</b> recruiting</span>
-        </div>
-      </section>
-
-      <div class="nav-cards">
+      <div class="nav-cards nav-cards-home">
         <a class="nav-card" href="/find">
           <div class="nav-card-icon">⚑</div>
           <h3>Find a Unit</h3>
@@ -85,18 +92,18 @@
       </div>
 
       <h2 class="section">What ValorLink Gives You</h2>
-      <div class="feature-grid">
-        <div class="feature"><h4>Roster &amp; Ranks</h4><p>A period-styled roster organised by company and rank, with a full dossier for every member.</p></div>
-        <div class="feature"><h4>Events &amp; Attendance</h4><p>Post drills and battles with RSVP buttons, DM reminders, and turnout tracking.</p></div>
-        <div class="feature"><h4>Recruitment</h4><p>A pipeline from application to enlistment, with your own screening questions.</p></div>
-        <div class="feature"><h4>Assignments</h4><p>Secondary groups like High Command, Staff, or a training cadre, on top of companies.</p></div>
-        <div class="feature"><h4>Discord Bot</h4><p>Actions on the site sync roles, nicknames, announcements, and the live roster in Discord.</p></div>
-        <div class="feature"><h4>One Sign-In</h4><p>A single Discord login carries your standing across every unit you belong to.</p></div>
+      <div class="feature-grid feature-grid-home">
+        <div class="feature"><div class="feature-icon">♜</div><h4>Roster &amp; Ranks</h4><p>A living roster organised by company and rank, with a full dossier for every member.</p></div>
+        <div class="feature"><div class="feature-icon">☰</div><h4>Events &amp; Attendance</h4><p>Post drills and battles with RSVP buttons, DM reminders, and turnout tracking.</p></div>
+        <div class="feature"><div class="feature-icon">✎</div><h4>Recruitment</h4><p>A pipeline from application to enlistment, with your own screening questions.</p></div>
+        <div class="feature"><div class="feature-icon">⚜</div><h4>Assignments</h4><p>Secondary groups like High Command, Staff, or a training cadre, on top of companies.</p></div>
+        <div class="feature"><div class="feature-icon">❖</div><h4>Discord Bot</h4><p>Actions on the site sync roles, nicknames, announcements, and the live roster in Discord.</p></div>
+        <div class="feature"><div class="feature-icon">⚿</div><h4>One Sign-In</h4><p>A single Discord login carries your standing across every unit you belong to.</p></div>
       </div>
 
       {% if activity %}
-      <h2 class="section">On the Field <span class="tally">recent activity across ValorLink</span></h2>
-      <ul class="feed">
+      <h2 class="section"><span class="live-dot"></span>On the Field <span class="tally">recent activity across ValorLink</span></h2>
+      <ul class="feed feed-home">
         {% for a in activity %}
           <li class="feed-{{ a.kind }}">
             {% if a.av %}<img class="avatar avatar-sm" src="{{ a.av|avatar_url }}" alt="" loading="lazy">{% else %}<span class="feed-dot"></span>{% endif %}
