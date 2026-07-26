@@ -13,8 +13,10 @@
 
     <header class="banner banner-home">
       <div class="hero-inner">
-        <div class="crest">★ ✶ ★</div>
-        <h1>ValorLink</h1>
+        <div class="crest">
+          <span class="crest-star">★</span><span class="crest-star">✶</span><span class="crest-star">★</span>
+        </div>
+        <h1 class="hero-title">ValorLink</h1>
         <p class="motto">Command your unit. Muster the field.</p>
         <p class="hero-lead">A private HQ for your regiment, clan, or squad — roster, events, recruitment,
         and a Discord bot that keeps it all in sync. One platform, every game.</p>
@@ -27,90 +29,48 @@
           {% endif %}
         </div>
         <div class="hero-stats">
-          <div class="hero-stat"><b>{{ '{:,}'.format(total_players) }}</b><span>player{{ 's' if total_players != 1 }}</span></div>
+          <div class="hero-stat"><b data-count-to="{{ total_players }}">0</b><span>player{{ 's' if total_players != 1 }}</span></div>
           <div class="hero-stat-sep"></div>
-          <div class="hero-stat"><b>{{ total_units }}</b><span>unit{{ 's' if total_units != 1 }}</span></div>
+          <div class="hero-stat"><b data-count-to="{{ total_units }}">0</b><span>unit{{ 's' if total_units != 1 }}</span></div>
           <div class="hero-stat-sep"></div>
-          <div class="hero-stat"><b>{{ game_count }}</b><span>game{{ 's' if game_count != 1 }}</span></div>
+          <div class="hero-stat"><b data-count-to="{{ game_count }}">0</b><span>game{{ 's' if game_count != 1 }}</span></div>
           <div class="hero-stat-sep"></div>
-          <div class="hero-stat hero-stat-live"><b>{{ recruiting_total }}</b><span>recruiting now</span></div>
+          <div class="hero-stat hero-stat-live"><b data-count-to="{{ recruiting_total }}">0</b><span>recruiting now</span></div>
         </div>
       </div>
+      <div class="hero-fade"></div>
     </header>
 
-    <main class="wrap">
+    <main class="wrap wrap-home">
       {% if flash %}
         <div class="flashes">
           {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
         </div>
       {% endif %}
 
-      <div class="nav-cards nav-cards-home">
-        <a class="nav-card" href="/find">
-          <div class="nav-card-icon">⚑</div>
+      <div class="bento">
+        <a class="bento-tile bento-hero reveal" style="--i:0" href="/find">
+          <div class="bento-tile-glow"></div>
+          <div class="bento-tile-icon">⚑</div>
           <h3>Find a Unit</h3>
-          <p>Browse {{ total_units }} unit{{ 's' if total_units != 1 }} across every game and apply to join one that fits.</p>
-          <span class="nav-card-go">Browse units →</span>
-        </a>
-        <a class="nav-card" href="/players">
-          <div class="nav-card-icon">⚇</div>
-          <h3>Find a Player</h3>
-          <p>Look up any member and see their service record across every unit on the platform.</p>
-          <span class="nav-card-go">Search players →</span>
-        </a>
-        {% if user %}
-        <a class="nav-card" href="/my-units">
-          <div class="nav-card-icon">★</div>
-          <h3>My Units</h3>
-          <p>{% if my_unit_count %}Jump straight to the {{ my_unit_count }} unit{{ 's' if my_unit_count != 1 }} you serve in.{% else %}You're not enrolled in a unit yet — find one to join.{% endif %}</p>
-          <span class="nav-card-go">Go to my units →</span>
-        </a>
-        {% else %}
-        <a class="nav-card" href="/auth/discord/login">
-          <div class="nav-card-icon">★</div>
-          <h3>My Units</h3>
-          <p>Sign in with Discord to reach the units you serve in — one login works across all of them.</p>
-          <span class="nav-card-go">Sign in with Discord →</span>
-        </a>
-        {% endif %}
-        {% if invite_url %}
-        <a class="nav-card" href="{{ invite_url }}">
-          <div class="nav-card-icon">➕</div>
-          <h3>Invite the Bot</h3>
-          <p>Add the ValorLink bot to your Discord server to sync roles, nicknames, and the live roster.</p>
-          <span class="nav-card-go">Invite to Discord →</span>
-        </a>
-        {% endif %}
-        {% if is_platform_admin %}
-        <a class="nav-card nav-card-admin" href="/admin/platform">
-          <div class="nav-card-icon">⚙</div>
-          <h3>Platform Dashboard</h3>
-          <p>Every unit's health, broadcast an update to all units, and manage the platform.</p>
-          <span class="nav-card-go">Open dashboard →</span>
-        </a>
-        {% endif %}
-      </div>
-
-      <div class="home-split">
-        <div class="home-main">
-          <h2 class="section">What ValorLink Gives You</h2>
-          <div class="feature-grid feature-grid-home">
-            <div class="feature"><div class="feature-icon">♜</div><div class="feature-body"><h4>Roster &amp; Ranks</h4><p>Organised by company and rank, with a full dossier per member.</p></div></div>
-            <div class="feature"><div class="feature-icon">☰</div><div class="feature-body"><h4>Events &amp; Attendance</h4><p>RSVP buttons, DM reminders, and turnout tracking.</p></div></div>
-            <div class="feature"><div class="feature-icon">✎</div><div class="feature-body"><h4>Recruitment</h4><p>A pipeline from application to enlistment.</p></div></div>
-            <div class="feature"><div class="feature-icon">⚜</div><div class="feature-body"><h4>Assignments</h4><p>High Command, Staff, or a cadre — on top of companies.</p></div></div>
-            <div class="feature"><div class="feature-icon">❖</div><div class="feature-body"><h4>Discord Bot</h4><p>Roles, nicknames, and the live roster sync automatically.</p></div></div>
-            <div class="feature"><div class="feature-icon">⚿</div><div class="feature-body"><h4>One Sign-In</h4><p>One Discord login carries your standing everywhere.</p></div></div>
+          <p>Browse {{ total_units }} unit{{ 's' if total_units != 1 }} across every game and apply to join one that fits your playstyle.</p>
+          <span class="bento-tile-go">Browse the directory →</span>
+          {% if sample_units %}
+          <div class="bento-hero-sample">
+            {% for name in sample_units %}<span class="bento-hero-chip">{{ name }}</span>{% endfor %}
+            {% if total_units > sample_units|length %}<span class="bento-hero-chip bento-hero-more">+{{ total_units - sample_units|length }} more</span>{% endif %}
           </div>
-        </div>
+          {% endif %}
+        </a>
 
         {% if activity %}
-        <aside class="live-feed">
-          <div class="live-feed-head"><span class="live-dot"></span>On the Field</div>
-          <div class="live-feed-sub">Recent activity across ValorLink</div>
+        <div class="bento-tile bento-feed reveal" style="--i:1">
+          <div class="bento-tile-icon live-icon"><span class="live-dot"></span></div>
+          <h3>On the Field</h3>
+          <p class="bento-feed-sub">Recent activity across ValorLink</p>
           <ul class="feed feed-home feed-compact">
             {% for a in activity %}
-              <li class="feed-{{ a.kind }}">
+              <li class="feed-{{ a.kind }}" style="--i:{{ loop.index0 }}">
                 {% if a.av %}<img class="avatar avatar-sm" src="{{ a.av|avatar_url }}" alt="" loading="lazy">{% else %}<span class="feed-dot"></span>{% endif %}
                 <span class="feed-text">
                   {% if a.who %}<b>{{ a.who }}</b> {{ a.text }} in <a href="{{ a.url }}">{{ a.unit }}</a>
@@ -120,8 +80,65 @@
               </li>
             {% endfor %}
           </ul>
-        </aside>
+        </div>
         {% endif %}
+
+        <a class="bento-tile reveal" style="--i:2" href="/players">
+          <div class="bento-tile-icon">⚇</div>
+          <h3>Find a Player</h3>
+          <p>Look up any member's service record across the platform.</p>
+          <span class="bento-tile-go">Search players →</span>
+        </a>
+
+        {% if user %}
+        <a class="bento-tile reveal" style="--i:3" href="/my-units">
+          <div class="bento-tile-icon">★</div>
+          <h3>My Units</h3>
+          <p>{% if my_unit_count %}Jump straight to the {{ my_unit_count }} unit{{ 's' if my_unit_count != 1 }} you serve in.{% else %}You're not enrolled in a unit yet.{% endif %}</p>
+          <span class="bento-tile-go">Go to my units →</span>
+        </a>
+        {% else %}
+        <a class="bento-tile reveal" style="--i:3" href="/auth/discord/login">
+          <div class="bento-tile-icon">★</div>
+          <h3>My Units</h3>
+          <p>Sign in with Discord to reach the units you serve in.</p>
+          <span class="bento-tile-go">Sign in with Discord →</span>
+        </a>
+        {% endif %}
+
+        {% if invite_url %}
+        <a class="bento-tile reveal" style="--i:4" href="{{ invite_url }}">
+          <div class="bento-tile-icon">➕</div>
+          <h3>Invite the Bot</h3>
+          <p>Sync roles, nicknames, and the live roster in Discord.</p>
+          <span class="bento-tile-go">Invite to Discord →</span>
+        </a>
+        {% endif %}
+
+        {% if is_platform_admin %}
+        <a class="bento-tile bento-admin reveal" style="--i:5" href="/admin/platform">
+          <div class="bento-tile-icon">⚙</div>
+          <h3>Platform Dashboard</h3>
+          <p>Every unit's health, and platform-wide broadcasts.</p>
+          <span class="bento-tile-go">Open dashboard →</span>
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="marquee-wrap reveal">
+        <div class="marquee-label"><span>What ValorLink Gives You</span></div>
+        <div class="marquee">
+          <div class="marquee-track">
+            {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
+                                     ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
+              <span class="marquee-pill"><span class="marquee-pill-icon">{{ icon }}</span>{{ label }}</span>
+            {% endfor %}
+            {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
+                                     ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
+              <span class="marquee-pill" aria-hidden="true"><span class="marquee-pill-icon">{{ icon }}</span>{{ label }}</span>
+            {% endfor %}
+          </div>
+        </div>
       </div>
 
       <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
@@ -140,6 +157,45 @@
       try { el.textContent = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }); } catch (e) {}
       el.title = d.toString();
     });
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Count the hero stats up from 0 once, on load.
+    (function () {
+      var nodes = document.querySelectorAll('[data-count-to]');
+      nodes.forEach(function (el) {
+        var target = parseInt(el.getAttribute('data-count-to'), 10) || 0;
+        if (reduceMotion) { el.textContent = target.toLocaleString(); return; }
+        var start = null, duration = 1100;
+        function tick(ts) {
+          if (start === null) start = ts;
+          var p = Math.min((ts - start) / duration, 1);
+          var eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = Math.round(eased * target).toLocaleString();
+          if (p < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    })();
+
+    // Fade + rise elements into view as they're scrolled to.
+    (function () {
+      var els = document.querySelectorAll('.reveal');
+      if (!els.length) return;
+      if (reduceMotion || !('IntersectionObserver' in window)) {
+        els.forEach(function (el) { el.classList.add('in-view'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+      els.forEach(function (el) { io.observe(el); });
+    })();
   </script>
 </body>
 </html>

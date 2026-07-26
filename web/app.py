@@ -437,6 +437,7 @@ def _render_home(request: Request):
         "recruiting_total": sum(1 for u in data["units"] if u["recruiting"]),
         "game_count": len(data["games"]),
         "total_players": sum(u["members"] or 0 for u in data["units"]),
+        "sample_units": [u["name"] for u in data["units"][:4]],
         "my_unit_count": my_count,
         "base_domain": data["base_domain"],
         "user": user,
