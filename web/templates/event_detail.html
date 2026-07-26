@@ -218,8 +218,15 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Accent colour <span class="opt">(optional)</span></label>
-          <input name="color_hex" value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else '' }}" placeholder="#7C1F2B">
+          <label>Accent colour <span class="opt">(optional — blank uses the unit's own)</span></label>
+          <div class="color-field">
+            <input type="color" class="color-swatch" id="edit-color-swatch"
+                   value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else brand_color }}"
+                   tabindex="-1" aria-label="Pick an accent colour">
+            <input name="color_hex" id="edit-color-hex"
+                   value="{{ ('#' + '%06x'|format(event.color)) if event.color is not none else '' }}" placeholder="#7C1F2B"
+                   maxlength="7" autocomplete="off">
+          </div>
         </div>
         <div class="field">
           <label>Image <span class="opt">(optional)</span></label>
@@ -277,6 +284,16 @@
       document.getElementById('edit-time').value = pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
     document.getElementById('edit-tz').value = new Date().getTimezoneOffset();
+  })();
+
+  (function () {
+    var swatch = document.getElementById('edit-color-swatch');
+    var text = document.getElementById('edit-color-hex');
+    if (!swatch || !text) return;
+    var HEX = /^#[0-9a-f]{6}$/i;
+    if (HEX.test(text.value)) swatch.value = text.value;
+    swatch.addEventListener('input', function () { text.value = swatch.value.toUpperCase(); });
+    text.addEventListener('input', function () { if (HEX.test(text.value)) swatch.value = text.value; });
   })();
 </script>
 {% endif %}

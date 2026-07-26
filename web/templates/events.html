@@ -25,7 +25,13 @@
       <textarea name="description" rows="3" placeholder="Loadout, meeting point, rules — shown in the Discord post."></textarea>
     </div>
     <div class="field-row">
-      <div class="field"><label>Accent colour <span class="opt">(optional)</span></label><input name="color_hex" placeholder="#7C1F2B"></div>
+      <div class="field">
+        <label>Accent colour <span class="opt">(optional — blank uses the unit's own)</span></label>
+        <div class="color-field">
+          <input type="color" class="color-swatch" id="color-swatch" value="{{ brand_color }}" tabindex="-1" aria-label="Pick an accent colour">
+          <input name="color_hex" id="color-hex" placeholder="#7C1F2B" maxlength="7" autocomplete="off">
+        </div>
+      </div>
       <div class="field">
         <label>Image <span class="opt">(optional)</span></label>
         <label class="btn btn-small file-btn" style="align-self:flex-start;">
@@ -65,6 +71,17 @@
   colour blank to use the unit's own brand colour. Signup roles with capacity limits can be added once
   the event is created, from its own page.</p>
   <script>document.getElementById('tz-offset').value = new Date().getTimezoneOffset();</script>
+  <script>
+    (function () {
+      var swatch = document.getElementById('color-swatch');
+      var text = document.getElementById('color-hex');
+      if (!swatch || !text) return;
+      var HEX = /^#[0-9a-f]{6}$/i;
+      if (HEX.test(text.value)) swatch.value = text.value;
+      swatch.addEventListener('input', function () { text.value = swatch.value.toUpperCase(); });
+      text.addEventListener('input', function () { if (HEX.test(text.value)) swatch.value = text.value; });
+    })();
+  </script>
 </details>
 {% endif %}
 

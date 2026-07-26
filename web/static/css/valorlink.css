@@ -714,6 +714,27 @@ footer .fine { display: block; margin-top: 6px; font-size: 10px; letter-spacing:
 }
 .field-actions { margin-top: 2px; }
 
+/* Accent-colour picker: a native swatch next to the plain hex field it
+   drives, so filling it in doesn't require knowing the hex code up front.
+   The hex field is still what's actually submitted -- the swatch only
+   writes into it on interaction, so leaving it untouched still submits
+   blank (falls back to the unit's own brand colour) exactly as before. */
+.color-field { display: flex; align-items: stretch; gap: 8px; }
+.color-field input[name="color_hex"] { flex: 1 1 auto; width: auto; }
+.color-field .color-swatch {
+  /* flex-basis (not width) drives sizing here on purpose: .orders input's
+     width:100% outranks a plain .color-swatch selector on specificity, but
+     flex-basis wins over width for main-axis sizing regardless, so this
+     stays 44px however that specificity fight would otherwise resolve. */
+  flex: 0 0 44px; width: 44px; padding: 2px;
+  border: 1px solid var(--rule-strong); border-radius: 1px;
+  background: rgba(255,253,246,0.75); cursor: pointer;
+}
+.color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-swatch::-webkit-color-swatch { border: none; border-radius: 1px; }
+.color-swatch::-moz-color-swatch { border: none; border-radius: 1px; }
+body.theme-dark .color-swatch { background: rgba(255,255,255,0.06); }
+
 /* ---- Buttons ------------------------------------------------------------ */
 button.btn { cursor: pointer; font-family: var(--serif); }
 .btn-strong {
