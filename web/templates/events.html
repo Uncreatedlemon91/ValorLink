@@ -111,6 +111,7 @@
     var overlay = document.getElementById('ev-create-overlay');
     var closeBtn = document.getElementById('ev-create-close');
     if (!openBtn || !overlay) return;
+    document.body.appendChild(overlay);
     function open() {
       overlay.classList.add('open');
       var first = overlay.querySelector('input:not([type=hidden]), select, textarea');
