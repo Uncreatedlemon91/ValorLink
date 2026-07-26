@@ -12,8 +12,6 @@
     {% include "_apex_topbar.html" %}
 
     <header class="banner banner-home">
-      <div class="hero-grid"></div>
-      <div class="hero-glow"></div>
       <div class="hero-inner">
         <div class="crest">★ ✶ ★</div>
         <h1>ValorLink</h1>
@@ -29,6 +27,8 @@
           {% endif %}
         </div>
         <div class="hero-stats">
+          <div class="hero-stat"><b>{{ '{:,}'.format(total_players) }}</b><span>player{{ 's' if total_players != 1 }}</span></div>
+          <div class="hero-stat-sep"></div>
           <div class="hero-stat"><b>{{ total_units }}</b><span>unit{{ 's' if total_units != 1 }}</span></div>
           <div class="hero-stat-sep"></div>
           <div class="hero-stat"><b>{{ game_count }}</b><span>game{{ 's' if game_count != 1 }}</span></div>

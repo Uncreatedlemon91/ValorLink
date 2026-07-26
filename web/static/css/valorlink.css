@@ -44,7 +44,7 @@ a { color: var(--oxblood); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .sheet {
-  max-width: 1040px;
+  max-width: 1240px;
   margin: 0 auto;
   min-height: 100vh;
   background:
@@ -70,28 +70,70 @@ a:hover { text-decoration: underline; }
 
 .wrap { padding: 0 clamp(18px, 5vw, 56px) 64px; position: relative; z-index: 6; }
 
-/* ---- Banner ------------------------------------------------------------- */
+/* ---- Banner --------------------------------------------------------------
+   Every page (platform and per-unit alike) opens on a dark, high-contrast
+   band instead of flat parchment -- self-contained gradients/grid, no
+   assets, tinted by the active unit's --seal so each regiment still reads
+   as its own colour on an otherwise identical layout. */
 
 .banner {
   text-align: center;
-  padding: 34px 24px 22px;
-  border-bottom: 3px double var(--rule-strong);
+  padding: clamp(30px, 6vw, 58px) 24px clamp(24px, 5vw, 42px);
   position: relative;
   z-index: 6;
+  overflow: hidden;
+  color: #f2e7cf;
+  background: radial-gradient(120% 140% at 50% -20%, #3a0f16 0%, #1a0a0d 45%, #0c0908 100%);
+  background: radial-gradient(120% 140% at 50% -20%,
+    color-mix(in srgb, var(--seal) 55%, #170a0c) 0%, #170a0c 45%, #0c0908 100%);
 }
+.banner::before {
+  content: "";
+  position: absolute; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(242,231,207,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(242,231,207,0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(80% 70% at 50% 20%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 20%, #000 40%, transparent 100%);
+}
+.banner::after {
+  content: "";
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(38% 55% at 18% 15%, rgba(184,147,63,0.25), transparent 60%),
+    radial-gradient(45% 60% at 85% 10%, rgba(124,31,43,0.55), transparent 65%);
+  background:
+    radial-gradient(38% 55% at 18% 15%, rgba(184,147,63,0.25), transparent 60%),
+    radial-gradient(45% 60% at 85% 10%, color-mix(in srgb, var(--seal) 65%, transparent), transparent 65%);
+  animation: hero-pulse 9s ease-in-out infinite;
+}
+@keyframes hero-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .banner::after { animation: none; } }
+.banner > * { position: relative; z-index: 1; }
 
 .banner .crest {
   font-size: 30px;
-  color: var(--seal-ink);
+  color: var(--brass-bright);
   letter-spacing: 0.5em;
   margin-left: 0.5em;
+  text-shadow: 0 0 14px rgba(184,147,63,0.5);
 }
 .crest-badge {
   width: 72px; height: 72px; margin: 0 auto;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%; border: 3px double var(--seal);
-  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.4), rgba(0,0,0,0.03));
+  background: radial-gradient(circle at 35% 30%, #fff8ea, #e6d3a4 75%);
   font-family: var(--serif); font-size: 30px; font-weight: 700; color: var(--seal-ink);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+}
+.crest-img {
+  background: rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 6px;
 }
 
 .banner h1 {
@@ -100,13 +142,13 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.06em;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--ink);
-  text-shadow: 0 1px 0 rgba(255,250,235,0.5);
+  color: #fbf3e2;
+  text-shadow: 0 0 30px rgba(124,31,43,0.5), 0 2px 0 rgba(0,0,0,0.4);
 }
 
 .banner .motto {
   font-style: italic;
-  color: var(--ink-soft);
+  color: #d9c8a8;
   font-size: clamp(14px, 2.4vw, 18px);
   margin: 2px 0 0;
 }
@@ -116,7 +158,7 @@ a:hover { text-decoration: underline; }
   font-size: 11px;
   letter-spacing: 0.35em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: #a8987a;
 }
 
 /* ---- Navigation --------------------------------------------------------- */
@@ -1551,9 +1593,10 @@ body.theme-dark .cmd-copy { border-color: #2a2f36; }
 .apex-nav a.on::after { transform: scaleX(1); }
 
 /* ---- Home landing: nav cards, features --------------------------------- */
-.nav-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin: 28px 0 8px; }
+.nav-cards { display: flex; flex-wrap: wrap; gap: 18px; margin: 28px 0 8px; }
 .nav-card {
   display: block; text-decoration: none; color: var(--ink);
+  flex: 1 1 260px; max-width: 320px;
   border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal);
   background: rgba(255,253,246,0.55); border-radius: 3px; padding: 20px 22px;
   transition: box-shadow .15s, transform .15s;
@@ -1564,8 +1607,12 @@ body.theme-dark .cmd-copy { border-color: #2a2f36; }
 .nav-card p { color: var(--ink-soft); margin: 0 0 12px; }
 .nav-card-go { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--seal-ink); font-weight: 700; }
 
-.feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.feature { border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong); background: rgba(255,253,246,0.4); border-radius: 2px; padding: 12px 14px; }
+.feature-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+.feature {
+  flex: 1 1 220px; max-width: 280px;
+  border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong);
+  background: rgba(255,253,246,0.4); border-radius: 2px; padding: 12px 14px;
+}
 .feature h4 { font-family: var(--serif); font-size: 15px; color: var(--ink); margin: 0 0 4px; letter-spacing: 0.03em; }
 .feature p { font-size: 13px; color: var(--ink-soft); margin: 0; line-height: 1.55; }
 
@@ -1577,49 +1624,14 @@ body.theme-dark .nav-card,
 body.theme-dark .feature { background: rgba(255,255,255,0.035); border-color: var(--rule-strong); }
 .section .tally a { color: var(--seal-ink); }
 
-/* ---- Home landing: hero --------------------------------------------------
-   The front page breaks from the parchment sheet for one section: a dark,
-   high-contrast hero band up top (self-contained gradients/patterns, no
-   assets) so the site reads as a live game-ops HQ before settling back into
-   the muster-roll paper for everything below it. */
-.banner-home {
-  text-align: center;
-  padding: 0;
-  border-bottom: none;
-  overflow: hidden;
-  position: relative;
-  background: radial-gradient(120% 140% at 50% -20%, #3a0f16 0%, #1a0a0d 45%, #0c0908 100%);
-  color: #f2e7cf;
-}
-.banner-home .hero-grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(242,231,207,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(242,231,207,0.05) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: radial-gradient(80% 70% at 50% 20%, #000 40%, transparent 100%);
-  -webkit-mask-image: radial-gradient(80% 70% at 50% 20%, #000 40%, transparent 100%);
-}
-.banner-home .hero-glow {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(38% 55% at 18% 15%, rgba(184,147,63,0.25), transparent 60%),
-    radial-gradient(45% 60% at 85% 10%, rgba(124,31,43,0.55), transparent 65%);
-  animation: hero-pulse 9s ease-in-out infinite;
-}
-@keyframes hero-pulse {
-  0%, 100% { opacity: 0.85; }
-  50% { opacity: 1; }
-}
-.hero-inner { position: relative; z-index: 2; padding: clamp(40px, 8vw, 76px) 24px clamp(34px, 6vw, 58px); }
-.banner-home .crest { color: var(--brass-bright); text-shadow: 0 0 18px rgba(184,147,63,0.5); }
-.banner-home h1 {
-  color: #fbf3e2;
-  font-size: clamp(36px, 7vw, 64px);
-  text-shadow: 0 0 30px rgba(124,31,43,0.6), 0 2px 0 rgba(0,0,0,0.4);
-}
+/* ---- Home landing: hero ----------------------------------------------
+   The front page's banner carries extra content (lead line, CTAs, a live
+   stat strip) that no other page has, so it gets a taller inner wrapper
+   and a bigger title on top of the sitewide .banner treatment above. */
+.banner-home { padding: 0; }
+.hero-inner { position: relative; z-index: 1; padding: clamp(40px, 8vw, 76px) 24px clamp(34px, 6vw, 58px); }
+.banner-home h1 { font-size: clamp(36px, 7vw, 64px); }
 .banner-home .motto {
-  color: #d9c8a8;
   font-style: normal;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -1647,7 +1659,7 @@ body.theme-dark .feature { background: rgba(255,255,255,0.035); border-color: va
 .hero-stats {
   display: flex; align-items: center; justify-content: center; gap: 22px;
   margin: 34px auto 0; flex-wrap: wrap;
-  max-width: 460px; padding: 14px 26px;
+  max-width: 620px; padding: 14px 26px;
   border: 1px solid rgba(242,231,207,0.16); border-radius: 4px;
   background: rgba(0,0,0,0.22); backdrop-filter: blur(2px);
 }
@@ -1655,8 +1667,11 @@ body.theme-dark .feature { background: rgba(255,255,255,0.035); border-color: va
 .hero-stat b { display: block; font-family: var(--serif); font-size: 26px; font-weight: 700; color: var(--brass-bright); line-height: 1; }
 .hero-stat span { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #a8987a; }
 .hero-stat-sep { width: 1px; height: 30px; background: rgba(242,231,207,0.15); }
+@media (max-width: 480px) {
+  .hero-stats { gap: 16px 24px; }
+  .hero-stat-sep { display: none; }
+}
 .hero-stat-live b { color: #7fbf72; text-shadow: 0 0 10px rgba(127,191,114,0.5); }
-@media (prefers-reduced-motion: reduce) { .banner-home .hero-glow { animation: none; } }
 
 /* Live pulse dot on the activity section header */
 .live-dot {
