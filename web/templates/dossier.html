@@ -7,7 +7,7 @@
   <a class="backlink" href="/u/{{ member.discord_id }}">cross-unit service record ›</a>
 </p>
 
-<div class="dossier-head">
+<div class="dossier-head reveal" style="--i:0">
   <div class="name">
     <div class="dossier-id">
       <img class="avatar avatar-lg" src="{{ member|avatar_url(128) }}" alt="" loading="lazy">
@@ -41,14 +41,21 @@
 {% endif %}
 
 <div class="cols" style="margin-top: 10px;">
-  <section>
+  <section class="reveal" style="--i:1">
     <h2 class="section">Honors &amp; Qualifications</h2>
     {% if awards %}
       <div class="medal-row">
         {% for a in awards %}
           <div class="medal">
-            <div class="m-name">{% if a.award_type.emoji %}{{ a.award_type.emoji }} {% endif %}{{ a.award_type.name }}</div>
-            <div class="m-date">{{ a.date_awarded|fmt_date }}</div>
+            <div class="medal-badge">
+              {% if a.award_type.image %}<img src="{{ a.award_type.image }}" alt="">
+              {% elif a.award_type.emoji %}<span class="medal-badge-emoji">{{ a.award_type.emoji }}</span>
+              {% else %}<span class="medal-badge-emoji">✦</span>{% endif %}
+            </div>
+            <div>
+              <div class="m-name">{{ a.award_type.name }}</div>
+              <div class="m-date">{{ a.date_awarded|fmt_date }}</div>
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -58,19 +65,17 @@
 
     <h2 class="section">Attendance</h2>
     {% if att_counts %}
-      <table class="ledger">
-        <tbody>
+      <div class="att-summary">
         {% for status, n in att_counts.items() %}
-          <tr><td>{{ status|attendance_label }}</td><td class="num">{{ n }}</td></tr>
+          <div class="att-chip"><span class="att-num">{{ n }}</span><span class="att-label">{{ status|attendance_label }}</span></div>
         {% endfor %}
-        </tbody>
-      </table>
+      </div>
     {% else %}
       <p class="empty">Has attended no events.</p>
     {% endif %}
   </section>
 
-  <section>
+  <section class="reveal" style="--i:2">
     <h2 class="section">Service Timeline</h2>
     {% if timeline %}
       <ul class="timeline">
@@ -174,7 +179,7 @@
 <p class="lede">Changes here are written to the record at once; role, nickname,
 roster, and dossier updates are applied in Discord within moments.</p>
 
-<div class="orders-grid">
+<div class="orders-grid reveal" style="--i:3">
   <div class="order-card">
     <h3 class="order-title">Rank</h3>
     <form class="orders" method="post" action="/members/{{ member.discord_id }}/rank">
@@ -252,23 +257,6 @@ roster, and dossier updates are applied in Discord within moments.</p>
   </div>
 
   <div class="order-card">
-    <h3 class="order-title">Conduct</h3>
-    <form class="orders" method="post" action="/members/{{ member.discord_id }}/discipline">
-      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <div class="field">
-        <label>Kind</label>
-        <select name="record_type">
-          <option value="note">Note</option>
-          <option value="warn">Reprimand</option>
-          <option value="strike">Strike</option>
-        </select>
-      </div>
-      <div class="field"><label>Reason</label><input name="reason" required placeholder="Absent without leave…"></div>
-      <div class="field field-actions"><button class="btn btn-danger" type="submit">Enter on record</button></div>
-    </form>
-  </div>
-
-  <div class="order-card">
     <h3 class="order-title">Honors</h3>
     {% set grantable = award_catalogue | rejectattr('id', 'in', held_award_ids) | list %}
     {% if grantable %}
@@ -320,7 +308,31 @@ roster, and dossier updates are applied in Discord within moments.</p>
       </form>
     </div>
     {% endif %}
+  {% endif %}
+</div>
 
+<details class="announce-card announce-grave" {{ 'open' if member.status == 'discharged' }}>
+  <summary><span class="announce-title">Discipline &amp; Separation</span>
+    <span class="announce-sub">reprimands, strikes, discharge, and reinstatement</span></summary>
+  <div class="orders-grid">
+    <div class="order-card">
+      <h3 class="order-title">Conduct</h3>
+      <form class="orders" method="post" action="/members/{{ member.discord_id }}/discipline">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <div class="field">
+          <label>Kind</label>
+          <select name="record_type">
+            <option value="note">Note</option>
+            <option value="warn">Reprimand</option>
+            <option value="strike">Strike</option>
+          </select>
+        </div>
+        <div class="field"><label>Reason</label><input name="reason" required placeholder="Absent without leave…"></div>
+        <div class="field field-actions"><button class="btn btn-danger" type="submit">Enter on record</button></div>
+      </form>
+    </div>
+
+    {% if member.status != 'discharged' %}
     <div class="order-card order-grave">
       <h3 class="order-title">Discharge</h3>
       <form class="orders" method="post" action="/members/{{ member.discord_id }}/discharge"
@@ -337,7 +349,7 @@ roster, and dossier updates are applied in Discord within moments.</p>
         <div class="field field-actions"><button class="btn btn-danger" type="submit">Discharge</button></div>
       </form>
     </div>
-  {% else %}
+    {% else %}
     <div class="order-card">
       <h3 class="order-title">Reinstate</h3>
       <p class="order-note">This member has been discharged.</p>
@@ -347,10 +359,32 @@ roster, and dossier updates are applied in Discord within moments.</p>
         <div class="field field-actions"><button class="btn btn-strong" type="submit">Reinstate to active duty</button></div>
       </form>
     </div>
-  {% endif %}
-</div>
+    {% endif %}
+  </div>
+</details>
 {% endif %}
 
 <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!els.length) return;
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in-view'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
 
 {% endblock %}
