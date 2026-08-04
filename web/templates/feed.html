@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Feed</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+</head>
+<body>
+  <div class="sheet">
+    {% include "_apex_topbar.html" %}
+    <header class="banner">
+      <div class="crest">★ ✶ ★</div>
+      <h1>Feed</h1>
+      <p class="motto">Status updates from every regiment, unit, and squad on ValorLink</p>
+    </header>
+    <main class="wrap">
+      {% if flash %}
+        <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
+      {% endif %}
+
+      {% if user %}
+      <form class="wall-composer" method="post" action="/feed" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <textarea name="body" rows="3" maxlength="{{ post_max_len }}" placeholder="Share something with the whole platform…"></textarea>
+        <div class="wall-composer-row">
+          <label class="file-btn btn btn-small">
+            <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+            <span>Attach image</span>
+          </label>
+          <button class="btn btn-strong" type="submit">Post</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="lede">
+        <a href="/auth/discord/login">Sign in with Discord</a> to post, comment, and like on the feed.
+      </p>
+      {% endif %}
+
+      {% if posts %}
+      <div class="wall">
+        {% for post in posts %}
+        <article class="wall-post" id="post-{{ post.id }}">
+          <div class="wall-head">
+            <img class="avatar" src="{{ (post.author_discord_id, post.author_avatar)|avatar_url(40) }}" alt="">
+            <div>
+              <a class="wall-author" href="/u/{{ post.author_discord_id }}">{{ post.author_name }}</a>
+              <div class="wall-when">{{ post.created_at|fmt_date(true) }}</div>
+            </div>
+            {% if post.can_delete %}
+            <form method="post" action="/feed/{{ post.id }}/delete" class="wall-delete"
+                  data-confirm="Delete this post?">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="chip-x" type="submit" title="Delete post">×</button>
+            </form>
+            {% endif %}
+          </div>
+
+          {% if post.body %}<p class="wall-body">{{ post.body }}</p>{% endif %}
+          {% if post.image %}<img class="wall-image" src="{{ post.image }}" alt="">{% endif %}
+
+          <div class="wall-actions">
+            {% if user %}
+            <form method="post" action="/feed/{{ post.id }}/like" class="like-form">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <button class="like-btn{{ ' liked' if post.liked_by_me }}" type="submit">
+                {{ '♥' if post.liked_by_me else '♡' }} {{ post.like_count if post.like_count else '' }}
+              </button>
+            </form>
+            {% else %}
+            <span class="like-btn-static">♡ {{ post.like_count if post.like_count else '' }}</span>
+            {% endif %}
+            <span class="wall-comment-count">{{ post.comments|length }} comment{{ 's' if post.comments|length != 1 }}</span>
+          </div>
+
+          {% if post.comments %}
+          <div class="wall-comments">
+            {% for c in post.comments %}
+            <div class="wall-comment">
+              <img class="avatar avatar-sm" src="{{ (c.author_discord_id, c.author_avatar)|avatar_url(28) }}" alt="">
+              <div class="wall-comment-body">
+                <a class="wall-comment-author" href="/u/{{ c.author_discord_id }}">{{ c.author_name }}</a>
+                <span class="wall-comment-text">{{ c.body }}</span>
+                <div class="wall-when">{{ c.created_at|fmt_date(true) }}</div>
+              </div>
+              {% if c.can_delete %}
+              <form method="post" action="/feed/comment/{{ c.id }}/delete" class="wall-delete"
+                    data-confirm="Delete this comment?">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <button class="chip-x" type="submit" title="Delete comment">×</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if user %}
+          <form method="post" action="/feed/{{ post.id }}/comment" class="comment-composer">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input name="body" maxlength="{{ comment_max_len }}" placeholder="Write a comment…" required>
+            <button class="btn btn-small" type="submit">Reply</button>
+          </form>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="hollow"><div class="mark">✵</div><h3>No Posts Yet</h3>
+      <p>Be the first to post something to the platform-wide feed.</p></div>
+      {% endif %}
+
+      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+    </main>
+  </div>
+</body>
+</html>

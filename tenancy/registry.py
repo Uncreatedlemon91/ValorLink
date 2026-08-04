@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -138,6 +139,51 @@ class AllianceRSVP(RegistryBase):
     unit_slug = Column(String, nullable=True)
     status = Column(String, nullable=False, default="accepted")  # accepted|tentative|declined
     responded_at = Column(DateTime, default=_utcnow)
+
+
+class Post(RegistryBase):
+    """A status update on the platform-wide social feed. Cross-unit by
+    design (any member of any unit posts to the same shared wall), so it
+    lives in the registry alongside alliances rather than in a unit's own
+    database. Author name/avatar are snapshotted at post time rather than
+    joined live from a unit's roster, since the poster may belong to
+    several units (or none) and the registry has no roster of its own."""
+
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True)
+    author_discord_id = Column(BigInteger, nullable=False, index=True)
+    author_name = Column(String, nullable=False)
+    author_avatar = Column(String, nullable=True)
+    body = Column(Text, nullable=False)
+    image = Column(Text, nullable=True)  # data URI
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class PostComment(RegistryBase):
+    """A comment on a feed post."""
+
+    __tablename__ = "post_comments"
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, nullable=False, index=True)
+    author_discord_id = Column(BigInteger, nullable=False)
+    author_name = Column(String, nullable=False)
+    author_avatar = Column(String, nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class PostLike(RegistryBase):
+    """One member's like on a feed post. A member can like a post once."""
+
+    __tablename__ = "post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "discord_id", name="uq_post_like"),)
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, nullable=False, index=True)
+    discord_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}

@@ -171,10 +171,10 @@ def dev_login(
         tier = TIER_NONE
     slug = resolve_tenant(request).slug
     # Dev login is a per-unit "act as": grant the chosen tier on this unit only,
-    # mirroring production's per-unit tier map.
+    # mirroring production's per-unit tier map. No Discord avatar in dev mode.
     request.session["user"] = {
         "id": discord_id, "name": name, "via": "dev",
-        "tenant": slug, "tiers": {slug: tier},
+        "tenant": slug, "tiers": {slug: tier}, "avatar": None,
     }
     return RedirectResponse("/", status_code=303)
 
@@ -319,6 +319,10 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
         "via": "discord",
         "tenant": tenant_slug,
         "tiers": tiers,
+        # Discord avatar hash, snapshotted at sign-in so cross-unit features
+        # (the social feed, the platform search) can render a real avatar
+        # without a per-unit roster lookup.
+        "avatar": me.get("avatar"),
     }
     return RedirectResponse(origin, status_code=303)
 
