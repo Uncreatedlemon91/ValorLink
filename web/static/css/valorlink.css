@@ -2177,14 +2177,19 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .rsvp-cell form { margin: 0 2px 0 0; }
 .check-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 
-/* ---- Social feed ----------------------------------------------------------
-   A deliberate break from the sitewide 1860s parchment skin and the home
-   landing's dark hero: a flat, neutral, sans-serif "app" look, scoped
-   entirely to .feed-shell via its own custom-property set so nothing here
-   leaks onto (or depends on) the shared theme system. Light by default;
-   follows the OS dark-mode preference automatically since there's no manual
-   toggle on this page. */
-.feed-shell {
+/* =========================================================================
+   Platform pages: the "fx" design system
+   A deliberate break from the sitewide 1860s parchment skin and the old dark
+   military hero: a flat, neutral, sans-serif "app" look. Every platform-wide
+   page (Feed, Find a Unit, Find a Player, My Units, Alliance, Register,
+   Platform Dashboard, service records, and the home landing) shares this one
+   system via .fx-shell, so the platform reads as one consistent product; only
+   pages branded to a specific unit (Headquarters, Roster, Command Tent, …)
+   keep the parchment skin. Scoped entirely to .fx-shell via its own
+   custom-property set so nothing here leaks onto (or depends on) the unit
+   theme system. Light by default; follows the OS dark-mode preference
+   automatically since there's no manual toggle on these pages. */
+.fx-shell {
   --fx-bg:        #f6f7f9;
   --fx-card:      #ffffff;
   --fx-border:    #e5e7eb;
@@ -2196,6 +2201,10 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   --fx-accent-bg: #eef2ff;
   --fx-like:      #e11d48;
   --fx-like-bg:   #fff1f2;
+  --fx-ok:        #16a34a;
+  --fx-ok-bg:     #f0fdf4;
+  --fx-warn:      #d97706;
+  --fx-warn-bg:   #fffbeb;
   --fx-shadow:    0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06);
   --fx-shadow-lg: 0 4px 10px rgba(16,24,40,0.06), 0 2px 4px rgba(16,24,40,0.05);
 
@@ -2215,40 +2224,68 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   font-family: var(--serif);
 }
 @media (prefers-color-scheme: dark) {
-  .feed-shell {
+  .fx-shell {
     --fx-bg: #0f1115; --fx-card: #171a21; --fx-border: #2a2e37;
     --fx-ink: #e8eaed; --fx-ink-soft: #a2a9b4; --fx-ink-faint: #6b7280;
     --fx-accent: #818cf8; --fx-accent-ink: #a5b4fc; --fx-accent-bg: rgba(129,140,248,0.14);
     --fx-like: #fb7185; --fx-like-bg: rgba(251,113,133,0.12);
+    --fx-ok: #4ade80; --fx-ok-bg: rgba(74,222,128,0.12);
+    --fx-warn: #fbbf24; --fx-warn-bg: rgba(251,191,36,0.12);
     --fx-shadow: 0 1px 2px rgba(0,0,0,0.3); --fx-shadow-lg: 0 8px 20px rgba(0,0,0,0.4);
   }
 }
-.feed-shell a { color: var(--fx-accent); }
-.feed-shell .flashes { max-width: 720px; margin: 0 auto 18px; padding: 0 20px; }
-.feed-shell .flash { border-radius: 8px; border-left-width: 3px; background: var(--fx-card); box-shadow: var(--fx-shadow); }
+/* Exclude the pill/badge components so this plain-link color never outranks
+   their own color by specificity -- .fx-shell a (0,1,1) would otherwise beat
+   a single-class rule like .fx-btn-primary (0,1,0), leaving e.g. primary
+   button text invisible (accent-on-accent). */
+.fx-shell a:not(.fx-btn):not(.fx-chip):not(.fx-badge) { color: var(--fx-accent); }
+.fx-shell .flashes { max-width: 720px; margin: 0 auto 18px; padding: 0 20px; }
+.fx-shell .flash { border-radius: 8px; border-left-width: 3px; background: var(--fx-card); box-shadow: var(--fx-shadow); }
+.fx-shell footer { text-align: center; padding: 32px 20px 0; color: var(--fx-ink-faint); font-size: 12px; }
 
-.feed-header {
+/* ---- Header band: title + description, optional live stat row --------- */
+.fx-header {
   border-bottom: 1px solid var(--fx-border);
   padding: 34px 20px 28px;
   background: var(--fx-card);
 }
-.feed-header-inner {
+.fx-header-inner {
   max-width: 720px; margin: 0 auto;
   display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
 }
-.feed-heading h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
-.feed-heading p { margin: 6px 0 0; color: var(--fx-ink-soft); font-size: 14.5px; max-width: 46ch; }
-.feed-stats { display: flex; gap: 22px; }
-.feed-stat { text-align: center; }
-.feed-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--fx-ink); font-variant-numeric: tabular-nums; }
-.feed-stat span { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fx-ink-faint); }
+.fx-main--wide .fx-header-inner { max-width: 980px; }
+.fx-heading h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
+.fx-heading p { margin: 6px 0 0; color: var(--fx-ink-soft); font-size: 14.5px; max-width: 46ch; }
+.fx-stats { display: flex; gap: 22px; }
+.fx-stat { text-align: center; }
+.fx-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--fx-ink); font-variant-numeric: tabular-nums; }
+.fx-stat span { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fx-ink-faint); }
 @media (max-width: 560px) {
-  .feed-header-inner { flex-direction: column; align-items: flex-start; }
-  .feed-stats { gap: 18px; }
+  .fx-header-inner { flex-direction: column; align-items: flex-start; }
+  .fx-stats { gap: 18px; }
 }
 
-.feed-main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+/* ---- Bigger variant for the home landing: lead line + CTA row --------- */
+.fx-hero { padding: 56px 20px 40px; text-align: center; }
+.fx-hero .fx-header-inner { flex-direction: column; align-items: center; max-width: 640px; }
+.fx-hero h1 { font-size: clamp(32px, 6vw, 44px); }
+.fx-hero .fx-lede { text-align: center; max-width: 52ch; margin: 10px auto 0; font-size: 15.5px; }
+.fx-hero-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 22px; }
 
+.fx-main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+.fx-main--wide { max-width: 980px; }
+
+/* ---- Section headings, intro text -------------------------------------- */
+.fx-section {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;
+  font-size: 19px; font-weight: 800; letter-spacing: -0.01em; margin: 34px 0 12px;
+}
+.fx-section:first-child { margin-top: 0; }
+.fx-tally { font-size: 12.5px; font-weight: 600; color: var(--fx-ink-faint); }
+.fx-lede { color: var(--fx-ink-soft); font-size: 14.5px; line-height: 1.6; margin: 0 0 18px; max-width: 68ch; }
+
+/* ---- Cards + grid -------------------------------------------------------- */
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px; margin: 4px 0; }
 .fx-card {
   background: var(--fx-card); border: 1px solid var(--fx-border); border-radius: 14px;
   box-shadow: var(--fx-shadow);
@@ -2277,6 +2314,9 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-btn-primary:hover { background: var(--fx-accent-ink); border-color: var(--fx-accent-ink); color: #fff; }
 .fx-btn-primary:active { transform: scale(0.97); }
 .fx-btn-ghost { background: transparent; }
+.fx-btn-danger { background: var(--fx-like-bg); border-color: var(--fx-like-bg); color: var(--fx-like); }
+.fx-btn-danger:hover { background: var(--fx-like); border-color: var(--fx-like); color: #fff; }
+.fx-btn-sm { padding: 5px 13px; font-size: 12px; }
 .btn-post { padding: 8px 22px; }
 .file-btn.fx-attach {
   display: inline-flex; align-items: center; gap: 6px;
@@ -2343,7 +2383,134 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-empty h3 { margin: 0 0 4px; color: var(--fx-ink-soft); font-size: 16px; }
 .fx-empty p { margin: 0; font-size: 13.5px; }
 
-.feed-shell footer { text-align: center; padding: 32px 20px 0; color: var(--fx-ink-faint); font-size: 12px; }
+/* ---- Chips + badges ----------------------------------------------------- */
+.fx-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--fx-ink-soft);
+  background: var(--fx-card); border: 1px solid var(--fx-border); border-radius: 999px;
+  padding: 6px 13px; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.fx-chip:hover { border-color: var(--fx-accent); color: var(--fx-accent); text-decoration: none; }
+.fx-chip.fx-chip-on { background: var(--fx-accent); border-color: var(--fx-accent); color: #fff; }
+.fx-chip-static { cursor: default; }
+.fx-chip-static:hover { border-color: var(--fx-border); color: var(--fx-ink-soft); }
+
+.fx-badge {
+  display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 700;
+  letter-spacing: 0.02em; border-radius: 999px; padding: 3px 10px;
+  background: var(--fx-bg); color: var(--fx-ink-soft); border: 1px solid var(--fx-border);
+}
+.fx-badge-ok { background: var(--fx-ok-bg); color: var(--fx-ok); border-color: transparent; }
+.fx-badge-off { background: var(--fx-bg); color: var(--fx-ink-faint); border-color: var(--fx-border); }
+.fx-badge-warn { background: var(--fx-warn-bg); color: var(--fx-warn); border-color: transparent; }
+.fx-badge-danger { background: var(--fx-like-bg); color: var(--fx-like); border-color: transparent; }
+.fx-badge-accent { background: var(--fx-accent-bg); color: var(--fx-accent-ink); border-color: transparent; }
+
+/* ---- Search / filter tools ----------------------------------------------- */
+.fx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 18px; }
+.fx-search {
+  flex: 1 1 220px; min-width: 180px; max-width: 340px;
+  font-family: inherit; font-size: 14px; color: var(--fx-ink);
+  background: var(--fx-card); border: 1px solid var(--fx-border);
+  border-radius: 999px; padding: 9px 16px;
+}
+.fx-search:focus { outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg); }
+.fx-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-select {
+  font-family: inherit; font-size: 13px; color: var(--fx-ink);
+  background: var(--fx-card); border: 1px solid var(--fx-border);
+  border-radius: 999px; padding: 8px 14px;
+}
+.fx-check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--fx-ink-soft); }
+.fx-check input { width: auto; }
+
+/* ---- Forms --------------------------------------------------------------- */
+.fx-form { display: flex; flex-direction: column; gap: 14px; }
+.fx-field { display: flex; flex-direction: column; gap: 5px; }
+.fx-field label { font-size: 12.5px; font-weight: 700; color: var(--fx-ink-soft); }
+.fx-field label .fx-opt { font-weight: 400; font-style: italic; color: var(--fx-ink-faint); }
+.fx-field .fx-hint { font-size: 12px; color: var(--fx-ink-faint); line-height: 1.5; }
+.fx-form input:not([type=checkbox]):not([type=radio]),
+.fx-form select, .fx-form textarea {
+  font-family: inherit; font-size: 14.5px; color: var(--fx-ink);
+  background: var(--fx-bg); border: 1px solid var(--fx-border);
+  border-radius: 10px; padding: 9px 12px; width: 100%;
+}
+.fx-form textarea { resize: vertical; }
+.fx-form input:focus, .fx-form select:focus, .fx-form textarea:focus {
+  outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg);
+}
+.fx-field-actions { margin-top: 2px; }
+
+/* ---- Table ---------------------------------------------------------------- */
+.fx-table-wrap { overflow-x: auto; border: 1px solid var(--fx-border); border-radius: 14px; background: var(--fx-card); box-shadow: var(--fx-shadow); }
+.fx-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.fx-table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--fx-ink-faint); font-weight: 700; padding: 12px 14px; border-bottom: 1px solid var(--fx-border);
+}
+.fx-table td { padding: 11px 14px; border-bottom: 1px solid var(--fx-border); vertical-align: middle; }
+.fx-table tbody tr:last-child td { border-bottom: none; }
+.fx-table tbody tr:hover { background: var(--fx-bg); }
+.fx-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.fx-table .fx-row-fail { background: var(--fx-like-bg); }
+
+/* ---- Timeline / activity list --------------------------------------------- */
+.fx-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.fx-timeline-item {
+  display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--fx-border); font-size: 13.5px;
+}
+.fx-timeline-item:last-child { border-bottom: none; }
+.fx-timeline-item .avatar { margin: 0; }
+.fx-timeline-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fx-accent); margin: 0 auto; }
+.fx-timeline-text { color: var(--fx-ink); }
+.fx-timeline-text b { font-weight: 700; }
+.fx-timeline-when { font-size: 12px; color: var(--fx-ink-faint); white-space: nowrap; }
+
+/* ---- Numbered steps (raise-a-unit follow-through) ------------------------- */
+.fx-steps { list-style: none; margin: 0; padding: 0; counter-reset: fx-step; display: flex; flex-direction: column; gap: 4px; }
+.fx-step { counter-increment: fx-step; display: flex; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--fx-border); }
+.fx-step:last-child { border-bottom: none; }
+.fx-step::before {
+  content: counter(fx-step); flex: none; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--fx-accent-bg); color: var(--fx-accent-ink); font-weight: 800; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.fx-step-body h4 { margin: 2px 0 4px; font-size: 14.5px; font-weight: 700; }
+.fx-step-body p { margin: 0 0 6px; font-size: 13.5px; color: var(--fx-ink-soft); line-height: 1.55; }
+
+/* ---- Inline code + copy button --------------------------------------------- */
+.fx-code-row { display: flex; align-items: stretch; margin: 6px 0; max-width: 100%; }
+.fx-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--fx-bg); color: var(--fx-ink); border: 1px solid var(--fx-border); border-right: none;
+  border-radius: 8px 0 0 8px; padding: 8px 12px; overflow-x: auto; white-space: nowrap;
+}
+.fx-code-copy {
+  border: 1px solid var(--fx-border); border-radius: 0 8px 8px 0;
+  background: var(--fx-accent); color: #fff; font-size: 12px; font-weight: 600;
+  padding: 0 14px; cursor: pointer; white-space: nowrap;
+}
+.fx-code-copy.is-copied { background: var(--fx-ok); border-color: var(--fx-ok); }
+
+/* ---- Unit card (directory + my-units) -------------------------------------- */
+.fx-unit-card { display: flex; flex-direction: column; padding: 16px; text-decoration: none; color: inherit; }
+.fx-unit-card:hover { text-decoration: none; box-shadow: var(--fx-shadow-lg); }
+.fx-unit-head { display: flex; align-items: center; gap: 12px; }
+.fx-unit-logo {
+  width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex: none;
+  border: 1px solid var(--fx-border); background: var(--fx-bg);
+}
+.fx-unit-logo-ph {
+  display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800;
+}
+.fx-unit-title { margin: 0; font-size: 16px; font-weight: 800; }
+.fx-unit-motto { margin: 2px 0 0; font-size: 12.5px; font-style: italic; color: var(--fx-ink-faint); }
+.fx-unit-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.fx-unit-blurb { margin: 10px 0 0; font-size: 13px; color: var(--fx-ink-soft); line-height: 1.5; }
+.fx-unit-meta { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--fx-ink-faint); }
+.fx-unit-actions { display: flex; gap: 8px; margin-top: 14px; }
 
 /* Gentle fade-up on load -- no scroll-triggered stagger, just a quiet settle */
 .fx-in { animation: fx-settle .4s ease-out both; }

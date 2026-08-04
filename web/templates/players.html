@@ -7,44 +7,45 @@
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
 </head>
 <body>
-  <div class="sheet">
+  <div class="fx-shell">
     {% include "_apex_topbar.html" %}
-    <header class="banner">
-      <div class="crest">★ ✶ ★</div>
-      <h1>Find a Player</h1>
-      <p class="motto">Look up any member's service record across the platform</p>
+    <header class="fx-header">
+      <div class="fx-header-inner">
+        <div class="fx-heading">
+          <h1>Find a Player</h1>
+          <p>Look up any member's service record across the platform.</p>
+        </div>
+      </div>
     </header>
-    <main class="wrap">
-      <form class="player-search" method="get" action="/players">
-        <input name="q" value="{{ q }}" placeholder="Name or Discord ID" autofocus
-               autocomplete="off" aria-label="Search players">
-        <button class="btn btn-strong" type="submit">Search</button>
+    <main class="fx-main fx-main--wide">
+      <form class="fx-tools" method="get" action="/players">
+        <input class="fx-search" name="q" value="{{ q }}" placeholder="Name or Discord ID" autofocus
+               autocomplete="off" aria-label="Search players" style="max-width:420px;">
+        <button class="fx-btn fx-btn-primary" type="submit">Search</button>
       </form>
 
       {% if searched %}
         {% if results %}
-        <h2 class="section">{{ results|length }} match{{ 'es' if results|length != 1 else '' }}</h2>
-        <div class="posting-grid">
+        <div class="fx-section">{{ results|length }} match{{ 'es' if results|length != 1 else '' }}</div>
+        <div class="fx-grid">
           {% for r in results %}
-          <a class="posting player-hit" href="/u/{{ r.discord_id }}">
-            <div class="posting-head">
-              <span class="posting-unit"><img class="avatar" src="{{ (r.discord_id, r.avatar)|avatar_url(48) }}" alt="">{{ r.name }}</span>
+          <a class="fx-card fx-unit-card" href="/u/{{ r.discord_id }}">
+            <div class="fx-unit-head">
+              <img class="avatar avatar-lg" src="{{ (r.discord_id, r.avatar)|avatar_url(64) }}" alt="">
+              <h3 class="fx-unit-title">{{ r.name }}</h3>
             </div>
-            <div class="posting-sub">{{ r.units|length }} unit{{ 's' if r.units|length != 1 }}: {% for u in r.units %}{{ u }}{{ '' if loop.last else ' · ' }}{% endfor %}</div>
+            <div class="fx-unit-meta">{{ r.units|length }} unit{{ 's' if r.units|length != 1 }}: {% for u in r.units %}{{ u }}{{ '' if loop.last else ' · ' }}{% endfor %}</div>
           </a>
           {% endfor %}
         </div>
         {% else %}
-        <div class="hollow"><div class="mark">✵</div><h3>No Players Found</h3>
+        <div class="fx-card fx-empty"><div class="fx-empty-icon">✵</div><h3>No Players Found</h3>
         <p>No member matches “{{ q }}”. Try part of their name, or paste a Discord ID.</p></div>
         {% endif %}
       {% else %}
-        <p class="lede">Type at least two letters of a member's name — or paste their
-        Discord ID to jump straight to their record. Every member's service record
-        is public.</p>
+        <p class="fx-lede">Type at least two letters of a member's name — or paste their
+        Discord ID to jump straight to their record. Every member's service record is public.</p>
       {% endif %}
-
-      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
     </main>
   </div>
 </body>

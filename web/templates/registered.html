@@ -7,50 +7,52 @@
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
 </head>
 <body>
-  <div class="sheet" style="--seal:#3f6b3a;">
+  <div class="fx-shell">
     {% include "_apex_topbar.html" %}
-    <header class="banner">
-      <div class="crest" style="color:#3f6b3a;">★ ✶ ★</div>
-      <h1>Unit Raised</h1>
-      <p class="motto">Your regiment has been mustered</p>
+    <header class="fx-header">
+      <div class="fx-header-inner">
+        <div class="fx-heading">
+          <h1>Unit Raised</h1>
+          <p>Your regiment has been mustered.</p>
+        </div>
+      </div>
     </header>
-    <main class="wrap">
-      <h2 class="section">Next Steps</h2>
-      <ol class="entry-list" style="list-style:none;">
-        <li><span class="date">Step One — Invite the bot</span>
+    <main class="fx-main">
+      <div class="fx-section">Next Steps</div>
+      <ol class="fx-steps">
+        <li class="fx-step"><div class="fx-step-body">
+          <h4>Invite the bot</h4>
           {% if invite_url %}
-            Add the ValorLink bot to your Discord server so it can manage roles,
-            nicknames, and announcements:<br>
-            <a class="btn btn-strong" style="margin-top:8px;" href="{{ invite_url }}">Invite the bot to Discord</a>
+            <p>Add the ValorLink bot to your Discord server so it can manage roles,
+            nicknames, and announcements.</p>
+            <a class="fx-btn fx-btn-primary" href="{{ invite_url }}">Invite the bot to Discord</a>
           {% else %}
-            Ask the platform administrator for the bot invite link.
+            <p>Ask the platform administrator for the bot invite link.</p>
           {% endif %}
-        </li>
-        <li><span class="date">Step Two — Open your portal</span>
-          Your unit's headquarters is live at:<br>
-          <a class="btn" style="margin-top:8px;" href="{{ portal_url }}">{{ portal_url }}</a>
-        </li>
-        <li><span class="date">Step Three — Bootstrap admin access in Discord</span>
-          Before you can sign in as an admin, bind your admin role in Discord.
-          Run this once in your server, as someone with server
-          <b>Administrator</b> permission:
-          <div class="bootstrap-note">
-            <span class="cmd">
-              <code class="cmd-text">/config set_role key:admin role:@Admin</code>
-              <button type="button" class="cmd-copy" data-copy="/config set_role key:admin role:@Admin">Copy</button>
-            </span>
-            <p class="bootstrap-hint">Replace <code>@Admin</code> with your server's admin role.
-            This first binding must be done in Discord; afterwards the admin role
-            can manage everything.</p>
+        </div></li>
+        <li class="fx-step"><div class="fx-step-body">
+          <h4>Open your portal</h4>
+          <p>Your unit's headquarters is live at:</p>
+          <a class="fx-btn" href="{{ portal_url }}">{{ portal_url }}</a>
+        </div></li>
+        <li class="fx-step"><div class="fx-step-body">
+          <h4>Bootstrap admin access in Discord</h4>
+          <p>Before you can sign in as an admin, bind your admin role in Discord.
+          Run this once in your server, as someone with server <b>Administrator</b> permission:</p>
+          <div class="fx-code-row">
+            <code class="fx-code">/config set_role key:admin role:@Admin</code>
+            <button type="button" class="fx-code-copy" data-copy="/config set_role key:admin role:@Admin">Copy</button>
           </div>
-        </li>
-        <li><span class="date">Step Four — Configure from the Command Tent</span>
-          Sign in on your portal with that admin role, then set the other roles,
-          channels, ranks, and companies from the Command Tent.
-        </li>
+          <p class="fx-unit-meta">Replace <code>@Admin</code> with your server's admin role.
+          This first binding must be done in Discord; afterwards the admin role can manage everything.</p>
+        </div></li>
+        <li class="fx-step"><div class="fx-step-body">
+          <h4>Configure from the Command Tent</h4>
+          <p>Sign in on your portal with that admin role, then set the other roles,
+          channels, ranks, and companies from the Command Tent.</p>
+        </div></li>
       </ol>
-      <p style="margin-top:20px;"><a class="backlink" href="/">‹ back to the Muster Grounds</a></p>
-      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+      <p style="margin-top:20px;"><a href="/">‹ back to the Muster Grounds</a></p>
     </main>
   </div>
   {% include "_copy_js.html" %}

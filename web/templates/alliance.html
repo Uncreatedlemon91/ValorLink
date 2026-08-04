@@ -7,74 +7,88 @@
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
 </head>
 <body>
-  <div class="sheet">
+  <div class="fx-shell">
     {% include "_apex_topbar.html" %}
-    <header class="banner">
-      <div class="crest">⚔ ✶ ⚔</div>
-      <h1>{{ alliance.name }}</h1>
-      <p class="motto">Coalition of {{ alliance.members|length }} unit{{ 's' if alliance.members|length != 1 }}
-        {% if alliance.strength %}· {{ alliance.strength }} strong{% endif %}</p>
-    </header>
-    <main class="wrap">
-      {% if alliance.description %}<p class="lede">{{ alliance.description }}</p>{% endif %}
-
-      <div class="stat-strip">
-        <div class="stat"><span class="stat-num">{{ alliance.members|length }}</span><span class="stat-cap">member units</span></div>
-        <div class="stat"><span class="stat-num">{{ alliance.strength }}</span><span class="stat-cap">combined strength</span></div>
-        <div class="stat"><span class="stat-num">{% if alliance.created_at %}{{ alliance.created_at.year }}{% else %}—{% endif %}</span><span class="stat-cap">formed</span></div>
+    <header class="fx-header">
+      <div class="fx-header-inner">
+        <div class="fx-heading">
+          <h1>{{ alliance.name }}</h1>
+          <p>Coalition of {{ alliance.members|length }} unit{{ 's' if alliance.members|length != 1 }}
+          {% if alliance.strength %}· {{ alliance.strength }} strong{% endif %}</p>
+        </div>
+        <div class="fx-stats">
+          <div class="fx-stat"><b>{{ alliance.members|length }}</b><span>Units</span></div>
+          <div class="fx-stat"><b>{{ alliance.strength }}</b><span>Strength</span></div>
+          <div class="fx-stat"><b>{% if alliance.created_at %}{{ alliance.created_at.year }}{% else %}—{% endif %}</b><span>Formed</span></div>
+        </div>
       </div>
+    </header>
+    <main class="fx-main fx-main--wide">
+      {% if alliance.description %}<p class="fx-lede">{{ alliance.description }}</p>{% endif %}
 
-      <h2 class="section">Joint Operations</h2>
+      <div class="fx-section">Joint Operations</div>
       {% if events %}
-      <div class="posting-grid">
+      <div class="fx-grid">
         {% for e in events %}
-        <div class="posting je-card">
-          <div class="posting-head">
-            <span class="posting-unit">{{ e.name }}</span>
-            <span class="rankchip">{{ e.event_type }}</span>
+        <div class="fx-card" style="padding:16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            <b>{{ e.name }}</b>
+            <span class="fx-badge fx-badge-accent">{{ e.event_type }}</span>
           </div>
-          <div class="posting-sub"><time datetime="{{ e.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ e.scheduled_at|fmt_date(true) }}</time></div>
-          {% if e.description %}<div class="je-desc">{{ e.description }}</div>{% endif %}
-          <div class="je-counts">
-            <span class="je-count">✔ {{ e.counts.accepted }}</span>
-            <span class="je-count">~ {{ e.counts.tentative }}</span>
-            <span class="je-count">✘ {{ e.counts.declined }}</span>
+          <div class="fx-unit-meta" style="margin-top:6px;"><time datetime="{{ e.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ e.scheduled_at|fmt_date(true) }}</time></div>
+          {% if e.description %}<p class="fx-unit-blurb">{{ e.description }}</p>{% endif %}
+          <div class="fx-unit-tags">
+            <span class="fx-badge fx-badge-ok">✔ {{ e.counts.accepted }}</span>
+            <span class="fx-badge">~ {{ e.counts.tentative }}</span>
+            <span class="fx-badge fx-badge-off">✘ {{ e.counts.declined }}</span>
           </div>
           {% if can_rsvp %}
-          <div class="je-rsvp">
+          <div class="fx-unit-actions">
             {% for value, label in rsvp_choices %}
-            <form method="post" action="/alliance/{{ alliance.slug }}/events/{{ e.id }}/rsvp">
+            <form method="post" action="/alliance/{{ alliance.slug }}/events/{{ e.id }}/rsvp" style="margin:0;">
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <input type="hidden" name="status" value="{{ value }}">
-              <button class="btn btn-small {{ 'btn-strong' if e.mine == value else 'btn-ghost' }}" type="submit">{{ label }}</button>
+              <button class="fx-btn fx-btn-sm {{ 'fx-btn-primary' if e.mine == value }}" type="submit">{{ label }}</button>
             </form>
             {% endfor %}
           </div>
           {% elif user %}
-          <p class="order-note">Members of a unit in this alliance can answer the call.</p>
+          <p class="fx-unit-meta">Members of a unit in this alliance can answer the call.</p>
           {% endif %}
         </div>
         {% endfor %}
       </div>
       {% else %}
-      <p class="empty">No joint operations on the books. A member unit's admin can schedule one from their Command Tent.</p>
+      <p class="fx-lede">No joint operations on the books. A member unit's admin can schedule one from their Command Tent.</p>
       {% endif %}
 
-      <h2 class="section">Member Units</h2>
-      <div class="posting-grid">
+      <div class="fx-section">Member Units</div>
+      <div class="fx-grid">
         {% for m in alliance.members %}
-        <div class="posting" style="border-top-color: {{ m.brand_color or 'var(--seal)' }};">
-          <div class="posting-head">
-            <a class="posting-unit" href="{{ m.url }}">{{ m.name }}</a>
-            {% if m.role == 'founder' %}<span class="rankchip">founder</span>{% endif %}
+        <div class="fx-card" style="padding:16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            <a href="{{ m.url }}" style="font-weight:800;">{{ m.name }}</a>
+            {% if m.role == 'founder' %}<span class="fx-badge fx-badge-accent">founder</span>{% endif %}
           </div>
-          <div class="posting-sub">{% if m.members is not none %}{{ m.members }} active member{{ 's' if m.members != 1 }}{% else %}—{% endif %}</div>
+          <div class="fx-unit-meta" style="margin-top:6px;">{% if m.members is not none %}{{ m.members }} active member{{ 's' if m.members != 1 }}{% else %}—{% endif %}</div>
         </div>
         {% endfor %}
       </div>
 
-      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+      <footer>ValorLink &middot; {{ now.strftime('%d %B %Y') if now else '' }}</footer>
     </main>
   </div>
+  <script>
+    document.querySelectorAll('time[data-local]').forEach(function (el) {
+      var d = new Date(el.getAttribute('datetime'));
+      if (isNaN(d.getTime())) return;
+      var withTime = el.getAttribute('data-fmt') === 'datetime';
+      var opts = withTime
+        ? { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+        : { year: 'numeric', month: 'short', day: '2-digit' };
+      try { el.textContent = d.toLocaleString(undefined, opts); } catch (e) {}
+      el.title = d.toString();
+    });
+  </script>
 </body>
 </html>

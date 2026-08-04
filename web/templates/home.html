@@ -5,148 +5,125 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ValorLink — The Muster Grounds</title>
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
-  <style>:root { --seal: #7c1f2b; }</style>
 </head>
-<body class="theme-modern theme-dark">
-  <div class="sheet" style="--seal:#7c1f2b;">
+<body>
+  <div class="fx-shell">
     {% include "_apex_topbar.html" %}
 
-    <header class="banner banner-home">
-      <div class="hero-inner">
-        <div class="crest">
-          <span class="crest-star">★</span><span class="crest-star">✶</span><span class="crest-star">★</span>
+    <header class="fx-header fx-hero">
+      <div class="fx-header-inner">
+        <div class="fx-heading">
+          <h1>ValorLink</h1>
+          <p style="font-weight:600; color:var(--fx-ink);">Command your unit. Muster the field.</p>
         </div>
-        <h1 class="hero-title">ValorLink</h1>
-        <p class="motto">Command your unit. Muster the field.</p>
-        <p class="hero-lead">A private HQ for your regiment, clan, or squad — roster, events, recruitment,
+        <p class="fx-lede">A private HQ for your regiment, clan, or squad — roster, events, recruitment,
         and a Discord bot that keeps it all in sync. One platform, every game.</p>
-        <div class="hero-cta">
-          <a class="btn btn-hero-primary" href="/find">Find a Unit →</a>
+        <div class="fx-hero-cta">
+          <a class="fx-btn fx-btn-primary" href="/find">Find a Unit →</a>
           {% if user %}
-          <a class="btn btn-hero-ghost" href="/my-units">Go to My Units</a>
+          <a class="fx-btn" href="/my-units">Go to My Units</a>
           {% else %}
-          <a class="btn btn-hero-ghost" href="/auth/discord/login">Sign in with Discord</a>
+          <a class="fx-btn" href="/auth/discord/login">Sign in with Discord</a>
           {% endif %}
         </div>
-        <div class="hero-stats">
-          <div class="hero-stat"><b data-count-to="{{ total_players }}">0</b><span>player{{ 's' if total_players != 1 }}</span></div>
-          <div class="hero-stat-sep"></div>
-          <div class="hero-stat"><b data-count-to="{{ total_units }}">0</b><span>unit{{ 's' if total_units != 1 }}</span></div>
-          <div class="hero-stat-sep"></div>
-          <div class="hero-stat"><b data-count-to="{{ game_count }}">0</b><span>game{{ 's' if game_count != 1 }}</span></div>
-          <div class="hero-stat-sep"></div>
-          <div class="hero-stat hero-stat-live"><b data-count-to="{{ recruiting_total }}">0</b><span>recruiting now</span></div>
+        <div class="fx-stats" style="margin-top:26px;">
+          <div class="fx-stat"><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
+          <div class="fx-stat"><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
+          <div class="fx-stat"><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
+          <div class="fx-stat"><b data-count-to="{{ recruiting_total }}" style="color:var(--fx-ok);">0</b><span>Recruiting now</span></div>
         </div>
       </div>
-      <div class="hero-fade"></div>
     </header>
 
-    <main class="wrap wrap-home">
+    <main class="fx-main fx-main--wide">
       {% if flash %}
-        <div class="flashes">
-          {% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}
-        </div>
+        <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
       {% endif %}
 
-      <div class="bento">
-        <a class="bento-tile bento-hero reveal" style="--i:0" href="/find">
-          <div class="bento-tile-glow"></div>
-          <div class="bento-tile-icon">⚑</div>
-          <h3>Find a Unit</h3>
-          <p>Browse {{ total_units }} unit{{ 's' if total_units != 1 }} across every game and apply to join one that fits your playstyle.</p>
-          <span class="bento-tile-go">Browse the directory →</span>
+      <div class="fx-grid" style="grid-template-columns: repeat(auto-fill, minmax(240px,1fr));">
+        <a class="fx-card fx-in" href="/find" style="grid-column: span 2; padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">⚑</div>
+          <h3 style="margin:0 0 6px; font-size:20px;">Find a Unit</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">Browse {{ total_units }} unit{{ 's' if total_units != 1 }} across every game and apply to join one that fits your playstyle.</p>
+          <span class="fx-tally" style="margin-top:auto;">Browse the directory →</span>
           {% if sample_units %}
-          <div class="bento-hero-sample">
-            {% for name in sample_units %}<span class="bento-hero-chip">{{ name }}</span>{% endfor %}
-            {% if total_units > sample_units|length %}<span class="bento-hero-chip bento-hero-more">+{{ total_units - sample_units|length }} more</span>{% endif %}
+          <div class="fx-unit-tags" style="margin-top:12px;">
+            {% for name in sample_units %}<span class="fx-badge">{{ name }}</span>{% endfor %}
+            {% if total_units > sample_units|length %}<span class="fx-badge fx-badge-accent">+{{ total_units - sample_units|length }} more</span>{% endif %}
           </div>
           {% endif %}
         </a>
 
         {% if activity %}
-        <div class="bento-tile bento-feed reveal" style="--i:1">
-          <div class="bento-tile-icon live-icon"><span class="live-dot"></span></div>
-          <h3>On the Field</h3>
-          <p class="bento-feed-sub">Recent activity across ValorLink</p>
-          <ul class="feed feed-home feed-compact">
+        <div class="fx-card fx-in" style="grid-column: span 2; padding:18px 20px 8px; display:flex; flex-direction:column;">
+          <h3 style="margin:0 0 2px; font-size:16px; display:flex; align-items:center; gap:6px;"><span class="fx-timeline-dot" style="background:var(--fx-ok);"></span>On the Field</h3>
+          <p class="fx-unit-meta" style="margin:0 0 6px;">Recent activity across ValorLink</p>
+          <ul class="fx-timeline" style="max-height:230px; overflow-y:auto;">
             {% for a in activity %}
-              <li class="feed-{{ a.kind }}" style="--i:{{ loop.index0 }}">
-                {% if a.av %}<img class="avatar avatar-sm" src="{{ a.av|avatar_url }}" alt="" loading="lazy">{% else %}<span class="feed-dot"></span>{% endif %}
-                <span class="feed-text">
+              <li class="fx-timeline-item">
+                {% if a.av %}<img class="avatar avatar-sm" src="{{ a.av|avatar_url }}" alt="" loading="lazy">{% else %}<span class="fx-timeline-dot"></span>{% endif %}
+                <span class="fx-timeline-text">
                   {% if a.who %}<b>{{ a.who }}</b> {{ a.text }} in <a href="{{ a.url }}">{{ a.unit }}</a>
                   {% else %}<a href="{{ a.url }}">{{ a.unit }}</a> {{ a.text }}{% endif %}
                 </span>
-                <time class="feed-when" datetime="{{ a.when.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="date">{{ a.when.strftime('%d %b') }}</time>
+                <time class="fx-timeline-when" datetime="{{ a.when.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="date">{{ a.when.strftime('%d %b') }}</time>
               </li>
             {% endfor %}
           </ul>
         </div>
         {% endif %}
 
-        <a class="bento-tile reveal" style="--i:2" href="/players">
-          <div class="bento-tile-icon">⚇</div>
-          <h3>Find a Player</h3>
-          <p>Look up any member's service record across the platform.</p>
-          <span class="bento-tile-go">Search players →</span>
+        <a class="fx-card fx-in" href="/players" style="padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">⚇</div>
+          <h3 style="margin:0 0 6px; font-size:18px;">Find a Player</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">Look up any member's service record across the platform.</p>
+          <span class="fx-tally" style="margin-top:auto;">Search players →</span>
         </a>
 
         {% if user %}
-        <a class="bento-tile reveal" style="--i:3" href="/my-units">
-          <div class="bento-tile-icon">★</div>
-          <h3>My Units</h3>
-          <p>{% if my_unit_count %}Jump straight to the {{ my_unit_count }} unit{{ 's' if my_unit_count != 1 }} you serve in.{% else %}You're not enrolled in a unit yet.{% endif %}</p>
-          <span class="bento-tile-go">Go to my units →</span>
+        <a class="fx-card fx-in" href="/my-units" style="padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">★</div>
+          <h3 style="margin:0 0 6px; font-size:18px;">My Units</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">{% if my_unit_count %}Jump straight to the {{ my_unit_count }} unit{{ 's' if my_unit_count != 1 }} you serve in.{% else %}You're not enrolled in a unit yet.{% endif %}</p>
+          <span class="fx-tally" style="margin-top:auto;">Go to my units →</span>
         </a>
         {% else %}
-        <a class="bento-tile reveal" style="--i:3" href="/auth/discord/login">
-          <div class="bento-tile-icon">★</div>
-          <h3>My Units</h3>
-          <p>Sign in with Discord to reach the units you serve in.</p>
-          <span class="bento-tile-go">Sign in with Discord →</span>
+        <a class="fx-card fx-in" href="/auth/discord/login" style="padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">★</div>
+          <h3 style="margin:0 0 6px; font-size:18px;">My Units</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">Sign in with Discord to reach the units you serve in.</p>
+          <span class="fx-tally" style="margin-top:auto;">Sign in with Discord →</span>
         </a>
         {% endif %}
 
         {% if invite_url %}
-        <a class="bento-tile reveal" style="--i:4" href="{{ invite_url }}">
-          <div class="bento-tile-icon">➕</div>
-          <h3>Invite the Bot</h3>
-          <p>Sync roles, nicknames, and the live roster in Discord.</p>
-          <span class="bento-tile-go">Invite to Discord →</span>
+        <a class="fx-card fx-in" href="{{ invite_url }}" style="padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">➕</div>
+          <h3 style="margin:0 0 6px; font-size:18px;">Invite the Bot</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">Sync roles, nicknames, and the live roster in Discord.</p>
+          <span class="fx-tally" style="margin-top:auto;">Invite to Discord →</span>
         </a>
         {% endif %}
 
         {% if is_platform_admin %}
-        <a class="bento-tile bento-admin reveal" style="--i:5" href="/admin/platform">
-          <div class="bento-tile-icon">⚙</div>
-          <h3>Platform Dashboard</h3>
-          <p>Every unit's health, and platform-wide broadcasts.</p>
-          <span class="bento-tile-go">Open dashboard →</span>
+        <a class="fx-card fx-in" href="/admin/platform" style="padding:22px; display:flex; flex-direction:column;">
+          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">⚙</div>
+          <h3 style="margin:0 0 6px; font-size:18px;">Platform Dashboard</h3>
+          <p class="fx-unit-blurb" style="margin:0 0 10px;">Every unit's health, and platform-wide broadcasts.</p>
+          <span class="fx-tally" style="margin-top:auto;">Open dashboard →</span>
         </a>
         {% endif %}
       </div>
 
-      <div class="marquee-wrap reveal">
-        <div class="marquee-label"><span>What ValorLink Gives You</span></div>
-        <div class="marquee">
-          <div class="marquee-track">
-            {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
-                                     ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
-              <span class="marquee-pill"><span class="marquee-pill-icon">{{ icon }}</span>{{ label }}</span>
-            {% endfor %}
-            {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
-                                     ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
-              <span class="marquee-pill" aria-hidden="true"><span class="marquee-pill-icon">{{ icon }}</span>{{ label }}</span>
-            {% endfor %}
-          </div>
-        </div>
+      <div class="fx-section" style="margin-top:40px; justify-content:center; text-align:center;">What ValorLink Gives You</div>
+      <div class="fx-filters" style="justify-content:center;">
+        {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
+                                 ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
+          <span class="fx-chip fx-chip-static">{{ icon }} {{ label }}</span>
+        {% endfor %}
       </div>
 
-      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
-
-      <footer>
-        ValorLink
-        <span class="fine">The Muster Grounds &middot; {{ now.strftime('%d %B %Y') }}</span>
-      </footer>
+      <footer>ValorLink &middot; {{ now.strftime('%d %B %Y') }}</footer>
     </main>
   </div>
 
@@ -176,25 +153,6 @@
         }
         requestAnimationFrame(tick);
       });
-    })();
-
-    // Fade + rise elements into view as they're scrolled to.
-    (function () {
-      var els = document.querySelectorAll('.reveal');
-      if (!els.length) return;
-      if (reduceMotion || !('IntersectionObserver' in window)) {
-        els.forEach(function (el) { el.classList.add('in-view'); });
-        return;
-      }
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in-view');
-            io.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
-      els.forEach(function (el) { io.observe(el); });
     })();
   </script>
 </body>

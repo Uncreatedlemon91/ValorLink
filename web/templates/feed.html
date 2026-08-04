@@ -7,24 +7,24 @@
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
 </head>
 <body>
-  <div class="feed-shell">
+  <div class="fx-shell">
     {% include "_apex_topbar.html" %}
 
-    <header class="feed-header">
-      <div class="feed-header-inner">
-        <div class="feed-heading">
+    <header class="fx-header">
+      <div class="fx-header-inner">
+        <div class="fx-heading">
           <h1>Feed</h1>
           <p>Status updates, highlights, and shout-outs from members across every regiment, unit, and squad on ValorLink.</p>
         </div>
-        <div class="feed-stats">
-          <div class="feed-stat"><b>{{ stats.posts }}</b><span>Posts</span></div>
-          <div class="feed-stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
-          <div class="feed-stat"><b>{{ stats.contributors }}</b><span>Voices</span></div>
+        <div class="fx-stats">
+          <div class="fx-stat"><b>{{ stats.posts }}</b><span>Posts</span></div>
+          <div class="fx-stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
+          <div class="fx-stat"><b>{{ stats.contributors }}</b><span>Voices</span></div>
         </div>
       </div>
     </header>
 
-    <main class="feed-main">
+    <main class="fx-main">
       {% if flash %}
         <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
       {% endif %}
