@@ -186,6 +186,21 @@ class PostLike(RegistryBase):
     created_at = Column(DateTime, default=_utcnow)
 
 
+class PlatformBan(RegistryBase):
+    """A Discord identity banned from the platform. Keyed by discord_id (not
+    any one unit's Member row) since a single Discord sign-in already spans
+    every unit -- a ban here blocks sign-in and revokes any live session
+    everywhere on ValorLink, not just one unit."""
+
+    __tablename__ = "platform_bans"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(BigInteger, nullable=False, unique=True, index=True)
+    reason = Column(Text, nullable=True)
+    banned_by = Column(BigInteger, nullable=True)
+    banned_at = Column(DateTime, default=_utcnow)
+
+
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
 RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)

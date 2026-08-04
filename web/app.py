@@ -41,6 +41,7 @@ from db.models import (
 )
 from tenancy import alliance_events
 from tenancy import alliances as alliance_mod
+from tenancy import bans as bans_mod
 from tenancy import feed as feed_mod
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
@@ -2717,6 +2718,7 @@ def platform_admin(request: Request):
         "flash": request.session.pop("flash", []),
         "base_domain": os.getenv("PLATFORM_BASE_DOMAIN"),
         "units": units,
+        "bans": bans_mod.list_bans(),
         "now": datetime.utcnow(),
         "totals": {
             "units": len(units),
@@ -2996,6 +2998,69 @@ def platform_broadcast(
     count = _broadcast_to_all_units(title.strip(), body, user.get("id"))
     _flash(request, f"Update queued for {count} unit{'s' if count != 1 else ''}. "
                     "The bot posts it to each admin-log channel shortly.", "ok")
+    return RedirectResponse("/admin/platform", status_code=303)
+
+
+@app.post("/admin/platform/ban")
+def platform_ban(
+    request: Request,
+    csrf: str = Form(...),
+    discord_id: str = Form(...),
+    reason: str = Form(""),
+):
+    """Ban a Discord identity from the platform (platform-admin only). Blocks
+    sign-in and revokes any live session everywhere on ValorLink, not just
+    one unit."""
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        raise TenantNotFound(None)
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _is_platform_admin(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    try:
+        target_id = int(discord_id.strip())
+    except ValueError:
+        _flash(request, "That doesn't look like a Discord ID.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    try:
+        bans_mod.ban_user(target_id, reason, int(user["id"]))
+        _flash(request, f"Discord user {target_id} is banned from ValorLink.", "ok")
+    except bans_mod.BanError as e:
+        _flash(request, str(e), "error")
+    return RedirectResponse("/admin/platform", status_code=303)
+
+
+@app.post("/admin/platform/unban")
+def platform_unban(
+    request: Request,
+    csrf: str = Form(...),
+    discord_id: str = Form(...),
+):
+    """Lift a platform ban (platform-admin only)."""
+    if not os.getenv("PLATFORM_BASE_DOMAIN"):
+        raise TenantNotFound(None)
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    if not _is_platform_admin(user):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    try:
+        target_id = int(discord_id.strip())
+    except ValueError:
+        _flash(request, "That doesn't look like a Discord ID.", "error")
+        return RedirectResponse("/admin/platform", status_code=303)
+    try:
+        bans_mod.unban_user(target_id)
+        _flash(request, f"Discord user {target_id} is unbanned.", "ok")
+    except bans_mod.BanError as e:
+        _flash(request, str(e), "error")
     return RedirectResponse("/admin/platform", status_code=303)
 
 

@@ -27,6 +27,7 @@ import secrets
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 
+from tenancy import bans
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
@@ -61,8 +62,23 @@ def tier_from_role_ids(session, role_ids: set[int]) -> str:
 
 # --- Session helpers ----------------------------------------------------- #
 def current_user(request: Request) -> dict | None:
-    """The raw session user, regardless of which unit they signed into."""
-    return request.session.get("user")
+    """The raw session user, regardless of which unit they signed into.
+
+    Checked against the platform ban list on every call so a ban takes
+    effect immediately — even for someone with an existing live session —
+    rather than only at their next sign-in.
+    """
+    user = request.session.get("user")
+    if not user:
+        return None
+    if bans.is_banned(int(user["id"])):
+        request.session.pop("user", None)
+        request.session.setdefault("flash", []).append({
+            "level": "error",
+            "text": "Your account has been banned from ValorLink.",
+        })
+        return None
+    return user
 
 
 def effective_user(request: Request, tenant_slug: str | None = None) -> dict | None:
@@ -74,7 +90,7 @@ def effective_user(request: Request, tenant_slug: str | None = None) -> dict | N
     in returns ``None`` — they're a visitor there — so signing in still grants
     nothing on units where they hold no role.
     """
-    user = request.session.get("user")
+    user = current_user(request)
     if not user:
         return None
     if tenant_slug is None:
@@ -167,6 +183,8 @@ def dev_login(
 ):
     if not DEV_LOGIN_ENABLED:
         return RedirectResponse("/login", status_code=303)
+    if bans.is_banned(discord_id):
+        return _login_error(request, "That account has been banned from ValorLink.")
     if tier not in _ORDER:
         tier = TIER_NONE
     slug = resolve_tenant(request).slug
@@ -303,6 +321,9 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
             me = client.get(f"{_DISCORD_API}/users/@me", headers=bearer)
             me.raise_for_status()
             me = me.json()
+
+            if bans.is_banned(int(me["id"])):
+                return _login_error(request, "That account has been banned from ValorLink.")
 
             # One grant → the user's tier on every unit they belong to.
             tiers, signin_nick = _resolve_membership(client, bearer, me, tenant_slug)

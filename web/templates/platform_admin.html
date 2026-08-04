@@ -51,6 +51,49 @@
         </form>
       </div>
 
+      <div class="fx-section">Banned Users <span class="fx-tally">{{ bans|length }}</span></div>
+      <p class="fx-lede">Ban a Discord identity to block them from signing in anywhere on ValorLink —
+      it also immediately signs them out of any live session, so it works even if they're on the
+      site right now.</p>
+      <div class="fx-card" style="padding:18px; max-width:640px;">
+        <form class="fx-form" method="post" action="/admin/platform/ban">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <div class="fx-field">
+            <label>Discord ID</label>
+            <input name="discord_id" required inputmode="numeric" pattern="[0-9]+" placeholder="123456789012345678">
+          </div>
+          <div class="fx-field">
+            <label>Reason <span class="fx-opt">(optional)</span></label>
+            <input name="reason" maxlength="500" placeholder="Posted explicit content to the feed">
+          </div>
+          <div class="fx-field fx-field-actions"><button class="fx-btn fx-btn-danger" type="submit">Ban user</button></div>
+        </form>
+      </div>
+
+      {% if bans %}
+      <div class="fx-table-wrap">
+      <table class="fx-table">
+        <thead><tr><th>Discord ID</th><th>Reason</th><th class="num">Banned</th><th></th></tr></thead>
+        <tbody>
+        {% for b in bans %}
+          <tr>
+            <td>{{ b.discord_id }}</td>
+            <td>{{ b.reason or '—' }}</td>
+            <td class="num">{{ b.banned_at|fmt_date if b.banned_at else '—' }}</td>
+            <td class="num">
+              <form method="post" action="/admin/platform/unban" style="margin:0;">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="discord_id" value="{{ b.discord_id }}">
+                <button class="fx-btn fx-btn-sm" type="submit">Unban</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% endif %}
+
       <div class="fx-section">Units <span class="fx-tally">{{ units|length }}</span></div>
       <p class="fx-lede">Each unit's health across the platform. “Not linked” means no Discord
       server is bound yet, so the bot can't act for it. An unreadable unit is flagged in red.</p>
