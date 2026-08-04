@@ -2271,13 +2271,41 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 }
 
 /* ---- Bigger variant for the home landing: lead line + CTA row --------- */
-.fx-hero { padding: 56px 20px 40px; text-align: center; }
-.fx-hero .fx-header-inner { flex-direction: column; align-items: center; max-width: 640px; }
+/* A soft radial glow instead of a flat card background, so the hero has some
+   depth. color-mix keeps it tied to the theme's accent (and thus adapts
+   automatically in dark mode) rather than a hardcoded color. */
+.fx-hero {
+  position: relative; overflow: hidden; padding: 52px 20px 36px; text-align: center;
+  background:
+    radial-gradient(ellipse 900px 480px at 50% -15%, color-mix(in srgb, var(--fx-accent) 22%, transparent), transparent 65%),
+    var(--fx-card);
+}
+.fx-hero .fx-header-inner { flex-direction: column; align-items: center; max-width: 640px; position: relative; z-index: 1; }
 .fx-hero h1 { font-size: clamp(32px, 6vw, 44px); }
 .fx-hero .fx-lede { text-align: center; max-width: 52ch; margin: 10px auto 0; font-size: 15.5px; }
 .fx-hero-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 22px; }
 .fx-hero-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
 .fx-hero-links .fx-chip { background: transparent; }
+
+/* ---- Hero: featured-unit crest strip ------------------------------------ */
+.fx-hero-crests { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 22px; max-width: 720px; }
+.fx-hero-crest {
+  display: flex; align-items: center; gap: 7px; text-decoration: none; color: var(--fx-ink-soft);
+  font-size: 12.5px; font-weight: 600; padding: 4px 12px 4px 4px; border-radius: 999px;
+  border: 1px solid var(--fx-border); background: var(--fx-card);
+  transition: border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.fx-hero-crest:hover { border-color: var(--fx-accent); color: var(--fx-accent); text-decoration: none; transform: translateY(-1px); }
+.fx-hero-crest img, .fx-hero-crest-ph { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; }
+.fx-hero-crest-ph { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; }
+
+/* ---- Hero: stats as a bordered, iconized strip instead of plain text --- */
+.fx-hero .fx-stats {
+  padding: 16px 30px; border: 1px solid var(--fx-border); border-radius: 18px;
+  background: var(--fx-card); box-shadow: var(--fx-shadow); position: relative; z-index: 1;
+}
+.fx-hero .fx-stat-icon { display: block; font-size: 15px; margin-bottom: 4px; opacity: 0.85; }
+.fx-hero .fx-stat b { font-size: 32px; }
 
 .fx-main { max-width: 1160px; margin: 0 auto; padding: 24px 20px 64px; }
 .fx-main.fx-narrow { max-width: 720px; }
@@ -2531,12 +2559,15 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 
 .fx-feed-preview { display: flex; flex-direction: column; }
 .fx-feed-preview-item {
-  display: flex; gap: 10px; text-decoration: none; color: inherit;
-  padding: 12px 0; border-bottom: 1px solid var(--fx-border);
+  display: flex; gap: 12px; text-decoration: none; color: inherit;
+  padding: 14px 12px; border-radius: 12px; border-bottom: 1px solid var(--fx-border);
+  transition: background .15s ease;
 }
-.fx-feed-preview-item:first-child { padding-top: 2px; }
+.fx-feed-preview-item:hover { background: var(--fx-bg); }
+.fx-feed-preview-item:first-child { padding-top: 12px; }
 .fx-feed-preview-item:last-child { border-bottom: none; }
 .fx-feed-preview-item:hover .fx-feed-preview-author { color: var(--fx-accent); }
+.fx-feed-preview-avatar { width: 44px; height: 44px; margin: 0; flex: none; }
 .fx-feed-preview-body { flex: 1; min-width: 0; }
 .fx-feed-preview-author { font-weight: 700; color: var(--fx-ink); }
 .fx-feed-preview-text {

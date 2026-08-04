@@ -30,11 +30,24 @@
           {% if invite_url %}<a class="fx-chip" href="{{ invite_url }}">➕ Invite the Bot</a>{% endif %}
           {% if is_platform_admin %}<a class="fx-chip" href="/admin/platform">⚙ Platform Dashboard</a>{% endif %}
         </div>
-        <div class="fx-stats" style="margin-top:22px;">
-          <div class="fx-stat"><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
-          <div class="fx-stat"><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
-          <div class="fx-stat"><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
-          <div class="fx-stat"><b data-count-to="{{ recruiting_total }}" style="color:var(--fx-ok);">0</b><span>Recruiting now</span></div>
+
+        {% if featured_units %}
+        <div class="fx-hero-crests">
+          {% for u in featured_units %}
+          <a class="fx-hero-crest" href="{{ u.url }}">
+            {% if u.crest %}<img src="{{ u.crest }}" alt="">
+            {% else %}<span class="fx-hero-crest-ph" style="background:{{ u.brand_color }};">{{ u.name[0]|upper }}</span>{% endif %}
+            {{ u.name }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="fx-stats" style="margin-top:24px;">
+          <div class="fx-stat"><span class="fx-stat-icon">👤</span><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">⚑</span><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">🎮</span><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">🟢</span><b data-count-to="{{ recruiting_total }}" style="color:var(--fx-ok);">0</b><span>Recruiting now</span></div>
         </div>
       </div>
     </header>
@@ -56,7 +69,7 @@
             <div class="fx-feed-preview">
               {% for post in feed_posts %}
               <a class="fx-feed-preview-item" href="/feed#post-{{ post.id }}">
-                <img class="avatar" src="{{ (post.author_discord_id, post.author_avatar)|avatar_url(36) }}" alt="">
+                <img class="avatar fx-feed-preview-avatar" src="{{ (post.author_discord_id, post.author_avatar)|avatar_url(44) }}" alt="">
                 <div class="fx-feed-preview-body">
                   <span class="fx-feed-preview-author">{{ post.author_name }}</span>
                   {% if post.body %}<p class="fx-feed-preview-text">{{ post.body|truncate(140) }}</p>{% endif %}
