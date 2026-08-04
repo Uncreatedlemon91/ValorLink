@@ -10,14 +10,14 @@
   <div class="fx-shell">
     {% include "_apex_topbar.html" %}
     <header class="fx-header">
-      <div class="fx-header-inner">
+      <div class="fx-header-inner fx-narrow">
         <div class="fx-heading">
           <h1>Raise a Unit</h1>
           <p>Muster your own regiment on ValorLink.</p>
         </div>
       </div>
     </header>
-    <main class="fx-main">
+    <main class="fx-main fx-narrow">
       {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
 
       {% if not can_register %}

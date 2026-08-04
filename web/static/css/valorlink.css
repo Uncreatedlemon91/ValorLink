@@ -2249,11 +2249,16 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   padding: 34px 20px 28px;
   background: var(--fx-card);
 }
+/* Wide (1160px) is the default -- most platform pages hold a grid or table
+   that wants the room. .fx-narrow (put on both .fx-header-inner and .fx-main
+   independently -- they're siblings under .fx-shell, not nested, so a single
+   wrapper modifier can't reach both) opts a single-column reading page
+   (Feed, a form, a step list) into the tighter 720px column instead. */
 .fx-header-inner {
-  max-width: 720px; margin: 0 auto;
+  max-width: 1160px; margin: 0 auto;
   display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
 }
-.fx-main--wide .fx-header-inner { max-width: 980px; }
+.fx-header-inner.fx-narrow { max-width: 720px; }
 .fx-heading h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
 .fx-heading p { margin: 6px 0 0; color: var(--fx-ink-soft); font-size: 14.5px; max-width: 46ch; }
 .fx-stats { display: flex; gap: 22px; }
@@ -2272,8 +2277,8 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-hero .fx-lede { text-align: center; max-width: 52ch; margin: 10px auto 0; font-size: 15.5px; }
 .fx-hero-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 22px; }
 
-.fx-main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
-.fx-main--wide { max-width: 980px; }
+.fx-main { max-width: 1160px; margin: 0 auto; padding: 24px 20px 64px; }
+.fx-main.fx-narrow { max-width: 720px; }
 
 /* ---- Section headings, intro text -------------------------------------- */
 .fx-section {

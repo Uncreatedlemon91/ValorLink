@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <main class="fx-main fx-main--wide">
+    <main class="fx-main">
       {% if flash %}
         <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
       {% endif %}
