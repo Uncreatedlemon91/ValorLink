@@ -5,42 +5,73 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ValorLink — Feed</title>
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+  <style>:root { --seal: #7c1f2b; }</style>
 </head>
-<body>
-  <div class="sheet">
+<body class="theme-modern theme-dark">
+  <div class="sheet" style="--seal:#7c1f2b;">
     {% include "_apex_topbar.html" %}
-    <header class="banner">
-      <div class="crest">★ ✶ ★</div>
-      <h1>Feed</h1>
-      <p class="motto">Status updates from every regiment, unit, and squad on ValorLink</p>
+
+    <header class="banner banner-home">
+      <div class="hero-inner">
+        <div class="crest">
+          <span class="crest-star">★</span><span class="crest-star">✶</span><span class="crest-star">★</span>
+        </div>
+        <h1 class="hero-title">Feed</h1>
+        <p class="motto">One wall. Every regiment, unit, and squad.</p>
+        <p class="hero-lead">Status updates, highlights, and shout-outs from members across the whole
+        platform — post, comment, and answer the call together, no matter which unit you serve.</p>
+        <div class="hero-cta">
+          {% if user %}
+          <a class="btn btn-hero-primary" href="#composer">Post Something ↓</a>
+          <a class="btn btn-hero-ghost" href="/find">Find a Unit</a>
+          {% else %}
+          <a class="btn btn-hero-primary" href="/auth/discord/login">Sign in with Discord</a>
+          <a class="btn btn-hero-ghost" href="/find">Find a Unit</a>
+          {% endif %}
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><b data-count-to="{{ stats.posts }}">0</b><span>post{{ 's' if stats.posts != 1 }}</span></div>
+          <div class="hero-stat-sep"></div>
+          <div class="hero-stat"><b data-count-to="{{ stats.comments }}">0</b><span>comment{{ 's' if stats.comments != 1 }}</span></div>
+          <div class="hero-stat-sep"></div>
+          <div class="hero-stat hero-stat-live"><b data-count-to="{{ stats.contributors }}">0</b><span>voices on the wall</span></div>
+        </div>
+      </div>
+      <div class="hero-fade"></div>
     </header>
-    <main class="wrap">
+
+    <main class="wrap wrap-home">
       {% if flash %}
         <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
       {% endif %}
 
       {% if user %}
-      <form class="wall-composer" method="post" action="/feed" enctype="multipart/form-data">
+      <form class="wall-composer" method="post" action="/feed" enctype="multipart/form-data" id="composer">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
-        <textarea name="body" rows="3" maxlength="{{ post_max_len }}" placeholder="Share something with the whole platform…"></textarea>
+        <div class="wall-composer-head">
+          <img class="avatar" src="{{ (user.id, user.avatar)|avatar_url(40) }}" alt="">
+          <textarea name="body" rows="3" maxlength="{{ post_max_len }}" placeholder="Share something with the whole platform…"></textarea>
+        </div>
         <div class="wall-composer-row">
           <label class="file-btn btn btn-small">
             <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
             <span>Attach image</span>
           </label>
-          <button class="btn btn-strong" type="submit">Post</button>
+          <button class="btn btn-hero-primary btn-post" type="submit">Post</button>
         </div>
       </form>
       {% else %}
-      <p class="lede">
-        <a href="/auth/discord/login">Sign in with Discord</a> to post, comment, and like on the feed.
-      </p>
+      <div class="wall-composer wall-composer-signedout">
+        <p class="lede" style="margin:0;">
+          <a href="/auth/discord/login">Sign in with Discord</a> to post, comment, and like on the feed.
+        </p>
+      </div>
       {% endif %}
 
       {% if posts %}
       <div class="wall">
         {% for post in posts %}
-        <article class="wall-post" id="post-{{ post.id }}">
+        <article class="wall-post reveal" style="--i:{{ loop.index0 if loop.index0 < 6 else 6 }}" id="post-{{ post.id }}">
           <div class="wall-head">
             <img class="avatar" src="{{ (post.author_discord_id, post.author_avatar)|avatar_url(40) }}" alt="">
             <div>
@@ -110,8 +141,63 @@
       <p>Be the first to post something to the platform-wide feed.</p></div>
       {% endif %}
 
-      <div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+      <footer>
+        ValorLink
+        <span class="fine">The Feed &middot; {{ now.strftime('%d %B %Y') if now else '' }}</span>
+      </footer>
     </main>
   </div>
+
+  <script>
+    document.querySelectorAll('time[data-local]').forEach(function (el) {
+      var d = new Date(el.getAttribute('datetime'));
+      if (isNaN(d.getTime())) return;
+      var withTime = el.getAttribute('data-fmt') === 'datetime';
+      var opts = withTime
+        ? { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+        : { year: 'numeric', month: 'short', day: '2-digit' };
+      try { el.textContent = d.toLocaleString(undefined, opts); } catch (e) {}
+      el.title = d.toString();
+    });
+
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Count the hero stats up from 0 once, on load.
+    (function () {
+      var nodes = document.querySelectorAll('[data-count-to]');
+      nodes.forEach(function (el) {
+        var target = parseInt(el.getAttribute('data-count-to'), 10) || 0;
+        if (reduceMotion) { el.textContent = target.toLocaleString(); return; }
+        var start = null, duration = 1100;
+        function tick(ts) {
+          if (start === null) start = ts;
+          var p = Math.min((ts - start) / duration, 1);
+          var eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = Math.round(eased * target).toLocaleString();
+          if (p < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    })();
+
+    // Fade + rise each post into view as it's scrolled to.
+    (function () {
+      var els = document.querySelectorAll('.reveal');
+      if (!els.length) return;
+      if (reduceMotion || !('IntersectionObserver' in window)) {
+        els.forEach(function (el) { el.classList.add('in-view'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+      els.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
 </body>
 </html>

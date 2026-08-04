@@ -2818,6 +2818,8 @@ def feed_page(request: Request):
         "posts": posts,
         "post_max_len": feed_mod.POST_MAX_LEN,
         "comment_max_len": feed_mod.COMMENT_MAX_LEN,
+        "stats": feed_mod.feed_stats(),
+        "now": datetime.utcnow(),
     }
     return templates.TemplateResponse(request, "feed.html", ctx)
 

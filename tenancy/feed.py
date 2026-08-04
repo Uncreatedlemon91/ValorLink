@@ -95,6 +95,18 @@ def delete_comment(discord_id: int, comment_id: int) -> None:
         s.commit()
 
 
+def feed_stats() -> dict:
+    """Platform-wide totals for the feed's hero strip -- unbounded by the page
+    size `list_posts` uses, so it reflects the whole wall, not just what's
+    currently rendered."""
+    with registry_session() as s:
+        posts = s.query(Post).count()
+        comments = s.query(PostComment).count()
+        posters = {row[0] for row in s.query(Post.author_discord_id).distinct()}
+        commenters = {row[0] for row in s.query(PostComment.author_discord_id).distinct()}
+    return {"posts": posts, "comments": comments, "contributors": len(posters | commenters)}
+
+
 def list_posts(viewer_id: int | None = None, limit: int = 30, before_id: int | None = None) -> list[dict]:
     """The feed, newest first, each post with its comments and like info."""
     with registry_session() as s:
