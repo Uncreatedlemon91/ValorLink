@@ -448,6 +448,7 @@ def _render_home(request: Request):
         "activity": _platform_activity(),
         "is_platform_admin": _is_platform_admin(user),
         "invite_url": _bot_invite_url(),
+        "feed_posts": feed_mod.list_posts(viewer_id=int(user["id"]) if user else None, limit=4),
     }
     return templates.TemplateResponse(request, "home.html", ctx)
 
