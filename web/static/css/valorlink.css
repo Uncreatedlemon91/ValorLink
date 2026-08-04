@@ -2299,13 +2299,16 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-hero-crest img, .fx-hero-crest-ph { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; }
 .fx-hero-crest-ph { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; }
 
-/* ---- Hero: stats as a bordered, iconized strip instead of plain text --- */
-.fx-hero .fx-stats {
-  padding: 16px 30px; border: 1px solid var(--fx-border); border-radius: 18px;
-  background: var(--fx-card); box-shadow: var(--fx-shadow); position: relative; z-index: 1;
+/* ---- Hero: stats as separate highlight cards, not one shared box ------- */
+.fx-hero .fx-stats { flex-wrap: wrap; justify-content: center; gap: 12px; position: relative; z-index: 1; }
+.fx-hero .fx-stat {
+  padding: 14px 22px; border: 1px solid var(--fx-border); border-radius: 14px;
+  background: var(--fx-card); box-shadow: var(--fx-shadow);
+  transition: transform .15s ease, box-shadow .15s ease;
 }
+.fx-hero .fx-stat:hover { transform: translateY(-2px); box-shadow: var(--fx-shadow-lg); }
 .fx-hero .fx-stat-icon { display: block; font-size: 15px; margin-bottom: 4px; opacity: 0.85; }
-.fx-hero .fx-stat b { font-size: 32px; }
+.fx-hero .fx-stat b { font-size: 30px; }
 
 .fx-main { max-width: 1160px; margin: 0 auto; padding: 24px 20px 64px; }
 .fx-main.fx-narrow { max-width: 720px; }
