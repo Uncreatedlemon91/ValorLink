@@ -191,6 +191,11 @@ nav.rail.stuck { padding-top: 5px; box-shadow: 0 5px 16px rgba(0,0,0,0.12); }
 .topbar a { color: var(--ink-soft); transition: color .16s ease; }
 .topbar a:hover { color: var(--seal-ink); text-decoration: none; }
 .topbar a.on { color: var(--seal-ink); font-weight: 700; }
+.fx-wordmark {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--fx-display, var(--serif)); font-weight: 700; letter-spacing: 0.03em;
+  font-size: 12px;
+}
 .topbar .who { color: var(--ink-faint); }
 .topbar .who b { color: var(--ink-soft); }
 .topbar .rankchip {
@@ -2217,6 +2222,9 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   --oxblood: var(--fx-like); --brass: var(--fx-accent); --brass-bright: var(--fx-accent);
   --seal: var(--fx-accent); --seal-ink: var(--fx-accent-ink);
   --serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Loaded via the topbar partial (present on every fx- page) so it's
+     available sitewide without touching every template's <head>. */
+  --fx-display: 'Oswald', var(--serif);
 
   min-height: 100vh;
   background: var(--fx-bg);
@@ -2259,8 +2267,14 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
 }
 .fx-header-inner.fx-narrow { max-width: 720px; }
-.fx-heading h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
+.fx-heading h1 { margin: 0; font-family: var(--fx-display); font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
 .fx-heading p { margin: 6px 0 0; color: var(--fx-ink-soft); font-size: 14.5px; max-width: 46ch; }
+
+/* Small uppercase kicker above a heading, for editorial rhythm */
+.fx-eyebrow {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--fx-accent); margin-bottom: 5px;
+}
 .fx-stats { display: flex; gap: 22px; }
 .fx-stat { text-align: center; }
 .fx-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--fx-ink); font-variant-numeric: tabular-nums; }
@@ -2561,7 +2575,8 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-home-columns { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
 @media (max-width: 860px) { .fx-home-columns { grid-template-columns: 1fr; } }
 .fx-home-col { display: flex; flex-direction: column; padding: 20px 22px; }
-.fx-home-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.fx-home-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.fx-home-col-head .fx-tally { margin-top: 3px; }
 .fx-home-col-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 6px; }
 .fx-home-col-sub { margin: 0 0 6px; font-size: 12px; color: var(--fx-ink-faint); padding-bottom: 10px; border-bottom: 1px solid var(--fx-border); }
 .fx-home-col-body { flex: 1; max-height: 460px; overflow-y: auto; }
@@ -2586,8 +2601,10 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 }
 .fx-feed-preview-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--fx-ink-faint); }
 
-/* Gentle fade-up on load -- no scroll-triggered stagger, just a quiet settle */
-.fx-in { animation: fx-settle .4s ease-out both; }
-@keyframes fx-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .fx-in { animation: none; } }
+/* Fade + rise into view as scrolled to (JS toggles .fx-in-visible via
+   IntersectionObserver -- see the per-page <script> block). Starts already
+   visible so content isn't hidden if that script never runs. */
+.fx-in { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+.fx-in.fx-in-visible { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .fx-in { transition: none; opacity: 1; transform: none; } }
 .check-inline input { width: auto; }

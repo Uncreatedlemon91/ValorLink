@@ -1,7 +1,11 @@
+{% from "_icon.html" import icon %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap" rel="stylesheet">
 <div class="topbar">
   {% set p = request.url.path %}
   <div class="topbar-left">
-    <a href="/" class="{{ 'on' if p == '/' }}">ValorLink</a>
+    <a href="/" class="fx-wordmark {{ 'on' if p == '/' }}">{{ icon('flag', 15) }} ValorLink</a>
     <a href="/find" class="{{ 'on' if p == '/find' }}">Find a Unit</a>
     <a href="/players" class="{{ 'on' if p == '/players' }}">Find a Player</a>
     <a href="/feed" class="{{ 'on' if p == '/feed' }}">Feed</a>

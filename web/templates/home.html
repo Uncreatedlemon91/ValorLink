@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ValorLink — The Muster Grounds</title>
   <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+  <noscript><style>.fx-in { opacity: 1 !important; transform: none !important; }</style></noscript>
 </head>
 <body>
   <div class="fx-shell">
@@ -61,7 +62,10 @@
       <div class="fx-home-columns">
         <div class="fx-card fx-home-col fx-in">
           <div class="fx-home-col-head">
-            <h3>From the Feed</h3>
+            <div>
+              <span class="fx-eyebrow">Community</span>
+              <h3>From the Feed</h3>
+            </div>
             <a class="fx-tally" href="/feed">Open the feed →</a>
           </div>
           <p class="fx-home-col-sub">Latest status updates from members across the platform</p>
@@ -102,7 +106,10 @@
 
         <div class="fx-card fx-home-col fx-in">
           <div class="fx-home-col-head">
-            <h3><span class="fx-timeline-dot" style="background:var(--fx-ok);"></span>On the Field</h3>
+            <div>
+              <span class="fx-eyebrow">Live Activity</span>
+              <h3><span class="fx-timeline-dot" style="background:var(--fx-ok);"></span>On the Field</h3>
+            </div>
           </div>
           <p class="fx-home-col-sub">Recent enlistments, honors, and units joining ValorLink</p>
           <div class="fx-home-col-body">
@@ -130,7 +137,10 @@
         </div>
       </div>
 
-      <div class="fx-section" style="margin-top:40px; justify-content:center; text-align:center;">What ValorLink Gives You</div>
+      <div style="margin-top:40px; text-align:center;">
+        <span class="fx-eyebrow" style="text-align:center;">Features</span>
+        <div class="fx-section" style="justify-content:center; margin-top:0;">What ValorLink Gives You</div>
+      </div>
       <div class="fx-filters" style="justify-content:center;">
         {% for ic, label in [('users','Roster & Ranks'), ('calendar','Events & Attendance'), ('edit','Recruitment'),
                                ('award','Assignments'), ('sync','Discord Bot Sync'), ('login','One Sign-In')] %}
@@ -172,6 +182,25 @@
         }
         requestAnimationFrame(tick);
       });
+    })();
+
+    // Fade + rise each .fx-in element into view as it's scrolled to.
+    (function () {
+      var els = document.querySelectorAll('.fx-in');
+      if (!els.length) return;
+      if (reduceMotion || !('IntersectionObserver' in window)) {
+        els.forEach(function (el) { el.classList.add('fx-in-visible'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('fx-in-visible');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+      els.forEach(function (el) { io.observe(el); });
     })();
   </script>
 </body>
