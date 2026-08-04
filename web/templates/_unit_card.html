@@ -6,9 +6,9 @@
    data-members="{{ u.members or 0 }}">
   <a class="fx-unit-head" href="{{ u.join_url }}" style="text-decoration:none; color:inherit;">
     {% if u.crest %}
-      <img class="fx-unit-logo" src="{{ u.crest }}" alt="">
+      <img class="fx-unit-logo" src="{{ u.crest }}" alt="" style="border-color:{{ u.brand_color }};">
     {% else %}
-      <div class="fx-unit-logo fx-unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
+      <div class="fx-unit-logo fx-unit-logo-ph" style="background: {{ u.brand_color }};">{{ u.name[0]|upper }}</div>
     {% endif %}
     <div>
       <h3 class="fx-unit-title">{{ u.name }}</h3>
@@ -19,7 +19,7 @@
   <div class="fx-unit-tags">
     {% if u.game %}<span class="fx-badge fx-badge-accent">{{ u.game }}</span>{% endif %}
     {% for t in u.tags %}<span class="fx-badge">{{ t }}</span>{% endfor %}
-    {% for a in u.alliances %}<a class="fx-badge" href="/alliance/{{ a.slug }}">⚔ {{ a.name }}</a>{% endfor %}
+    {% for a in u.alliances %}<a class="fx-badge" href="/alliance/{{ a.slug }}">{{ icon('shield', 12) }} {{ a.name }}</a>{% endfor %}
   </div>
   {% endif %}
   {% if u.blurb %}<p class="fx-unit-blurb">{{ u.blurb }}</p>{% endif %}

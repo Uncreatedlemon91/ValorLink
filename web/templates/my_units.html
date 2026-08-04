@@ -38,9 +38,9 @@
             <a class="fx-card fx-unit-card" href="{{ u.url }}">
               <div class="fx-unit-head">
                 {% if u.crest %}
-                  <img class="fx-unit-logo" src="{{ u.crest }}" alt="">
+                  <img class="fx-unit-logo" src="{{ u.crest }}" alt="" style="border-color:{{ u.brand_color }};">
                 {% else %}
-                  <div class="fx-unit-logo fx-unit-logo-ph" style="color: {{ u.brand_color }};">★</div>
+                  <div class="fx-unit-logo fx-unit-logo-ph" style="background: {{ u.brand_color }};">{{ u.name[0]|upper }}</div>
                 {% endif %}
                 <h3 class="fx-unit-title">{{ u.name }}</h3>
               </div>

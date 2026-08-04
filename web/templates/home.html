@@ -1,3 +1,4 @@
+{% from "_icon.html" import icon %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,17 +26,17 @@
           {% endif %}
         </div>
         <div class="fx-hero-links">
-          <a class="fx-chip" href="/players">⚇ Find a Player</a>
-          <a class="fx-chip" href="{{ '/my-units' if user else '/auth/discord/login' }}">★ My Units</a>
-          {% if invite_url %}<a class="fx-chip" href="{{ invite_url }}">➕ Invite the Bot</a>{% endif %}
-          {% if is_platform_admin %}<a class="fx-chip" href="/admin/platform">⚙ Platform Dashboard</a>{% endif %}
+          <a class="fx-chip" href="/players">{{ icon('search', 13) }} Find a Player</a>
+          <a class="fx-chip" href="{{ '/my-units' if user else '/auth/discord/login' }}">{{ icon('star', 13) }} My Units</a>
+          {% if invite_url %}<a class="fx-chip" href="{{ invite_url }}">{{ icon('plus', 13) }} Invite the Bot</a>{% endif %}
+          {% if is_platform_admin %}<a class="fx-chip" href="/admin/platform">{{ icon('settings', 13) }} Platform Dashboard</a>{% endif %}
         </div>
 
         {% if featured_units %}
         <div class="fx-hero-crests">
           {% for u in featured_units %}
           <a class="fx-hero-crest" href="{{ u.url }}">
-            {% if u.crest %}<img src="{{ u.crest }}" alt="">
+            {% if u.crest %}<img src="{{ u.crest }}" alt="" style="border-color:{{ u.brand_color }};">
             {% else %}<span class="fx-hero-crest-ph" style="background:{{ u.brand_color }};">{{ u.name[0]|upper }}</span>{% endif %}
             {{ u.name }}
           </a>
@@ -44,10 +45,10 @@
         {% endif %}
 
         <div class="fx-stats" style="margin-top:24px;">
-          <div class="fx-stat"><span class="fx-stat-icon">👤</span><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
-          <div class="fx-stat"><span class="fx-stat-icon">⚑</span><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
-          <div class="fx-stat"><span class="fx-stat-icon">🎮</span><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
-          <div class="fx-stat"><span class="fx-stat-icon">🟢</span><b data-count-to="{{ recruiting_total }}" style="color:var(--fx-ok);">0</b><span>Recruiting now</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">{{ icon('users', 16) }}</span><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">{{ icon('flag', 16) }}</span><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon">{{ icon('gamepad', 16) }}</span><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
+          <div class="fx-stat"><span class="fx-stat-icon"><span class="live-dot" style="margin:0;"></span></span><b data-count-to="{{ recruiting_total }}" style="color:var(--fx-ok);">0</b><span>Recruiting now</span></div>
         </div>
       </div>
     </header>
@@ -131,9 +132,9 @@
 
       <div class="fx-section" style="margin-top:40px; justify-content:center; text-align:center;">What ValorLink Gives You</div>
       <div class="fx-filters" style="justify-content:center;">
-        {% for icon, label in [('♜','Roster & Ranks'), ('☰','Events & Attendance'), ('✎','Recruitment'),
-                                 ('⚜','Assignments'), ('❖','Discord Bot Sync'), ('⚿','One Sign-In')] %}
-          <span class="fx-chip fx-chip-static">{{ icon }} {{ label }}</span>
+        {% for ic, label in [('users','Roster & Ranks'), ('calendar','Events & Attendance'), ('edit','Recruitment'),
+                               ('award','Assignments'), ('sync','Discord Bot Sync'), ('login','One Sign-In')] %}
+          <span class="fx-chip fx-chip-static">{{ icon(ic, 13) }} {{ label }}</span>
         {% endfor %}
       </div>
 

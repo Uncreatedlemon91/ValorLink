@@ -1,3 +1,4 @@
+{% from "_icon.html" import icon %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,9 +39,9 @@
           <div class="fx-unit-meta" style="margin-top:6px;"><time datetime="{{ e.scheduled_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}" data-local data-fmt="datetime">{{ e.scheduled_at|fmt_date(true) }}</time></div>
           {% if e.description %}<p class="fx-unit-blurb">{{ e.description }}</p>{% endif %}
           <div class="fx-unit-tags">
-            <span class="fx-badge fx-badge-ok">✔ {{ e.counts.accepted }}</span>
+            <span class="fx-badge fx-badge-ok">{{ icon('check', 11) }} {{ e.counts.accepted }}</span>
             <span class="fx-badge">~ {{ e.counts.tentative }}</span>
-            <span class="fx-badge fx-badge-off">✘ {{ e.counts.declined }}</span>
+            <span class="fx-badge fx-badge-off">{{ icon('x', 11) }} {{ e.counts.declined }}</span>
           </div>
           {% if can_rsvp %}
           <div class="fx-unit-actions">

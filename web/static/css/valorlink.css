@@ -2296,8 +2296,11 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   transition: border-color .15s ease, color .15s ease, transform .15s ease;
 }
 .fx-hero-crest:hover { border-color: var(--fx-accent); color: var(--fx-accent); text-decoration: none; transform: translateY(-1px); }
-.fx-hero-crest img, .fx-hero-crest-ph { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; }
-.fx-hero-crest-ph { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; }
+.fx-hero-crest img, .fx-hero-crest-ph {
+  width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none;
+  border: 2px solid var(--fx-border);
+}
+.fx-hero-crest-ph { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; border-color: transparent; }
 
 /* ---- Hero: stats as separate highlight cards, not one shared box ------- */
 .fx-hero .fx-stats { flex-wrap: wrap; justify-content: center; gap: 12px; position: relative; z-index: 1; }
@@ -2307,8 +2310,11 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   transition: transform .15s ease, box-shadow .15s ease;
 }
 .fx-hero .fx-stat:hover { transform: translateY(-2px); box-shadow: var(--fx-shadow-lg); }
-.fx-hero .fx-stat-icon { display: block; font-size: 15px; margin-bottom: 4px; opacity: 0.85; }
+.fx-hero .fx-stat-icon { display: flex; justify-content: center; margin-bottom: 4px; color: var(--fx-ink-faint); }
 .fx-hero .fx-stat b { font-size: 30px; }
+
+/* Icons (see _icon.html) inline with chip/badge text */
+.fx-chip svg, .fx-badge svg { vertical-align: -2px; }
 
 .fx-main { max-width: 1160px; margin: 0 auto; padding: 24px 20px 64px; }
 .fx-main.fx-narrow { max-width: 720px; }
@@ -2538,10 +2544,11 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-unit-head { display: flex; align-items: center; gap: 12px; }
 .fx-unit-logo {
   width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex: none;
-  border: 1px solid var(--fx-border); background: var(--fx-bg);
+  border: 2px solid var(--fx-border); background: var(--fx-bg);
 }
 .fx-unit-logo-ph {
   display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800;
+  color: #fff; border-color: transparent;
 }
 .fx-unit-title { margin: 0; font-size: 16px; font-weight: 800; }
 .fx-unit-motto { margin: 2px 0 0; font-size: 12.5px; font-style: italic; color: var(--fx-ink-faint); }
