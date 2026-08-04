@@ -20,13 +20,17 @@
         and a Discord bot that keeps it all in sync. One platform, every game.</p>
         <div class="fx-hero-cta">
           <a class="fx-btn fx-btn-primary" href="/find">Find a Unit →</a>
-          {% if user %}
-          <a class="fx-btn" href="/my-units">Go to My Units</a>
-          {% else %}
+          {% if not user %}
           <a class="fx-btn" href="/auth/discord/login">Sign in with Discord</a>
           {% endif %}
         </div>
-        <div class="fx-stats" style="margin-top:26px;">
+        <div class="fx-hero-links">
+          <a class="fx-chip" href="/players">⚇ Find a Player</a>
+          <a class="fx-chip" href="{{ '/my-units' if user else '/auth/discord/login' }}">★ My Units</a>
+          {% if invite_url %}<a class="fx-chip" href="{{ invite_url }}">➕ Invite the Bot</a>{% endif %}
+          {% if is_platform_admin %}<a class="fx-chip" href="/admin/platform">⚙ Platform Dashboard</a>{% endif %}
+        </div>
+        <div class="fx-stats" style="margin-top:22px;">
           <div class="fx-stat"><b data-count-to="{{ total_players }}">0</b><span>Player{{ 's' if total_players != 1 }}</span></div>
           <div class="fx-stat"><b data-count-to="{{ total_units }}">0</b><span>Unit{{ 's' if total_units != 1 }}</span></div>
           <div class="fx-stat"><b data-count-to="{{ game_count }}">0</b><span>Game{{ 's' if game_count != 1 }}</span></div>
@@ -39,62 +43,6 @@
       {% if flash %}
         <div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>
       {% endif %}
-
-      <div class="fx-grid" style="grid-template-columns: repeat(auto-fill, minmax(240px,1fr));">
-        <a class="fx-card fx-card-hero fx-in" href="/find" style="grid-column: span 2; padding:26px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="border-radius:14px; margin-bottom:12px;">⚑</div>
-          <h3 style="margin:0 0 8px;">Find a Unit</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 12px;">Browse {{ total_units }} unit{{ 's' if total_units != 1 }} across every game and apply to join one that fits your playstyle.</p>
-          <span class="fx-tally" style="margin-top:auto;">Browse the directory →</span>
-          {% if sample_units %}
-          <div class="fx-unit-tags" style="margin-top:14px;">
-            {% for name in sample_units %}<span class="fx-badge">{{ name }}</span>{% endfor %}
-            {% if total_units > sample_units|length %}<span class="fx-badge">+{{ total_units - sample_units|length }} more</span>{% endif %}
-          </div>
-          {% endif %}
-        </a>
-
-        <a class="fx-card fx-in" href="/players" style="padding:22px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">⚇</div>
-          <h3 style="margin:0 0 6px; font-size:18px;">Find a Player</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 10px;">Look up any member's service record across the platform.</p>
-          <span class="fx-tally" style="margin-top:auto;">Search players →</span>
-        </a>
-
-        {% if user %}
-        <a class="fx-card fx-in" href="/my-units" style="padding:22px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">★</div>
-          <h3 style="margin:0 0 6px; font-size:18px;">My Units</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 10px;">{% if my_unit_count %}Jump straight to the {{ my_unit_count }} unit{{ 's' if my_unit_count != 1 }} you serve in.{% else %}You're not enrolled in a unit yet.{% endif %}</p>
-          <span class="fx-tally" style="margin-top:auto;">Go to my units →</span>
-        </a>
-        {% else %}
-        <a class="fx-card fx-in" href="/auth/discord/login" style="padding:22px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">★</div>
-          <h3 style="margin:0 0 6px; font-size:18px;">My Units</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 10px;">Sign in with Discord to reach the units you serve in.</p>
-          <span class="fx-tally" style="margin-top:auto;">Sign in with Discord →</span>
-        </a>
-        {% endif %}
-
-        {% if invite_url %}
-        <a class="fx-card fx-in" href="{{ invite_url }}" style="padding:22px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">➕</div>
-          <h3 style="margin:0 0 6px; font-size:18px;">Invite the Bot</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 10px;">Sync roles, nicknames, and the live roster in Discord.</p>
-          <span class="fx-tally" style="margin-top:auto;">Invite to Discord →</span>
-        </a>
-        {% endif %}
-
-        {% if is_platform_admin %}
-        <a class="fx-card fx-in" href="/admin/platform" style="padding:22px; display:flex; flex-direction:column;">
-          <div class="fx-unit-logo-ph" style="width:44px; height:44px; border-radius:12px; background:var(--fx-accent-bg); color:var(--fx-accent-ink); font-size:20px; margin-bottom:10px;">⚙</div>
-          <h3 style="margin:0 0 6px; font-size:18px;">Platform Dashboard</h3>
-          <p class="fx-unit-blurb" style="margin:0 0 10px;">Every unit's health, and platform-wide broadcasts.</p>
-          <span class="fx-tally" style="margin-top:auto;">Open dashboard →</span>
-        </a>
-        {% endif %}
-      </div>
 
       <div class="fx-home-columns">
         <div class="fx-card fx-home-col fx-in">
