@@ -72,7 +72,7 @@ def test_feed_page_loads_signed_out():
     _reset()
     c = TestClient(app)
     html = c.get("/feed").text
-    assert "No Posts Yet" in html
+    assert "No posts yet" in html
     assert "Sign in with Discord" in html
 
 
@@ -103,7 +103,7 @@ def test_empty_post_without_image_is_rejected():
     token = _csrf(a)
     a.post("/feed", data={"csrf": token, "body": "   "}, follow_redirects=False)
     html = a.get("/feed").text
-    assert "No Posts Yet" in html
+    assert "No posts yet" in html
     assert "Say something" in html
 
 

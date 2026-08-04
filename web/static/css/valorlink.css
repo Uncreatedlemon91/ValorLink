@@ -2177,86 +2177,176 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .rsvp-cell form { margin: 0 2px 0 0; }
 .check-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 
-/* ---- Social feed ---------------------------------------------------------
-   Styled after the home landing's bento cards + dark hero, rather than the
-   sitewide parchment-and-rule look: rounded gradient cards, a seal-colour
-   top accent, and the same scroll-reveal stagger as the home page tiles. */
-.wall-composer {
-  position: relative; overflow: hidden;
-  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal); border-radius: 6px;
-  background: linear-gradient(165deg, rgba(255,253,246,0.75), rgba(255,253,246,0.4));
-  padding: 16px 18px; margin: 8px 0 24px;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.06);
+/* ---- Social feed ----------------------------------------------------------
+   A deliberate break from the sitewide 1860s parchment skin and the home
+   landing's dark hero: a flat, neutral, sans-serif "app" look, scoped
+   entirely to .feed-shell via its own custom-property set so nothing here
+   leaks onto (or depends on) the shared theme system. Light by default;
+   follows the OS dark-mode preference automatically since there's no manual
+   toggle on this page. */
+.feed-shell {
+  --fx-bg:        #f6f7f9;
+  --fx-card:      #ffffff;
+  --fx-border:    #e5e7eb;
+  --fx-ink:       #111827;
+  --fx-ink-soft:  #6b7280;
+  --fx-ink-faint: #9ca3af;
+  --fx-accent:    #4f46e5;
+  --fx-accent-ink:#4338ca;
+  --fx-accent-bg: #eef2ff;
+  --fx-like:      #e11d48;
+  --fx-like-bg:   #fff1f2;
+  --fx-shadow:    0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06);
+  --fx-shadow-lg: 0 4px 10px rgba(16,24,40,0.06), 0 2px 4px rgba(16,24,40,0.05);
+
+  /* Shadow every shared token these components read, so nested shared
+     partials (the topbar, avatars, buttons, flashes) inherit the clean
+     palette instead of the sitewide parchment one. */
+  --paper: var(--fx-card); --paper-2: var(--fx-bg); --paper-edge: var(--fx-border);
+  --ink: var(--fx-ink); --ink-soft: var(--fx-ink-soft); --ink-faint: var(--fx-ink-faint);
+  --rule: var(--fx-border); --rule-strong: var(--fx-border);
+  --oxblood: var(--fx-like); --brass: var(--fx-accent); --brass-bright: var(--fx-accent);
+  --seal: var(--fx-accent); --seal-ink: var(--fx-accent-ink);
+  --serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  min-height: 100vh;
+  background: var(--fx-bg);
+  color: var(--fx-ink);
+  font-family: var(--serif);
 }
-body.theme-dark .wall-composer { background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); box-shadow: 0 10px 26px rgba(0,0,0,0.3); }
-.wall-composer-signedout { text-align: center; padding: 22px 18px; }
+@media (prefers-color-scheme: dark) {
+  .feed-shell {
+    --fx-bg: #0f1115; --fx-card: #171a21; --fx-border: #2a2e37;
+    --fx-ink: #e8eaed; --fx-ink-soft: #a2a9b4; --fx-ink-faint: #6b7280;
+    --fx-accent: #818cf8; --fx-accent-ink: #a5b4fc; --fx-accent-bg: rgba(129,140,248,0.14);
+    --fx-like: #fb7185; --fx-like-bg: rgba(251,113,133,0.12);
+    --fx-shadow: 0 1px 2px rgba(0,0,0,0.3); --fx-shadow-lg: 0 8px 20px rgba(0,0,0,0.4);
+  }
+}
+.feed-shell a { color: var(--fx-accent); }
+.feed-shell .flashes { max-width: 720px; margin: 0 auto 18px; padding: 0 20px; }
+.feed-shell .flash { border-radius: 8px; border-left-width: 3px; background: var(--fx-card); box-shadow: var(--fx-shadow); }
+
+.feed-header {
+  border-bottom: 1px solid var(--fx-border);
+  padding: 34px 20px 28px;
+  background: var(--fx-card);
+}
+.feed-header-inner {
+  max-width: 720px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
+}
+.feed-heading h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
+.feed-heading p { margin: 6px 0 0; color: var(--fx-ink-soft); font-size: 14.5px; max-width: 46ch; }
+.feed-stats { display: flex; gap: 22px; }
+.feed-stat { text-align: center; }
+.feed-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--fx-ink); font-variant-numeric: tabular-nums; }
+.feed-stat span { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fx-ink-faint); }
+@media (max-width: 560px) {
+  .feed-header-inner { flex-direction: column; align-items: flex-start; }
+  .feed-stats { gap: 18px; }
+}
+
+.feed-main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+
+.fx-card {
+  background: var(--fx-card); border: 1px solid var(--fx-border); border-radius: 14px;
+  box-shadow: var(--fx-shadow);
+}
+
+.wall-composer { padding: 16px; margin: 0 0 22px; }
+.wall-composer-signedout { text-align: center; padding: 22px 18px; color: var(--fx-ink-soft); }
 .wall-composer-head { display: flex; align-items: flex-start; gap: 12px; }
 .wall-composer-head .avatar { margin: 2px 0 0; }
 .wall-composer textarea {
-  flex: 1; font-family: var(--serif); font-size: 15px; color: var(--ink);
-  background: rgba(255,253,246,0.75); border: 1px solid var(--rule-strong);
-  border-radius: 4px; padding: 10px 12px; width: 100%; resize: vertical;
+  flex: 1; font-family: inherit; font-size: 15px; color: var(--fx-ink);
+  background: var(--fx-bg); border: 1px solid var(--fx-border);
+  border-radius: 10px; padding: 10px 12px; width: 100%; resize: vertical;
 }
-body.theme-dark .wall-composer textarea { background: rgba(0,0,0,0.2); }
-.wall-composer textarea:focus { outline: 2px solid var(--brass); outline-offset: 1px; border-color: var(--brass); }
+.wall-composer textarea:focus { outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg); }
 .wall-composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
-.btn-post { padding: 9px 22px; font-size: 12.5px; }
 
-.wall { display: flex; flex-direction: column; gap: 18px; margin: 8px 0 4px; }
-.wall-post {
-  position: relative; overflow: hidden;
-  border: 1px solid var(--rule-strong); border-top: 3px solid var(--seal); border-radius: 6px;
-  background: linear-gradient(165deg, rgba(255,253,246,0.75), rgba(255,253,246,0.4));
-  padding: 16px 18px;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.06);
-  transition: box-shadow .2s ease, border-color .2s ease;
+.fx-btn {
+  font-family: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em;
+  border-radius: 999px; padding: 8px 18px; border: 1px solid var(--fx-border);
+  background: var(--fx-card); color: var(--fx-ink-soft); cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;
 }
-.wall-post:hover { border-color: var(--seal); box-shadow: 0 14px 32px rgba(124,31,43,0.14), 0 2px 0 var(--seal); }
-body.theme-dark .wall-post { background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); box-shadow: 0 10px 26px rgba(0,0,0,0.3); }
-body.theme-dark .wall-post:hover { box-shadow: 0 14px 32px rgba(0,0,0,0.4), 0 2px 0 var(--seal); }
+.fx-btn:hover { background: var(--fx-bg); color: var(--fx-ink); text-decoration: none; }
+.fx-btn-primary { background: var(--fx-accent); border-color: var(--fx-accent); color: #fff; }
+.fx-btn-primary:hover { background: var(--fx-accent-ink); border-color: var(--fx-accent-ink); color: #fff; }
+.fx-btn-primary:active { transform: scale(0.97); }
+.fx-btn-ghost { background: transparent; }
+.btn-post { padding: 8px 22px; }
+.file-btn.fx-attach {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--fx-ink-soft); border-radius: 999px; padding: 7px 14px;
+  border: 1px dashed var(--fx-border); background: transparent;
+}
+.file-btn.fx-attach:hover { border-color: var(--fx-accent); color: var(--fx-accent); }
+
+.wall { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.wall-post {
+  padding: 16px;
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.wall-post:hover { box-shadow: var(--fx-shadow-lg); }
 
 .wall-head { display: flex; align-items: center; gap: 10px; }
-.wall-head .avatar { margin: 0; }
-.wall-author { font-family: var(--serif); font-weight: 700; color: var(--seal-ink); }
-.wall-when { font-size: 11px; color: var(--ink-faint); }
+.wall-head .avatar { margin: 0; border-radius: 50%; }
+.wall-author { font-weight: 700; color: var(--fx-ink); }
+.wall-author:hover { color: var(--fx-accent); }
+.wall-when { font-size: 12px; color: var(--fx-ink-faint); }
 .wall-delete { margin-left: auto; }
-.wall-body { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.55; }
-.wall-image { max-width: 100%; border: 1px solid var(--rule-strong); border-radius: 4px; margin-top: 10px; display: block; }
+.wall-delete .chip-x { color: var(--fx-ink-faint); border-radius: 6px; padding: 4px; }
+.wall-delete .chip-x:hover { color: var(--fx-like); background: var(--fx-like-bg); }
+.wall-body { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
+.wall-image { max-width: 100%; border: 1px solid var(--fx-border); border-radius: 10px; margin-top: 10px; display: block; }
 
-.wall-actions { display: flex; align-items: center; gap: 16px; margin-top: 14px; }
+.wall-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .wall-actions form { margin: 0; }
-.like-btn, .like-btn-static {
-  font-family: var(--serif); font-size: 13px; color: var(--ink-soft);
-  background: rgba(124,31,43,0.05); border: 1px solid var(--rule-strong); border-radius: 20px;
-  padding: 4px 13px; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+.like-btn, .like-btn-static, .wall-comment-count {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--fx-ink-soft);
+  background: transparent; border: none; border-radius: 999px;
+  padding: 6px 11px; cursor: pointer; transition: background .15s ease, color .15s ease;
 }
-body.theme-dark .like-btn, body.theme-dark .like-btn-static { background: rgba(255,255,255,0.04); }
-.like-btn:hover { border-color: var(--oxblood); color: var(--oxblood); transform: translateY(-1px); }
-.like-btn.liked {
-  color: #fff; border-color: var(--oxblood); background: var(--oxblood);
-  box-shadow: 0 0 0 3px rgba(210,77,96,0.18);
-}
-.wall-comment-count { font-size: 12px; color: var(--ink-faint); }
+.wall-comment-count { cursor: default; }
+.like-btn:hover { background: var(--fx-like-bg); color: var(--fx-like); }
+.like-btn .fx-icon { transition: transform .15s ease; }
+.like-btn.liked { color: var(--fx-like); background: var(--fx-like-bg); }
+.like-btn.liked .fx-icon { fill: var(--fx-like); transform: scale(1.08); }
+.wall-comment-count:hover { background: var(--fx-bg); }
 
-.wall-comments { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 10px; }
+.wall-comments { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--fx-border); display: flex; flex-direction: column; gap: 8px; }
 .wall-comment { display: flex; align-items: flex-start; gap: 8px; }
-.wall-comment .avatar-sm { margin: 2px 0 0; }
-.wall-comment-body {
-  flex: 1; background: rgba(124,31,43,0.04); border-radius: 12px; padding: 6px 12px;
-}
-body.theme-dark .wall-comment-body { background: rgba(255,255,255,0.035); }
-.wall-comment-author { font-weight: 700; color: var(--seal-ink); margin-right: 6px; }
-.wall-comment-text { font-size: 14px; }
+.wall-comment .avatar-sm { margin: 3px 0 0; border-radius: 50%; }
+.wall-comment-body { flex: 1; background: var(--fx-bg); border-radius: 14px; padding: 7px 13px; }
+.wall-comment-author { font-weight: 700; color: var(--fx-ink); margin-right: 6px; font-size: 13.5px; }
+.wall-comment-text { font-size: 13.5px; }
 .wall-comment .wall-when { margin-top: 1px; }
 .wall-comment .wall-delete { margin-left: 0; align-self: center; }
 
-.comment-composer { display: flex; gap: 8px; margin-top: 14px; }
+.comment-composer { display: flex; gap: 8px; margin-top: 12px; }
 .comment-composer input {
-  flex: 1; font-family: var(--serif); font-size: 13px; color: var(--ink);
-  background: rgba(255,253,246,0.75); border: 1px solid var(--rule-strong);
-  border-radius: 20px; padding: 7px 14px;
+  flex: 1; font-family: inherit; font-size: 13.5px; color: var(--fx-ink);
+  background: var(--fx-bg); border: 1px solid var(--fx-border);
+  border-radius: 999px; padding: 8px 14px;
 }
-body.theme-dark .comment-composer input { background: rgba(0,0,0,0.2); }
-.comment-composer input:focus { outline: 2px solid var(--brass); outline-offset: 1px; border-color: var(--brass); }
-.comment-composer button { border-radius: 20px; }
+.comment-composer input:focus { outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg); }
+.comment-composer button { border-radius: 999px; }
+
+.fx-empty {
+  text-align: center; padding: 56px 20px; color: var(--fx-ink-faint);
+}
+.fx-empty .fx-empty-icon { font-size: 34px; margin-bottom: 10px; opacity: 0.5; }
+.fx-empty h3 { margin: 0 0 4px; color: var(--fx-ink-soft); font-size: 16px; }
+.fx-empty p { margin: 0; font-size: 13.5px; }
+
+.feed-shell footer { text-align: center; padding: 32px 20px 0; color: var(--fx-ink-faint); font-size: 12px; }
+
+/* Gentle fade-up on load -- no scroll-triggered stagger, just a quiet settle */
+.fx-in { animation: fx-settle .4s ease-out both; }
+@keyframes fx-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fx-in { animation: none; } }
 .check-inline input { width: auto; }
