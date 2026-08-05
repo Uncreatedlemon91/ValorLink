@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+
+<h2 class="section">Documents <span class="tally">{{ documents|length }} on file</span></h2>
+<p class="lede">Handbooks, standing orders, and SOPs published by the regiment's officers.</p>
+
+{% if tier_at_least(user, TIER_OFFICER) %}
+<div class="field-actions" style="margin-bottom:18px;">
+  <a class="btn btn-strong" href="/documents/new">New Document</a>
+</div>
+{% endif %}
+
+{% if documents %}
+<div class="doc-list">
+  {% for d in documents %}
+  <a class="doc-list-item" href="/documents/{{ d.slug }}">
+    <div class="doc-list-title">{{ d.title }}
+      {% if d.admin_only %}<span class="doc-lock" title="Only admins can edit this document">admin-locked</span>{% endif %}
+    </div>
+    <div class="doc-list-meta">
+      Updated {{ d.updated_at|fmt_date }}{% if d.updated_by_name %} by {{ d.updated_by_name }}{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="hollow">
+    <div class="mark">✎</div>
+    <h3>No Documents Yet</h3>
+    <p>Nothing has been published to the regiment yet.
+    {% if tier_at_least(user, TIER_OFFICER) %}Start with the handbook or your standing orders.{% endif %}</p>
+  </div>
+{% endif %}
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

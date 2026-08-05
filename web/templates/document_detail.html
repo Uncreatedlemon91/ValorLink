@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.title }}{% endblock %}
+{% block content %}
+
+<div class="doc-head">
+  <h2 class="section" style="margin-bottom:0;">{{ doc.title }}</h2>
+  {% if can_edit %}
+  <div class="doc-head-actions">
+    <a class="btn btn-small" href="/documents/{{ doc.slug }}/edit">Edit</a>
+    <form method="post" action="/documents/{{ doc.slug }}/delete" style="display:inline;"
+          data-confirm="Delete '{{ doc.title }}'? This can't be undone.">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn btn-small btn-danger" type="submit">Delete</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<p class="lede">
+  Last updated {{ doc.updated_at|fmt_date(true) }}{% if doc.updated_by_name %} by {{ doc.updated_by_name }}{% endif %}
+  {% if doc.admin_only %}<span class="doc-lock" title="Only admins can edit this document">admin-locked</span>{% endif %}
+</p>
+
+<article class="doc-body">
+{{ doc_html|safe }}
+</article>
+
+<div class="ornament">✦ &nbsp; ❦ &nbsp; ✦</div>
+{% endblock %}

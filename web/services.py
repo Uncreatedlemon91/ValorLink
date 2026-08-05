@@ -13,6 +13,7 @@ Validation failures raise ActionError with a message safe to show the user.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import func
@@ -34,6 +35,7 @@ from db.models import (
     Rank,
     RecruitmentQuestion,
     ServiceHistoryEntry,
+    UnitDocument,
 )
 from utils import queue
 from utils import ranks as rank_utils
@@ -74,6 +76,7 @@ def _log(session, member_id: int, entry: str, actor: dict):
 AUDIT_CATEGORIES = [
     "rank", "company", "service", "discipline", "lifecycle", "leave",
     "recruitment", "awards", "announcement", "roster", "event", "assignment",
+    "document",
 ]
 
 
@@ -1640,3 +1643,86 @@ def rank_options(session) -> list[str]:
 
 def company_options(session) -> list[str]:
     return [c.name for c in list_companies(session)]
+
+
+# --- Unit documents (handbooks, SOPs, standing orders) -------------------- #
+def _slugify(title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return slug or "document"
+
+
+def _unique_slug(session, title: str, exclude_id: int | None = None) -> str:
+    base = _slugify(title)
+    slug = base
+    n = 2
+    while True:
+        q = session.query(UnitDocument).filter(UnitDocument.slug == slug)
+        if exclude_id is not None:
+            q = q.filter(UnitDocument.id != exclude_id)
+        if q.first() is None:
+            return slug
+        slug = f"{base}-{n}"
+        n += 1
+
+
+def list_documents(session) -> list[UnitDocument]:
+    return session.query(UnitDocument).order_by(UnitDocument.title.asc()).all()
+
+
+def get_document(session, slug: str) -> UnitDocument:
+    doc = session.query(UnitDocument).filter(UnitDocument.slug == slug).one_or_none()
+    if doc is None:
+        raise ActionError("That document doesn't exist.")
+    return doc
+
+
+def create_document(session, actor: dict, title: str, body: str,
+                    admin_only: bool = False) -> UnitDocument:
+    title = title.strip()
+    body = body.strip()
+    if not title:
+        raise ActionError("A document needs a title.")
+    if not body:
+        raise ActionError("A document needs some content.")
+    doc = UnitDocument(
+        title=title, slug=_unique_slug(session, title), body=body,
+        admin_only=bool(admin_only),
+        created_by=actor["id"], created_by_name=actor["name"],
+        updated_by=actor["id"], updated_by_name=actor["name"],
+    )
+    session.add(doc)
+    _audit(session, actor, "document", f"Published document '{title}'")
+    session.commit()
+    return doc
+
+
+def update_document(session, actor: dict, doc: UnitDocument, title: str, body: str,
+                    admin_only: bool | None = None) -> UnitDocument:
+    """``admin_only=None`` leaves the document's edit-lock as it was --
+    only an admin decides whether to change it, so an officer's edit form
+    never submits the field at all."""
+    title = title.strip()
+    body = body.strip()
+    if not title:
+        raise ActionError("A document needs a title.")
+    if not body:
+        raise ActionError("A document needs some content.")
+    if title != doc.title:
+        doc.slug = _unique_slug(session, title, exclude_id=doc.id)
+    doc.title = title
+    doc.body = body
+    if admin_only is not None:
+        doc.admin_only = bool(admin_only)
+    doc.updated_by = actor["id"]
+    doc.updated_by_name = actor["name"]
+    _audit(session, actor, "document", f"Updated document '{title}'")
+    session.commit()
+    return doc
+
+
+def delete_document(session, actor: dict, doc: UnitDocument) -> str:
+    title = doc.title
+    session.delete(doc)
+    _audit(session, actor, "document", f"Deleted document '{title}'")
+    session.commit()
+    return f"'{title}' deleted."

@@ -395,3 +395,28 @@ class RecruitmentQuestion(Base):
     position = Column(Integer, nullable=False, default=0)
     required = Column(Boolean, nullable=False, default=True)
     enabled = Column(Boolean, nullable=False, default=True)
+
+
+class UnitDocument(Base):
+    """A long-form Markdown document an officer publishes for the unit to
+    read -- a handbook, standing orders, an SOP. The Markdown source is what's
+    stored and edited; it's rendered to sanitized HTML on read.
+
+    ``admin_only`` restricts who may edit or delete *this* document beyond the
+    baseline officer tier -- an admin can lock down a sensitive document
+    (officers can still read it) while everyday pages stay officer-editable.
+    """
+
+    __tablename__ = "unit_documents"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    slug = Column(String, nullable=False, unique=True)
+    body = Column(Text, nullable=False)
+    admin_only = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_by = Column(BigInteger, nullable=True)
+    created_by_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_by = Column(BigInteger, nullable=True)
+    updated_by_name = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

@@ -130,6 +130,7 @@ def _require(required: str):
     return dep
 
 
+require_signed_in = _require(TIER_NONE)
 require_recruiter = _require(TIER_RECRUITER)
 require_officer = _require(TIER_OFFICER)
 require_admin = _require(TIER_ADMIN)

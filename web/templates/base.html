@@ -63,6 +63,7 @@
       {% set g_events = path.startswith('/muster-calls') or path == '/attendance' %}
       {% set g_recruit = path in ['/recruits', '/join'] %}
       {% set g_manage = path in ['/audit', '/command-tent'] %}
+      {% set g_docs = path == '/documents' or path.startswith('/documents/') %}
 
       <a href="/" class="{{ 'active' if path == '/' }}">{{ terms.hq }}</a>
 
@@ -92,6 +93,10 @@
           <a href="/join" class="{{ 'here' if path == '/join' }}">{{ terms.join }}</a>
         </div>
       </div>
+
+      {% if user %}
+      <a href="/documents" class="{{ 'active' if g_docs }}">Documents</a>
+      {% endif %}
 
       {% if tier_at_least(user, TIER_OFFICER) %}
       <div class="nav-group{{ ' active' if g_manage }}">

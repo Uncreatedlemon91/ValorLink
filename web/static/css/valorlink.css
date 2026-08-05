@@ -788,6 +788,70 @@ footer .fine { display: block; margin-top: 6px; font-size: 10px; letter-spacing:
 }
 .field-actions { margin-top: 2px; }
 
+/* ---- Unit documents ------------------------------------------------------ */
+.doc-list { display: flex; flex-direction: column; gap: 2px; }
+.doc-list-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; border: 1px solid var(--rule); border-radius: 2px;
+  background: rgba(255,253,246,0.4); color: var(--ink); text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.doc-list-item:hover { border-color: var(--seal); background: rgba(255,253,246,0.65); text-decoration: none; }
+body.theme-dark .doc-list-item { background: rgba(255,255,255,0.02); }
+body.theme-dark .doc-list-item:hover { background: rgba(255,255,255,0.05); }
+.doc-list-title { font-weight: 700; font-size: 15px; }
+.doc-list-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+
+.doc-lock {
+  display: inline-block; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--brass); border: 1px solid var(--brass); border-radius: 1px;
+  padding: 1px 6px; margin-left: 8px; vertical-align: middle;
+}
+
+.doc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.doc-head-actions { display: flex; gap: 8px; }
+
+.doc-checkbox { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; cursor: pointer; }
+.doc-checkbox input { width: auto !important; }
+
+.doc-editor { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; line-height: 1.6; }
+
+/* Rendered Markdown, given its own reading measure and typographic rhythm
+   distinct from the surrounding form/table chrome. */
+.doc-body { max-width: 72ch; line-height: 1.7; }
+.doc-body > *:first-child { margin-top: 0; }
+.doc-body h1, .doc-body h2, .doc-body h3, .doc-body h4 {
+  font-family: var(--serif); color: var(--ink); margin: 28px 0 10px; line-height: 1.3;
+}
+.doc-body h1 { font-size: 26px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+.doc-body h2 { font-size: 20px; }
+.doc-body h3 { font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+.doc-body p, .doc-body ul, .doc-body ol { margin: 0 0 14px; }
+.doc-body ul, .doc-body ol { padding-left: 24px; }
+.doc-body li + li { margin-top: 4px; }
+.doc-body a { color: var(--seal-ink); text-decoration: underline; text-underline-offset: 2px; }
+.doc-body blockquote {
+  margin: 0 0 14px; padding: 4px 16px; border-left: 3px solid var(--brass);
+  color: var(--ink-soft); font-style: italic;
+}
+.doc-body code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.9em;
+  background: rgba(0,0,0,0.06); border-radius: 2px; padding: 1px 5px;
+}
+body.theme-dark .doc-body code { background: rgba(255,255,255,0.08); }
+.doc-body pre {
+  margin: 0 0 14px; padding: 14px 16px; overflow-x: auto; border-radius: 3px;
+  background: rgba(0,0,0,0.06); border: 1px solid var(--rule);
+}
+body.theme-dark .doc-body pre { background: rgba(255,255,255,0.04); }
+.doc-body pre code { background: none; padding: 0; }
+.doc-body img { max-width: 100%; border-radius: 2px; }
+.doc-body table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 14px; }
+.doc-body th, .doc-body td { border: 1px solid var(--rule); padding: 6px 10px; text-align: left; }
+.doc-body th { background: rgba(0,0,0,0.04); }
+body.theme-dark .doc-body th { background: rgba(255,255,255,0.05); }
+.doc-body hr { border: none; border-top: 1px solid var(--rule); margin: 24px 0; }
+
 /* Accent-colour picker: the swatch is the only visible control -- it
    drives a hidden color_hex field, so there's no hex text box duplicating
    it. Leaving the swatch untouched submits blank (falls back to the

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Document' if mode == 'edit' else 'New Document' }}{% endblock %}
+{% block content %}
+
+<h2 class="section">{{ 'Edit “' + doc.title + '”' if mode == 'edit' else 'New Document' }}</h2>
+<p class="lede">Written in Markdown — headings, <b>bold</b>/<i>italic</i>, lists, links, images,
+code blocks, and tables are all supported.</p>
+
+<form class="orders" method="post"
+      action="{{ '/documents/' + doc.slug + '/edit' if mode == 'edit' else '/documents/new' }}">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div class="field">
+    <label>Title</label>
+    <input name="title" required maxlength="200" value="{{ doc.title if doc else '' }}" placeholder="Regiment Handbook">
+  </div>
+  <div class="field">
+    <label>Content <span class="opt">(Markdown)</span></label>
+    <textarea name="body" required rows="20" class="doc-editor"
+      placeholder="# Welcome to the Regiment&#10;&#10;This handbook covers...">{{ doc.body if doc else '' }}</textarea>
+  </div>
+  {% if tier_at_least(user, TIER_ADMIN) %}
+  <div class="field">
+    <label class="doc-checkbox">
+      <input type="checkbox" name="admin_only" value="1" {{ 'checked' if doc and doc.admin_only }}>
+      Restrict editing to admins only
+    </label>
+    <span class="order-note">Officers can still read this document — only edits and deletion are locked to admins.</span>
+  </div>
+  {% endif %}
+  <div class="field field-actions">
+    <a class="btn" href="{{ '/documents/' + doc.slug if mode == 'edit' else '/documents' }}">Cancel</a>
+    <button class="btn btn-strong" type="submit">{{ 'Save Changes' if mode == 'edit' else 'Publish' }}</button>
+  </div>
+</form>
+
+{% endblock %}

@@ -49,6 +49,7 @@ from tenancy.units import sessionmaker_for
 from utils import queue
 from utils import ranks as rank_utils
 from utils import terminology
+from utils.markdown_render import render as render_markdown
 from utils.sync import build_prefix
 from utils.settings import (
     CHANNEL_KEYS,
@@ -1309,6 +1310,142 @@ def honors(request: Request, session: Session = Depends(get_session)):
 
     ctx.update(catalogue=catalogue, recent=recent)
     return templates.TemplateResponse(request, "honors.html", ctx)
+
+
+# --- Unit documents (handbooks, SOPs, standing orders) -------------------- #
+def _can_edit_document(user: dict, doc) -> bool:
+    if doc.admin_only:
+        return auth.tier_at_least(user, auth.TIER_ADMIN)
+    return auth.tier_at_least(user, auth.TIER_OFFICER)
+
+
+@app.get("/documents", response_class=HTMLResponse)
+def documents_list(request: Request, session: Session = Depends(get_session),
+                    user: dict = Depends(auth.require_signed_in)):
+    """Every published unit document -- handbooks, standing orders, SOPs."""
+    ctx = _base_context(request, session)
+    ctx["documents"] = services.list_documents(session)
+    return templates.TemplateResponse(request, "documents.html", ctx)
+
+
+@app.get("/documents/new", response_class=HTMLResponse)
+def document_new_form(request: Request, session: Session = Depends(get_session),
+                       user: dict = Depends(auth.require_officer)):
+    ctx = _base_context(request, session)
+    ctx.update(doc=None, mode="new")
+    return templates.TemplateResponse(request, "document_form.html", ctx)
+
+
+@app.post("/documents/new")
+def document_new(
+    request: Request,
+    csrf: str = Form(...),
+    title: str = Form(...),
+    body: str = Form(...),
+    admin_only: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/documents", status_code=303)
+    actor = {"id": user["id"], "name": user["name"]}
+    # Only an admin's submission can lock a document to admin-only editing;
+    # an officer's form doesn't offer the checkbox, so this stays False for them.
+    locked = bool(admin_only) and auth.tier_at_least(user, auth.TIER_ADMIN)
+    with _tenant_session(request) as session:
+        try:
+            doc = services.create_document(session, actor, title, body, admin_only=locked)
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+            return RedirectResponse("/documents/new", status_code=303)
+    _flash(request, f"'{doc.title}' published.", "ok")
+    return RedirectResponse(f"/documents/{doc.slug}", status_code=303)
+
+
+@app.get("/documents/{slug}", response_class=HTMLResponse)
+def document_detail(request: Request, slug: str, session: Session = Depends(get_session),
+                     user: dict = Depends(auth.require_signed_in)):
+    ctx = _base_context(request, session)
+    try:
+        doc = services.get_document(session, slug)
+    except services.ActionError:
+        ctx["message"] = "No such document is on file."
+        return templates.TemplateResponse(request, "not_found.html", ctx, status_code=404)
+    ctx["doc"] = doc
+    ctx["doc_html"] = render_markdown(doc.body)
+    ctx["can_edit"] = _can_edit_document(ctx["user"], doc)
+    return templates.TemplateResponse(request, "document_detail.html", ctx)
+
+
+@app.get("/documents/{slug}/edit", response_class=HTMLResponse)
+def document_edit_form(request: Request, slug: str, session: Session = Depends(get_session),
+                        user: dict = Depends(auth.require_officer)):
+    doc = services.get_document(session, slug)
+    if not _can_edit_document(user, doc):
+        raise auth.NotAuthorized(auth.TIER_ADMIN)
+    ctx = _base_context(request, session)
+    ctx.update(doc=doc, mode="edit")
+    return templates.TemplateResponse(request, "document_form.html", ctx)
+
+
+@app.post("/documents/{slug}/edit")
+def document_edit(
+    request: Request,
+    slug: str,
+    csrf: str = Form(...),
+    title: str = Form(...),
+    body: str = Form(...),
+    admin_only: str = Form(""),
+    user: dict = Depends(auth.require_officer),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse(f"/documents/{slug}", status_code=303)
+    actor = {"id": user["id"], "name": user["name"]}
+    with _tenant_session(request) as session:
+        try:
+            doc = services.get_document(session, slug)
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+            return RedirectResponse("/documents", status_code=303)
+        if not _can_edit_document(user, doc):
+            raise auth.NotAuthorized(auth.TIER_ADMIN)
+        # Only an admin's edit can change the lock; an officer's form doesn't
+        # carry the field at all, so their edits leave it untouched.
+        lock = None
+        if auth.tier_at_least(user, auth.TIER_ADMIN):
+            lock = bool(admin_only)
+        try:
+            doc = services.update_document(session, actor, doc, title, body, admin_only=lock)
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+            return RedirectResponse(f"/documents/{slug}/edit", status_code=303)
+    _flash(request, f"'{doc.title}' updated.", "ok")
+    return RedirectResponse(f"/documents/{doc.slug}", status_code=303)
+
+
+@app.post("/documents/{slug}/delete")
+def document_delete(
+    request: Request,
+    slug: str,
+    csrf: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    if not auth.verify_csrf(request, csrf):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/documents", status_code=303)
+    with _tenant_session(request) as session:
+        try:
+            doc = services.get_document(session, slug)
+        except services.ActionError as exc:
+            _flash(request, str(exc), "error")
+            return RedirectResponse("/documents", status_code=303)
+        if not _can_edit_document(user, doc):
+            raise auth.NotAuthorized(auth.TIER_ADMIN)
+        actor = {"id": user["id"], "name": user["name"]}
+        message = services.delete_document(session, actor, doc)
+    _flash(request, message, "ok")
+    return RedirectResponse("/documents", status_code=303)
 
 
 def _setup_checklist(session: Session, cfg) -> list[dict]:
