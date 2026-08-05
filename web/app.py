@@ -58,7 +58,7 @@ from utils.settings import (
     get_config,
     list_companies,
 )
-from web import auth, profiles, services
+from web import auth, discord_meta, profiles, services
 from web.tenant import (
     TenantCtx,
     TenantNotFound,
@@ -1510,10 +1510,10 @@ def command_tent(request: Request, session: Session = Depends(get_session),
     checklist = _setup_checklist(session, cfg)
     ctx["checklist"] = checklist
     ctx["checklist_done"] = sum(1 for s in checklist if s["done"])
+    tenant = resolve_tenant(request)
     # This unit's public directory listing (registry), when platform mode is on.
     listing = None
     if os.getenv("PLATFORM_BASE_DOMAIN"):
-        tenant = resolve_tenant(request)
         with registry_session() as rs:
             row = tenant_by_slug(rs, tenant.slug)
             if row is not None:
@@ -1537,6 +1537,8 @@ def command_tent(request: Request, session: Session = Depends(get_session),
         channel_keys=CHANNEL_KEYS,
         role_values={k: getattr(cfg, col) for k, col in ROLE_KEYS.items()},
         channel_values={k: getattr(cfg, col) for k, col in CHANNEL_KEYS.items()},
+        guild_roles=discord_meta.guild_roles(tenant.guild_id),
+        guild_channels=discord_meta.guild_channels(tenant.guild_id),
         brand_hex=brand_hex(cfg.brand_color),
         ranks=list(reversed(rank_utils.all_ranks(session))),
         companies=list_companies(session),

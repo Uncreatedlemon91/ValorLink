@@ -925,7 +925,8 @@ button.btn { cursor: pointer; font-family: var(--serif); }
 /* Small buttons + inline row-forms (Command Tent tables) */
 .btn-small { padding: 3px 9px; font-size: 10px; letter-spacing: 0.1em; }
 .rowform { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; }
-.rowform input {
+.rowform input,
+.rowform select {
   font-family: var(--serif);
   font-size: 13px;
   color: var(--ink);
@@ -934,6 +935,7 @@ button.btn { cursor: pointer; font-family: var(--serif); }
   border-radius: 1px;
   padding: 5px 7px;
 }
+.rowform select { min-width: 150px; }
 .admin-table td { vertical-align: middle; padding: 10px 8px; }
 .edit-summary { color: var(--ink-soft); font-size: 13px; margin-right: 14px; }
 .edit-summary .role-id { font-variant-numeric: tabular-nums; }

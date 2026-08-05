@@ -1,0 +1,50 @@
+{# Role/channel pickers used across Command Tent. When live Discord data is
+   available (guild_roles/guild_channels is not None) these render a <select>;
+   otherwise they fall back to the plain ID text box, unchanged from before. #}
+
+{% macro role_select(name, current, guild_roles, css_class="") %}
+{% if guild_roles is not none %}
+  <select name="{{ name }}" class="{{ css_class }}">
+    <option value="">— none —</option>
+    {% for r in guild_roles %}
+      <option value="{{ r.id }}" {{ 'selected' if current == r.id }}>{{ r.name }}</option>
+    {% endfor %}
+    {% if current and current not in guild_roles|map(attribute='id')|list %}
+      <option value="{{ current }}" selected>Unknown role ({{ current }})</option>
+    {% endif %}
+  </select>
+{% else %}
+  <input name="{{ name }}" value="{{ current or '' }}" inputmode="numeric" placeholder="role ID" class="{{ css_class }}">
+{% endif %}
+{% endmacro %}
+
+{% macro role_field(name, label, current, guild_roles, optional=True, hint=None) %}
+<div class="field">
+  <label>{{ label }}{% if optional %} <span class="opt">(opt.)</span>{% endif %}</label>
+  {{ role_select(name, current, guild_roles) }}
+  {% if hint %}<span class="order-note">{{ hint }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro channel_select(name, current, guild_channels, css_class="") %}
+{% if guild_channels is not none %}
+  <select name="{{ name }}" class="{{ css_class }}">
+    <option value="">— none —</option>
+    {% for c in guild_channels %}
+      <option value="{{ c.id }}" {{ 'selected' if current == c.id }}>#{{ c.name }}</option>
+    {% endfor %}
+    {% if current and current not in guild_channels|map(attribute='id')|list %}
+      <option value="{{ current }}" selected>Unknown channel ({{ current }})</option>
+    {% endif %}
+  </select>
+{% else %}
+  <input name="{{ name }}" value="{{ current or '' }}" inputmode="numeric" placeholder="channel ID" class="{{ css_class }}">
+{% endif %}
+{% endmacro %}
+
+{% macro channel_field(name, label, current, guild_channels, optional=True) %}
+<div class="field">
+  <label>{{ label }}{% if optional %} <span class="opt">(opt.)</span>{% endif %}</label>
+  {{ channel_select(name, current, guild_channels) }}
+</div>
+{% endmacro %}

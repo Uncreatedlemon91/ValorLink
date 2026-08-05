@@ -1,11 +1,15 @@
 {% extends "base.html" %}
+{% from "_role_select.html" import role_field, role_select, channel_field, channel_select %}
 {% block title %}Command Tent{% endblock %}
 {% block content %}
 
 <h2 class="section">Command Tent <span class="tally">regiment configuration</span></h2>
 <p class="lede">The same settings the <code>/config</code>, <code>/rank</code>, and
-<code>/company</code> commands manage. Roles and channels are given as Discord IDs
-(enable Developer Mode in Discord, then right-click → Copy ID).</p>
+<code>/company</code> commands manage.
+{% if guild_roles is none %}Roles and channels are given as Discord IDs
+(enable Developer Mode in Discord, then right-click → Copy ID) — pickers switch on
+automatically once the bot is invited to your server.
+{% else %}Pick roles and channels straight from your Discord server.{% endif %}</p>
 
 <div class="tabs" role="tablist">
   <button type="button" class="tab on" data-tab="setup">Setup</button>
@@ -218,7 +222,7 @@
       <form class="orders" method="post" action="/admin/roles">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         {% for key, col in role_keys.items() %}
-          <div class="field"><label>{{ key }}</label><input name="{{ key }}" inputmode="numeric" value="{{ role_values[key] or '' }}" placeholder="role ID"></div>
+          <div class="field"><label>{{ key }}</label>{{ role_select(key, role_values[key], guild_roles) }}</div>
         {% endfor %}
         <div class="field field-actions"><button class="btn btn-strong" type="submit">Save roles</button></div>
       </form>
@@ -229,7 +233,7 @@
       <form class="orders" method="post" action="/admin/channels">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         {% for key, col in channel_keys.items() %}
-          <div class="field"><label>{{ key }}</label><input name="{{ key }}" inputmode="numeric" value="{{ channel_values[key] or '' }}" placeholder="channel ID"></div>
+          <div class="field"><label>{{ key }}</label>{{ channel_select(key, channel_values[key], guild_channels) }}</div>
         {% endfor %}
         <div class="field field-actions"><button class="btn btn-strong" type="submit">Save channels</button></div>
       </form>
@@ -291,7 +295,7 @@
                 <div class="field"><label>Abbr.</label><input name="abbreviation" value="{{ r.abbreviation }}" required></div>
                 <div class="field"><label>Tier <span class="opt">(opt.)</span></label><input name="tier" value="{{ r.tier or '' }}" placeholder="tier"></div>
               </div>
-              <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" value="{{ r.role_id or '' }}" inputmode="numeric" placeholder="role ID"></div>
+              {{ role_field('role_id', 'Role', r.role_id, guild_roles) }}
               <div class="field">
                 <label>Insignia <span class="opt">(optional)</span></label>
                 <label class="btn btn-small file-btn" style="align-self:flex-start;">
@@ -321,7 +325,7 @@
       </div>
       <div class="field-row">
         <div class="field"><label>Tier <span class="opt">(opt.)</span></label><input name="tier" placeholder="Field Officer"></div>
-        <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
+        {{ role_field('role_id', 'Role', none, guild_roles) }}
       </div>
       <div class="field"><label>Insignia image <span class="opt">(optional)</span></label>
         <label class="btn btn-small file-btn" style="align-self:flex-start;">
@@ -365,7 +369,7 @@
               <input type="hidden" name="csrf" value="{{ csrf_token }}">
               <div class="field"><label>Name</label><input name="name" value="{{ c.name }}" required></div>
               <div class="field-row">
-                <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" value="{{ c.role_id or '' }}" inputmode="numeric" placeholder="role ID"></div>
+                {{ role_field('role_id', 'Role', c.role_id, guild_roles) }}
                 <div class="field"><label>Tag <span class="opt">(opt.)</span></label><input name="tag" value="{{ c.tag or '' }}" maxlength="16" placeholder="tag" title="Nickname tag, e.g. A"></div>
               </div>
               <div class="field field-actions">
@@ -386,7 +390,7 @@
       <div class="field-row">
         <div class="field" style="flex:2;"><label>Name</label><input name="name" required placeholder="Color Company"></div>
         <div class="field"><label>Tag <span class="opt">(opt.)</span></label><input name="tag" maxlength="16" placeholder="A"></div>
-        <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
+        {{ role_field('role_id', 'Role', none, guild_roles) }}
       </div>
       <div class="field"><label class="checkline"><input type="checkbox" name="is_default" value="1"> Make this the default company for new enlistees</label></div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Add company</button></div>
@@ -403,7 +407,7 @@
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <div class="field">
         <label>Limit to a role <span class="opt">(optional)</span></label>
-        <input name="role_id" inputmode="numeric" placeholder="role ID — leave blank for everyone">
+        {{ role_select('role_id', none, guild_roles) }}
         <span class="order-note">Only members holding this role are imported. Blank imports all non-bot members.</span>
       </div>
       <div class="field field-actions"><button class="btn btn-strong" type="submit">Import members</button></div>
@@ -426,7 +430,7 @@
         <td>
           <form class="rowform" method="post" action="/admin/assignments/{{ a.id }}/update">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
-            <input name="role_id" value="{{ a.role_id or '' }}" size="14" placeholder="role ID" inputmode="numeric">
+            {{ role_select('role_id', a.role_id, guild_roles) }}
             <input name="description" value="{{ a.description or '' }}" size="18" placeholder="description">
             <label class="checkline"><input type="checkbox" name="is_leadership" value="1" {{ 'checked' if a.is_leadership }}> lead</label>
             <button class="btn btn-small" type="submit">Save</button>
@@ -449,7 +453,7 @@
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <div class="field-row">
         <div class="field" style="flex:2;"><label>Name</label><input name="name" required placeholder="High Command"></div>
-        <div class="field"><label>Role ID <span class="opt">(opt.)</span></label><input name="role_id" inputmode="numeric"></div>
+        {{ role_field('role_id', 'Role', none, guild_roles) }}
       </div>
       <div class="field"><label>Description <span class="opt">(optional)</span></label><input name="description" placeholder="The unit's senior leadership."></div>
       <div class="field"><label class="checkline"><input type="checkbox" name="is_leadership" value="1"> This is a leadership group</label></div>
