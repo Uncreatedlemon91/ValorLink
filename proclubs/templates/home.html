@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="hero">
+    <h1>{{ SITE_NAME }}</h1>
+    <p>{{ SITE_TAGLINE }} — news, upcoming fixtures, and live streams from the squad.</p>
+    <a class="btn" href="/news">Read the latest</a>
+  </div>
+
+  {% if live_streamers %}
+    <div class="section-head"><h2>Live now</h2><a href="/streamers">All streamers &rarr;</a></div>
+    <div class="card-grid">
+      {% for s in live_streamers %}
+        {% set info = live[s.twitch_login] %}
+        <a class="card streamer-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
+          <div class="streamer-thumb">
+            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
+            <span class="live-badge">Live</span>
+            <span class="viewer-count">{{ info.viewer_count }} watching</span>
+          </div>
+          <div class="streamer-info">
+            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+            <div>
+              <div class="streamer-name">{{ s.display_name }}</div>
+              <div class="streamer-status">{{ info.title }}</div>
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="section-head"><h2>Latest news</h2><a href="/news">All news &rarr;</a></div>
+  {% if articles %}
+    <div class="card-grid">
+      {% for a in articles %}
+        <a class="card article-card" href="/news/{{ a.slug }}">
+          {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
+          <div class="body">
+            <h3>{{ a.title }}</h3>
+            {% if a.summary %}<p>{{ a.summary }}</p>{% endif %}
+            <div class="article-meta">{{ a.author_name }} &middot; {{ a.published_at.strftime('%b %-d, %Y') }}</div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">No articles yet.</div>
+  {% endif %}
+
+  <div class="section-head"><h2>Next up</h2><a href="/events">Full schedule &rarr;</a></div>
+  {% if next_event %}
+    <div class="event-row">
+      <div class="event-date">
+        <div class="month">{{ next_event.scheduled_at.strftime('%b') }}</div>
+        <div class="day">{{ next_event.scheduled_at.strftime('%-d') }}</div>
+      </div>
+      <div class="event-info">
+        <span class="event-type-badge">{{ next_event.event_type }}</span>
+        <h3>{{ next_event.title }}{% if next_event.opponent %} vs {{ next_event.opponent }}{% endif %}</h3>
+        <p>{{ next_event.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card empty-state">Nothing scheduled yet — check back soon.</div>
+  {% endif %}
+
+  {% if stats_teaser %}
+    <div class="section-head"><h2>Club standing</h2><a href="/stats">Full stats &rarr;</a></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Division</div><div class="value">{{ stats_teaser.currentDivision or '—' }}</div></div>
+      <div class="stat-card"><div class="label">Points</div><div class="value">{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div></div>
+      <div class="stat-card"><div class="label">Best division</div><div class="value">{{ stats_teaser.bestDivision or '—' }}</div></div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

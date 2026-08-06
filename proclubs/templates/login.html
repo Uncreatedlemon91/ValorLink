@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="card login-card">
+    <h1>Sign in with Discord</h1>
+    <p class="page-lede">Everyone can read the site without an account. Signing in
+    unlocks staff tools if your Discord roles say you're staff.</p>
+
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+    {% if OAUTH_ENABLED %}
+      <a class="btn discord" href="/auth/discord/login">Sign in with Discord</a>
+    {% else %}
+      <p class="field-hint">Discord sign-in isn't configured on this deployment yet.</p>
+    {% endif %}
+
+    {% if DEV_LOGIN_ENABLED %}
+      <p class="divider">— local development only —</p>
+      <form class="dev-login-form" method="post" action="/auth/dev">
+        <input name="name" placeholder="Display name" value="Test Staffer" required />
+        <label class="checkbox-field"><input type="checkbox" name="staff" value="1" checked /> Act as staff</label>
+        <button type="submit">Dev sign in</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

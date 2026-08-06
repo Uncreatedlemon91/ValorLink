@@ -296,13 +296,14 @@ against that unit's guild, so web actions reach Discord for **all** units.
 (New units are picked up on the next bot restart, when it syncs commands to
 their guild — `sudo systemctl restart valorlink-bot`.)
 
-## Optional: Pro Clubs Tracker
+## Optional: Pro Clubs team site
 
-A separate, unrelated Flask app under [`proclubs/`](../proclubs) that proxies
-EA's unofficial Pro Clubs API. It shares the droplet but nothing else with
-the bot/web app: its own venv, its own systemd service, its own subdomain, no
-shared database, no shared `.env`. Safe to install, skip, or remove without
-affecting anything above.
+A separate FastAPI app under [`proclubs/`](../proclubs): a news/blog,
+events calendar, Twitch streamer showcase, and EA stats dashboard for the
+Pro Clubs team, with Discord-role-gated staff access. It shares the droplet
+but nothing else with the bot/web app: its own venv, its own systemd
+service, its own subdomain, its own database, its own `.env`. Safe to
+install, skip, or remove without affecting anything above.
 
 ```bash
 # 1. DNS: add an A record for proclubs.apps.valorlink.co -> the droplet IP.
@@ -319,10 +320,16 @@ sudo -u valorlink python3 -m venv proclubs/.venv
 sudo -u valorlink proclubs/.venv/bin/pip install --upgrade pip
 sudo -u valorlink proclubs/.venv/bin/pip install -r proclubs/requirements.txt
 
-# 3. Install/start the service (install.sh already includes it):
+# 3. Its own .env -- Discord OAuth app, Twitch app, and a session secret.
+#    See proclubs/README.md#configuring-a-fresh-deployment for how to get
+#    each value; proclubs/.env.example lists every setting.
+sudo -u valorlink cp proclubs/.env.example proclubs/.env
+sudo -u valorlink nano proclubs/.env
+
+# 4. Install/start the service (install.sh already includes it):
 sudo bash deploy/install.sh
 
-# 4. Caddy: the proclubs.apps.valorlink.co block is already in
+# 5. Caddy: the proclubs.apps.valorlink.co block is already in
 #    Caddyfile.platform (or Caddyfile, if you're not running platform mode).
 #    Copy whichever you use to /etc/caddy/Caddyfile, then:
 sudo systemctl reload caddy

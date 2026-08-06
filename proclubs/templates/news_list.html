@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}News{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>News</h1>
+      <p class="page-lede">Match reports, roster moves, and everything else from the club.</p>
+    </div>
+    {% if is_staff %}<a class="btn" href="/news/new">New article</a>{% endif %}
+  </div>
+
+  {% if articles %}
+    <div class="card-grid">
+      {% for a in articles %}
+        <a class="card article-card" href="/news/{{ a.slug }}">
+          {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
+          <div class="body">
+            <h3>{{ a.title }}{% if not a.published %} <span class="draft-pill">Draft</span>{% endif %}</h3>
+            {% if a.summary %}<p>{{ a.summary }}</p>{% endif %}
+            <div class="article-meta">{{ a.author_name }} &middot; {{ a.published_at.strftime('%b %-d, %Y') }}</div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">No articles yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

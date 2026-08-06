@@ -1,5 +1,5 @@
 [Unit]
-Description=ValorLink Pro Clubs Tracker
+Description=ValorLink Pro Clubs Team Site
 After=network-online.target
 Wants=network-online.target
 
@@ -8,10 +8,12 @@ Type=simple
 User=valorlink
 Group=valorlink
 WorkingDirectory=/opt/valorlink/proclubs
-# Deliberately its own venv (not /opt/valorlink/.venv) -- fully isolated from
-# the bot/web app's dependencies. No .env needed: this service has no secrets.
+# Deliberately its own venv (not /opt/valorlink/.venv) and its own .env --
+# fully isolated from the bot/web app's dependencies and secrets. config.py
+# loads /opt/valorlink/proclubs/.env itself (python-dotenv), so no
+# EnvironmentFile= directive is needed here.
 ExecStart=/opt/valorlink/proclubs/.venv/bin/gunicorn app:app \
-    --workers 2 --bind 127.0.0.1:8001
+    -k uvicorn.workers.UvicornWorker --workers 2 --bind 127.0.0.1:8001
 Restart=on-failure
 RestartSec=5
 

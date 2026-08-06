@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ SITE_NAME }}{% endblock %} · {{ SITE_NAME }}</title>
+  <link rel="stylesheet" href="/static/css/site.css?v={{ css_v }}" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <span class="brand-name">{{ SITE_NAME }}</span>
+      <span class="brand-tagline">{{ SITE_TAGLINE }}</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/news" class="{{ 'active' if request.url.path.startswith('/news') else '' }}">News</a>
+      <a href="/events" class="{{ 'active' if request.url.path.startswith('/events') else '' }}">Events</a>
+      <a href="/streamers" class="{{ 'active' if request.url.path.startswith('/streamers') else '' }}">Streamers</a>
+      <a href="/stats" class="{{ 'active' if request.url.path.startswith('/stats') else '' }}">Stats</a>
+    </nav>
+    <div class="nav-account">
+      {% if user %}
+        {% if user.avatar %}<img class="nav-avatar" src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="" />{% endif %}
+        <span>{{ user.name }}</span>
+        {% if is_staff %}<span class="staff-pill">STAFF</span>{% endif %}
+        <a class="btn secondary" href="/logout">Sign out</a>
+      {% else %}
+        <a class="btn secondary" href="/login">Sign in</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% set flashes = pop_flash(request) %}
+  {% if flashes %}
+    <div class="flash-stack">
+      {% for f in flashes %}<div class="flash {{ f.level }}">{{ f.text }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    {{ SITE_NAME }} &middot; unofficial fan-run site, not affiliated with EA
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

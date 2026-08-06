@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }}{% endblock %}
+{% block content %}
+<div class="page narrow">
+  <div class="page-head">
+    <div>
+      <h1>{{ article.title }}{% if not article.published %} <span class="draft-pill">Draft</span>{% endif %}</h1>
+      <p class="page-lede">{{ article.author_name }} &middot; {{ article.published_at.strftime('%B %-d, %Y') }}</p>
+    </div>
+    {% if is_staff %}
+      <div class="form-actions">
+        <a class="btn secondary" href="/news/{{ article.slug }}/edit">Edit</a>
+        <form method="post" action="/news/{{ article.slug }}/delete" onsubmit="return confirm('Delete this article?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" />{% endif %}
+  <div class="article-body">{{ article.body_html | safe }}</div>
+</div>
+{% endblock %}
