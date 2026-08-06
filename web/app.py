@@ -49,6 +49,7 @@ from tenancy.units import sessionmaker_for
 from utils import queue
 from utils import ranks as rank_utils
 from utils import terminology
+from utils.lifecycle import DISCHARGE_TYPES
 from utils.markdown_render import render as render_markdown
 from utils.sync import build_prefix
 from utils.settings import (
@@ -207,6 +208,13 @@ def fmt_date(value: datetime | None, with_time: bool = False):
     )
 
 
+def fmt_mil_date(value: datetime | None) -> str:
+    """A date in service-record form: 06 AUG 2026. Plain text, not a <time>
+    element — these sit inside a formal record where a browser rewriting them
+    into the viewer's locale would break the convention."""
+    return value.strftime("%d %b %Y").upper() if value else "—"
+
+
 def avatar_url(member, size: int = 64) -> str:
     """Discord CDN avatar URL for a member (or a (discord_id, hash) pair),
     falling back to Discord's default avatar when we don't have a hash yet."""
@@ -227,6 +235,7 @@ templates.env.filters["status_label"] = status_label
 templates.env.filters["record_label"] = record_label
 templates.env.filters["attendance_label"] = attendance_label
 templates.env.filters["fmt_date"] = fmt_date
+templates.env.filters["fmt_mil_date"] = fmt_mil_date
 templates.env.filters["avatar_url"] = avatar_url
 
 
@@ -996,10 +1005,11 @@ def _render_dossier(request: Request, session: Session, member: Member, is_self:
         rank_options=services.rank_options(session),
         company_options=services.company_options(session),
         held_award_ids={a.award_type_id for a in member.awards},
-        award_catalogue=session.query(AwardType).order_by(AwardType.name).all(),
+        award_catalogue=services.list_award_types(session),
         # Bio / timezone / in-game names are platform-wide now, so the dossier
         # shows them but sends the member to /me/edit to change them.
         player_profile=player_profiles.get_profile(member.discord_id),
+        discharge_types=DISCHARGE_TYPES,
         is_self=is_self,
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
@@ -1285,10 +1295,13 @@ def honors(request: Request, session: Session = Depends(get_session)):
     """Awards & qualifications catalogue with their recipients."""
     ctx = _base_context(request, session)
 
-    award_types = session.query(AwardType).order_by(AwardType.name).all()
+    # Order of precedence — the order these are worn on a service record, and
+    # the order officers reorder against below. (This used to sort by rarity;
+    # with an explicit precedence, showing any other order would make the
+    # up/down controls move cards somewhere other than where you pushed them.)
     catalogue = []
     recent = []
-    for at in award_types:
+    for at in services.list_award_types(session):
         holders = []
         for grant in at.awards:
             member = session.get(Member, grant.member_id)
@@ -1296,11 +1309,6 @@ def honors(request: Request, session: Session = Depends(get_session)):
             recent.append({"grant": grant, "member": member, "award": at})
         holders.sort(key=lambda h: (h["member"].callsign.lower() if h["member"] else "~"))
         catalogue.append({"award": at, "holders": holders})
-
-    # Rarest (fewest holders) first, so the most exclusive honors lead the
-    # page; never-awarded types (0 holders isn't "exclusive", it's unused)
-    # sink to the end instead of hogging the front.
-    catalogue.sort(key=lambda row: (len(row["holders"]) == 0, len(row["holders"]), row["award"].name.lower()))
 
     recent.sort(key=lambda r: r["grant"].date_awarded or datetime.min, reverse=True)
     recent = recent[:8]
@@ -2378,6 +2386,20 @@ async def post_award_image(
         _flash(request, str(exc), "error")
         return RedirectResponse("/honors", status_code=303)
     return _do(request, csrf, services.set_award_image, award_type_id, uri, redirect="/honors")
+
+
+@app.post("/admin/awards/{award_type_id}/move")
+def post_award_move(
+    request: Request,
+    award_type_id: int,
+    csrf: str = Form(...),
+    direction: str = Form(...),
+    user: dict = Depends(auth.require_officer),
+):
+    """Reorder the honors catalogue — this is the order of precedence a
+    member's decorations are worn in on their service record."""
+    return _do(request, csrf, services.award_move, award_type_id, direction,
+               redirect="/honors")
 
 
 # --- Admin: identity / roles / channels ----------------------------------- #

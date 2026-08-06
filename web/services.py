@@ -39,6 +39,7 @@ from db.models import (
 )
 from utils import queue
 from utils import ranks as rank_utils
+from utils.lifecycle import DISCHARGE_LABELS
 from utils.settings import (
     CHANNEL_KEYS,
     ROLE_KEYS,
@@ -268,8 +269,8 @@ def discipline(session, actor: dict, discord_id: int, record_type: str, reason: 
 
 # --- Lifecycle ----------------------------------------------------------- #
 def discharge(session, actor: dict, discord_id: int, discharge_type: str, reason: str) -> str:
-    if discharge_type not in ("honorable", "dishonorable"):
-        raise ActionError("Choose an honorable or dishonorable discharge.")
+    if discharge_type not in DISCHARGE_LABELS:
+        raise ActionError("Choose a character of service for the discharge.")
     reason = reason.strip()
     if not reason:
         raise ActionError("A reason is required for a discharge.")
@@ -278,23 +279,26 @@ def discharge(session, actor: dict, discord_id: int, discharge_type: str, reason
         raise ActionError(f"{record.callsign} is already discharged.")
 
     callsign = record.callsign
-    verb = "Honorably" if discharge_type == "honorable" else "Dishonorably"
+    label = DISCHARGE_LABELS[discharge_type]
+    # "Discharged (Honorable) by …" rather than an adverb, so all five
+    # characterisations read the same way. Keep the word "discharged" in the
+    # entry: the service record detects a separation by matching on it.
     record.status = "discharged"
     record.discharge_type = discharge_type
     _log(session, discord_id,
-         f"{verb} discharged by {actor['name']}. Reason: {reason}", actor)
+         f"Discharged ({label}) by {actor['name']}. Reason: {reason}", actor)
     queue.enqueue(
         session,
         queue.DISCHARGE,
         {"discord_id": discord_id, "callsign": callsign, "rank_at_discharge": record.rank,
-         "verb": verb, "reason": reason, "actor_id": actor["id"],
-         "billboard": f"**{callsign}** has been {verb.lower()} discharged."},
+         "character": label, "reason": reason, "actor_id": actor["id"],
+         "billboard": f"**{callsign}** has been discharged — {label.lower()}."},
         actor_id=actor["id"],
     )
     _audit(session, actor, "lifecycle",
-           f"{verb} discharged {callsign}. Reason: {reason}", target_id=discord_id)
+           f"Discharged {callsign} ({label}). Reason: {reason}", target_id=discord_id)
     session.commit()
-    return f"{callsign} has been {verb.lower()} discharged."
+    return f"{callsign} has been discharged — {label.lower()}."
 
 
 def reinstate(session, actor: dict, discord_id: int, reason: str = "") -> str:
@@ -901,6 +905,12 @@ def mark_attendance(session, actor: dict, event_id: int, member_id: int, status:
 
 
 # --- Awards -------------------------------------------------------------- #
+def list_award_types(session) -> list[AwardType]:
+    """The honors catalogue in order of precedence — the order a member's
+    decorations are worn on their service record."""
+    return session.query(AwardType).order_by(AwardType.position, AwardType.name).all()
+
+
 def create_award_type(session, actor: dict, name: str, description: str = "",
                       emoji: str = "", image: str | None = None) -> str:
     name = name.strip()
@@ -908,17 +918,44 @@ def create_award_type(session, actor: dict, name: str, description: str = "",
         raise ActionError("The award needs a name.")
     if session.query(AwardType).filter(AwardType.name.ilike(name)).one_or_none():
         raise ActionError(f"'{name}' is already in the catalogue.")
+    # New honors enter at the bottom of the rack; an officer promotes them up
+    # the order of precedence deliberately.
+    last = session.query(func.max(AwardType.position)).scalar()
     session.add(
         AwardType(
             name=name,
             description=description.strip() or None,
             emoji=emoji.strip() or None,
             image=image,
+            position=(last + 1) if last is not None else 0,
             created_by=actor["id"],
         )
     )
     session.commit()
     return f"Added '{name}' to the honors catalogue."
+
+
+def award_move(session, award_type_id: int, direction: str) -> str:
+    """Move an honor up or down the order of precedence. Lower position is
+    worn first, so "up" means a smaller position."""
+    award = session.get(AwardType, award_type_id)
+    if award is None:
+        raise ActionError("Unknown honor.")
+    ordered = list_award_types(session)
+    index = next((i for i, a in enumerate(ordered) if a.id == award.id), None)
+    swap_with = index - 1 if direction == "up" else index + 1
+    if index is None or not 0 <= swap_with < len(ordered):
+        raise ActionError(
+            f"'{award.name}' is already {'first' if direction == 'up' else 'last'} "
+            "in the order of precedence.")
+    other = ordered[swap_with]
+    # Rewrite the whole run rather than swapping two values: positions seeded
+    # by the migration can tie, and swapping equal numbers would do nothing.
+    ordered[index], ordered[swap_with] = ordered[swap_with], ordered[index]
+    for i, a in enumerate(ordered):
+        a.position = i
+    session.commit()
+    return f"'{award.name}' now ranks {'above' if direction == 'up' else 'below'} '{other.name}'."
 
 
 def grant_award(session, actor: dict, discord_id: int, award_type_id: int, notes: str = "") -> str:

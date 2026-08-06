@@ -3,7 +3,8 @@
 {% block content %}
 
 <h2 class="section">{{ terms.honors }} &amp; Qualifications <span class="tally">{{ catalogue|length }} in the catalogue</span></h2>
-<p class="lede">Medals, commendations, and courses of instruction, with those who hold them.</p>
+<p class="lede">Medals, commendations, and courses of instruction, with those who hold them.
+Listed in order of precedence — the order they're worn on a member's service record.</p>
 
 {% if tier_at_least(user, TIER_OFFICER) %}
 <details class="announce-card">
@@ -62,7 +63,10 @@
         <div class="honor-holders">
           {% for h in row.holders[:12] %}
             {% if h.member %}
-            <a class="honor-chip" href="/dossier/{{ h.member.discord_id }}" title="Conferred {{ h.grant.date_awarded|fmt_date if h.grant.date_awarded else 'unknown' }}">
+            {# fmt_date emits a <time> element, whose quotes would close this
+               title attribute and leak the rest of the tag onto the page —
+               titles need the plain-text date filter. #}
+            <a class="honor-chip" href="/dossier/{{ h.member.discord_id }}" title="Conferred {{ h.grant.date_awarded|fmt_mil_date }}">
               <img class="avatar avatar-sm" src="{{ h.member|avatar_url }}" alt="" loading="lazy">{{ h.member.callsign }}
             </a>
             {% else %}
@@ -76,6 +80,19 @@
         {% endif %}
 
         {% if tier_at_least(user, TIER_OFFICER) %}
+        <div class="honor-precedence">
+          <form method="post" action="/admin/awards/{{ row.award.id }}/move">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="direction" value="up">
+            <button class="btn btn-small" type="submit" title="Higher precedence" {{ 'disabled' if loop.first }}>▲</button>
+          </form>
+          <span class="honor-precedence-n" title="Order of precedence">{{ loop.index }}</span>
+          <form method="post" action="/admin/awards/{{ row.award.id }}/move">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="direction" value="down">
+            <button class="btn btn-small" type="submit" title="Lower precedence" {{ 'disabled' if loop.last }}>▼</button>
+          </form>
+        </div>
         <button type="button" class="btn btn-small btn-ghost honor-manage js-edit-open" data-target="tpl-honor-{{ row.award.id }}">
           {{ 'Replace image' if row.award.image else 'Add image' }}
         </button>

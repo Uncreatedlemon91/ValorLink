@@ -12,11 +12,14 @@ viewer sees (see ``viewer_level``):
                   reasons behind discharges and the full per-unit history.
 * **recruiter** — anyone holding recruiter standing or higher on any unit:
                   the vetting view — service, ranks, tenure, awards, and the
-                  *type* of any discharge (honorable / dishonorable), but never
-                  the written reasons or disciplinary notes.
+                  *character* of any discharge (see utils/lifecycle.py), but
+                  never the written reasons or disciplinary notes.
 * **public**    — everyone else, including signed-out visitors: the positive
                   record — units, ranks, tenure, awards, and promotions. No
-                  discharge type, no reasons.
+                  discharge character, no reasons.
+
+Disciplinary records never appear here at any level: they stay inside the
+unit that issued them.
 """
 from __future__ import annotations
 
@@ -37,14 +40,17 @@ from tenancy.career import career_events_for
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
 from utils import ranks as rank_utils
+from utils.lifecycle import ADVERSE_DISCHARGES, discharge_label
+from utils.settings import get_config
 
 LEVEL_OWNER = "owner"
 LEVEL_RECRUITER = "recruiter"
 LEVEL_PUBLIC = "public"
 
 # Promotion entries are written in a fixed shape by both the web and the bot:
-# "Promoted from <old> to <new> by <actor>." — pull the new rank, drop the rest.
-_PROMOTION_RE = re.compile(r"^Promoted from .+ to (.+?) by ")
+# "Promoted from <old> to <new> by <actor>." — both ranks, never the actor.
+# The "from" is what lets the rank ladder start at the rank they enlisted at.
+_PROMOTION_RE = re.compile(r"^Promoted from (.+?) to (.+?) by ")
 
 # --- Turnout -------------------------------------------------------------- #
 # How much of a member's recent muster-call history counts toward their
@@ -116,28 +122,49 @@ def _unit_url(slug: str, is_default: bool) -> str:
 
 def _posting(session, member: Member, tenant, level: str) -> dict:
     """Build one unit's slice of the record, redacted to the viewer's level."""
+    # In order of precedence — a decorations rack is worn in a fixed order,
+    # not in the order the medals happened to be earned.
     award_rows = (
         session.query(MemberAward, AwardType)
         .join(AwardType, MemberAward.award_type_id == AwardType.id)
         .filter(MemberAward.member_id == member.discord_id)
-        .order_by(MemberAward.date_awarded)
+        .order_by(AwardType.position, AwardType.name)
         .all()
     )
-    awards = [{"name": at.name, "emoji": at.emoji, "date": ma.date_awarded}
+    awards = [{"name": at.name, "emoji": at.emoji, "image": at.image,
+               "description": at.description, "citation": ma.notes,
+               "date": ma.date_awarded}
               for ma, at in award_rows]
 
     # Structured, reason-free promotions parsed from the service history — the
-    # new rank and date only, safe to show at any level.
+    # ranks and date only, safe to show at any level.
     promotions = []
     discharged_at = None
-    for h in member.service_history:
+    for h in sorted(member.service_history, key=lambda e: e.date or datetime.min):
         m = _PROMOTION_RE.match(h.entry or "")
         if m:
-            promotions.append({"rank": m.group(1).rstrip("."), "date": h.date})
+            promotions.append({"from": m.group(1).strip(),
+                               "rank": m.group(2).rstrip(".").strip(), "date": h.date})
         elif "discharged" in (h.entry or "").lower():
             discharged_at = h.date  # the date only, never the written reason
 
     rank_row = rank_utils.rank_by_name(session, member.rank)
+
+    # The career ladder: the rank they enlisted at, then each promotion, with
+    # insignia. Reads as a progression rather than a list of log lines.
+    ladder = []
+    if promotions:
+        ladder.append({"rank": promotions[0]["from"], "date": member.joined_date,
+                       "enlisted": True})
+        ladder += [{"rank": p["rank"], "date": p["date"], "enlisted": False}
+                   for p in promotions]
+    else:
+        # Never promoted — they hold the rank they came in at.
+        ladder.append({"rank": member.rank, "date": member.joined_date, "enlisted": True})
+    for step in ladder:
+        step_row = rank_utils.rank_by_name(session, step["rank"])
+        step["image"] = step_row.image if step_row else None
+        step["abbreviation"] = step_row.abbreviation if step_row else None
     # Secondary groups (High Command, a training cadre, the colour guard) —
     # standing that a rank alone doesn't convey, and invisible outside the
     # unit until now. Leadership groups lead.
@@ -147,13 +174,20 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
         key=lambda a: (not a["leadership"], a["name"].lower()),
     )
     on_leave = bool(member.loa_until and member.loa_until > datetime.utcnow())
+    cfg = get_config(session)
     posting = {
         "unit": tenant.name,
         "slug": tenant.slug,
         "game": tenant.game,
+        "crest": cfg.crest,
+        "unit_tag": cfg.unit_tag,
         "url": _unit_url(tenant.slug, tenant.is_default),
         "rank": member.rank,
         "rank_image": rank_row.image if rank_row else None,
+        "rank_tier": rank_row.tier if rank_row else None,
+        "ladder": ladder,
+        # Time in grade — the other half of the pair a record leads with.
+        "time_in_grade": _service_length(member.rank_since),
         "company": member.company,
         "status": member.status,
         "assignments": assignments,
@@ -167,12 +201,14 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
         "promotions": promotions,
         "discharged_at": discharged_at if member.status == "discharged" else None,
         "discharge_type": None,
+        "discharge_label": None,
         "history": [],
     }
     # The discharge *type* is a recruiter/owner signal; public sees only that
     # they're a former member, never why or how.
     if level in (LEVEL_OWNER, LEVEL_RECRUITER):
         posting["discharge_type"] = member.discharge_type
+        posting["discharge_label"] = discharge_label(member.discharge_type)
     # Only the member sees the raw written history (which carries reasons and
     # the names of officers who acted).
     if level == LEVEL_OWNER:
@@ -197,22 +233,29 @@ def _archived_service(discord_id: int, live_slugs: set[str], level: str):
         unit = evs[0]["unit_name"]
         enlisted = next((e["at"] for e in evs if e["kind"] == "enlisted"), None)
         promotions = [e for e in evs if e["kind"] == "promoted"]
-        awards = [{"name": e["detail"], "emoji": None, "date": e["at"]}
+        awards = [{"name": e["detail"], "emoji": None, "image": None,
+                   "description": None, "citation": None, "date": e["at"]}
                   for e in evs if e["kind"] == "awarded"]
         discharge = next((e for e in evs if e["kind"] == "discharged"), None)
+        dtype = discharge["detail"] if discharge else None
+        vetting = level in (LEVEL_OWNER, LEVEL_RECRUITER)
         final_rank = promotions[-1]["detail"] if promotions else None
         postings.append({
             # The unit's database is gone, so anything that lived only there
             # (turnout, assignments, last-active) is simply unavailable — the
             # career log keeps the milestones, not the day-to-day record.
             "unit": unit, "slug": slug, "game": None, "url": None, "archived": True,
-            "rank": final_rank or "—", "rank_image": None, "company": "",
+            "crest": None, "unit_tag": None,
+            "rank": final_rank or "—", "rank_image": None, "rank_tier": None,
+            "ladder": [], "time_in_grade": None, "company": "",
             "status": "discharged" if discharge else "departed",
             "assignments": [], "on_leave": False, "loa_until": None,
             "last_active": None, "turnout": None,
             "joined": enlisted, "rank_since": None,
             "awards": awards, "promotions": [], "history": [],
-            "discharge_type": discharge["detail"] if (discharge and level in (LEVEL_OWNER, LEVEL_RECRUITER)) else None,
+            "discharged_at": discharge["at"] if discharge else None,
+            "discharge_type": dtype if vetting else None,
+            "discharge_label": discharge_label(dtype) if vetting else None,
         })
         # Timeline entries — reason-free by construction.
         if enlisted:
@@ -226,7 +269,7 @@ def _archived_service(discord_id: int, live_slugs: set[str], level: str):
                                "text": f"Awarded {a['name']} · {unit}"})
         if discharge:
             dt = discharge["detail"]
-            label = f"{dt.title()} discharge" if dt else "Departed"
+            label = f"{discharge_label(dt)} discharge" if dt else "Departed"
             milestones.append({"at": discharge["at"], "kind": "discharge", "unit": unit,
                                "text": f"{label} · {unit} (archived)"})
     return postings, milestones
@@ -325,8 +368,10 @@ def build_service_record(discord_id: int, level: str) -> dict:
         stats["turnout_pct"] = round(present / counted * 100)
         stats["turnout_counted"] = counted
     if level in (LEVEL_OWNER, LEVEL_RECRUITER):
-        stats["dishonorable"] = sum(
-            1 for p in former if p.get("discharge_type") == "dishonorable")
+        # Any characterisation that counts against them when vetting — not
+        # just the worst one, now that there are middle grades.
+        stats["adverse"] = sum(
+            1 for p in former if p.get("discharge_type") in ADVERSE_DISCHARGES)
 
     # A reason-free milestone feed, merged across units: enlistments, awards,
     # and departures. Owners also see promotions via each unit's full history.
@@ -344,7 +389,7 @@ def build_service_record(discord_id: int, level: str) -> dict:
                                    "text": f"Awarded {a['name']} · {p['unit']}"})
         if p["status"] == "discharged":
             dt = p.get("discharge_type")
-            label = f"{dt.title()} discharge" if dt else "Departed"
+            label = f"{discharge_label(dt)} discharge" if dt else "Departed"
             milestones.append({"at": p.get("discharged_at") or p["rank_since"],
                                "kind": "discharge", "unit": p["unit"],
                                "text": f"{label} · {p['unit']}"})
@@ -357,6 +402,9 @@ def build_service_record(discord_id: int, level: str) -> dict:
 
     return {
         "discord_id": discord_id,
+        # A record identifier rather than a raw database key. The Discord ID
+        # is still what it is — this is only how it's presented.
+        "service_number": f"VL-{discord_id}",
         "name": name,
         "avatar": avatar,
         "level": level,

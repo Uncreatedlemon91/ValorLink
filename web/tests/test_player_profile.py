@@ -205,6 +205,68 @@ def test_editing_requires_a_signed_in_user():
     assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
+def test_decorations_are_racked_in_order_of_precedence():
+    """A rack is worn in a fixed order, not the order things were earned."""
+    from datetime import datetime, timedelta
+    from db.models import AwardType, MemberAward
+    _enlist("5thva", discord_id=PLAYER, callsign="Reb", rank="Private",
+            company="Alpha", status="active")
+    now = datetime.utcnow()
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        # Earned second, but ranks first in precedence.
+        s.add(AwardType(id=1, name="Gallantry Star", position=0, created_by=1))
+        s.add(AwardType(id=2, name="Long Service", position=1, created_by=1))
+        s.add(MemberAward(member_id=PLAYER, award_type_id=2, awarded_by=1,
+                          date_awarded=now - timedelta(days=100)))
+        s.add(MemberAward(member_id=PLAYER, award_type_id=1, awarded_by=1,
+                          date_awarded=now - timedelta(days=5)))
+        s.commit()
+    html = TestClient(app).get(f"/u/{PLAYER}", headers={"host": APEX}).text
+    assert html.index("Gallantry Star") < html.index("Long Service")
+
+
+def test_rank_ladder_starts_at_the_rank_they_enlisted_at():
+    from datetime import datetime, timedelta
+    from db.models import ServiceHistoryEntry
+    _enlist("5thva", discord_id=PLAYER, callsign="Reb", rank="Sergeant",
+            company="Alpha", status="active",
+            joined_date=datetime.utcnow() - timedelta(days=400))
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(ServiceHistoryEntry(
+            member_id=PLAYER, date=datetime.utcnow() - timedelta(days=200),
+            entry="Promoted from Private to Corporal by Officer."))
+        s.add(ServiceHistoryEntry(
+            member_id=PLAYER, date=datetime.utcnow() - timedelta(days=50),
+            entry="Promoted from Corporal to Sergeant by Officer."))
+        s.commit()
+    html = TestClient(app).get(f"/u/{PLAYER}", headers={"host": APEX}).text
+    ladder = html[html.index("Progression"):]
+    # The rank they came in at leads, then each promotion in order.
+    assert ladder.index("Private") < ladder.index("Corporal") < ladder.index("Sergeant")
+
+
+def test_character_of_service_is_shown_to_a_recruiter_not_the_public():
+    from db.models import Member
+    with sessionmaker_for(unit_db_url_for_slug("5thva"))() as s:
+        s.add(Member(discord_id=PLAYER, callsign="Reb", rank="Private", company="Alpha",
+                     status="discharged", discharge_type="other_than_honorable"))
+        s.commit()
+
+    public = TestClient(app).get(f"/u/{PLAYER}", headers={"host": APEX}).text
+    assert "Other Than Honorable" not in public
+
+    recruiter = TestClient(app)
+    _login(recruiter, discord_id=777, name="Rec", tier="recruiter")
+    assert "Other Than Honorable" in recruiter.get(f"/u/{PLAYER}", headers={"host": APEX}).text
+
+
+def test_service_number_is_shown():
+    _enlist("5thva", discord_id=PLAYER, callsign="Reb", rank="Private",
+            company="Alpha", status="active")
+    html = TestClient(app).get(f"/u/{PLAYER}", headers={"host": APEX}).text
+    assert f"VL-{PLAYER}" in html
+
+
 if __name__ == "__main__":
     import sys
 

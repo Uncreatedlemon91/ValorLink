@@ -542,9 +542,15 @@ class Bridge(commands.Cog):
         await self._refresh(guild, p["discord_id"], roster=True)
         await self._lock_thread(guild, self._thread_id(p["discord_id"]), locked=True)
 
+        # "character" is the current payload key; "verb" is what the web wrote
+        # before characters of service were introduced, and an action queued
+        # just before a deploy can still be carrying it.
+        character = p.get("character") or {"Honorably": "Honorable"}.get(p.get("verb"), "Dishonorable")
         embed = base_embed(
-            title=f"{p['verb']} Discharge",
-            color=(discord.Color.green().value if p["verb"] == "Honorably" else discord.Color.red().value),
+            title=f"Discharge — {character}",
+            color=(discord.Color.green().value
+                   if character in ("Honorable", "General (Under Honorable Conditions)")
+                   else discord.Color.red().value),
         )
         embed.add_field(name="Member", value=member.mention if member else str(p["discord_id"]), inline=True)
         embed.add_field(name="Rank at Discharge", value=p.get("rank_at_discharge", "—"), inline=True)

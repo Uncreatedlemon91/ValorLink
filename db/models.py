@@ -171,6 +171,10 @@ class AwardType(Base):
     emoji = Column(String, nullable=True)
     # Optional medal/insignia image (data URI); the bot shows it in the award embed.
     image = Column(Text, nullable=True)
+    # Order of precedence for the decorations rack on a service record: lower
+    # is worn first. Not unique — ties simply fall back to alphabetical, so a
+    # unit that never reorders still gets a stable rack.
+    position = Column(Integer, nullable=False, default=0, server_default="0")
     created_by = Column(BigInteger, nullable=False)
 
     awards = relationship("MemberAward", back_populates="award_type", cascade="all, delete-orphan")
