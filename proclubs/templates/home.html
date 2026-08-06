@@ -2,42 +2,32 @@
 {% block title %}Home{% endblock %}
 {% block content %}
 <div class="page">
-  <div class="hero">
-    <h1>{{ SITE_NAME }}</h1>
-    <p>{{ SITE_TAGLINE }} — news, upcoming fixtures, and live streams from the squad.</p>
-    <a class="btn" href="/news">Read the latest</a>
-  </div>
-
-  {% if live_streamers %}
-    <div class="section-head"><h2>Live now</h2><a href="/streamers">All streamers &rarr;</a></div>
-    <div class="card-grid">
-      {% for s in live_streamers %}
-        {% set info = live[s.twitch_login] %}
-        <a class="card streamer-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
-          <div class="streamer-thumb">
-            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
-            <span class="live-badge">Live</span>
-            <span class="viewer-count">{{ info.viewer_count }} watching</span>
-          </div>
-          <div class="streamer-info">
-            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
-            <div>
-              <div class="streamer-name">{{ s.display_name }}</div>
-              <div class="streamer-status">{{ info.title }}</div>
-            </div>
-          </div>
-        </a>
-      {% endfor %}
+  {% if featured %}
+    <a class="featured-story" href="/news/{{ featured.slug }}"
+       {% if featured.cover_image %}style="background-image: linear-gradient(0deg, rgba(10,12,16,0.92), rgba(10,12,16,0.35) 55%, rgba(10,12,16,0.1)), url('{{ featured.cover_image }}');"{% endif %}>
+      <div class="featured-story-body">
+        <span class="category-badge cat-{{ featured.category | replace(' ', '-') | lower }}">{{ featured.category }}</span>
+        <h1>{{ featured.title }}</h1>
+        {% if featured.summary %}<p>{{ featured.summary }}</p>{% endif %}
+        <div class="article-meta">{{ featured.author_name }} &middot; {{ featured.published_at.strftime('%b %-d, %Y') }}</div>
+      </div>
+    </a>
+  {% else %}
+    <div class="hero">
+      <h1>{{ SITE_NAME }}</h1>
+      <p>{{ SITE_TAGLINE }} — news, transfers, and match highlights from the squad.</p>
+      {% if is_staff %}<a class="btn" href="/news/new">Post the first article</a>{% endif %}
     </div>
   {% endif %}
 
-  <div class="section-head"><h2>Latest news</h2><a href="/news">All news &rarr;</a></div>
   {% if articles %}
+    <div class="section-head"><h2>Latest news</h2><a href="/news">All news &rarr;</a></div>
     <div class="card-grid">
       {% for a in articles %}
         <a class="card article-card" href="/news/{{ a.slug }}">
           {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
           <div class="body">
+            <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
             <h3>{{ a.title }}</h3>
             {% if a.summary %}<p>{{ a.summary }}</p>{% endif %}
             <div class="article-meta">{{ a.author_name }} &middot; {{ a.published_at.strftime('%b %-d, %Y') }}</div>
@@ -45,26 +35,48 @@
         </a>
       {% endfor %}
     </div>
-  {% else %}
-    <div class="card empty-state">No articles yet.</div>
   {% endif %}
 
-  <div class="section-head"><h2>Next up</h2><a href="/events">Full schedule &rarr;</a></div>
-  {% if next_event %}
-    <div class="event-row">
-      <div class="event-date">
-        <div class="month">{{ next_event.scheduled_at.strftime('%b') }}</div>
-        <div class="day">{{ next_event.scheduled_at.strftime('%-d') }}</div>
-      </div>
-      <div class="event-info">
-        <span class="event-type-badge">{{ next_event.event_type }}</span>
-        <h3>{{ next_event.title }}{% if next_event.opponent %} vs {{ next_event.opponent }}{% endif %}</h3>
-        <p>{{ next_event.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}</p>
-      </div>
+  <div class="side-strip">
+    <div class="card strip-card">
+      <div class="strip-head">Next up</div>
+      {% if next_event %}
+        <div class="event-row" style="border:none; padding:0; background:transparent;">
+          <div class="event-date">
+            <div class="month">{{ next_event.scheduled_at.strftime('%b') }}</div>
+            <div class="day">{{ next_event.scheduled_at.strftime('%-d') }}</div>
+          </div>
+          <div class="event-info">
+            <span class="event-type-badge">{{ next_event.event_type }}</span>
+            <h3>{{ next_event.title }}{% if next_event.opponent %} vs {{ next_event.opponent }}{% endif %}</h3>
+            <p>{{ next_event.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}</p>
+          </div>
+        </div>
+      {% else %}
+        <p class="field-hint">Nothing scheduled yet.</p>
+      {% endif %}
+      <a class="strip-link" href="/events">Full schedule &rarr;</a>
     </div>
-  {% else %}
-    <div class="card empty-state">Nothing scheduled yet — check back soon.</div>
-  {% endif %}
+
+    <div class="card strip-card">
+      <div class="strip-head">{{ 'Live now' if live_streamers else 'Streamers' }}</div>
+      {% if live_streamers %}
+        {% for s in live_streamers %}
+          {% set info = live[s.twitch_login] %}
+          <a class="live-strip-row" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
+            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+            <div>
+              <div class="streamer-name">{{ s.display_name }}</div>
+              <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>
+            </div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <p class="field-hint">Nobody's live right now.</p>
+      {% endif %}
+      <a class="strip-link" href="/streamers">All streamers &rarr;</a>
+    </div>
+  </div>
 
   {% if stats_teaser %}
     <div class="section-head"><h2>Club standing</h2><a href="/stats">Full stats &rarr;</a></div>

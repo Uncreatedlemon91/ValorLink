@@ -4,6 +4,7 @@
 <div class="page narrow">
   <div class="page-head">
     <div>
+      <span class="category-badge cat-{{ article.category | replace(' ', '-') | lower }}">{{ article.category }}</span>
       <h1>{{ article.title }}{% if not article.published %} <span class="draft-pill">Draft</span>{% endif %}</h1>
       <p class="page-lede">{{ article.author_name }} &middot; {{ article.published_at.strftime('%B %-d, %Y') }}</p>
     </div>

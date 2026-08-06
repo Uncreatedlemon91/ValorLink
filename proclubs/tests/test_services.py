@@ -37,6 +37,48 @@ def test_create_article_generates_slug_and_html():
         assert article.slug == "big-win-tonight"
         assert "<strong>GG</strong>" in article.body_html
         assert article.published is True
+        assert article.category == "News"  # default when not specified
+
+
+def test_create_article_with_explicit_category():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Big Signing", summary="", body_md="x", category="Transfer",
+            cover_image=None, published=True, author=AUTHOR,
+        )
+        assert article.category == "Transfer"
+
+
+def test_unrecognized_category_falls_back_to_default():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Weird Category", summary="", body_md="x", category="Not A Real Category",
+            cover_image=None, published=True, author=AUTHOR,
+        )
+        assert article.category == "News"
+
+
+def test_list_articles_filters_by_category():
+    with database.get_session() as session:
+        services.create_article(session, title="Transfer News", summary="", body_md="x",
+                                  category="Transfer", cover_image=None, published=True, author=AUTHOR)
+        services.create_article(session, title="Match Recap", summary="", body_md="x",
+                                  category="Match Highlight", cover_image=None, published=True, author=AUTHOR)
+        transfers = services.list_articles(session, category="Transfer")
+        assert [a.title for a in transfers] == ["Transfer News"]
+
+
+def test_update_article_keeps_category_if_not_given():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Original", summary="", body_md="x",
+                                             category="Transfer", cover_image=None, published=True, author=AUTHOR)
+        updated = services.update_article(session, article, title="Original", summary="",
+                                            body_md="y", cover_image=None, published=True)
+        assert updated.category == "Transfer"
+
+        updated = services.update_article(session, article, title="Original", summary="",
+                                            body_md="z", cover_image=None, published=True, category="News")
+        assert updated.category == "News"
 
 
 def test_duplicate_titles_get_unique_slugs():

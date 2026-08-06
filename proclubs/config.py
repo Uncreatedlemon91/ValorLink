@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Site identity --------------------------------------------------------- #
-SITE_NAME = os.getenv("SITE_NAME", "Pr1mE6ers")
+SITE_NAME = os.getenv("SITE_NAME", "YeeHaw FC")
 SITE_TAGLINE = os.getenv("SITE_TAGLINE", "Pro Clubs")
 
 # --- Our team, for the locked-in stats dashboard --------------------------- #

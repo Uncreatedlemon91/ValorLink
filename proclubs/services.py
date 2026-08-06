@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import markdown_render
-from models import Article, Event, Streamer
+from models import ARTICLE_CATEGORIES, Article, Event, Streamer
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
 
@@ -58,11 +58,19 @@ async def image_to_data_uri(upload: UploadFile | None) -> str | None:
     return f"data:{content_type};base64,{encoded}"
 
 
+def _normalize_category(category: str) -> str:
+    category = (category or "").strip()
+    return category if category in ARTICLE_CATEGORIES else ARTICLE_CATEGORIES[0]
+
+
 # --- Articles ---------------------------------------------------------- #
-def list_articles(session: Session, *, include_drafts: bool = False, limit: int | None = None) -> list[Article]:
+def list_articles(session: Session, *, include_drafts: bool = False,
+                   category: str | None = None, limit: int | None = None) -> list[Article]:
     query = select(Article).order_by(Article.published_at.desc())
     if not include_drafts:
         query = query.where(Article.published.is_(True))
+    if category:
+        query = query.where(Article.category == category)
     if limit:
         query = query.limit(limit)
     return list(session.execute(query).scalars())
@@ -77,7 +85,8 @@ def get_article_by_id(session: Session, article_id: int) -> Article | None:
 
 
 def create_article(session: Session, *, title: str, summary: str, body_md: str,
-                    cover_image: str | None, published: bool, author: dict) -> Article:
+                    cover_image: str | None, published: bool, author: dict,
+                    category: str = "News") -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -86,6 +95,7 @@ def create_article(session: Session, *, title: str, summary: str, body_md: str,
     article = Article(
         title=title,
         slug=unique_slug(session, title),
+        category=_normalize_category(category),
         summary=summary.strip() or None,
         body_md=body_md,
         body_html=markdown_render.render(body_md),
@@ -103,7 +113,8 @@ def create_article(session: Session, *, title: str, summary: str, body_md: str,
 
 
 def update_article(session: Session, article: Article, *, title: str, summary: str,
-                    body_md: str, cover_image: str | None, published: bool) -> Article:
+                    body_md: str, cover_image: str | None, published: bool,
+                    category: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -112,6 +123,7 @@ def update_article(session: Session, article: Article, *, title: str, summary: s
     if title != article.title:
         article.slug = unique_slug(session, title, exclude_id=article.id)
     article.title = title
+    article.category = _normalize_category(category if category is not None else article.category)
     article.summary = summary.strip() or None
     article.body_md = body_md
     article.body_html = markdown_render.render(body_md)

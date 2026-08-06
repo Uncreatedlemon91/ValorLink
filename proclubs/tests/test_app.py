@@ -103,6 +103,50 @@ def test_draft_article_hidden_from_fans_visible_to_staff(client):
     assert r.status_code == 200
 
 
+def test_home_shows_most_recent_article_as_featured(client):
+    _login_staff(client)
+    for title in ["First Post", "Second Post"]:
+        token = _csrf(client, "/news/new")
+        client.post("/news/new", data={
+            "title": title, "summary": "", "body_md": "x",
+            "published": "1", "csrf_token": token,
+        }, follow_redirects=False)
+
+    home = client.get("/")
+    # The most recently published article leads as the featured story...
+    assert 'href="/news/second-post"' in home.text
+    assert home.text.index("second-post") < home.text.index("first-post")
+    # ...and doesn't also appear a second time in the "Latest news" grid.
+    assert home.text.count('href="/news/second-post"') == 1
+
+
+def test_article_category_defaults_and_can_be_set(client):
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    r = client.post("/news/new", data={
+        "title": "Transfer Window Update", "category": "Transfer", "summary": "",
+        "body_md": "x", "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    detail = client.get("/news/transfer-window-update")
+    assert "Transfer" in detail.text
+
+
+def test_news_list_filters_by_category(client):
+    _login_staff(client)
+    for title, category in [("News Item", "News"), ("Transfer Item", "Transfer")]:
+        token = _csrf(client, "/news/new")
+        client.post("/news/new", data={
+            "title": title, "category": category, "summary": "",
+            "body_md": "x", "published": "1", "csrf_token": token,
+        }, follow_redirects=False)
+
+    filtered = client.get("/news?category=Transfer")
+    assert "Transfer Item" in filtered.text
+    assert "News Item" not in filtered.text
+
+
 def test_csrf_token_is_required_on_writes(client):
     _login_staff(client)
     r = client.post("/streamers/add", data={

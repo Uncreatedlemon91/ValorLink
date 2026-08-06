@@ -11,6 +11,11 @@ from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, T
 
 from database import Base
 
+# What kind of post this is, for the front page's category badges and the
+# /news filter -- a fixed, small set rather than free-text tags, matching
+# how a real club site sections its news.
+ARTICLE_CATEGORIES = ["News", "Transfer", "Match Highlight"]
+
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
@@ -25,6 +30,7 @@ class Article(Base):
     id = Column(Integer, primary_key=True)
     title = Column(String, nullable=False)
     slug = Column(String, nullable=False, unique=True, index=True)
+    category = Column(String, nullable=False, server_default="News")  # see ARTICLE_CATEGORIES
     summary = Column(String, nullable=True)          # dek shown in list views
     body_md = Column(Text, nullable=False)
     body_html = Column(Text, nullable=False)
