@@ -342,8 +342,8 @@ def discord_callback(request: Request, code: str = "", state: str = ""):
         "tenant": tenant_slug,
         "tiers": tiers,
         # Discord avatar hash, snapshotted at sign-in so cross-unit features
-        # (the social feed, the platform search) can render a real avatar
-        # without a per-unit roster lookup.
+        # (e.g. the platform search) can render a real avatar without a
+        # per-unit roster lookup.
         "avatar": me.get("avatar"),
     }
     return RedirectResponse(origin, status_code=303)

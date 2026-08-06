@@ -2415,18 +2415,6 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   box-shadow: var(--fx-shadow);
 }
 
-.wall-composer { padding: 16px; margin: 0 0 22px; }
-.wall-composer-signedout { text-align: center; padding: 22px 18px; color: var(--fx-ink-soft); }
-.wall-composer-head { display: flex; align-items: flex-start; gap: 12px; }
-.wall-composer-head .avatar { margin: 2px 0 0; }
-.wall-composer textarea {
-  flex: 1; font-family: inherit; font-size: 15px; color: var(--fx-ink);
-  background: var(--fx-bg); border: 1px solid var(--fx-border);
-  border-radius: 10px; padding: 10px 12px; width: 100%; resize: vertical;
-}
-.wall-composer textarea:focus { outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg); }
-.wall-composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
-
 .fx-btn {
   font-family: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em;
   border-radius: 999px; padding: 8px 18px; border: 1px solid var(--fx-border);
@@ -2441,64 +2429,6 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-btn-danger { background: var(--fx-like-bg); border-color: var(--fx-like-bg); color: var(--fx-like); }
 .fx-btn-danger:hover { background: var(--fx-like); border-color: var(--fx-like); color: #fff; }
 .fx-btn-sm { padding: 5px 13px; font-size: 12px; }
-.btn-post { padding: 8px 22px; }
-.file-btn.fx-attach {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 13px; color: var(--fx-ink-soft); border-radius: 999px; padding: 7px 14px;
-  border: 1px dashed var(--fx-border); background: transparent;
-}
-.file-btn.fx-attach:hover { border-color: var(--fx-accent); color: var(--fx-accent); }
-
-.wall { display: flex; flex-direction: column; gap: 14px; margin: 0; }
-.wall-post {
-  padding: 16px;
-  transition: box-shadow .18s ease, transform .18s ease;
-}
-.wall-post:hover { box-shadow: var(--fx-shadow-lg); }
-
-.wall-head { display: flex; align-items: center; gap: 10px; }
-.wall-head .avatar { margin: 0; border-radius: 50%; }
-.wall-author { font-weight: 700; color: var(--fx-ink); }
-.wall-author:hover { color: var(--fx-accent); }
-.wall-when { font-size: 12px; color: var(--fx-ink-faint); }
-.wall-delete { margin-left: auto; }
-.wall-delete .chip-x { color: var(--fx-ink-faint); border-radius: 6px; padding: 4px; }
-.wall-delete .chip-x:hover { color: var(--fx-like); background: var(--fx-like-bg); }
-.wall-body { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
-.wall-image { max-width: 100%; border: 1px solid var(--fx-border); border-radius: 10px; margin-top: 10px; display: block; }
-
-.wall-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.wall-actions form { margin: 0; }
-.like-btn, .like-btn-static, .wall-comment-count {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--fx-ink-soft);
-  background: transparent; border: none; border-radius: 999px;
-  padding: 6px 11px; cursor: pointer; transition: background .15s ease, color .15s ease;
-}
-.wall-comment-count { cursor: default; }
-.like-btn:hover { background: var(--fx-like-bg); color: var(--fx-like); }
-.like-btn .fx-icon { transition: transform .15s ease; }
-.like-btn.liked { color: var(--fx-like); background: var(--fx-like-bg); }
-.like-btn.liked .fx-icon { fill: var(--fx-like); transform: scale(1.08); }
-.wall-comment-count:hover { background: var(--fx-bg); }
-
-.wall-comments { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--fx-border); display: flex; flex-direction: column; gap: 8px; }
-.wall-comment { display: flex; align-items: flex-start; gap: 8px; }
-.wall-comment .avatar-sm { margin: 3px 0 0; border-radius: 50%; }
-.wall-comment-body { flex: 1; background: var(--fx-bg); border-radius: 14px; padding: 7px 13px; }
-.wall-comment-author { font-weight: 700; color: var(--fx-ink); margin-right: 6px; font-size: 13.5px; }
-.wall-comment-text { font-size: 13.5px; }
-.wall-comment .wall-when { margin-top: 1px; }
-.wall-comment .wall-delete { margin-left: 0; align-self: center; }
-
-.comment-composer { display: flex; gap: 8px; margin-top: 12px; }
-.comment-composer input {
-  flex: 1; font-family: inherit; font-size: 13.5px; color: var(--fx-ink);
-  background: var(--fx-bg); border: 1px solid var(--fx-border);
-  border-radius: 999px; padding: 8px 14px;
-}
-.comment-composer input:focus { outline: none; border-color: var(--fx-accent); box-shadow: 0 0 0 3px var(--fx-accent-bg); }
-.comment-composer button { border-radius: 999px; }
 
 .fx-empty {
   text-align: center; padding: 56px 20px; color: var(--fx-ink-faint);
@@ -2637,35 +2567,13 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-unit-meta { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--fx-ink-faint); }
 .fx-unit-actions { display: flex; gap: 8px; margin-top: 14px; }
 
-/* ---- Home: "From the Feed" + "On the Field" as two full columns -------- */
-.fx-home-columns { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
-@media (max-width: 860px) { .fx-home-columns { grid-template-columns: 1fr; } }
-.fx-home-col { display: flex; flex-direction: column; padding: 20px 22px; }
+/* ---- Home: "On the Field" activity card --------------------------------- */
+.fx-home-col { display: flex; flex-direction: column; padding: 20px 22px; margin-top: 16px; }
 .fx-home-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .fx-home-col-head .fx-tally { margin-top: 3px; }
 .fx-home-col-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 6px; }
 .fx-home-col-sub { margin: 0 0 6px; font-size: 12px; color: var(--fx-ink-faint); padding-bottom: 10px; border-bottom: 1px solid var(--fx-border); }
 .fx-home-col-body { flex: 1; max-height: 460px; overflow-y: auto; }
-.fx-home-col-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--fx-border); }
-
-.fx-feed-preview { display: flex; flex-direction: column; }
-.fx-feed-preview-item {
-  display: flex; gap: 12px; text-decoration: none; color: inherit;
-  padding: 14px 12px; border-radius: 12px; border-bottom: 1px solid var(--fx-border);
-  transition: background .15s ease;
-}
-.fx-feed-preview-item:hover { background: var(--fx-bg); }
-.fx-feed-preview-item:first-child { padding-top: 12px; }
-.fx-feed-preview-item:last-child { border-bottom: none; }
-.fx-feed-preview-item:hover .fx-feed-preview-author { color: var(--fx-accent); }
-.fx-feed-preview-avatar { width: 44px; height: 44px; margin: 0; flex: none; }
-.fx-feed-preview-body { flex: 1; min-width: 0; }
-.fx-feed-preview-author { font-weight: 700; color: var(--fx-ink); }
-.fx-feed-preview-text {
-  margin: 3px 0 0; font-size: 13.5px; color: var(--fx-ink-soft); line-height: 1.5;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.fx-feed-preview-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--fx-ink-faint); }
 
 /* Fade + rise into view as scrolled to (JS toggles .fx-in-visible via
    IntersectionObserver -- see the per-page <script> block). Starts already

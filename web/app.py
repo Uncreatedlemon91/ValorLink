@@ -42,7 +42,6 @@ from db.models import (
 from tenancy import alliance_events
 from tenancy import alliances as alliance_mod
 from tenancy import bans as bans_mod
-from tenancy import feed as feed_mod
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -448,7 +447,6 @@ def _render_home(request: Request):
         "activity": _platform_activity(),
         "is_platform_admin": _is_platform_admin(user),
         "invite_url": _bot_invite_url(),
-        "feed_posts": feed_mod.list_posts(viewer_id=int(user["id"]) if user else None, limit=4),
     }
     return templates.TemplateResponse(request, "home.html", ctx)
 
@@ -2937,135 +2935,6 @@ def my_service_record(request: Request):
     if not user:
         return RedirectResponse("/auth/discord/login", status_code=303)
     return RedirectResponse(f"/u/{user['id']}", status_code=303)
-
-
-# --- Social feed (cross-unit) --------------------------------------------- #
-FEED_PAGE_SIZE = 30
-
-
-@app.get("/feed", response_class=HTMLResponse)
-def feed_page(request: Request):
-    """The platform-wide social feed: every member of every unit posts and
-    comments on the same shared wall. Viewable by anyone; posting, commenting,
-    and liking require a sign-in."""
-    user = auth.current_user(request)
-    posts = feed_mod.list_posts(viewer_id=int(user["id"]) if user else None, limit=FEED_PAGE_SIZE)
-    ctx = {
-        "request": request,
-        "user": user,
-        "csrf_token": auth.get_csrf_token(request),
-        "flash": request.session.pop("flash", []),
-        "posts": posts,
-        "post_max_len": feed_mod.POST_MAX_LEN,
-        "comment_max_len": feed_mod.COMMENT_MAX_LEN,
-        "stats": feed_mod.feed_stats(),
-        "now": datetime.utcnow(),
-    }
-    return templates.TemplateResponse(request, "feed.html", ctx)
-
-
-@app.post("/feed")
-async def post_feed_post(
-    request: Request,
-    csrf: str = Form(...),
-    body: str = Form(""),
-    image: UploadFile = File(None),
-):
-    user = auth.current_user(request)
-    if not user:
-        raise auth.NotAuthenticated()
-    if not auth.verify_csrf(request, csrf):
-        _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        uri = await _image_data_uri(image) if image and image.filename else None
-    except ValueError as exc:
-        _flash(request, str(exc), "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        feed_mod.create_post(user, body, image=uri)
-    except feed_mod.FeedError as exc:
-        _flash(request, str(exc), "error")
-    return RedirectResponse("/feed", status_code=303)
-
-
-@app.post("/feed/{post_id}/comment")
-def post_feed_comment(
-    request: Request,
-    post_id: int,
-    csrf: str = Form(...),
-    body: str = Form(...),
-):
-    user = auth.current_user(request)
-    if not user:
-        raise auth.NotAuthenticated()
-    if not auth.verify_csrf(request, csrf):
-        _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        feed_mod.add_comment(user, post_id, body)
-    except feed_mod.FeedError as exc:
-        _flash(request, str(exc), "error")
-    return RedirectResponse("/feed", status_code=303)
-
-
-@app.post("/feed/{post_id}/like")
-def post_feed_like(
-    request: Request,
-    post_id: int,
-    csrf: str = Form(...),
-):
-    user = auth.current_user(request)
-    if not user:
-        raise auth.NotAuthenticated()
-    if not auth.verify_csrf(request, csrf):
-        _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        feed_mod.toggle_like(int(user["id"]), post_id)
-    except feed_mod.FeedError as exc:
-        _flash(request, str(exc), "error")
-    return RedirectResponse("/feed", status_code=303)
-
-
-@app.post("/feed/{post_id}/delete")
-def post_feed_delete(
-    request: Request,
-    post_id: int,
-    csrf: str = Form(...),
-):
-    user = auth.current_user(request)
-    if not user:
-        raise auth.NotAuthenticated()
-    if not auth.verify_csrf(request, csrf):
-        _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        feed_mod.delete_post(int(user["id"]), post_id)
-        _flash(request, "Post deleted.", "ok")
-    except feed_mod.FeedError as exc:
-        _flash(request, str(exc), "error")
-    return RedirectResponse("/feed", status_code=303)
-
-
-@app.post("/feed/comment/{comment_id}/delete")
-def post_feed_comment_delete(
-    request: Request,
-    comment_id: int,
-    csrf: str = Form(...),
-):
-    user = auth.current_user(request)
-    if not user:
-        raise auth.NotAuthenticated()
-    if not auth.verify_csrf(request, csrf):
-        _flash(request, "Your session expired. Please try that again.", "error")
-        return RedirectResponse("/feed", status_code=303)
-    try:
-        feed_mod.delete_comment(int(user["id"]), comment_id)
-        _flash(request, "Comment deleted.", "ok")
-    except feed_mod.FeedError as exc:
-        _flash(request, str(exc), "error")
-    return RedirectResponse("/feed", status_code=303)
 
 
 @app.get("/u/{discord_id}", response_class=HTMLResponse)
