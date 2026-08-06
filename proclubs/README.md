@@ -48,12 +48,16 @@ The pieces that need real setup:
 - **Our club** (`CLUB_PLATFORM` / `CLUB_ID`) -- this site shows one club's
   stats, configured once, not a search box. `tracked_clubs.json` (used by
   the history poller, see below) should reference the same club.
-- **Discord OAuth2** -- register a new application at
-  [discord.com/developers/applications](https://discord.com/developers/applications)
-  (separate from the main ValorLink bot's app). Add an OAuth2 redirect
-  matching `DISCORD_OAUTH_REDIRECT`, and copy the client ID/secret. Then
-  find the team's guild ID and the staff role's ID (enable Developer Mode
-  in Discord, right-click the server/role, "Copy ID").
+- **Discord OAuth2** -- reuses the same Discord application as the main
+  ValorLink bot/web app; a Discord app supports multiple OAuth2 redirect
+  URIs, so no second app is needed. On that existing application's OAuth2
+  page at [discord.com/developers/applications](https://discord.com/developers/applications),
+  add a redirect matching `DISCORD_OAUTH_REDIRECT`, then copy the same
+  client ID/secret into this app's `.env`. (Sharing the OAuth app is just
+  sharing an identity provider -- the `.env`, session, and database stay
+  separate.) Then find the team's guild ID and the staff role's ID (enable
+  Developer Mode in Discord, right-click the server/role, "Copy ID") --
+  the role doesn't have to be the same one ValorLink treats as officer.
 - **Twitch** -- register a free app at
   [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps). This
   site only uses the app-level client-credentials grant to check "is this
