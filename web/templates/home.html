@@ -27,7 +27,6 @@
           {% endif %}
         </div>
         <div class="fx-hero-links">
-          <a class="fx-chip" href="/players">{{ icon('search', 13) }} Find a Player</a>
           <a class="fx-chip" href="{{ '/my-units' if user else '/auth/discord/login' }}">{{ icon('star', 13) }} My Units</a>
           {% if invite_url %}<a class="fx-chip" href="{{ invite_url }}">{{ icon('plus', 13) }} Invite the Bot</a>{% endif %}
           {% if is_platform_admin %}<a class="fx-chip" href="/admin/platform">{{ icon('settings', 13) }} Platform Dashboard</a>{% endif %}

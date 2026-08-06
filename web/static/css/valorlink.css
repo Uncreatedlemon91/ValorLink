@@ -2252,8 +2252,8 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
    Platform pages: the "fx" design system
    A deliberate break from the sitewide 1860s parchment skin and the old dark
    military hero: a flat, neutral, sans-serif "app" look. Every platform-wide
-   page (Feed, Find a Unit, Find a Player, My Units, Alliance, Register,
-   Platform Dashboard, service records, and the home landing) shares this one
+   page (Find a Unit, My Units, Alliance, Register, Platform Dashboard,
+   service records, and the home landing) shares this one
    system via .fx-shell, so the platform reads as one consistent product; only
    pages branded to a specific unit (Headquarters, Roster, Command Tent, …)
    keep the parchment skin. Scoped entirely to .fx-shell via its own
