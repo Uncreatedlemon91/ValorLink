@@ -12,6 +12,7 @@ from tenancy.resolve import all_tenants
 from utils.billboard import post_billboard
 from utils.checks import is_officer
 from utils.embeds import base_embed
+from utils.lifecycle import FAVOURABLE_DISCHARGES, discharge_label
 from utils.settings import get_config
 
 
@@ -47,6 +48,9 @@ class Lifecycle(commands.Cog):
     @app_commands.command(name="discharge", description="Formally discharge a member from the regiment")
     @app_commands.choices(discharge_type=[
         app_commands.Choice(name="Honorable", value="honorable"),
+        app_commands.Choice(name="General (Under Honorable Conditions)", value="general"),
+        app_commands.Choice(name="Other Than Honorable", value="other_than_honorable"),
+        app_commands.Choice(name="Bad Conduct", value="bad_conduct"),
         app_commands.Choice(name="Dishonorable", value="dishonorable"),
     ])
     @is_officer()
@@ -72,10 +76,13 @@ class Lifecycle(commands.Cog):
             dtype = discharge_type.value
 
             record.status = "discharged"
-            verb = "Honorably" if dtype == "honorable" else "Dishonorably"
+            record.discharge_type = dtype
+            # Same wording the web path writes, so a record reads identically
+            # whichever way the discharge was ordered.
+            label = discharge_label(dtype)
             session.add(ServiceHistoryEntry(
                 member_id=member.id,
-                entry=f"{verb} discharged by {interaction.user.display_name}. Reason: {reason}",
+                entry=f"Discharged ({label}) by {interaction.user.display_name}. Reason: {reason}",
                 recorded_by=interaction.user.id,
             ))
             session.commit()
@@ -107,8 +114,9 @@ class Lifecycle(commands.Cog):
             admin_log_id = get_config(session).admin_log_channel_id
         log_channel = interaction.guild.get_channel(admin_log_id) if admin_log_id else None
         if log_channel:
-            color = discord.Color.green().value if dtype == "honorable" else discord.Color.red().value
-            embed = base_embed(title=f"{verb} Discharge", color=color)
+            color = (discord.Color.green().value if dtype in FAVOURABLE_DISCHARGES
+                     else discord.Color.red().value)
+            embed = base_embed(title=f"Discharge — {label}", color=color)
             embed.add_field(name="Member", value=member.mention, inline=True)
             embed.add_field(name="Rank at Discharge", value=old_rank, inline=True)
             embed.add_field(name="Discharged By", value=interaction.user.mention, inline=True)
@@ -123,11 +131,11 @@ class Lifecycle(commands.Cog):
 
         await post_billboard(
             interaction.guild,
-            f"**{callsign}** has been {verb.lower()} discharged.",
+            f"**{callsign}** has been discharged — {label.lower()}.",
         )
 
         await interaction.followup.send(
-            f"**{callsign}** has been {verb.lower()} discharged.", ephemeral=True
+            f"**{callsign}** has been discharged — {label.lower()}.", ephemeral=True
         )
 
     # --- /loa ---

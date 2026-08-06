@@ -15,10 +15,13 @@
           <img class="avatar avatar-lg" src="{{ (record.discord_id, record.avatar)|avatar_url(128) }}" alt="">
           <div style="flex:1;">
             <h1>{{ record.name or 'Unknown Soldier' }}</h1>
-            <p>Service Record
-              {% if level == 'owner' %}· your record across every unit
-              {% elif level == 'recruiter' %}· recruiter vetting view
-              {% else %}· public record{% endif %}</p>
+            <p class="sr-ident">
+              <span class="sr-sn">{{ record.service_number }}</span>
+              <span>Service Record</span>
+              {% if level == 'owner' %}<span>your record across every unit</span>
+              {% elif level == 'recruiter' %}<span>recruiter vetting view</span>
+              {% else %}<span>public record</span>{% endif %}
+            </p>
           </div>
           {% if is_owner %}<a class="fx-btn" href="/me/edit">Edit profile</a>{% endif %}
         </div>
@@ -30,8 +33,8 @@
           <div class="fx-stat"><b>{{ record.stats.turnout_pct }}%</b><span>Turnout</span></div>
           {% endif %}
           <div class="fx-stat"><b>{{ record.stats.service_length or '—' }}</b><span>Serving</span></div>
-          {% if record.stats.dishonorable is defined and record.stats.dishonorable %}
-          <div class="fx-stat"><b style="color:var(--fx-like);">{{ record.stats.dishonorable }}</b><span>Dishonorable</span></div>
+          {% if record.stats.adverse is defined and record.stats.adverse %}
+          <div class="fx-stat"><b style="color:var(--fx-like);">{{ record.stats.adverse }}</b><span>Adverse separations</span></div>
           {% endif %}
         </div>
       </div>
@@ -72,26 +75,72 @@
 
       <div class="fx-section">Current Postings</div>
       {% if record.current %}
-      <div class="fx-grid">
+      <div class="fx-grid pf-postings">
         {% for p in record.current %}
         <div class="fx-card" style="padding:16px;">
           <div class="pf-posting-head">
-            <a href="{{ p.url }}">{{ p.unit }}</a>
+            <div class="pf-unit">
+              {% if p.crest %}<img class="pf-crest" src="{{ p.crest }}" alt="">{% endif %}
+              <div>
+                <a href="{{ p.url }}">{{ p.unit }}</a>
+                {% if p.game %}<div class="pf-line" style="margin-top:1px;">{{ p.game }}</div>{% endif %}
+              </div>
+            </div>
             {% if p.on_leave %}<span class="fx-badge fx-badge-warn">on furlough</span>
             {% else %}<span class="fx-badge fx-badge-accent">{{ p.status }}</span>{% endif %}
           </div>
-          {% if p.game %}<div class="pf-line">{{ p.game }}</div>{% endif %}
-          <div class="pf-line">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }} · {{ p.company }}</div>
-          <div class="pf-line">Enlisted {{ p.joined|fmt_date }}{% if p.rank_since %} · {{ p.rank }} since {{ p.rank_since|fmt_date }}{% endif %}</div>
-          {% if p.on_leave %}<div class="pf-line">On furlough until {{ p.loa_until|fmt_date }}</div>{% endif %}
-          {% if p.turnout and p.turnout.pct is not none %}
-          <div class="pf-line">Turnout {{ p.turnout.pct }}% · {{ p.turnout.present }} of {{ p.turnout.counted }} recent call{{ 's' if p.turnout.counted != 1 }}</div>
+
+          <div class="pf-grade">
+            {% if p.rank_image %}<img class="pf-grade-insignia" src="{{ p.rank_image }}" alt="">{% endif %}
+            <div>
+              <div class="pf-grade-rank">{{ p.rank }}</div>
+              <div class="pf-line" style="margin-top:0;">{{ p.company }}{% if p.rank_tier %} · {{ p.rank_tier }}{% endif %}</div>
+            </div>
+          </div>
+
+          <dl class="pf-dl">
+            <div><dt>Enlisted</dt><dd>{{ p.joined|fmt_mil_date }}</dd></div>
+            <div><dt>Date of rank</dt><dd>{{ p.rank_since|fmt_mil_date }}</dd></div>
+            {% if p.time_in_grade %}<div><dt>Time in grade</dt><dd>{{ p.time_in_grade }}</dd></div>{% endif %}
+            {% if p.turnout and p.turnout.pct is not none %}
+            <div><dt>Turnout</dt><dd>{{ p.turnout.pct }}% ({{ p.turnout.present }}/{{ p.turnout.counted }})</dd></div>
+            {% endif %}
+            {% if p.on_leave %}<div><dt>Furlough until</dt><dd>{{ p.loa_until|fmt_mil_date }}</dd></div>{% endif %}
+          </dl>
+
+          {% if p.ladder|length > 1 %}
+          <div class="pf-sub">Progression</div>
+          <ol class="pf-ladder">
+            {% for step in p.ladder %}
+            <li{{ ' class=now' if loop.last }}>
+              {% if step.image %}<img src="{{ step.image }}" alt="">{% else %}<span class="pf-ladder-ph">{{ step.abbreviation or step.rank[:2] }}</span>{% endif %}
+              <span class="pf-ladder-rank">{{ step.rank }}</span>
+              <span class="pf-ladder-date">{{ step.date|fmt_mil_date }}</span>
+            </li>
+            {% endfor %}
+          </ol>
           {% endif %}
+
           {% if p.assignments %}
+          <div class="pf-sub">Assignments</div>
           <div class="fx-unit-tags">{% for a in p.assignments %}<span class="fx-badge {{ 'fx-badge-accent' if a.leadership }}">{{ a.name }}</span>{% endfor %}</div>
           {% endif %}
+
           {% if p.awards %}
-          <div class="fx-unit-tags">{% for a in p.awards %}<span class="fx-badge">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
+          <div class="pf-sub">Decorations</div>
+          <div class="pf-rack">
+            {% for a in p.awards %}
+            <div class="pf-medal" title="{{ a.name }}{% if a.date %} · {{ a.date|fmt_mil_date }}{% endif %}{% if a.citation %} — {{ a.citation }}{% elif a.description %} — {{ a.description }}{% endif %}">
+              <span class="pf-medal-badge">
+                {% if a.image %}<img src="{{ a.image }}" alt="">
+                {% elif a.emoji %}<span class="pf-medal-emoji">{{ a.emoji }}</span>
+                {% else %}<span class="pf-medal-emoji">✦</span>{% endif %}
+              </span>
+              <span class="pf-medal-name">{{ a.name }}</span>
+              <span class="pf-medal-date">{{ a.date|fmt_mil_date }}</span>
+            </div>
+            {% endfor %}
+          </div>
           {% endif %}
           {% if is_owner and p.history %}
           <details style="margin-top:10px; font-size:12.5px;">
@@ -108,22 +157,49 @@
 
       {% if record.former %}
       <div class="fx-section">Former Service</div>
-      <div class="fx-grid">
+      <div class="fx-grid pf-postings">
         {% for p in record.former %}
         <div class="fx-card" style="padding:16px; opacity:0.92;">
           <div class="pf-posting-head">
-            {% if p.url %}<a href="{{ p.url }}">{{ p.unit }}</a>
-            {% else %}<span style="font-weight:800;">{{ p.unit }}</span>{% endif %}
-            {% if p.discharge_type == 'honorable' %}<span class="fx-badge fx-badge-ok">Honorable</span>
-            {% elif p.discharge_type == 'dishonorable' %}<span class="fx-badge fx-badge-danger">Dishonorable</span>
+            <div class="pf-unit">
+              {% if p.crest %}<img class="pf-crest" src="{{ p.crest }}" alt="">{% endif %}
+              <div>
+                {% if p.url %}<a href="{{ p.url }}">{{ p.unit }}</a>
+                {% else %}<span style="font-weight:800;">{{ p.unit }}</span>{% endif %}
+                {% if p.game %}<div class="pf-line" style="margin-top:1px;">{{ p.game }}</div>{% endif %}
+              </div>
+            </div>
+            {% if p.discharge_type %}<span class="fx-badge {{ 'fx-badge-ok' if p.discharge_type == 'honorable' else ('fx-badge-danger' if p.discharge_type in ('dishonorable', 'bad_conduct') else 'fx-badge-warn') }}">{{ p.discharge_label }}</span>
             {% elif p.archived %}<span class="fx-badge">archived</span>
             {% else %}<span class="fx-badge">former</span>{% endif %}
           </div>
-          {% if p.game %}<div class="pf-line">{{ p.game }}</div>{% endif %}
-          <div class="pf-line">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
-          <div class="pf-line">{% if p.joined %}Enlisted {{ p.joined|fmt_date }}{% endif %}{% if p.archived %} · unit since disbanded{% endif %}</div>
+          <div class="pf-grade">
+            {% if p.rank_image %}<img class="pf-grade-insignia" src="{{ p.rank_image }}" alt="">{% endif %}
+            <div>
+              <div class="pf-grade-rank">{{ p.rank }}</div>
+              {% if p.company %}<div class="pf-line" style="margin-top:0;">{{ p.company }}</div>{% endif %}
+            </div>
+          </div>
+          <dl class="pf-dl">
+            {% if p.joined %}<div><dt>Enlisted</dt><dd>{{ p.joined|fmt_mil_date }}</dd></div>{% endif %}
+            {% if p.discharged_at %}<div><dt>Separated</dt><dd>{{ p.discharged_at|fmt_mil_date }}</dd></div>{% endif %}
+            {% if p.archived %}<div><dt>Unit</dt><dd>since disbanded</dd></div>{% endif %}
+          </dl>
           {% if p.awards %}
-          <div class="fx-unit-tags">{% for a in p.awards %}<span class="fx-badge">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
+          <div class="pf-sub">Decorations</div>
+          <div class="pf-rack">
+            {% for a in p.awards %}
+            <div class="pf-medal" title="{{ a.name }}{% if a.date %} · {{ a.date|fmt_mil_date }}{% endif %}">
+              <span class="pf-medal-badge">
+                {% if a.image %}<img src="{{ a.image }}" alt="">
+                {% elif a.emoji %}<span class="pf-medal-emoji">{{ a.emoji }}</span>
+                {% else %}<span class="pf-medal-emoji">✦</span>{% endif %}
+              </span>
+              <span class="pf-medal-name">{{ a.name }}</span>
+              <span class="pf-medal-date">{{ a.date|fmt_mil_date }}</span>
+            </div>
+            {% endfor %}
+          </div>
           {% endif %}
           {% if is_owner and p.history %}
           <details style="margin-top:10px; font-size:12.5px;">
@@ -143,7 +219,7 @@
         <li class="fx-timeline-item">
           <span class="fx-timeline-dot"></span>
           <span class="fx-timeline-text">{{ m.text }}</span>
-          <time class="fx-timeline-when">{% if m.at %}{{ m.at|fmt_date }}{% endif %}</time>
+          <time class="fx-timeline-when">{% if m.at %}{{ m.at|fmt_mil_date }}{% endif %}</time>
         </li>
         {% endfor %}
       </ul>
