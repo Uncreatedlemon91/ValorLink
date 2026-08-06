@@ -381,24 +381,19 @@ def loa_end(session, actor: dict, discord_id: int) -> str:
     return f"{callsign} is back on active duty."
 
 
-# --- Member profile (self-service) --------------------------------------- #
-DAY_CODES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+# --- Member preferences (self-service) ----------------------------------- #
+def update_preferences(session, actor: dict, discord_id: int,
+                       reminders_opt_out: bool = False) -> str:
+    """A member updates the settings that are genuinely *per-unit*.
 
-
-def update_profile(session, actor: dict, discord_id: int, timezone: str = "",
-                   ingame_name: str = "", availability: str = "", bio: str = "",
-                   reminders_opt_out: bool = False) -> str:
-    """A member updates their own profile. Web-only data (no Discord side
-    effect). ``availability`` is a comma-separated subset of DAY_CODES."""
+    Bio, timezone, availability, and in-game names moved to the platform
+    profile (``tenancy/player_profiles.py``) — they describe the player, not
+    their standing in any one unit. Reminder opt-out stays here: it's this
+    unit's bot that would be DMing them."""
     record = _member(session, discord_id)
-    record.timezone = (timezone or "").strip() or None
-    record.ingame_name = (ingame_name or "").strip() or None
-    days = [d for d in (availability or "").split(",") if d in DAY_CODES]
-    record.availability = ",".join(days) or None
-    record.bio = (bio or "").strip()[:1000] or None
     record.reminders_opt_out = bool(reminders_opt_out)
     session.commit()
-    return "Your profile has been updated."
+    return "Your preferences have been updated."
 
 
 # --- Leave of absence: member self-request ------------------------------- #

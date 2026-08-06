@@ -22,14 +22,16 @@
     <div><span class="k">Company</span><br>{{ member.company }}</div>
     <div><span class="k">Enrolled</span><br>{{ member.joined_date|fmt_date }}</div>
     <div><span class="k">Last Seen</span><br>{{ member.last_active_date|fmt_date }}</div>
-    {% if member.ingame_name %}<div><span class="k">In-Game Name</span><br>{{ member.ingame_name }}</div>{% endif %}
-    {% if member.timezone %}<div><span class="k">Timezone</span><br>{{ member.timezone }}</div>{% endif %}
-    {% if member_days %}<div><span class="k">Plays</span><br>{{ member_days|join(', ') }}</div>{% endif %}
+    {% for game, name in (player_profile.ingame_names or {}).items() %}
+      <div><span class="k">{{ game }} Name</span><br>{{ name }}</div>
+    {% endfor %}
+    {% if player_profile.timezone %}<div><span class="k">Timezone</span><br>{{ player_profile.timezone }}</div>{% endif %}
+    {% if player_profile.availability %}<div><span class="k">Plays</span><br>{{ player_profile.availability|join(', ') }}</div>{% endif %}
     {% if member.loa_until %}<div><span class="k">Furlough Until</span><br>{{ member.loa_until|fmt_date }}</div>{% endif %}
   </div>
 </div>
 
-{% if member.bio %}<p class="dossier-bio">{{ member.bio }}</p>{% endif %}
+{% if player_profile.bio %}<p class="dossier-bio">{{ player_profile.bio }}</p>{% endif %}
 
 {% if held_assignments %}
 <div class="assign-chips">
@@ -135,24 +137,24 @@
 <div class="orders-grid">
   <div class="order-card">
     <h3 class="order-title">Profile</h3>
-    <form class="orders" method="post" action="/my-record/profile">
+    <p class="order-note">Your bio, timezone, playing nights, and in-game names are part of your
+    ValorLink profile — one profile across every unit you serve in, so you only write them once.</p>
+    <div class="field field-actions" style="margin-top:12px;">
+      <a class="btn btn-strong" href="{{ ('https://' + platform_base) if platform_base else '' }}/me/edit">Edit my profile</a>
+      <a class="btn" href="{{ ('https://' + platform_base) if platform_base else '' }}/u/{{ member.discord_id }}">View my record</a>
+    </div>
+  </div>
+
+  <div class="order-card">
+    <h3 class="order-title">This Unit's Settings</h3>
+    <form class="orders" method="post" action="/my-record/preferences">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <div class="field"><label>War of Rights name</label><input name="ingame_name" value="{{ member.ingame_name or '' }}" placeholder="Your in-game name"></div>
-      <div class="field"><label>Timezone</label><input name="timezone" value="{{ member.timezone or '' }}" placeholder="e.g. America/New_York or GMT+1"></div>
-      <div class="field">
-        <label>Nights I play</label>
-        <div class="day-picker">
-          {% for d in day_codes %}
-            <label class="day-chip"><input type="checkbox" name="availability" value="{{ d }}" {{ 'checked' if d in member_days }}> {{ d }}</label>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="field"><label>About me <span class="opt">(optional)</span></label><textarea name="bio" rows="2" maxlength="1000">{{ member.bio or '' }}</textarea></div>
       <div class="field">
         <label class="check-inline"><input type="checkbox" name="reminders_opt_out" value="1" {{ 'checked' if member.reminders_opt_out }}>
         Don't DM me event reminders</label>
+        <span class="order-note">Applies to this unit's bot only.</span>
       </div>
-      <div class="field field-actions"><button class="btn btn-strong" type="submit">Save profile</button></div>
+      <div class="field field-actions"><button class="btn btn-strong" type="submit">Save settings</button></div>
     </form>
   </div>
 

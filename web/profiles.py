@@ -22,8 +22,17 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime, timedelta
 
-from db.models import AwardType, Member, MemberAward, ServiceHistoryEntry
+from db.models import (
+    AttendanceRecord,
+    AwardType,
+    Event,
+    Member,
+    MemberAward,
+    ServiceHistoryEntry,
+)
+from tenancy import player_profiles
 from tenancy.career import career_events_for
 from tenancy.resolve import all_tenants
 from tenancy.units import sessionmaker_for
@@ -36,6 +45,52 @@ LEVEL_PUBLIC = "public"
 # Promotion entries are written in a fixed shape by both the web and the bot:
 # "Promoted from <old> to <new> by <actor>." — pull the new rank, drop the rest.
 _PROMOTION_RE = re.compile(r"^Promoted from .+ to (.+?) by ")
+
+# --- Turnout -------------------------------------------------------------- #
+# How much of a member's recent muster-call history counts toward their
+# turnout. Defined here rather than in web/app.py so the per-unit attendance
+# page and the cross-unit profile can't drift apart on the rule.
+ATTENDANCE_WINDOW_DAYS = 90
+
+
+def score_turnout(present: int, excused: int, eligible: int) -> dict:
+    """Turnout from a member's raw counts. Excused absences are set aside
+    entirely rather than counted as misses, so the rate reflects only the
+    calls they were actually expected at. ``eligible`` should already exclude
+    calls held before they enrolled."""
+    counted = eligible - excused
+    rate = (present / counted) if counted else None
+    return {
+        "present": present, "counted": counted, "excused": excused,
+        "missed": (counted - present) if counted else 0,
+        "rate": rate, "pct": round(rate * 100) if rate is not None else None,
+    }
+
+
+def _turnout(session, member: Member) -> dict:
+    """One member's turnout in one unit, over the recent window."""
+    now = datetime.utcnow()
+    events = (
+        session.query(Event)
+        .filter(
+            Event.scheduled_at <= now,
+            Event.scheduled_at >= now - timedelta(days=ATTENDANCE_WINDOW_DAYS),
+            Event.scheduled_at >= (member.joined_date or datetime.min),
+        )
+        .all()
+    )
+    if not events:
+        return score_turnout(0, 0, 0)
+    statuses = {
+        r.event_id: r.status
+        for r in session.query(AttendanceRecord).filter(
+            AttendanceRecord.member_id == member.discord_id,
+            AttendanceRecord.event_id.in_([e.id for e in events]),
+        )
+    }
+    present = sum(1 for e in events if statuses.get(e.id) == "present")
+    excused = sum(1 for e in events if statuses.get(e.id) == "excused")
+    return score_turnout(present, excused, len(events))
 
 
 def viewer_level(viewer: dict | None, target_id: int) -> str:
@@ -83,14 +138,29 @@ def _posting(session, member: Member, tenant, level: str) -> dict:
             discharged_at = h.date  # the date only, never the written reason
 
     rank_row = rank_utils.rank_by_name(session, member.rank)
+    # Secondary groups (High Command, a training cadre, the colour guard) —
+    # standing that a rank alone doesn't convey, and invisible outside the
+    # unit until now. Leadership groups lead.
+    assignments = sorted(
+        ({"name": ma.assignment.name, "leadership": ma.assignment.is_leadership}
+         for ma in member.assignments if ma.assignment),
+        key=lambda a: (not a["leadership"], a["name"].lower()),
+    )
+    on_leave = bool(member.loa_until and member.loa_until > datetime.utcnow())
     posting = {
         "unit": tenant.name,
         "slug": tenant.slug,
+        "game": tenant.game,
         "url": _unit_url(tenant.slug, tenant.is_default),
         "rank": member.rank,
         "rank_image": rank_row.image if rank_row else None,
         "company": member.company,
         "status": member.status,
+        "assignments": assignments,
+        "on_leave": on_leave,
+        "loa_until": member.loa_until if on_leave else None,
+        "last_active": member.last_active_date,
+        "turnout": _turnout(session, member) if member.status != "discharged" else None,
         "joined": member.joined_date,
         "rank_since": member.rank_since,
         "awards": awards,
@@ -132,9 +202,14 @@ def _archived_service(discord_id: int, live_slugs: set[str], level: str):
         discharge = next((e for e in evs if e["kind"] == "discharged"), None)
         final_rank = promotions[-1]["detail"] if promotions else None
         postings.append({
-            "unit": unit, "slug": slug, "url": None, "archived": True,
-            "rank": final_rank or "—", "company": "",
+            # The unit's database is gone, so anything that lived only there
+            # (turnout, assignments, last-active) is simply unavailable — the
+            # career log keeps the milestones, not the day-to-day record.
+            "unit": unit, "slug": slug, "game": None, "url": None, "archived": True,
+            "rank": final_rank or "—", "rank_image": None, "company": "",
             "status": "discharged" if discharge else "departed",
+            "assignments": [], "on_leave": False, "loa_until": None,
+            "last_active": None, "turnout": None,
             "joined": enlisted, "rank_since": None,
             "awards": awards, "promotions": [], "history": [],
             "discharge_type": discharge["detail"] if (discharge and level in (LEVEL_OWNER, LEVEL_RECRUITER)) else None,
@@ -155,6 +230,48 @@ def _archived_service(discord_id: int, live_slugs: set[str], level: str):
             milestones.append({"at": discharge["at"], "kind": "discharge", "unit": unit,
                                "text": f"{label} · {unit} (archived)"})
     return postings, milestones
+
+
+def games_played_by(discord_id: int) -> list[str]:
+    """The games this player can actually be found in — those played by the
+    units they serve in, plus any they've already recorded a name for (so
+    leaving a unit doesn't strip the entry off their profile)."""
+    from tenancy.registry import registry_session
+
+    games: list[str] = []
+    with registry_session() as rs:
+        tenants = [(t.db_url, t.game) for t in all_tenants(rs) if t.game]
+    for db_url, game in tenants:
+        if game in games:
+            continue
+        try:
+            with sessionmaker_for(db_url)() as s:
+                if s.get(Member, discord_id) is not None:
+                    games.append(game)
+        except Exception:  # noqa: BLE001 -- an unreadable unit just isn't listed
+            continue
+    for game in player_profiles.get_profile(discord_id)["ingame_names"]:
+        if game not in games:
+            games.append(game)
+    return sorted(games, key=str.lower)
+
+
+def _service_length(first_enlisted: datetime | None) -> str | None:
+    """How long they've been on the platform, as "3 yrs 2 mo" — more telling
+    at a glance than the bare year they first enlisted."""
+    if not first_enlisted:
+        return None
+    days = (datetime.utcnow() - first_enlisted).days
+    if days < 0:
+        return None
+    years, months = divmod(max(days, 0) // 30, 12)
+    if years and months:
+        return f"{years} yr{'s' if years != 1 else ''} {months} mo"
+    if years:
+        return f"{years} yr{'s' if years != 1 else ''}"
+    if months:
+        return f"{months} mo"
+    return f"{days} day{'s' if days != 1 else ''}"
 
 
 def build_service_record(discord_id: int, level: str) -> dict:
@@ -191,12 +308,22 @@ def build_service_record(discord_id: int, level: str) -> dict:
 
     joined_dates = [p["joined"] for p in all_postings if p["joined"]]
     awards_total = sum(len(p["awards"]) for p in all_postings)
+    first_enlisted = min(joined_dates) if joined_dates else None
     stats = {
         "units_served": len(all_postings),
         "active_units": len(current),
         "awards_total": awards_total,
-        "first_enlisted": min(joined_dates) if joined_dates else None,
+        "first_enlisted": first_enlisted,
+        "service_length": _service_length(first_enlisted),
     }
+    # Turnout pooled across every unit they currently serve, so one quiet
+    # posting doesn't read as an unreliable player (and vice versa). Only
+    # meaningful once they've actually had calls to attend.
+    counted = sum(p["turnout"]["counted"] for p in current if p["turnout"])
+    if counted:
+        present = sum(p["turnout"]["present"] for p in current if p["turnout"])
+        stats["turnout_pct"] = round(present / counted * 100)
+        stats["turnout_counted"] = counted
     if level in (LEVEL_OWNER, LEVEL_RECRUITER):
         stats["dishonorable"] = sum(
             1 for p in former if p.get("discharge_type") == "dishonorable")
@@ -224,15 +351,22 @@ def build_service_record(discord_id: int, level: str) -> dict:
     milestones += archived_milestones
     milestones.sort(key=lambda m: (m["at"] is None, m["at"]))
 
+    # The player-authored half: one row for this Discord identity, however
+    # many units they serve in. Public, like the rest of the record.
+    profile = player_profiles.get_profile(discord_id)
+
     return {
         "discord_id": discord_id,
         "name": name,
         "avatar": avatar,
         "level": level,
+        "profile": profile,
         "postings": all_postings,
         "current": current,
         "former": former,
         "stats": stats,
         "milestones": milestones,
-        "found": bool(all_postings),
+        # A profile someone has actually written is worth showing on its own,
+        # even before they've been enlisted anywhere.
+        "found": bool(all_postings) or bool(profile["bio"] or profile["ingame_names"]),
     }

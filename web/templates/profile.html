@@ -13,19 +13,23 @@
       <div class="fx-header-inner">
         <div class="fx-heading" style="display:flex; align-items:center; gap:14px;">
           <img class="avatar avatar-lg" src="{{ (record.discord_id, record.avatar)|avatar_url(128) }}" alt="">
-          <div>
+          <div style="flex:1;">
             <h1>{{ record.name or 'Unknown Soldier' }}</h1>
             <p>Service Record
               {% if level == 'owner' %}· your record across every unit
               {% elif level == 'recruiter' %}· recruiter vetting view
               {% else %}· public record{% endif %}</p>
           </div>
+          {% if is_owner %}<a class="fx-btn" href="/me/edit">Edit profile</a>{% endif %}
         </div>
         <div class="fx-stats">
           <div class="fx-stat"><b>{{ record.stats.units_served }}</b><span>Units served</span></div>
           <div class="fx-stat"><b>{{ record.stats.active_units }}</b><span>Active now</span></div>
           <div class="fx-stat"><b>{{ record.stats.awards_total }}</b><span>Honors</span></div>
-          <div class="fx-stat"><b>{% if record.stats.first_enlisted %}{{ record.stats.first_enlisted.year }}{% else %}—{% endif %}</b><span>First enlisted</span></div>
+          {% if record.stats.turnout_pct is defined %}
+          <div class="fx-stat"><b>{{ record.stats.turnout_pct }}%</b><span>Turnout</span></div>
+          {% endif %}
+          <div class="fx-stat"><b>{{ record.stats.service_length or '—' }}</b><span>Serving</span></div>
           {% if record.stats.dishonorable is defined and record.stats.dishonorable %}
           <div class="fx-stat"><b style="color:var(--fx-like);">{{ record.stats.dishonorable }}</b><span>Dishonorable</span></div>
           {% endif %}
@@ -36,17 +40,56 @@
     <main class="fx-main">
       {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
 
+      {% set pf = record.profile %}
+      {% if pf.bio or pf.timezone or pf.availability or pf.ingame_names or pf.links %}
+      <div class="fx-card pf-about">
+        {% if pf.bio %}<p class="pf-bio">{{ pf.bio }}</p>{% endif %}
+        <div class="pf-facts">
+          {% for game, name in pf.ingame_names.items() %}
+            <div><span class="pf-k">{{ game }}</span>{{ name }}</div>
+          {% endfor %}
+          {% if pf.timezone %}<div><span class="pf-k">Timezone</span>{{ pf.timezone }}</div>{% endif %}
+          {% if pf.availability %}<div><span class="pf-k">Plays</span>{{ pf.availability|join(', ') }}</div>{% endif %}
+        </div>
+        {% if pf.links %}
+        <div class="pf-links">
+          {% for key, label in [('steam','Steam'), ('twitch','Twitch'), ('youtube','YouTube'), ('website','Website')] %}
+            {% if pf.links.get(key) %}
+              <a class="fx-chip" href="{{ pf.links[key] }}" rel="noopener noreferrer nofollow" target="_blank">{{ label }}</a>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% elif is_owner %}
+      <div class="fx-card fx-empty" style="padding:28px 20px;">
+        <div class="fx-empty-icon">✎</div>
+        <h3>Your Profile Is Empty</h3>
+        <p>Add a bio, your playing nights, and your in-game names so units know who you are.</p>
+        <p style="margin-top:14px;"><a class="fx-btn fx-btn-primary" href="/me/edit">Set up my profile</a></p>
+      </div>
+      {% endif %}
+
       <div class="fx-section">Current Postings</div>
       {% if record.current %}
       <div class="fx-grid">
         {% for p in record.current %}
         <div class="fx-card" style="padding:16px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-            <a href="{{ p.url }}" style="font-weight:800;">{{ p.unit }}</a>
-            <span class="fx-badge fx-badge-accent">{{ p.status }}</span>
+          <div class="pf-posting-head">
+            <a href="{{ p.url }}">{{ p.unit }}</a>
+            {% if p.on_leave %}<span class="fx-badge fx-badge-warn">on furlough</span>
+            {% else %}<span class="fx-badge fx-badge-accent">{{ p.status }}</span>{% endif %}
           </div>
-          <div class="fx-unit-meta" style="margin-top:6px;">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }} · {{ p.company }}</div>
-          <div class="fx-unit-meta">Enlisted {{ p.joined|fmt_date }}{% if p.rank_since %} · {{ p.rank }} since {{ p.rank_since|fmt_date }}{% endif %}</div>
+          {% if p.game %}<div class="pf-line">{{ p.game }}</div>{% endif %}
+          <div class="pf-line">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }} · {{ p.company }}</div>
+          <div class="pf-line">Enlisted {{ p.joined|fmt_date }}{% if p.rank_since %} · {{ p.rank }} since {{ p.rank_since|fmt_date }}{% endif %}</div>
+          {% if p.on_leave %}<div class="pf-line">On furlough until {{ p.loa_until|fmt_date }}</div>{% endif %}
+          {% if p.turnout and p.turnout.pct is not none %}
+          <div class="pf-line">Turnout {{ p.turnout.pct }}% · {{ p.turnout.present }} of {{ p.turnout.counted }} recent call{{ 's' if p.turnout.counted != 1 }}</div>
+          {% endif %}
+          {% if p.assignments %}
+          <div class="fx-unit-tags">{% for a in p.assignments %}<span class="fx-badge {{ 'fx-badge-accent' if a.leadership }}">{{ a.name }}</span>{% endfor %}</div>
+          {% endif %}
           {% if p.awards %}
           <div class="fx-unit-tags">{% for a in p.awards %}<span class="fx-badge">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
           {% endif %}
@@ -68,16 +111,17 @@
       <div class="fx-grid">
         {% for p in record.former %}
         <div class="fx-card" style="padding:16px; opacity:0.92;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-            {% if p.url %}<a href="{{ p.url }}" style="font-weight:800;">{{ p.unit }}</a>
+          <div class="pf-posting-head">
+            {% if p.url %}<a href="{{ p.url }}">{{ p.unit }}</a>
             {% else %}<span style="font-weight:800;">{{ p.unit }}</span>{% endif %}
             {% if p.discharge_type == 'honorable' %}<span class="fx-badge fx-badge-ok">Honorable</span>
             {% elif p.discharge_type == 'dishonorable' %}<span class="fx-badge fx-badge-danger">Dishonorable</span>
             {% elif p.archived %}<span class="fx-badge">archived</span>
             {% else %}<span class="fx-badge">former</span>{% endif %}
           </div>
-          <div class="fx-unit-meta" style="margin-top:6px;">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
-          <div class="fx-unit-meta">{% if p.joined %}Enlisted {{ p.joined|fmt_date }}{% endif %}{% if p.archived %} · unit since disbanded{% endif %}</div>
+          {% if p.game %}<div class="pf-line">{{ p.game }}</div>{% endif %}
+          <div class="pf-line">{% if p.rank_image %}<img class="insignia-img" src="{{ p.rank_image }}" alt="">{% endif %}{{ p.rank }}{% if p.company %} · {{ p.company }}{% endif %}</div>
+          <div class="pf-line">{% if p.joined %}Enlisted {{ p.joined|fmt_date }}{% endif %}{% if p.archived %} · unit since disbanded{% endif %}</div>
           {% if p.awards %}
           <div class="fx-unit-tags">{% for a in p.awards %}<span class="fx-badge">{{ a.emoji or '🎖' }} {{ a.name }}</span>{% endfor %}</div>
           {% endif %}

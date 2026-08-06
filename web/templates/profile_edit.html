@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValorLink — Edit Profile</title>
+  <link rel="stylesheet" href="/static/css/valorlink.css?v={{ css_v }}">
+</head>
+<body>
+  <div class="fx-shell">
+    {% include "_apex_topbar.html" %}
+    <header class="fx-header">
+      <div class="fx-header-inner fx-narrow">
+        <div class="fx-heading">
+          <h1>Edit Profile</h1>
+          <p>One profile across every unit you serve in — written once, shown everywhere.</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="fx-main fx-narrow">
+      {% if flash %}<div class="flashes">{% for f in flash %}<div class="flash flash-{{ f.level }}">{{ f.text }}</div>{% endfor %}</div>{% endif %}
+
+      <div class="fx-card" style="padding:18px;">
+        <form class="fx-form" method="post" action="/me/edit">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+          <div class="fx-field">
+            <label>About me <span class="fx-opt">(optional)</span></label>
+            <textarea name="bio" rows="4" maxlength="{{ bio_max_len }}"
+              placeholder="Who you are, how you play, what you're looking for.">{{ profile.bio or '' }}</textarea>
+          </div>
+
+          <div class="fx-field">
+            <label>Timezone <span class="fx-opt">(optional)</span></label>
+            <input name="timezone" value="{{ profile.timezone or '' }}" maxlength="60"
+                   placeholder="e.g. America/New_York or GMT+1">
+          </div>
+
+          <div class="fx-field">
+            <label>Nights I play</label>
+            <div class="day-picker">
+              {% for d in day_codes %}
+                <label class="day-chip"><input type="checkbox" name="availability" value="{{ d }}"
+                  {{ 'checked' if d in profile.availability }}> {{ d }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="fx-section" style="margin-bottom:6px;">In-Game Names</div>
+          {% if games %}
+          <p class="fx-lede" style="margin-bottom:12px;">What you're called in each game your units play,
+          so people can find you in-game as well as on Discord.</p>
+          {% for game in games %}
+            <div class="fx-field">
+              <label>{{ game }}</label>
+              <input name="ingame:{{ game }}" value="{{ profile.ingame_names.get(game, '') }}"
+                     maxlength="120" placeholder="Your name in {{ game }}">
+            </div>
+          {% endfor %}
+          {% else %}
+          <p class="fx-lede">Once you're on the roster of a unit with a game set, you'll be able to
+          add your in-game name for it here.</p>
+          {% endif %}
+
+          <div class="fx-section" style="margin-bottom:6px;">Links</div>
+          <p class="fx-lede" style="margin-bottom:12px;">Optional. Shown on your public record.</p>
+          {% for key, label in link_platforms %}
+            <div class="fx-field">
+              <label>{{ label }}</label>
+              <input name="link:{{ key }}" value="{{ profile.links.get(key, '') }}"
+                     maxlength="300" placeholder="https://…">
+            </div>
+          {% endfor %}
+
+          <div class="fx-field fx-field-actions">
+            <a class="fx-btn" href="/u/{{ discord_id }}">Cancel</a>
+            <button class="fx-btn fx-btn-primary" type="submit">Save profile</button>
+          </div>
+        </form>
+      </div>
+
+      <footer>ValorLink &middot; {{ now.strftime('%d %B %Y') if now else '' }}</footer>
+    </main>
+  </div>
+</body>
+</html>

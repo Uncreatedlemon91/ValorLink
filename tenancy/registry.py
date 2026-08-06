@@ -155,6 +155,36 @@ class PlatformBan(RegistryBase):
     banned_at = Column(DateTime, default=_utcnow)
 
 
+class PlayerProfile(RegistryBase):
+    """Who a player *is*, as opposed to what they've done -- one row per
+    Discord identity, owned and edited by the member themselves.
+
+    Lives here rather than on each unit's Member row because a player is the
+    same person everywhere: previously bio/timezone/in-game name were per-unit
+    columns, so somebody in three units kept three separate bios and had to
+    edit each one. Their *service* is still assembled per-unit and read-only
+    (see web/profiles.py); this is the part they write.
+
+    ``ingame_names`` and ``links`` are JSON objects rather than columns because
+    both are open-ended maps -- one in-game name per game they play, and
+    whichever of a handful of platforms they care to list.
+    """
+
+    __tablename__ = "player_profiles"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(BigInteger, nullable=False, unique=True, index=True)
+    bio = Column(Text, nullable=True)
+    timezone = Column(String, nullable=True)
+    availability = Column(String, nullable=True)   # comma-separated day codes
+    ingame_names = Column(Text, nullable=True)     # JSON {game: name}
+    links = Column(Text, nullable=True)            # JSON {platform: url}
+    # Set once the legacy per-unit profile columns have been folded in, so the
+    # one-time import never re-runs and overwrites the member's own edits.
+    imported_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 _connect_args = {"check_same_thread": False} if REGISTRY_DATABASE_URL.startswith("sqlite") else {}
 registry_engine = create_engine(REGISTRY_DATABASE_URL, connect_args=_connect_args)
 RegistrySession = sessionmaker(bind=registry_engine, expire_on_commit=False)

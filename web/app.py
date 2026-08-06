@@ -42,6 +42,7 @@ from db.models import (
 from tenancy import alliance_events
 from tenancy import alliances as alliance_mod
 from tenancy import bans as bans_mod
+from tenancy import player_profiles
 from tenancy.registry import registry_session
 from tenancy.resolve import all_tenants, listed_tenants, slug_from_host, tenant_by_slug
 from tenancy.units import sessionmaker_for
@@ -679,15 +680,16 @@ def join(request: Request, session: Session = Depends(get_session)):
         .limit(5)
         .all()
     )
-    # When do members tend to play? Tally their self-reported nights.
+    # When do members tend to play? Tally the nights they've each set on their
+    # platform profile (one bulk registry lookup, not a query per member).
+    active_ids = [
+        mid for (mid,) in session.query(Member.discord_id).filter(Member.status == "active")
+    ]
     play_nights: dict[str, int] = defaultdict(int)
-    for (avail,) in session.query(Member.availability).filter(
-        Member.status == "active", Member.availability.isnot(None)
-    ):
-        for d in (avail or "").split(","):
-            if d:
-                play_nights[d] += 1
-    nights = [d for d in services.DAY_CODES if play_nights.get(d)]
+    for prof in player_profiles.get_profiles(active_ids).values():
+        for d in prof["availability"]:
+            play_nights[d] += 1
+    nights = [d for d in player_profiles.DAY_CODES if play_nights.get(d)]
 
     viewer = ctx["user"]
     already_applied = is_member = False
@@ -995,8 +997,9 @@ def _render_dossier(request: Request, session: Session, member: Member, is_self:
         company_options=services.company_options(session),
         held_award_ids={a.award_type_id for a in member.awards},
         award_catalogue=session.query(AwardType).order_by(AwardType.name).all(),
-        day_codes=services.DAY_CODES,
-        member_days=(member.availability or "").split(",") if member.availability else [],
+        # Bio / timezone / in-game names are platform-wide now, so the dossier
+        # shows them but sends the member to /me/edit to change them.
+        player_profile=player_profiles.get_profile(member.discord_id),
         is_self=is_self,
     )
     return templates.TemplateResponse(request, "dossier.html", ctx)
@@ -1050,7 +1053,9 @@ def events(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "events.html", ctx)
 
 
-ATTENDANCE_WINDOW_DAYS = 90
+# The turnout rule itself lives in web/profiles.py so the cross-unit profile
+# and this page can't drift apart on what "turnout" means.
+ATTENDANCE_WINDOW_DAYS = profiles.ATTENDANCE_WINDOW_DAYS
 AT_RISK_RATE = 0.5      # below this counts as at-risk
 AT_RISK_MIN_EVENTS = 2  # ...but only once someone's had a fair sample
 
@@ -1085,13 +1090,7 @@ def _attendance_index(session: Session, window_days: int = ATTENDANCE_WINDOW_DAY
         statuses = status_by_member.get(member.discord_id, {})
         present = sum(1 for e in eligible if statuses.get(e.id) == "present")
         excused = sum(1 for e in eligible if statuses.get(e.id) == "excused")
-        counted = len(eligible) - excused
-        rate = (present / counted) if counted else None
-        return {
-            "present": present, "counted": counted, "excused": excused,
-            "missed": (counted - present) if counted else 0,
-            "rate": rate, "pct": round(rate * 100) if rate is not None else None,
-        }
+        return profiles.score_turnout(present, excused, len(eligible))
 
     return events, status_by_member, rate_for
 
@@ -2014,20 +2013,14 @@ def _self_action(request: Request, csrf: str, fn, *args, redirect: str):
     return RedirectResponse(redirect, status_code=303)
 
 
-@app.post("/my-record/profile")
-def post_profile(
+@app.post("/my-record/preferences")
+def post_preferences(
     request: Request,
     csrf: str = Form(...),
-    timezone: str = Form(""),
-    ingame_name: str = Form(""),
-    availability: list[str] = Form(default=[]),
-    bio: str = Form(""),
     reminders_opt_out: bool = Form(False),
 ):
-    days = ",".join(availability)
-    return _self_action(request, csrf, services.update_profile,
-                        timezone, ingame_name, days, bio, reminders_opt_out,
-                        redirect="/my-record")
+    return _self_action(request, csrf, services.update_preferences,
+                        reminders_opt_out, redirect="/my-record")
 
 
 @app.post("/my-record/request-loa")
@@ -2938,6 +2931,57 @@ def service_record(request: Request, discord_id: int):
         return templates.TemplateResponse(request, "profile_private.html", ctx,
                                           status_code=404)
     return templates.TemplateResponse(request, "profile.html", ctx)
+
+
+@app.get("/me/edit", response_class=HTMLResponse)
+def edit_profile_form(request: Request):
+    """Edit the player-authored half of your profile — one form for the whole
+    platform, however many units you serve in."""
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    discord_id = int(user["id"])
+    ctx = {
+        "request": request,
+        "user": user,
+        "csrf_token": auth.get_csrf_token(request),
+        "flash": request.session.pop("flash", []),
+        "profile": player_profiles.get_profile(discord_id),
+        "day_codes": player_profiles.DAY_CODES,
+        "link_platforms": player_profiles.LINK_PLATFORMS,
+        "bio_max_len": player_profiles.BIO_MAX_LEN,
+        # One in-game name per game they can actually be found in — the games
+        # their units play, so the form has real rows rather than free text.
+        "games": profiles.games_played_by(discord_id),
+        "discord_id": discord_id,
+        "now": datetime.utcnow(),
+    }
+    return templates.TemplateResponse(request, "profile_edit.html", ctx)
+
+
+@app.post("/me/edit")
+async def edit_profile(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        raise auth.NotAuthenticated()
+    form = await request.form()
+    if not auth.verify_csrf(request, form.get("csrf", "")):
+        _flash(request, "Your session expired. Please try that again.", "error")
+        return RedirectResponse("/me/edit", status_code=303)
+    # In-game names and links arrive as `ingame:<game>` / `link:<platform>`
+    # fields, since both are open-ended maps rather than fixed columns.
+    ingame = {k[len("ingame:"):]: v for k, v in form.items() if k.startswith("ingame:")}
+    links = {k[len("link:"):]: v for k, v in form.items() if k.startswith("link:")}
+    message = player_profiles.save_profile(
+        int(user["id"]),
+        bio=form.get("bio", ""),
+        timezone=form.get("timezone", ""),
+        availability=form.getlist("availability"),
+        ingame_names=ingame,
+        links=links,
+    )
+    _flash(request, message, "ok")
+    return RedirectResponse(f"/u/{user['id']}", status_code=303)
 
 
 def _broadcast_to_all_units(title: str, body: str, actor_id: int | None) -> int:

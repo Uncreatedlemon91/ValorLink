@@ -439,6 +439,7 @@ def test_manual_discord_rename_gets_reverted():
 
 
 def test_member_profile_and_loa_self_service():
+    from tenancy import player_profiles
     client = TestClient(app)
     _login(client, "none", discord_id=MEMBER_ID, name="Testman")
 
@@ -446,12 +447,15 @@ def test_member_profile_and_loa_self_service():
         m = re.search(r'name="csrf" value="([^"]+)"', client.get(path).text)
         return m.group(1)
 
-    client.post("/my-record/profile",
-                data={"csrf": mcsrf(), "ingame_name": "TM", "timezone": "UTC",
+    # Bio / timezone / playing nights are platform-wide now, edited once at
+    # /me/edit rather than per-unit on the dossier.
+    client.post("/me/edit",
+                data={"csrf": mcsrf("/me/edit"), "timezone": "UTC",
                       "availability": ["Fri", "Sat"], "bio": "Line infantry."})
-    with SessionLocal() as s:
-        m = s.get(Member, MEMBER_ID)
-        assert m.ingame_name == "TM" and m.availability == "Fri,Sat" and m.bio == "Line infantry."
+    prof = player_profiles.get_profile(MEMBER_ID)
+    assert prof["timezone"] == "UTC"
+    assert prof["availability"] == ["Fri", "Sat"]
+    assert prof["bio"] == "Line infantry."
 
     client.post("/my-record/request-loa", data={"csrf": mcsrf(), "days": "10", "reason": "exams"})
     with SessionLocal() as s:
@@ -1185,12 +1189,12 @@ def test_reminder_skips_opted_out_member():
 def test_profile_toggle_sets_reminder_opt_out():
     client = TestClient(app)
     _login(client, "officer", discord_id=MEMBER_ID, name="Testman")
-    client.post("/my-record/profile",
+    client.post("/my-record/preferences",
                 data={"csrf": _csrf(client, "/my-record"), "reminders_opt_out": "1"})
     with SessionLocal() as s:
         assert s.get(Member, MEMBER_ID).reminders_opt_out is True
     # unchecking clears it (checkbox absent from the form submission)
-    client.post("/my-record/profile", data={"csrf": _csrf(client, "/my-record")})
+    client.post("/my-record/preferences", data={"csrf": _csrf(client, "/my-record")})
     with SessionLocal() as s:
         assert s.get(Member, MEMBER_ID).reminders_opt_out is False
 

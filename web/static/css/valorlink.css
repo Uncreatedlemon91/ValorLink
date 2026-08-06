@@ -2430,6 +2430,37 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
 .fx-btn-danger:hover { background: var(--fx-like); border-color: var(--fx-like); color: #fff; }
 .fx-btn-sm { padding: 5px 13px; font-size: 12px; }
 
+/* ---- Profile: the player-authored identity block ------------------------ */
+.pf-about { padding: 18px 20px; margin-bottom: 4px; }
+.pf-bio { margin: 0; font-size: 15px; line-height: 1.65; color: var(--fx-ink); white-space: pre-wrap; }
+.pf-facts {
+  display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 14px;
+  font-size: 13.5px; color: var(--fx-ink);
+}
+.pf-about .pf-bio + .pf-facts { padding-top: 14px; border-top: 1px solid var(--fx-border); }
+.pf-k {
+  display: block; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--fx-ink-faint); margin-bottom: 2px;
+}
+.pf-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* Posting detail lines. Deliberately not .fx-unit-meta: that's a flex row for
+   icon-plus-label, and the <time> elements fmt_date emits would each become a
+   gapped flex item, breaking "Enlisted <date> · Sergeant since <date>" into
+   pieces. This is running text, so it stays a block. */
+.pf-line { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--fx-ink-faint); }
+.pf-line .insignia-img { vertical-align: -2px; margin-right: 4px; }
+.pf-posting-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pf-posting-head a { font-weight: 800; }
+
+/* The day picker is shared with the parchment dossier, whose hardcoded cream
+   fill reads as a stain on the flat fx background — restate it here. */
+.fx-shell .day-chip {
+  background: var(--fx-bg); color: var(--fx-ink-soft); border-radius: 999px;
+  padding: 6px 12px; font-size: 12.5px;
+}
+.fx-shell .day-chip:hover { border-color: var(--fx-accent); color: var(--fx-accent); }
+
 .fx-empty {
   text-align: center; padding: 56px 20px; color: var(--fx-ink-faint);
 }
@@ -2453,6 +2484,8 @@ body.theme-dark .ev-card-next { background: linear-gradient(165deg, rgba(255,255
   display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 700;
   letter-spacing: 0.02em; border-radius: 999px; padding: 3px 10px;
   background: var(--fx-bg); color: var(--fx-ink-soft); border: 1px solid var(--fx-border);
+  /* A badge is a short label — never let one wrap into a two-line lozenge. */
+  white-space: nowrap; flex: none;
 }
 .fx-badge-ok { background: var(--fx-ok-bg); color: var(--fx-ok); border-color: transparent; }
 .fx-badge-off { background: var(--fx-bg); color: var(--fx-ink-faint); border-color: var(--fx-border); }
