@@ -1,3 +1,12 @@
-flask==3.0.3
-curl_cffi==0.15.0
-gunicorn==22.0.0  # production WSGI server (droplet only -- local dev uses `python app.py`)
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+jinja2>=3.1.0
+itsdangerous>=2.1.0   # signed session cookies (Starlette SessionMiddleware)
+httpx>=0.27.0          # Discord + Twitch API calls
+python-multipart>=0.0.9  # form parsing (article/event/streamer forms)
+python-dotenv>=1.0.0
+markdown>=3.6          # renders article Markdown source
+nh3>=0.2.17            # sanitizes the rendered HTML before it's served
+sqlalchemy>=2.0.0      # site content database (articles/events/streamers)
+curl_cffi==0.15.0       # EA Pro Clubs API client (bypasses bot detection)
+gunicorn==22.0.0        # production WSGI/ASGI server (droplet only)

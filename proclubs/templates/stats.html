@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+{% if not club_id %}
+  <div class="page narrow">
+    <div class="card empty-state">
+      Stats aren't configured on this deployment yet. Set <code>CLUB_ID</code>
+      and <code>CLUB_PLATFORM</code> in the environment to enable this page.
+    </div>
+  </div>
+{% else %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>Club stats</h1>
+        <p class="page-lede">Live from EA, plus trends we've tracked over time.</p>
+      </div>
+    </div>
+
+    <section id="club-view">
+      <div id="club-header"></div>
+      <nav id="tabs">
+        <button data-tab="overview" class="active">Overview</button>
+        <button data-tab="matches">Matches</button>
+        <button data-tab="members">Members</button>
+        <button data-tab="standings">Standings</button>
+        <button data-tab="history">History</button>
+      </nav>
+      <div id="tab-overview" class="tab-panel active"></div>
+      <div id="tab-matches" class="tab-panel"></div>
+      <div id="tab-members" class="tab-panel"></div>
+      <div id="tab-standings" class="tab-panel"></div>
+      <div id="tab-history" class="tab-panel"></div>
+    </section>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
+    window.CLUB_ID = {{ club_id | tojson }};
+    window.CLUB_PLATFORM = {{ club_platform | tojson }};
+  </script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+{% endif %}
+{% endblock %}

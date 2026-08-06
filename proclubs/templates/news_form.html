@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit article' if article else 'New article' }}{% endblock %}
+{% block content %}
+<div class="page narrow">
+  <div class="page-head"><h1>{{ 'Edit article' if article else 'New article' }}</h1></div>
+
+  <form class="card" method="post" enctype="multipart/form-data"
+        action="{{ '/news/' ~ article.slug ~ '/edit' if article else '/news/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <div class="field">
+      <label for="title">Title</label>
+      <input id="title" name="title" required value="{{ article.title if article else '' }}" />
+    </div>
+
+    <div class="field">
+      <label for="summary">Summary</label>
+      <input id="summary" name="summary" placeholder="One line shown in article lists" value="{{ article.summary if article else '' }}" />
+    </div>
+
+    <div class="field">
+      <label for="cover_image">Cover image</label>
+      {% if article and article.cover_image %}<img class="article-cover" style="max-width:240px;" src="{{ article.cover_image }}" alt="" />{% endif %}
+      <input id="cover_image" name="cover_image" type="file" accept="image/*" />
+      <p class="field-hint">Leave blank to keep the current image. Max 2MB.</p>
+    </div>
+
+    <div class="field">
+      <label for="body_md">Body (Markdown)</label>
+      <textarea id="body_md" name="body_md" rows="16" required>{{ article.body_md if article else '' }}</textarea>
+    </div>
+
+    <label class="field checkbox-field">
+      <input type="checkbox" name="published" value="1" {% if not article or article.published %}checked{% endif %} />
+      Published (uncheck to save as a draft)
+    </label>
+
+    <div class="form-actions">
+      <button type="submit">{{ 'Save changes' if article else 'Publish' }}</button>
+      <a class="btn secondary" href="{{ '/news/' ~ article.slug if article else '/news' }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,70 +1,126 @@
-# Pro Clubs Tracker
+# Pr1mE6ers — Pro Clubs team site
 
-A Flask site that pulls club data from EA's **unofficial** Pro Clubs API
-(`proclubs.ea.com/api/fc`) and displays it in a simple dashboard: club
-overview, recent matches, member stats, and divisional standings.
+The team's public home: news/blog articles, an events calendar, a live
+Twitch streamer showcase, and an EA Pro Clubs stats dashboard locked to our
+own club. FastAPI + Jinja2 + SQLAlchemy, matching the main ValorLink
+platform's stack.
 
 This runs as its own independent service alongside the ValorLink bot/web app
 -- separate venv, separate systemd unit, separate subdomain
-(`proclubs.apps.valorlink.co`), no shared database or code. See
+(`proclubs.apps.valorlink.co`), separate `.env`, no shared database or code
+with `web/`, `db/`, `tenancy/`, or `utils/`. See
 [`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
 
-## Important caveats
+## Permissions
 
-- This is **not** an official EA API. It's the same undocumented endpoint the
-  proclubs.ea.com website itself calls. EA can change or break it at any time
-  without notice (it has gone down before -- see EA forum threads about
-  outages).
-- EA does not expose a full league table. "Standings" here means your own
-  club's divisional progress (current division, promotions/relegations,
-  skill rating) -- not a table of other clubs.
-- The `clubs/matches` response shape isn't documented anywhere public, so the
-  match list renderer is best-effort; if EA's field names don't match what's
-  expected, it falls back to showing the raw JSON so you can see what came
-  back.
+Two tiers, both derived live from Discord roles at sign-in time (never
+stored): everyone -- including signed-out visitors -- can read the site.
+**Staff** -- holders of `DISCORD_STAFF_ROLE_ID` in `DISCORD_GUILD_ID` -- can
+write articles, manage events, and manage the streamer list. A role change
+in Discord takes effect on that person's next sign-in.
 
 ## Local dev
 
 ```bash
 cd proclubs
-pip install -r requirements.txt
-python app.py
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env   # then fill in at least SESSION_SECRET; see below
+DEV_LOGIN=1 .venv/bin/uvicorn app:app --reload
 ```
 
-Then open http://localhost:5000
+Then open http://localhost:8000. With `DEV_LOGIN=1` set, `/login` offers a
+"Dev sign in" shortcut that acts as any name, staff or not -- no Discord app
+needed for local development. Never set `DEV_LOGIN` in production.
 
-## Platforms
+Run the tests with:
 
-EA groups platforms into a few buckets rather than one per console:
+```bash
+.venv/bin/pip install pytest
+.venv/bin/pytest tests/
+```
 
-| Value          | Covers                    |
-|----------------|---------------------------|
-| `common-gen5`  | PC, PS5, Xbox Series X/S  |
-| `common-gen4`  | PS4, Xbox One             |
-| `nx`           | Legacy value, rarely used |
+## Configuring a fresh deployment
 
-Since your club has members on PC and consoles, `common-gen5` is the right
-choice for anyone on PC or current-gen -- Pro Clubs crossplay pools those
-together under one platform bucket. Members still on PS4/Xbox One would show
-up under `common-gen4` instead if the club also has a presence registered
-there.
+All configuration lives in `.env` (see `.env.example` for the full list).
+The pieces that need real setup:
+
+- **Our club** (`CLUB_PLATFORM` / `CLUB_ID`) -- this site shows one club's
+  stats, configured once, not a search box. `tracked_clubs.json` (used by
+  the history poller, see below) should reference the same club.
+- **Discord OAuth2** -- reuses the same Discord application as the main
+  ValorLink bot/web app; a Discord app supports multiple OAuth2 redirect
+  URIs, so no second app is needed. On that existing application's OAuth2
+  page at [discord.com/developers/applications](https://discord.com/developers/applications),
+  add a redirect matching `DISCORD_OAUTH_REDIRECT`, then copy the same
+  client ID/secret into this app's `.env`. (Sharing the OAuth app is just
+  sharing an identity provider -- the `.env`, session, and database stay
+  separate.) Then find the team's guild ID and the staff role's ID (enable
+  Developer Mode in Discord, right-click the server/role, "Copy ID") --
+  the role doesn't have to be the same one ValorLink treats as officer.
+- **Twitch** -- register a free app at
+  [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps). This
+  site only uses the app-level client-credentials grant to check "is this
+  channel live," never a user login, so any redirect URL satisfies
+  registration.
+- **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
+  Signs the session cookie; rotating it signs everyone out.
+
+Any of Discord OAuth or Twitch can be left unconfigured -- the site
+degrades gracefully (sign-in shows "not configured," the streamer showcase
+shows profiles without live status) rather than erroring.
+
+## Important caveats about the EA stats dashboard
+
+- The EA API (`proclubs.ea.com/api/fc`) is **not official**. It's the same
+  undocumented endpoint the proclubs.ea.com website itself calls, and EA can
+  change or break it without notice.
+- EA does not expose a full league table. "Standings" means our own club's
+  divisional progress (current division, promotions/relegations, skill
+  rating) -- not a table of other clubs.
+- EA's API only returns a rolling window of recent matches and no historical
+  division data at all. `proclubs-poll.timer` (see `../deploy/README.md`)
+  snapshots our club hourly into `data/history.db` so the "History" tab has
+  something to show beyond that window; history only accumulates from
+  whenever polling started.
 
 ## Project layout
 
 ```
 proclubs/
-  app.py         Flask routes
-  ea_client.py   EA API client (requests, caching, error handling)
-  templates/index.html
-  static/css/style.css
-  static/js/app.js
-  static/js/charts.js
+  app.py               FastAPI routes: pages, staff CRUD forms, /api/* stats proxy
+  auth.py               Discord OAuth2, staff-role gating, CSRF helpers
+  config.py             All env-var configuration
+  database.py            SQLAlchemy engine/session for the site's own content DB
+  models.py              Article / Event / Streamer
+  services.py            CRUD + validation for articles/events/streamers
+  markdown_render.py    Article Markdown -> sanitized HTML
+  twitch_client.py       Twitch Helix: is-this-channel-live, with a short cache
+  ea_client.py           EA Pro Clubs API client (curl_cffi, unrelated to the above)
+  db.py                  Locally-accumulated EA stats history (own sqlite3 file)
+  poll.py                Standalone poller for db.py, run by proclubs-poll.timer
+  tracked_clubs.json     Clubs poll.py snapshots (just ours, normally)
+  templates/             Jinja2 templates
+  static/css/site.css    Design system (also read by charts.js as CSS vars)
+  static/js/app.js       Stats dashboard UI (fetches /api/*)
+  static/js/charts.js    Dependency-free SVG charts
+  tests/                 pytest suite
 ```
 
-## API endpoints (this app)
+## Pages
 
-- `GET /api/clubs/search?name=&platform=`
-- `GET /api/clubs/<club_id>/overview?platform=`
-- `GET /api/clubs/<club_id>/standings?platform=`
-- `GET /api/clubs/<club_id>/members?platform=`
-- `GET /api/clubs/<club_id>/matches?platform=&matchType=leagueMatch|playoffMatch|friendlyMatch`
+| Path | Who | What |
+|---|---|---|
+| `/` | everyone | Hero, latest news, next event, live streamers, stats teaser |
+| `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
+| `/news/new`, `/news/<slug>/edit` | staff | Article form (Markdown + optional cover image) |
+| `/events` | everyone | Upcoming + past events |
+| `/events/new`, `/events/<id>/edit` | staff | Event form |
+| `/streamers` | everyone | Showcase, live status from Twitch |
+| `/stats` | everyone | EA stats dashboard for our club |
+| `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
+
+`/api/overview`, `/api/standings`, `/api/members`, `/api/matches`,
+`/api/history/division`, `/api/history/matches`, `/api/history/players`, and
+`/api/streamers/live` back the `/stats` page's JS and are not meant to be
+called directly, though they're unauthenticated (read-only, no secrets).

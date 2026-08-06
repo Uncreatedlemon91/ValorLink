@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Streamers{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Streamers</h1>
+      <p class="page-lede">Catch the squad live on Twitch.</p>
+    </div>
+  </div>
+
+  {% if not twitch_enabled %}
+    <div class="card empty-state">Twitch isn't configured on this deployment yet, so live status can't be shown.</div>
+  {% endif %}
+
+  {% if streamers %}
+    <div class="card-grid">
+      {% for s in streamers %}
+        {% set info = live.get(s.twitch_login) %}
+        <div class="card streamer-card">
+          <a href="https://twitch.tv/{{ s.twitch_login }}" target="_blank" rel="noopener noreferrer">
+            <div class="streamer-thumb">
+              {% if info and info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
+              {% if info %}<span class="live-badge">Live</span><span class="viewer-count">{{ info.viewer_count }} watching</span>{% endif %}
+            </div>
+          </a>
+          <div class="streamer-info">
+            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+            <div>
+              <div class="streamer-name">{{ s.display_name }}</div>
+              <div class="streamer-status {{ 'is-live' if info else '' }}">
+                {{ info.title if info else ('Offline' if twitch_enabled else '@' ~ s.twitch_login) }}
+              </div>
+            </div>
+          </div>
+          {% if is_staff %}
+            <form method="post" action="/streamers/{{ s.id }}/delete" onsubmit="return confirm('Remove this streamer?');" style="padding:0 1rem 1rem;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <button type="submit" class="btn danger">Remove</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">No streamers on the showcase yet.</div>
+  {% endif %}
+
+  {% if is_staff %}
+    <div class="section-head"><h2>Add a streamer</h2></div>
+    <form class="card" method="post" enctype="multipart/form-data" action="/streamers/add">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="field-row">
+        <div class="field">
+          <label for="display_name">Display name</label>
+          <input id="display_name" name="display_name" required />
+        </div>
+        <div class="field">
+          <label for="twitch_login">Twitch username</label>
+          <input id="twitch_login" name="twitch_login" required placeholder="e.g. ninja" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="avatar">Avatar (optional)</label>
+        <input id="avatar" name="avatar" type="file" accept="image/*" />
+      </div>
+      <div class="form-actions"><button type="submit">Add streamer</button></div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

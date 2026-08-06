@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Events{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Events</h1>
+      <p class="page-lede">Upcoming fixtures, scrims, and community events.</p>
+    </div>
+    {% if is_staff %}<a class="btn" href="/events/new">New event</a>{% endif %}
+  </div>
+
+  <div class="section-head"><h2>Upcoming</h2></div>
+  {% if upcoming %}
+    {% for e in upcoming %}
+      <div class="event-row">
+        <div class="event-date">
+          <div class="month">{{ e.scheduled_at.strftime('%b') }}</div>
+          <div class="day">{{ e.scheduled_at.strftime('%-d') }}</div>
+        </div>
+        <div class="event-info">
+          <span class="event-type-badge">{{ e.event_type }}</span>
+          <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
+          <p>{{ e.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}{% if e.description %} &middot; {{ e.description }}{% endif %}</p>
+        </div>
+        {% if is_staff %}
+          <div class="event-actions">
+            <a class="btn secondary" href="/events/{{ e.id }}/edit">Edit</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="card empty-state">Nothing scheduled yet.</div>
+  {% endif %}
+
+  {% if past %}
+    <div class="section-head"><h2>Past results</h2></div>
+    {% for e in past %}
+      <div class="event-row">
+        <div class="event-date">
+          <div class="month">{{ e.scheduled_at.strftime('%b') }}</div>
+          <div class="day">{{ e.scheduled_at.strftime('%-d') }}</div>
+        </div>
+        <div class="event-info">
+          <span class="event-type-badge">{{ e.event_type }}</span>
+          <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
+          <p>{{ e.scheduled_at.strftime('%A, %b %-d, %Y') }}</p>
+        </div>
+        {% if e.result %}
+          <div class="event-result {{ 'win' if e.result.startswith('W') else ('loss' if e.result.startswith('L') else '') }}">{{ e.result }}</div>
+        {% endif %}
+        {% if is_staff %}
+          <div class="event-actions">
+            <a class="btn secondary" href="/events/{{ e.id }}/edit">Edit</a>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

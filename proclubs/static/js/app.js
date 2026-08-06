@@ -1,7 +1,4 @@
 const statusEl = document.getElementById('status');
-const searchForm = document.getElementById('search-form');
-const resultsSection = document.getElementById('search-results');
-const resultsList = document.getElementById('results-list');
 const clubView = document.getElementById('club-view');
 const clubHeader = document.getElementById('club-header');
 
@@ -26,40 +23,6 @@ async function api(path) {
   return body;
 }
 
-searchForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = document.getElementById('club-name').value.trim();
-  const platform = document.getElementById('platform').value;
-  if (!name) return;
-
-  clubView.classList.add('hidden');
-  resultsSection.classList.add('hidden');
-  setStatus('Searching...');
-
-  try {
-    const results = await api(`/api/clubs/search?name=${encodeURIComponent(name)}&platform=${platform}`);
-    if (!results.length) {
-      setStatus(`No clubs found matching "${name}" on this platform.`, true);
-      return;
-    }
-    setStatus('');
-    renderResults(results, platform);
-  } catch (err) {
-    setStatus(err.message, true);
-  }
-});
-
-function renderResults(results, platform) {
-  resultsList.innerHTML = '';
-  results.forEach((club) => {
-    const li = document.createElement('li');
-    li.textContent = `${club.name} (club ID ${club.clubId})`;
-    li.addEventListener('click', () => loadClub(club.clubId, platform));
-    resultsList.appendChild(li);
-  });
-  resultsSection.classList.remove('hidden');
-}
-
 document.querySelectorAll('#tabs button').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#tabs button').forEach((b) => b.classList.remove('active'));
@@ -72,19 +35,18 @@ document.querySelectorAll('#tabs button').forEach((btn) => {
 async function loadClub(clubId, platform) {
   currentClubId = clubId;
   currentPlatform = platform;
-  resultsSection.classList.add('hidden');
   clubView.classList.remove('hidden');
   setStatus('Loading club...');
 
   const [overview, standings, members, matches, historyDivision, historyMatches, historyPlayers] =
     await Promise.allSettled([
-      api(`/api/clubs/${clubId}/overview?platform=${platform}`),
-      api(`/api/clubs/${clubId}/standings?platform=${platform}`),
-      api(`/api/clubs/${clubId}/members?platform=${platform}`),
-      api(`/api/clubs/${clubId}/matches?platform=${platform}&matchType=leagueMatch&count=10`),
-      api(`/api/clubs/${clubId}/history/division?platform=${platform}`),
-      api(`/api/clubs/${clubId}/history/matches?platform=${platform}`),
-      api(`/api/clubs/${clubId}/history/players?platform=${platform}`),
+      api('/api/overview'),
+      api('/api/standings'),
+      api('/api/members'),
+      api('/api/matches?matchType=leagueMatch&count=10'),
+      api('/api/history/division'),
+      api('/api/history/matches'),
+      api('/api/history/players'),
     ]);
 
   latestMatches = matches.status === 'fulfilled' ? matches.value || [] : [];
@@ -105,9 +67,7 @@ async function reloadMatches(matchType, count) {
   const panel = document.getElementById('tab-matches');
   panel.style.opacity = '0.5'; // hold the previous render while refetching
   try {
-    const data = await api(
-      `/api/clubs/${currentClubId}/matches?platform=${currentPlatform}&matchType=${matchType}&count=${count}`
-    );
+    const data = await api(`/api/matches?matchType=${matchType}&count=${count}`);
     latestMatches = data || [];
     renderMatches({ status: 'fulfilled', value: data }, matchType, count);
   } catch (err) {
@@ -1003,9 +963,7 @@ async function loadPlayerHistory(name) {
   }
   container.innerHTML = '<p class="chart-empty">Loading...</p>';
   try {
-    const data = await api(
-      `/api/clubs/${currentClubId}/history/players?platform=${currentPlatform}&name=${encodeURIComponent(name)}`
-    );
+    const data = await api(`/api/history/players?name=${encodeURIComponent(name)}`);
     const rows = data.matches || [];
     if (!rows.length) {
       Charts.emptyState(container, 'No tracked matches for this player yet.');
@@ -1022,7 +980,6 @@ async function loadPlayerHistory(name) {
   }
 }
 
-// Land straight on the regiment's own club instead of making everyone search
-// for it every visit -- the search box above still works for looking up
-// anyone else's club.
-loadClub('7810354', 'common-gen5');
+// This site tracks exactly one club, configured server-side (CLUB_ID /
+// CLUB_PLATFORM) -- there's no search box, so this is the only club view.
+loadClub(window.CLUB_ID, window.CLUB_PLATFORM);
