@@ -1,4 +1,4 @@
-# Pr1mE6ers — Pro Clubs team site
+# YeeHaw FC — Pro Clubs team site
 
 The team's public home: news/blog articles, an events calendar, a live
 Twitch streamer showcase, and an EA Pro Clubs stats dashboard locked to our

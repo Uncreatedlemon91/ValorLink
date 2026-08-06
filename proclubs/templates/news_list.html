@@ -5,9 +5,16 @@
   <div class="page-head">
     <div>
       <h1>News</h1>
-      <p class="page-lede">Match reports, roster moves, and everything else from the club.</p>
+      <p class="page-lede">Match reports, transfer news, and highlights from the club.</p>
     </div>
     {% if is_staff %}<a class="btn" href="/news/new">New article</a>{% endif %}
+  </div>
+
+  <div class="category-pills">
+    <a href="/news" class="pill {{ 'active' if not selected_category else '' }}">All</a>
+    {% for c in ARTICLE_CATEGORIES %}
+      <a href="/news?category={{ c | urlencode }}" class="pill {{ 'active' if selected_category == c else '' }}">{{ c }}</a>
+    {% endfor %}
   </div>
 
   {% if articles %}
@@ -16,6 +23,7 @@
         <a class="card article-card" href="/news/{{ a.slug }}">
           {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
           <div class="body">
+            <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
             <h3>{{ a.title }}{% if not a.published %} <span class="draft-pill">Draft</span>{% endif %}</h3>
             {% if a.summary %}<p>{{ a.summary }}</p>{% endif %}
             <div class="article-meta">{{ a.author_name }} &middot; {{ a.published_at.strftime('%b %-d, %Y') }}</div>
@@ -24,7 +32,7 @@
       {% endfor %}
     </div>
   {% else %}
-    <div class="card empty-state">No articles yet.</div>
+    <div class="card empty-state">No articles {{ 'in ' ~ selected_category if selected_category else '' }} yet.</div>
   {% endif %}
 </div>
 {% endblock %}

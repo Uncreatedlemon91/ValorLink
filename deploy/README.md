@@ -351,7 +351,7 @@ time. `proclubs-poll.timer` (already installed by `install.sh` above) fires
 `proclubs/tracked_clubs.json` into `proclubs/data/history.db` (its own
 SQLite file, plain stdlib `sqlite3` -- no extra dependency, not shared with
 anything else). `tracked_clubs.json` ships in the repo already set up for
-Pr1mE6ers, so it's in place as soon as you `git pull` -- nothing to create.
+YeeHaw FC, so it's in place as soon as you `git pull` -- nothing to create.
 Just run it once to confirm it works, instead of waiting an hour:
 
 ```bash

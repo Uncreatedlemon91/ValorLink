@@ -8,9 +8,19 @@
         action="{{ '/news/' ~ article.slug ~ '/edit' if article else '/news/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
-    <div class="field">
-      <label for="title">Title</label>
-      <input id="title" name="title" required value="{{ article.title if article else '' }}" />
+    <div class="field-row">
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" name="title" required value="{{ article.title if article else '' }}" />
+      </div>
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" name="category">
+          {% for c in ARTICLE_CATEGORIES %}
+            <option value="{{ c }}" {% if (article.category if article else 'News') == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
     <div class="field">

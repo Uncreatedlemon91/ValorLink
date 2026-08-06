@@ -24,6 +24,7 @@ import ea_client
 import services
 import twitch_client
 from database import get_session, init_db
+from models import ARTICLE_CATEGORIES
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -53,6 +54,7 @@ templates.env.globals["SITE_NAME"] = config.SITE_NAME
 templates.env.globals["SITE_TAGLINE"] = config.SITE_TAGLINE
 templates.env.globals["OAUTH_ENABLED"] = config.OAUTH_ENABLED
 templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
+templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
 
 
 @app.on_event("startup")
@@ -115,7 +117,8 @@ def _check_csrf(request: Request, token: str):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     with get_session() as session:
-        articles = services.list_articles(session, limit=3)
+        latest = services.list_articles(session, limit=7)
+        featured, rest = (latest[0], latest[1:]) if latest else (None, [])
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
@@ -128,7 +131,8 @@ def home(request: Request):
                 stats_teaser = None
         return templates.TemplateResponse(request, "home.html", _ctx(
             request,
-            articles=articles,
+            featured=featured,
+            articles=rest,
             next_event=upcoming[0] if upcoming else None,
             live_streamers=live_streamers,
             live=live,
@@ -146,11 +150,14 @@ def login_page(request: Request):
 # News
 # --------------------------------------------------------------------------- #
 @app.get("/news", response_class=HTMLResponse)
-def news_list(request: Request):
+def news_list(request: Request, category: str = ""):
+    category = category if category in ARTICLE_CATEGORIES else ""
     with get_session() as session:
         user = auth.current_user(request)
-        articles = services.list_articles(session, include_drafts=auth.is_staff(user))
-        return templates.TemplateResponse(request, "news_list.html", _ctx(request, articles=articles))
+        articles = services.list_articles(session, include_drafts=auth.is_staff(user), category=category or None)
+        return templates.TemplateResponse(request, "news_list.html", _ctx(
+            request, articles=articles, selected_category=category,
+        ))
 
 
 @app.get("/news/new", response_class=HTMLResponse)
@@ -160,7 +167,7 @@ def news_new_form(request: Request, _staff=Depends(auth.require_staff)):
 
 @app.post("/news/new")
 async def news_new(
-    request: Request, title: str = Form(...), summary: str = Form(""),
+    request: Request, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
     body_md: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
@@ -168,7 +175,7 @@ async def news_new(
     cover = await services.image_to_data_uri(cover_image)
     with get_session() as session:
         article = services.create_article(
-            session, title=title, summary=summary, body_md=body_md,
+            session, title=title, category=category, summary=summary, body_md=body_md,
             cover_image=cover, published=bool(published), author=staff,
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
@@ -199,7 +206,7 @@ def news_edit_form(request: Request, slug: str, _staff=Depends(auth.require_staf
 
 @app.post("/news/{slug}/edit")
 async def news_edit(
-    request: Request, slug: str, title: str = Form(...), summary: str = Form(""),
+    request: Request, slug: str, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
     body_md: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
@@ -212,7 +219,7 @@ async def news_edit(
                 request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
             )
         article = services.update_article(
-            session, article, title=title, summary=summary, body_md=body_md,
+            session, article, title=title, category=category, summary=summary, body_md=body_md,
             cover_image=cover, published=bool(published),
         )
         _flash(request, "Article updated.")

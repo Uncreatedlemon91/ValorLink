@@ -11,7 +11,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # SITE_DB_PATH lets tests (and any deployment that wants the DB elsewhere)
@@ -28,6 +28,30 @@ def init_db():
     import models  # noqa: F401  -- registers models on Base
 
     Base.metadata.create_all(engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns():
+    """Additive-only schema sync: adds any column a model declares that an
+    already-existing table is missing (e.g. after a code update adds a
+    field), so a redeploy doesn't need the DB file wiped. Still no real
+    migration tool -- this never drops, renames, or alters a column, only
+    adds new ones, which is all a create_all-managed app like this needs."""
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            existing_columns = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+                coltype = column.type.compile(engine.dialect)
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {coltype}'
+                if column.server_default is not None:
+                    ddl += f" DEFAULT '{column.server_default.arg}'"
+                conn.execute(text(ddl))
 
 
 @contextmanager
