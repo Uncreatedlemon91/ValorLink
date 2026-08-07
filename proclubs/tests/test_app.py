@@ -41,9 +41,26 @@ def _login_staff(client, name="Coach"):
 
 
 def _login_fan(client, name="Fan"):
+    """A regular signed-in guild member -- can comment/like, not staff."""
+    r = client.post("/auth/dev", data={"name": name, "member": "1"}, follow_redirects=False)
+    assert r.status_code == 303
+    return client
+
+
+def _login_non_member(client, name="Outsider"):
+    """Signed in with Discord, but not in our guild -- can't comment/like."""
     r = client.post("/auth/dev", data={"name": name}, follow_redirects=False)
     assert r.status_code == 303
     return client
+
+
+def _seed_article(*, title="Recap", body_html="<p>Great win.</p>", published=True) -> str:
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title=title, summary="", body_html=body_html, cover_image=None,
+            published=published, author={"id": 999, "name": "Coach", "avatar": None},
+        )
+        return article.slug
 
 
 def _csrf(client, path):
@@ -215,6 +232,138 @@ def test_news_list_filters_by_category(client):
     filtered = client.get("/news?category=Transfer")
     assert "Transfer Item" in filtered.text
     assert "News Item" not in filtered.text
+
+
+def test_comments_section_prompts_sign_in_when_signed_out(client):
+    slug = _seed_article()
+    detail = client.get(f"/news/{slug}")
+    assert "Sign in with Discord" in detail.text
+    assert 'like-btn static' in detail.text
+
+
+def test_comments_section_explains_membership_requirement_when_not_in_guild(client):
+    slug = _seed_article()
+    _login_non_member(client)
+    detail = client.get(f"/news/{slug}")
+    assert "need to be a member of our Discord server to comment" in detail.text
+    assert 'like-btn static' in detail.text
+
+
+def test_comment_route_rejects_signed_out_visitor(client):
+    slug = _seed_article()
+    r = client.post(f"/news/{slug}/comments", data={"body": "hi", "csrf_token": "x"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/login")
+
+
+def test_comment_route_rejects_non_guild_member(client):
+    slug = _seed_article()
+    _login_non_member(client)
+    r = client.post(f"/news/{slug}/comments", data={"body": "hi", "csrf_token": "x"})
+    assert r.status_code == 403
+
+
+def test_like_route_rejects_non_guild_member(client):
+    slug = _seed_article()
+    _login_non_member(client)
+    r = client.post(f"/news/{slug}/like", data={"csrf_token": "x"})
+    assert r.status_code == 403
+
+
+def test_signed_in_guild_member_can_comment(client):
+    slug = _seed_article()
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    r = client.post(f"/news/{slug}/comments", data={"body": "Nice win!", "csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/news/{slug}#comments"
+
+    detail = client.get(f"/news/{slug}")
+    assert "Nice win!" in detail.text
+    assert "1 Comment" in detail.text
+
+
+def test_comment_body_is_escaped_not_rendered_as_html(client):
+    slug = _seed_article()
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/comments", data={"body": "<script>alert(1)</script>", "csrf_token": token})
+
+    detail = client.get(f"/news/{slug}")
+    assert "<script>alert(1)</script>" not in detail.text
+    assert "&lt;script&gt;" in detail.text
+
+
+def test_empty_comment_is_rejected(client):
+    slug = _seed_article()
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    r = client.post(f"/news/{slug}/comments", data={"body": "   ", "csrf_token": token})
+    assert r.status_code == 400
+
+
+def test_comment_author_can_delete_their_own_comment(client):
+    slug = _seed_article()
+    _login_fan(client, name="Commenter")
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/comments", data={"body": "delete me", "csrf_token": token})
+
+    detail = client.get(f"/news/{slug}")
+    comment_id = re.search(r"/comments/(\d+)/delete", detail.text).group(1)
+
+    token = _csrf(client, f"/news/{slug}")
+    r = client.post(f"/news/{slug}/comments/{comment_id}/delete", data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "delete me" not in client.get(f"/news/{slug}").text
+
+
+def test_other_fan_cannot_delete_someone_elses_comment(client):
+    slug = _seed_article()
+    _login_fan(client, name="Commenter")
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/comments", data={"body": "not yours", "csrf_token": token})
+    comment_id = re.search(r"/comments/(\d+)/delete", client.get(f"/news/{slug}").text).group(1)
+
+    other = TestClient(appmod.app)
+    with other:
+        _login_fan(other, name="Someone Else")
+        token2 = _csrf(other, f"/news/{slug}")
+        other.post(f"/news/{slug}/comments/{comment_id}/delete", data={"csrf_token": token2}, follow_redirects=False)
+
+    assert "not yours" in client.get(f"/news/{slug}").text
+
+
+def test_staff_can_delete_any_comment(client):
+    slug = _seed_article()
+    fan = TestClient(appmod.app)
+    with fan:
+        _login_fan(fan, name="Commenter")
+        token = _csrf(fan, f"/news/{slug}")
+        fan.post(f"/news/{slug}/comments", data={"body": "moderate me", "csrf_token": token})
+        comment_id = re.search(r"/comments/(\d+)/delete", fan.get(f"/news/{slug}").text).group(1)
+
+    _login_staff(client)
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/comments/{comment_id}/delete", data={"csrf_token": token})
+    assert "moderate me" not in client.get(f"/news/{slug}").text
+
+
+def test_like_toggles_and_shows_count(client):
+    slug = _seed_article()
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/like", data={"csrf_token": token})
+
+    detail = client.get(f"/news/{slug}")
+    assert "1 Like" in detail.text
+    assert 'class="like-btn liked"' in detail.text
+
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/like", data={"csrf_token": token})
+
+    detail = client.get(f"/news/{slug}")
+    assert "0 Likes" in detail.text
+    assert 'class="like-btn liked"' not in detail.text
 
 
 def test_csrf_token_is_required_on_writes(client):

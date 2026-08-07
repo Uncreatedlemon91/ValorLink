@@ -84,6 +84,15 @@ def _on_not_staff(request: Request, exc: auth.NotStaff):
     )
 
 
+@app.exception_handler(auth.NotMember)
+def _on_not_member(request: Request, exc: auth.NotMember):
+    return templates.TemplateResponse(
+        request, "error.html",
+        _ctx(request, message="That needs you to be a member of our Discord server. You're signed in, but not in the guild."),
+        status_code=403,
+    )
+
+
 @app.exception_handler(services.ServiceError)
 def _on_service_error(request: Request, exc: services.ServiceError):
     return templates.TemplateResponse(
@@ -97,6 +106,7 @@ def _ctx(request: Request, **extra) -> dict:
         "request": request,
         "user": user,
         "is_staff": auth.is_staff(user),
+        "is_member": auth.is_member(user),
         "csrf_token": auth.get_csrf_token(request),
     }
     ctx.update(extra)
@@ -210,7 +220,13 @@ def news_detail(request: Request, slug: str):
             return templates.TemplateResponse(
                 request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
             )
-        return templates.TemplateResponse(request, "news_detail.html", _ctx(request, article=article))
+        user = auth.current_user(request)
+        return templates.TemplateResponse(request, "news_detail.html", _ctx(
+            request, article=article,
+            comments=services.list_comments(session, article),
+            like_count=services.count_likes(session, article),
+            user_has_liked=bool(user) and services.has_liked(session, article, user["id"]),
+        ))
 
 
 @app.get("/news/{slug}/edit", response_class=HTMLResponse)
@@ -255,6 +271,46 @@ def news_delete(request: Request, slug: str, csrf_token: str = Form(...), staff=
             services.delete_article(session, article)
             _flash(request, "Article deleted.")
     return RedirectResponse("/news", status_code=303)
+
+
+@app.post("/news/{slug}/like")
+def news_like(request: Request, slug: str, csrf_token: str = Form(...), member=Depends(auth.require_member)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        article = services.get_article(session, slug)
+        if article is None:
+            return templates.TemplateResponse(
+                request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
+            )
+        services.toggle_like(session, article, member["id"])
+    return RedirectResponse(f"/news/{slug}#comments", status_code=303)
+
+
+@app.post("/news/{slug}/comments")
+def news_add_comment(request: Request, slug: str, body: str = Form(...),
+                      csrf_token: str = Form(...), member=Depends(auth.require_member)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        article = services.get_article(session, slug)
+        if article is None:
+            return templates.TemplateResponse(
+                request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
+            )
+        services.add_comment(session, article, author=member, body=body)
+    return RedirectResponse(f"/news/{slug}#comments", status_code=303)
+
+
+@app.post("/news/{slug}/comments/{comment_id}/delete")
+def news_delete_comment(request: Request, slug: str, comment_id: int,
+                         csrf_token: str = Form(...), user=Depends(auth.require_signed_in)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        article = services.get_article(session, slug)
+        comment = services.get_comment(session, comment_id)
+        if (article is not None and comment is not None and comment.article_id == article.id
+                and (auth.is_staff(user) or comment.author_discord_id == user["id"])):
+            services.delete_comment(session, comment)
+    return RedirectResponse(f"/news/{slug}#comments", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

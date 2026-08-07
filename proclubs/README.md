@@ -18,13 +18,23 @@ session, OAuth client -- stays as described above.
 
 ## Permissions
 
-Two tiers, both derived live from Discord roles at sign-in time (never
-stored): everyone -- including signed-out visitors -- can read the site.
+Three tiers, all derived live from Discord at sign-in time (never stored):
+everyone -- including signed-out visitors -- can read the site. Anyone
+signed in with Discord **and a member of `DISCORD_GUILD_ID`** can comment
+on and like news articles, staff or not -- see "Comments and likes" below.
 **Staff** -- holders of `DISCORD_STAFF_ROLE_ID` in `DISCORD_GUILD_ID` -- can
-write articles and manage the streamer list. A role change in Discord
-takes effect on that person's next sign-in. Events are the one exception:
-there's no staff editing UI for them at all -- see "Events are
+write articles and manage the streamer list (and are always members too,
+since holding a guild role requires being in the guild). A role change in
+Discord takes effect on that person's next sign-in. Events are the one
+exception: there's no staff editing UI for them at all -- see "Events are
 Discord-only" below.
+
+Signing in with Discord doesn't by itself mean membership: OAuth just
+proves "this is a real Discord account," and anyone can authorize the
+app's login regardless of what servers they're in. Guild membership -- the
+comment/like gate -- is a second, separate check against
+`DISCORD_GUILD_ID` made during sign-in (`auth.py`'s OAuth callback already
+had to fetch this to determine staff roles; it's the same lookup).
 
 ## Local dev
 
@@ -177,6 +187,30 @@ raw Markdown. A few things worth knowing:
   -- modern browsers already refuse top-level navigation to a cross-origin
   `data:` URL, so the realistic risk is low, but it's a real tradeoff, not
   an oversight. See the comment in html_sanitize.py.
+
+## Comments and likes
+
+Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
+"Permissions" above) can comment on and like news articles -- not staff-only,
+unlike everything else that writes to this site.
+
+- **Comments are plain text**, not rich text -- rendered through Jinja's
+  normal HTML auto-escaping, no markup story here (unlike article bodies,
+  which go through html_sanitize.py). Capped at 2000 characters.
+- **Deleting a comment**: its author can delete their own, and staff can
+  delete anyone's (moderation). There's no edit -- delete and re-post is
+  the only path, keeping the write surface small.
+- **Likes are a simple toggle**, one per (article, Discord user) enforced
+  by a database unique constraint -- clicking again un-likes. No "who
+  liked this" list, just a count.
+- **Signed in but not a member** (someone who authorized the site's
+  Discord login without being in our server) can still read everything,
+  they just see a prompt instead of the comment box, and the like button
+  renders as inert text instead of a clickable one.
+- Deleting an article deletes its comments and likes with it
+  (`services.delete_article`) -- they're plain `article_id` columns, not a
+  real foreign key (matching this app's existing no-ORM-relationships
+  style), so nothing cascades automatically without that explicit cleanup.
 
 ## Important caveats about the EA stats dashboard
 
