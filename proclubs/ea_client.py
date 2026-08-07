@@ -130,7 +130,13 @@ def crest_colors(platform, club_id):
     numeric asset IDs (crestAssetId, kitId, ...) that its own game client
     renders from internal asset packs, not a public image URL. Colors are
     the only usable branding this endpoint offers. Returns None if the club
-    has no custom kit set or the club can't be found."""
+    has no custom kit set or the club can't be found.
+
+    ``accent``/``accent_trim`` are the third kit's two colors -- used as the
+    site's UI accent duo (glows, rings) instead of ``crest``, which for a lot
+    of clubs is a single saturated color that reads as too loud spread across
+    a whole section. Falls back to the crest/home kit if a club has no third
+    kit set."""
     info = club_info(platform, club_id)
     kit = (info or {}).get("customKit") or {}
     if not kit:
@@ -139,6 +145,8 @@ def crest_colors(platform, club_id):
         "crest": _hex_color(kit.get("crestColor")),
         "kit1": _hex_color(kit.get("kitColor1")),
         "kit2": _hex_color(kit.get("kitColor2")),
+        "accent": _hex_color(kit.get("kitThrdColor2")) or _hex_color(kit.get("crestColor")),
+        "accent_trim": _hex_color(kit.get("kitThrdColor4")) or _hex_color(kit.get("kitColor1")),
     }
 
 
