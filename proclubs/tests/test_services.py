@@ -169,10 +169,11 @@ def test_event_upcoming_only_filters_past():
         assert [e.title for e in upcoming] == ["Tomorrow's Match"]
 
 
-def _discord_event(event_id, name="Scrim Night", status=1, start="2027-06-01T18:00:00+00:00", description=None):
+def _discord_event(event_id, name="Scrim Night", status=1, start="2027-06-01T18:00:00+00:00",
+                    description=None, image=None):
     return {
         "id": event_id, "name": name, "description": description,
-        "scheduled_start_time": start, "status": status,
+        "scheduled_start_time": start, "status": status, "image": image,
     }
 
 
@@ -186,6 +187,26 @@ def test_sync_discord_events_creates_new_events():
         assert events[0].discord_event_id == "d1"
         assert events[0].title == "Scrim Night"
         assert events[0].event_type == "Match"  # sensible default, not from Discord
+
+
+def test_sync_discord_events_sets_cover_image_when_discord_event_has_one():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1", image="somehash")])
+        event = services.list_events(session)[0]
+        assert event.image == "https://cdn.discordapp.com/guild-events/d1/somehash.png"
+
+
+def test_sync_discord_events_updates_cover_image_on_resync():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1", image="oldhash")])
+        services.sync_discord_events(session, [_discord_event("d1", image="newhash")])
+        event = services.list_events(session)[0]
+        assert event.image == "https://cdn.discordapp.com/guild-events/d1/newhash.png"
+
+        # And clears it if the organizer removes the cover in Discord.
+        services.sync_discord_events(session, [_discord_event("d1", image=None)])
+        event = services.list_events(session)[0]
+        assert event.image is None
 
 
 def test_sync_discord_events_updates_existing_by_discord_id():

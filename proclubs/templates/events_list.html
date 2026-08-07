@@ -17,6 +17,7 @@
           <div class="month">{{ e.scheduled_at.strftime('%b') }}</div>
           <div class="day">{{ e.scheduled_at.strftime('%-d') }}</div>
         </div>
+        {% if e.image %}<img class="event-thumb" src="{{ e.image }}" alt="" />{% endif %}
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
           {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
@@ -37,6 +38,7 @@
           <div class="month">{{ e.scheduled_at.strftime('%b') }}</div>
           <div class="day">{{ e.scheduled_at.strftime('%-d') }}</div>
         </div>
+        {% if e.image %}<img class="event-thumb" src="{{ e.image }}" alt="" />{% endif %}
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
           {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
