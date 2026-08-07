@@ -234,17 +234,34 @@ unlike everything else that writes to this site.
 
 ## Important caveats about the EA stats dashboard
 
+`/stats` has four reports: an **Overview** (a club scoreboard, headline KPIs,
+a skill-rating trend, and a squad spotlight, with cards into the other
+three), **Players** (the full roster, filterable/sortable, click through for
+a per-player breakdown), **Matches** (result/shot/pass/tackle trends, click
+a match for a team-vs-team comparison plus both full rosters), and
+**Competition** (our own divisional progress and a head-to-head record
+against every club we've played).
+
 - The EA API (`proclubs.ea.com/api/fc`) is **not official**. It's the same
   undocumented endpoint the proclubs.ea.com website itself calls, and EA can
-  change or break it without notice.
-- EA does not expose a full league table. "Standings" means our own club's
-  divisional progress (current division, promotions/relegations, skill
-  rating) -- not a table of other clubs.
+  change or break it without notice. It also doesn't distinguish shots on
+  target from total shots -- only a total `shots` count is available, so
+  that's all this dashboard can show.
+- EA does not expose a full league table, or any way to look up another
+  club's results -- **Competition**'s "Head-to-Head Record" isn't from EA at
+  all; it's aggregated from our own tracked match history (`db.rival_records`),
+  built the same way the division/skill-rating trends are (see below). The
+  division ladder assumes EA Sports FC Pro Clubs' current 10-division
+  structure (undocumented, so treated as a reasonable default, not a fact --
+  it extends past 10 automatically rather than truncate if a club's data
+  ever reports higher).
 - EA's API only returns a rolling window of recent matches and no historical
   division data at all. `proclubs-poll.timer` (see `../deploy/README.md`)
-  snapshots our club hourly into `data/history.db` so the "History" tab has
-  something to show beyond that window; history only accumulates from
-  whenever polling started.
+  snapshots our club hourly into `data/history.db` so the skill-rating trend,
+  cumulative win rate, head-to-head record, and a player's full-career rating
+  trend (in their Players-tab detail drawer) all have something to show
+  beyond that rolling window; history only accumulates from whenever polling
+  started, never backfilled.
 
 ## Project layout
 

@@ -220,6 +220,41 @@ def match_history(platform, club_id, match_type=None):
     return [dict(r) for r in rows]
 
 
+def rival_records(platform, club_id):
+    """Head-to-head record against every opponent we've faced, aggregated
+    from tracked match history -- this is the "Competition" report's
+    answer to a question EA's API can't: not a league table (EA doesn't
+    expose one, see ea_client.py), but our own actual results against each
+    club, built from data we're already capturing on every poll.
+
+    Forfeits are excluded from the tally the same way the rest of this
+    module treats them -- a DNF isn't a real result to build a rivalry
+    record on. match_history() already returns oldest-first, so a single
+    pass naturally leaves each rival's last_outcome/last_played_at as its
+    most recent meeting."""
+    rivals: dict[str, dict] = {}
+    for m in match_history(platform, club_id):
+        if m["forfeit"]:
+            continue
+        name = m["opp_name"]
+        r = rivals.setdefault(name, {
+            "name": name, "played": 0, "wins": 0, "draws": 0, "losses": 0,
+            "gf": 0, "ga": 0, "last_outcome": None, "last_played_at": None,
+        })
+        r["played"] += 1
+        if m["outcome"] == "W":
+            r["wins"] += 1
+        elif m["outcome"] == "L":
+            r["losses"] += 1
+        else:
+            r["draws"] += 1
+        r["gf"] += m["us_score"] or 0
+        r["ga"] += m["opp_score"] or 0
+        r["last_outcome"] = m["outcome"]
+        r["last_played_at"] = m["played_at"]
+    return sorted(rivals.values(), key=lambda r: -r["played"])
+
+
 def player_names(platform, club_id):
     """Distinct players we've captured for this club, for a picker."""
     conn = _connect()
