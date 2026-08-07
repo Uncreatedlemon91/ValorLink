@@ -334,6 +334,59 @@ def test_comment_counts_for_empty_list_returns_empty_dict():
         assert services.comment_counts_for(session, []) == {}
 
 
+def _make_clip(session, *, title="Nice goal", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
+                jump_url="https://discord.com/channels/1/2/m1", discord_message_id="m1"):
+    clip = Clip(discord_message_id=discord_message_id, title=title, video_url=video_url,
+                filename="clip.mp4", author_name="Coach", jump_url=jump_url,
+                posted_at=datetime.utcnow())
+    session.add(clip)
+    session.commit()
+    session.refresh(clip)
+    return clip
+
+
+def test_render_clip_embeds_resolves_known_clip():
+    with database.get_session() as session:
+        clip = _make_clip(session)
+        html = services.render_clip_embeds(session, f'<p>Look:</p><clip-embed data-clip-id="{clip.id}"></clip-embed>')
+        assert '<video class="clip-video"' in html
+        assert f'src="{clip.video_url}"' in html
+        assert f'href="{clip.jump_url}"' in html
+        assert "<clip-embed" not in html
+
+
+def test_render_clip_embeds_falls_back_for_missing_clip():
+    with database.get_session() as session:
+        html = services.render_clip_embeds(session, '<clip-embed data-clip-id="404"></clip-embed>')
+        assert "no longer available" in html
+        assert "<clip-embed" not in html
+
+
+def test_render_clip_embeds_resolves_multiple_clips_in_one_query():
+    with database.get_session() as session:
+        a = _make_clip(session, discord_message_id="a", video_url="https://cdn.discordapp.com/a.mp4")
+        b = _make_clip(session, discord_message_id="b", video_url="https://cdn.discordapp.com/b.mp4")
+        html = services.render_clip_embeds(
+            session,
+            f'<clip-embed data-clip-id="{a.id}"></clip-embed><clip-embed data-clip-id="{b.id}"></clip-embed>',
+        )
+        assert "https://cdn.discordapp.com/a.mp4" in html
+        assert "https://cdn.discordapp.com/b.mp4" in html
+
+
+def test_render_clip_embeds_passthrough_when_no_placeholders():
+    with database.get_session() as session:
+        html = services.render_clip_embeds(session, "<p>Just text, no clips.</p>")
+        assert html == "<p>Just text, no clips.</p>"
+
+
+def test_render_clip_embeds_escapes_clip_title():
+    with database.get_session() as session:
+        clip = _make_clip(session, title='"><script>alert(1)</script>')
+        html = services.render_clip_embeds(session, f'<clip-embed data-clip-id="{clip.id}"></clip-embed>')
+        assert "<script>" not in html
+
+
 def test_delete_article_cascades_comments_and_likes():
     with database.get_session() as session:
         article = services.create_article(session, title="Cascade Test", summary="", body_html="<p>x</p>",

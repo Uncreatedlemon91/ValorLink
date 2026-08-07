@@ -61,6 +61,20 @@ def test_style_and_class_are_not_smuggled_through_arbitrary_tags():
     assert "class=" not in html
 
 
+def test_clip_embed_placeholder_survives_with_only_its_id():
+    html = html_sanitize.sanitize('<clip-embed data-clip-id="42" contenteditable="false">🎥 label</clip-embed>')
+    assert '<clip-embed data-clip-id="42">' in html
+    assert "contenteditable" not in html
+
+
+def test_clip_embed_with_non_numeric_id_is_still_just_an_attribute():
+    # Sanitization doesn't validate the id is numeric -- that's on the
+    # render side (services.render_clip_embeds); this only checks nothing
+    # unexpected (extra attributes, script content) sneaks through.
+    html = html_sanitize.sanitize('<clip-embed data-clip-id="42" onclick="alert(1)"></clip-embed>')
+    assert "onclick" not in html
+
+
 def test_empty_body_does_not_crash():
     assert html_sanitize.sanitize("") == ""
     assert html_sanitize.sanitize(None) == ""

@@ -51,6 +51,12 @@
 
     <div class="field">
       <label>Body</label>
+      {% if CLIPS_SYNC_ENABLED %}
+        <div class="clip-picker-wrap">
+          <button type="button" id="insert-clip-btn" class="btn secondary">Insert Clip</button>
+          <div id="clip-picker-panel" class="clip-picker-panel" hidden></div>
+        </div>
+      {% endif %}
       <div id="editor">{% if article %}{{ article.body_html | safe }}{% endif %}</div>
       <input type="hidden" name="body_html" id="body_html_input" />
       <p class="field-hint">You can drop images straight into the body, in addition to the cover image above.</p>
