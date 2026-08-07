@@ -60,6 +60,11 @@ class Event(Base):
     result = Column(String, nullable=True)              # e.g. "W 4-1", "L 1-2"
     created_by_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+    # Set only for events mirrored in from Discord's Scheduled Events (see
+    # discord_events.py) -- lets the poller find its own rows again to
+    # update or remove them without duplicating on every run. Null for
+    # events created directly on the site.
+    discord_event_id = Column(String, nullable=True, index=True)
 
 
 class Streamer(Base):

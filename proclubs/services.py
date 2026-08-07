@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import base64
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import UploadFile
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+import discord_events as discord_events_mod
 import markdown_render
 from models import ARTICLE_CATEGORIES, Article, Event, Streamer
 
@@ -202,6 +203,66 @@ def update_event(session: Session, event: Event, *, title: str, event_type: str,
 def delete_event(session: Session, event: Event) -> None:
     session.delete(event)
     session.commit()
+
+
+def _parse_discord_time(value: str) -> datetime:
+    """Discord's timestamps are ISO 8601 with an explicit offset (or "Z").
+    Normalize to a naive UTC datetime -- the same shape scheduled_at is
+    stored in everywhere else on this model."""
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
+    """Mirrors Discord's Scheduled Events into Event rows. Discord is the
+    source of truth for title/description/scheduled_at on these rows --
+    each sync overwrites them. event_type/opponent/result stay whatever
+    staff set on the site, since Discord has no equivalent fields; they're
+    only defaulted on first creation, never touched again here.
+
+    Events this function previously created that Discord no longer lists
+    as upcoming (canceled, or the event itself deleted) are removed, so a
+    canceled Discord event doesn't linger as a fixture on the site.
+    """
+    seen_ids = set()
+    created = updated = 0
+    for de in discord_events:
+        if not discord_events_mod.is_upcoming(de):
+            continue
+        discord_id = de["id"]
+        seen_ids.add(discord_id)
+        title = de.get("name") or "Discord Event"
+        description = de.get("description")
+        scheduled_at = _parse_discord_time(de["scheduled_start_time"])
+
+        event = session.execute(
+            select(Event).where(Event.discord_event_id == discord_id)
+        ).scalar_one_or_none()
+        if event is None:
+            session.add(Event(
+                discord_event_id=discord_id, title=title, event_type="Match",
+                description=description, scheduled_at=scheduled_at,
+                created_by_name="Discord sync",
+            ))
+            created += 1
+        else:
+            event.title = title
+            event.description = description
+            event.scheduled_at = scheduled_at
+            updated += 1
+
+    removed = 0
+    synced_upcoming = session.execute(
+        select(Event).where(Event.discord_event_id.is_not(None))
+                     .where(Event.scheduled_at >= datetime.utcnow())
+    ).scalars()
+    for event in synced_upcoming:
+        if event.discord_event_id not in seen_ids:
+            session.delete(event)
+            removed += 1
+
+    session.commit()
+    return {"created": created, "updated": updated, "removed": removed}
 
 
 # --- Streamers ------------------------------------------------------------ #

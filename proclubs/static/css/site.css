@@ -625,6 +625,11 @@ button:active, .btn:active { transform: translateY(0); }
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--accent-2); border: 1px solid var(--accent-2); border-radius: 4px; padding: 0.1rem 0.4rem;
 }
+.discord-sync-badge {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #5865f2; border: 1px solid #5865f2; border-radius: 4px; padding: 0.1rem 0.4rem;
+  margin-left: 0.35rem;
+}
 .event-result { font-weight: 700; font-size: 0.9rem; }
 .event-result.win { color: var(--status-good); }
 .event-result.loss { color: var(--status-critical); }
