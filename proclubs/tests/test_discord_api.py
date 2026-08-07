@@ -90,6 +90,55 @@ def test_get_raises_on_other_http_error(monkeypatch):
         discord_api.get("/channels/999/messages")
 
 
+def test_post_returns_response_and_sends_bot_auth_and_json_body(monkeypatch):
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "test-token")
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return _FakeResponse({"id": "msg1"})
+
+    monkeypatch.setattr(discord_api.httpx, "post", fake_post)
+
+    resp = discord_api.post("/channels/999/messages", json={"embeds": [{"title": "hi"}]})
+    assert resp.json() == {"id": "msg1"}
+    assert captured["url"] == "https://discord.com/api/v10/channels/999/messages"
+    assert captured["headers"]["Authorization"] == "Bot test-token"
+    assert captured["json"] == {"embeds": [{"title": "hi"}]}
+
+
+def test_post_raises_on_network_failure(monkeypatch):
+    def fake_post(url, headers=None, json=None, timeout=None):
+        raise discord_api.httpx.ConnectError("boom")
+
+    monkeypatch.setattr(discord_api.httpx, "post", fake_post)
+    with pytest.raises(discord_api.DiscordApiError):
+        discord_api.post("/channels/999/messages", json={})
+
+
+def test_post_retries_once_on_429_then_succeeds(monkeypatch):
+    monkeypatch.setattr(discord_api.time, "sleep", lambda seconds: None)
+    responses = [
+        _FakeResponse({"retry_after": 0.5}, status_code=429, headers={"Retry-After": "0.5"}),
+        _FakeResponse({"id": "msg1"}),
+    ]
+    monkeypatch.setattr(discord_api.httpx, "post", lambda *a, **k: responses.pop(0))
+
+    resp = discord_api.post("/channels/999/messages", json={})
+    assert resp.json() == {"id": "msg1"}
+    assert responses == []
+
+
+def test_post_raises_on_other_http_error(monkeypatch):
+    monkeypatch.setattr(discord_api.httpx, "post", lambda *a, **k: _FakeResponse(
+        {"message": "forbidden"}, status_code=403,
+    ))
+    with pytest.raises(discord_api.DiscordApiError):
+        discord_api.post("/channels/999/messages", json={})
+
+
 def test_retry_after_seconds_prefers_header_over_body():
     resp = _FakeResponse({"retry_after": 99}, status_code=429, headers={"Retry-After": "2.5"})
     assert discord_api._retry_after_seconds(resp) == 2.5

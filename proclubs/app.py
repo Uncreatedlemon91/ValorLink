@@ -11,8 +11,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -20,6 +20,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import auth
 import config
 import db
+import discord_announce
 import ea_client
 import services
 import twitch_client
@@ -42,9 +43,14 @@ app.include_router(auth.router)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
-def _asset_version() -> str:
+def _asset_version(rel_path: str = "css/site.css") -> str:
+    """Cache-busting query value for a static file, keyed off its own
+    mtime -- a plain `git pull` doesn't touch the mtime of files a deploy
+    left unchanged, so this must be per-file rather than one shared value,
+    or updating only a .js file (leaving site.css untouched) wouldn't bust
+    a browser's cached copy of that script."""
     try:
-        return str(int((BASE_DIR / "static" / "css" / "site.css").stat().st_mtime))
+        return str(int((BASE_DIR / "static" / rel_path).stat().st_mtime))
     except OSError:
         return "1"
 
@@ -68,6 +74,7 @@ def _focal_position(article) -> str:
 
 
 templates.env.globals["css_v"] = _asset_version()
+templates.env.globals["asset_version"] = _asset_version
 templates.env.globals["SITE_NAME"] = config.SITE_NAME
 templates.env.globals["SITE_TAGLINE"] = config.SITE_TAGLINE
 templates.env.globals["OAUTH_ENABLED"] = config.OAUTH_ENABLED
@@ -136,6 +143,28 @@ def _pop_flash(request: Request) -> list[dict]:
 
 
 templates.env.globals["pop_flash"] = _pop_flash
+
+
+def _announce_article(request: Request, article) -> None:
+    """Posts to Discord that this article just went live -- best-effort:
+    a Discord hiccup must never block publishing, so failure is flashed to
+    staff (so it isn't silently invisible) rather than raised."""
+    if not config.NEWS_ANNOUNCE_ENABLED:
+        return
+    if not config.SITE_BASE_URL:
+        _flash(request, "Published, but SITE_BASE_URL isn't configured -- skipped the Discord announcement.", level="error")
+        return
+    url = f"{config.SITE_BASE_URL}/news/{article.slug}"
+    cover_image_url = f"{config.SITE_BASE_URL}/news/{article.slug}/cover-image" if article.cover_image else None
+    embed = discord_announce.build_embed(
+        title=article.title, url=url, summary=article.summary, category=article.category,
+        author_name=article.author_name, cover_image_url=cover_image_url,
+        published_at=article.published_at,
+    )
+    try:
+        discord_announce.announce(config.NEWS_ANNOUNCE_CHANNEL_ID, embed)
+    except discord_announce.DiscordApiError:
+        _flash(request, "Published, but the Discord announcement failed to send.", level="error")
 
 
 def _check_csrf(request: Request, token: str):
@@ -237,7 +266,25 @@ async def news_new(
             cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
+        if article.published:
+            _announce_article(request, article)
         return RedirectResponse(f"/news/{article.slug}", status_code=303)
+
+
+@app.get("/news/{slug}/cover-image")
+def news_cover_image(slug: str):
+    """Serves an article's cover image at a real fetchable URL -- it's
+    normally stored as a data: URI (see services.image_to_data_uri), which
+    works fine embedded directly in this site's own pages, but Discord's
+    embed API needs a URL it can actually fetch (see discord_announce.py)."""
+    with get_session() as session:
+        article = services.get_article(session, slug)
+    if article is None:
+        raise HTTPException(status_code=404)
+    content_type, raw = services.decode_data_uri(article.cover_image)
+    if content_type is None:
+        raise HTTPException(status_code=404)
+    return Response(content=raw, media_type=content_type)
 
 
 @app.get("/news/{slug}", response_class=HTMLResponse)
@@ -284,12 +331,18 @@ async def news_edit(
             return templates.TemplateResponse(
                 request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
             )
+        was_published = article.published
         article = services.update_article(
             session, article, title=title, category=category, summary=summary, body_html=body_html,
             cover_image=cover, published=bool(published),
             cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article updated.")
+        # Announce a draft's first publish, same as a brand-new article --
+        # but not a re-save of an article that was already live, or every
+        # typo fix would repost it to Discord.
+        if article.published and not was_published:
+            _announce_article(request, article)
         return RedirectResponse(f"/news/{article.slug}", status_code=303)
 
 

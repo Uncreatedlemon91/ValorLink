@@ -11,6 +11,7 @@ app.py/services.py split.
 from __future__ import annotations
 
 import base64
+import binascii
 import re
 from datetime import datetime, timezone
 from html import escape as _escape_html
@@ -64,6 +65,25 @@ async def image_to_data_uri(upload: UploadFile | None) -> str | None:
         raise ServiceError("Images must be under 2MB.")
     encoded = base64.b64encode(data).decode("ascii")
     return f"data:{content_type};base64,{encoded}"
+
+
+_DATA_URI_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.S)
+
+
+def decode_data_uri(data_uri: str | None) -> tuple[str, bytes] | tuple[None, None]:
+    """Splits a `data:<mime>;base64,<...>` URI (see image_to_data_uri above)
+    back into (content_type, raw bytes) -- used to serve a stored cover
+    image at a real fetchable URL (see GET /news/<slug>/cover-image),
+    since e.g. Discord's embed API needs a URL it can fetch, not a data:
+    URI baked into the embed JSON."""
+    match = _DATA_URI_RE.match(data_uri or "")
+    if not match:
+        return None, None
+    content_type, encoded = match.groups()
+    try:
+        return content_type, base64.b64decode(encoded)
+    except (binascii.Error, ValueError):
+        return None, None
 
 
 def _normalize_category(category: str) -> str:

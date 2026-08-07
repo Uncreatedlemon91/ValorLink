@@ -58,6 +58,24 @@ DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
 CLIPS_CHANNEL_ID = os.getenv("CLIPS_CHANNEL_ID", "")
 CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
 
+# --- Discord article announcements ------------------------------------------
+# One-directional (site -> Discord), and unlike the syncs above, sent right
+# when an article goes live rather than polled -- this app is the source of
+# truth for articles, so there's nothing to notice later. Reuses
+# DISCORD_BOT_TOKEN above. See discord_announce.py / app.py's news_new and
+# news_edit routes.
+NEWS_ANNOUNCE_CHANNEL_ID = os.getenv("NEWS_ANNOUNCE_CHANNEL_ID", "")
+NEWS_ANNOUNCE_ENABLED = bool(DISCORD_BOT_TOKEN and NEWS_ANNOUNCE_CHANNEL_ID)
+
+# --- Public site URL ---------------------------------------------------------
+# The absolute https URL this site is reachable at. Only needed where an
+# absolute link is required rather than a relative one -- currently just the
+# Discord announcement above (an embed's url/image fields must be absolute).
+# Not derived from a request's Host header: gunicorn/uvicorn here aren't
+# configured to trust proxy headers from Caddy, so request.url.scheme would
+# report "http" even in production; explicit is more reliable than clever.
+SITE_BASE_URL = os.getenv("SITE_BASE_URL", "").rstrip("/")
+
 # --- Twitch (streamer showcase) -------------------------------------------- #
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")

@@ -223,6 +223,40 @@ every template that renders that cover image reads back via `app.py`'s
 `background-position`. Repositioning doesn't require re-uploading the
 image -- the two fields save independently of the file input.
 
+## Publishing announces to Discord
+
+Set `NEWS_ANNOUNCE_CHANNEL_ID` (and `SITE_BASE_URL`) and the site posts a
+rich embed to that channel the moment an article goes live -- title,
+summary, category-colored accent, cover image, and a link back to the
+article. See `discord_announce.py`.
+
+- **Fires on publish, not on save.** A brand-new article published
+  immediately announces; so does a draft the first time it's published.
+  Re-saving an article that was *already* published does not -- otherwise
+  every typo fix would repost it. The check is a simple before/after
+  comparison of `Article.published` in `app.py`'s `news_new`/`news_edit`
+  routes, no extra column needed.
+- **Reuses `DISCORD_BOT_TOKEN`** (see "Clips are Discord-only" above for
+  the sharing tradeoff) and `discord_api.py`'s POST-with-429-retry helper.
+  Synchronous and one-directional (site -> Discord) -- unlike the
+  events/clips sync, there's nothing to poll for, so it's a plain API call
+  made right when `services.create_article`/`update_article` publishes.
+- **The cover image needs a real URL, not the data: URI it's stored as.**
+  Discord's embed API can't fetch a `data:` URI, so
+  `GET /news/<slug>/cover-image` serves the stored image's decoded bytes
+  at an actual endpoint (`services.decode_data_uri`), and the embed points
+  there instead. Articles with no cover image just get an embed with no
+  thumbnail.
+- **A Discord hiccup never blocks publishing.** `announce()`'s failure is
+  caught in `app.py` and turned into an error-styled flash message ("...but
+  the Discord announcement failed to send") rather than raised -- the
+  article is already live on the site either way.
+- **`SITE_BASE_URL` is required** because an embed's `url`/`image.url`
+  fields must be absolute, and this deploy doesn't configure uvicorn/
+  gunicorn to trust Caddy's proxy headers, so a request's own scheme can't
+  be trusted to say `https`. Missing it doesn't block publishing either --
+  same flash-and-continue treatment, just naming the actual problem.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
