@@ -19,6 +19,7 @@ def _configured_and_reset(monkeypatch):
     monkeypatch.setattr(config, "TWITCH_CLIENT_ID", "test-client-id")
     monkeypatch.setattr(config, "TWITCH_CLIENT_SECRET", "test-secret")
     monkeypatch.setattr(config, "TWITCH_ENABLED", True)
+    monkeypatch.setattr(config, "TWITCH_GAME_FILTER", "EA Sports FC 26")
     twitch_client._token_cache.update({"value": None, "expires_at": 0.0})
     twitch_client._streams_cache.update({"key": None, "value": None, "expires_at": 0.0})
     yield
@@ -58,7 +59,7 @@ def test_live_streams_maps_by_login(monkeypatch):
         return _FakeResponse({
             "data": [{
                 "user_login": "shroud", "title": "ranked grind",
-                "game_name": "EA Sports FC", "viewer_count": 42,
+                "game_name": "EA Sports FC 26", "viewer_count": 42,
                 "thumbnail_url": "https://x/{width}x{height}.jpg",
                 "started_at": "2026-01-01T00:00:00Z",
             }],
@@ -91,6 +92,68 @@ def test_streams_are_cached_between_calls(monkeypatch):
     twitch_client.live_streams(["shroud"])
     twitch_client.live_streams(["shroud"])
     assert call_count["get"] == 1  # second call served from cache
+
+
+def test_live_stream_playing_a_different_game_is_excluded(monkeypatch):
+    def fake_post(url, data=None, timeout=None):
+        return _FakeResponse({"access_token": "tok123", "expires_in": 3600})
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse({
+            "data": [{
+                "user_login": "shroud", "title": "just chatting",
+                "game_name": "Just Chatting", "viewer_count": 42,
+                "thumbnail_url": "https://x/{width}x{height}.jpg",
+                "started_at": "2026-01-01T00:00:00Z",
+            }],
+        })
+
+    monkeypatch.setattr(twitch_client.httpx, "post", fake_post)
+    monkeypatch.setattr(twitch_client.httpx, "get", fake_get)
+
+    assert twitch_client.live_streams(["shroud"]) == {}
+
+
+def test_game_filter_match_is_case_insensitive(monkeypatch):
+    def fake_post(url, data=None, timeout=None):
+        return _FakeResponse({"access_token": "tok123", "expires_in": 3600})
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse({
+            "data": [{
+                "user_login": "shroud", "title": "ranked grind",
+                "game_name": "ea sports fc 26", "viewer_count": 42,
+                "thumbnail_url": "https://x/{width}x{height}.jpg",
+                "started_at": "2026-01-01T00:00:00Z",
+            }],
+        })
+
+    monkeypatch.setattr(twitch_client.httpx, "post", fake_post)
+    monkeypatch.setattr(twitch_client.httpx, "get", fake_get)
+
+    assert "shroud" in twitch_client.live_streams(["shroud"])
+
+
+def test_empty_game_filter_disables_filtering(monkeypatch):
+    monkeypatch.setattr(config, "TWITCH_GAME_FILTER", "")
+
+    def fake_post(url, data=None, timeout=None):
+        return _FakeResponse({"access_token": "tok123", "expires_in": 3600})
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return _FakeResponse({
+            "data": [{
+                "user_login": "shroud", "title": "just chatting",
+                "game_name": "Just Chatting", "viewer_count": 42,
+                "thumbnail_url": "https://x/{width}x{height}.jpg",
+                "started_at": "2026-01-01T00:00:00Z",
+            }],
+        })
+
+    monkeypatch.setattr(twitch_client.httpx, "post", fake_post)
+    monkeypatch.setattr(twitch_client.httpx, "get", fake_get)
+
+    assert "shroud" in twitch_client.live_streams(["shroud"])
 
 
 def test_api_failure_degrades_to_empty(monkeypatch):
