@@ -49,12 +49,20 @@ def _asset_version() -> str:
         return "1"
 
 
+def _initials(name: str, limit: int = 3) -> str:
+    """A short crest-style abbreviation for the match-center badges, e.g.
+    "YeeHaw FC" -> "YF", "Rivals FC" -> "RF" -- first letter of each word."""
+    letters = "".join(word[0] for word in (name or "").split() if word)
+    return (letters[:limit] or "?").upper()
+
+
 templates.env.globals["css_v"] = _asset_version()
 templates.env.globals["SITE_NAME"] = config.SITE_NAME
 templates.env.globals["SITE_TAGLINE"] = config.SITE_TAGLINE
 templates.env.globals["OAUTH_ENABLED"] = config.OAUTH_ENABLED
 templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
 templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
+templates.env.globals["initials"] = _initials
 
 
 @app.on_event("startup")
@@ -117,8 +125,10 @@ def _check_csrf(request: Request, token: str):
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     with get_session() as session:
-        latest = services.list_articles(session, limit=7)
+        latest = services.list_articles(session, limit=9)
         featured, rest = (latest[0], latest[1:]) if latest else (None, [])
+        transfers = services.list_articles(session, category="Transfer", limit=4)
+        highlights = services.list_articles(session, category="Match Highlight", limit=4)
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
@@ -133,6 +143,8 @@ def home(request: Request):
             request,
             featured=featured,
             articles=rest,
+            transfers=transfers,
+            highlights=highlights,
             next_event=upcoming[0] if upcoming else None,
             live_streamers=live_streamers,
             live=live,

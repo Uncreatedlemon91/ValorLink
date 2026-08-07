@@ -1,90 +1,157 @@
 {% extends "base.html" %}
 {% block title %}Home{% endblock %}
 {% block content %}
-<div class="page">
-  {% if featured %}
-    <a class="featured-story" href="/news/{{ featured.slug }}"
-       {% if featured.cover_image %}style="background-image: linear-gradient(0deg, rgba(10,12,16,0.92), rgba(10,12,16,0.35) 55%, rgba(10,12,16,0.1)), url('{{ featured.cover_image }}');"{% endif %}>
-      <div class="featured-story-body">
-        <span class="category-badge cat-{{ featured.category | replace(' ', '-') | lower }}">{{ featured.category }}</span>
-        <h1>{{ featured.title }}</h1>
-        {% if featured.summary %}<p>{{ featured.summary }}</p>{% endif %}
-        <div class="article-meta">{{ featured.author_name }} &middot; {{ featured.published_at.strftime('%b %-d, %Y') }}</div>
+
+<section class="hero-featured {{ '' if (featured and featured.cover_image) else 'no-image' }}"
+         {% if featured and featured.cover_image %}style="background-image: url('{{ featured.cover_image }}');"{% endif %}>
+  <div class="hero-scrim"></div>
+  <div class="hero-content">
+    {% if featured %}
+      <span class="hero-kicker">Latest Story</span>
+      <span class="category-badge cat-{{ featured.category | replace(' ', '-') | lower }}">{{ featured.category }}</span>
+      <h1><a href="/news/{{ featured.slug }}">{{ featured.title }}</a></h1>
+      {% if featured.summary %}<p>{{ featured.summary }}</p>{% endif %}
+      <div class="hero-meta">
+        <span class="article-meta">{{ featured.author_name }} &middot; {{ featured.published_at.strftime('%b %-d, %Y') }}</span>
+        <a class="btn hero-cta" href="/news/{{ featured.slug }}">Read the full story</a>
       </div>
-    </a>
-  {% else %}
-    <div class="hero">
+    {% else %}
+      <span class="hero-kicker">{{ SITE_TAGLINE }}</span>
       <h1>{{ SITE_NAME }}</h1>
-      <p>{{ SITE_TAGLINE }} — news, transfers, and match highlights from the squad.</p>
-      {% if is_staff %}<a class="btn" href="/news/new">Post the first article</a>{% endif %}
-    </div>
-  {% endif %}
+      <p>News, transfers, and match highlights from the squad.</p>
+      {% if is_staff %}<a class="btn hero-cta" href="/news/new">Post the first story</a>{% endif %}
+    {% endif %}
+  </div>
+  <div class="scroll-cue" aria-hidden="true">&darr;</div>
+</section>
+
+<div class="match-center">
+  <div class="match-center-inner">
+    {% if next_event %}
+      <span class="mc-kicker-label">Next {{ next_event.event_type }}</span>
+      <div class="mc-matchup">
+        <div class="mc-team">
+          <span class="crest">{{ initials(SITE_NAME) }}</span>
+          <span class="mc-team-name">{{ SITE_NAME }}</span>
+        </div>
+        <div class="mc-vs">
+          <span>{{ next_event.scheduled_at.strftime('%a %b %-d') }}</span>
+          <span class="mc-vs-text">VS</span>
+          <span>{{ next_event.scheduled_at.strftime('%H:%M UTC') }}</span>
+        </div>
+        <div class="mc-team">
+          {% if next_event.opponent %}
+            <span class="crest">{{ initials(next_event.opponent) }}</span>
+            <span class="mc-team-name">{{ next_event.opponent }}</span>
+          {% else %}
+            <span class="crest">?</span>
+            <span class="mc-team-name">{{ next_event.title }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mc-countdown" data-countdown="{{ next_event.scheduled_at.isoformat() }}Z">
+        <div class="cd-box"><span class="cd-d">00</span><small>Days</small></div>
+        <div class="cd-box"><span class="cd-h">00</span><small>Hrs</small></div>
+        <div class="cd-box"><span class="cd-m">00</span><small>Min</small></div>
+        <div class="cd-box"><span class="cd-s">00</span><small>Sec</small></div>
+      </div>
+      <a class="btn secondary mc-cta" href="/events">Full Schedule</a>
+    {% else %}
+      <div class="mc-empty">
+        <span class="mc-kicker-label">No fixture scheduled yet</span>
+        <a class="btn secondary mc-cta" href="/events">View schedule</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="page">
 
   {% if articles %}
-    <div class="section-head"><h2>Latest news</h2><a href="/news">All news &rarr;</a></div>
-    <div class="card-grid">
+    <div class="section-head"><h2>Latest News</h2><a href="/news">All news &rarr;</a></div>
+    <div class="news-rail">
       {% for a in articles %}
-        <a class="card article-card" href="/news/{{ a.slug }}">
-          {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
-          <div class="body">
+        <a class="rail-card" href="/news/{{ a.slug }}">
+          <div class="rail-card-image">
+            {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" />{% endif %}
+            {% if a.category == 'Match Highlight' %}<span class="play-badge">&#9658;</span>{% endif %}
+          </div>
+          <div class="rail-card-body">
             <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
             <h3>{{ a.title }}</h3>
-            {% if a.summary %}<p>{{ a.summary }}</p>{% endif %}
-            <div class="article-meta">{{ a.author_name }} &middot; {{ a.published_at.strftime('%b %-d, %Y') }}</div>
+            <div class="article-meta">{{ a.published_at.strftime('%b %-d, %Y') }}</div>
           </div>
         </a>
       {% endfor %}
     </div>
   {% endif %}
 
-  <div class="side-strip">
-    <div class="card strip-card">
-      <div class="strip-head">Next up</div>
-      {% if next_event %}
-        <div class="event-row" style="border:none; padding:0; background:transparent;">
-          <div class="event-date">
-            <div class="month">{{ next_event.scheduled_at.strftime('%b') }}</div>
-            <div class="day">{{ next_event.scheduled_at.strftime('%-d') }}</div>
-          </div>
-          <div class="event-info">
-            <span class="event-type-badge">{{ next_event.event_type }}</span>
-            <h3>{{ next_event.title }}{% if next_event.opponent %} vs {{ next_event.opponent }}{% endif %}</h3>
-            <p>{{ next_event.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}</p>
-          </div>
-        </div>
-      {% else %}
-        <p class="field-hint">Nothing scheduled yet.</p>
-      {% endif %}
-      <a class="strip-link" href="/events">Full schedule &rarr;</a>
+  {% if transfers %}
+    <div class="section-band">
+      <div class="band-head">
+        <span class="hero-kicker">Transfer Centre</span>
+        <a href="/news?category=Transfer">All transfers &rarr;</a>
+      </div>
+      <div class="band-list">
+        {% for a in transfers %}
+          <a class="band-row" href="/news/{{ a.slug }}">
+            <span class="band-arrow">&rarr;</span>
+            <span class="band-title">{{ a.title }}</span>
+            <span class="article-meta">{{ a.published_at.strftime('%b %-d') }}</span>
+          </a>
+        {% endfor %}
+      </div>
     </div>
+  {% endif %}
 
-    <div class="card strip-card">
-      <div class="strip-head">{{ 'Live now' if live_streamers else 'Streamers' }}</div>
-      {% if live_streamers %}
+  {% if highlights %}
+    <div class="section-head"><h2>Match Highlights</h2><a href="/news?category=Match+Highlight">All highlights &rarr;</a></div>
+    <div class="card-grid">
+      {% for a in highlights %}
+        <a class="card article-card" href="/news/{{ a.slug }}">
+          <div class="rail-card-image" style="aspect-ratio: 16/9;">
+            {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
+            <span class="play-badge">&#9658;</span>
+          </div>
+          <div class="body">
+            <h3>{{ a.title }}</h3>
+            <div class="article-meta">{{ a.published_at.strftime('%b %-d, %Y') }}</div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if live_streamers %}
+    <div class="live-banner">
+      <div class="live-banner-head"><span class="live-dot"></span> Live now on Twitch</div>
+      <div class="live-banner-row">
         {% for s in live_streamers %}
           {% set info = live[s.twitch_login] %}
-          <a class="live-strip-row" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
-            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
-            <div>
-              <div class="streamer-name">{{ s.display_name }}</div>
-              <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>
+          <a class="live-banner-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
+            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
+            <div class="live-banner-info">
+              {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+              <div>
+                <div class="streamer-name">{{ s.display_name }}</div>
+                <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>
+              </div>
             </div>
           </a>
         {% endfor %}
-      {% else %}
-        <p class="field-hint">Nobody's live right now.</p>
-      {% endif %}
-      <a class="strip-link" href="/streamers">All streamers &rarr;</a>
+      </div>
     </div>
-  </div>
+  {% endif %}
 
   {% if stats_teaser %}
-    <div class="section-head"><h2>Club standing</h2><a href="/stats">Full stats &rarr;</a></div>
+    <div class="section-head"><h2>Club Standing</h2><a href="/stats">Full stats &rarr;</a></div>
     <div class="stat-grid">
       <div class="stat-card"><div class="label">Division</div><div class="value">{{ stats_teaser.currentDivision or '—' }}</div></div>
       <div class="stat-card"><div class="label">Points</div><div class="value">{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div></div>
       <div class="stat-card"><div class="label">Best division</div><div class="value">{{ stats_teaser.bestDivision or '—' }}</div></div>
     </div>
   {% endif %}
+
 </div>
 {% endblock %}
+{% block scripts %}<script src="/static/js/countdown.js" defer></script>{% endblock %}
