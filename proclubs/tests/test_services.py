@@ -30,14 +30,16 @@ def _fresh_db():
 AUTHOR = {"id": 1, "name": "Coach", "avatar": None}
 
 
-def test_create_article_generates_slug_and_html():
+def test_create_article_generates_slug_and_sanitizes_html():
     with database.get_session() as session:
         article = services.create_article(
             session, title="Big Win Tonight", summary="We won",
-            body_md="**GG**", cover_image=None, published=True, author=AUTHOR,
+            body_html='<p><strong>GG</strong></p><script>alert(1)</script>',
+            cover_image=None, published=True, author=AUTHOR,
         )
         assert article.slug == "big-win-tonight"
         assert "<strong>GG</strong>" in article.body_html
+        assert "<script" not in article.body_html  # sanitized, not just stored raw
         assert article.published is True
         assert article.category == "News"  # default when not specified
 
@@ -45,7 +47,7 @@ def test_create_article_generates_slug_and_html():
 def test_create_article_with_explicit_category():
     with database.get_session() as session:
         article = services.create_article(
-            session, title="Big Signing", summary="", body_md="x", category="Transfer",
+            session, title="Big Signing", summary="", body_html="<p>x</p>", category="Transfer",
             cover_image=None, published=True, author=AUTHOR,
         )
         assert article.category == "Transfer"
@@ -54,7 +56,7 @@ def test_create_article_with_explicit_category():
 def test_unrecognized_category_falls_back_to_default():
     with database.get_session() as session:
         article = services.create_article(
-            session, title="Weird Category", summary="", body_md="x", category="Not A Real Category",
+            session, title="Weird Category", summary="", body_html="<p>x</p>", category="Not A Real Category",
             cover_image=None, published=True, author=AUTHOR,
         )
         assert article.category == "News"
@@ -62,9 +64,9 @@ def test_unrecognized_category_falls_back_to_default():
 
 def test_list_articles_filters_by_category():
     with database.get_session() as session:
-        services.create_article(session, title="Transfer News", summary="", body_md="x",
+        services.create_article(session, title="Transfer News", summary="", body_html="<p>x</p>",
                                   category="Transfer", cover_image=None, published=True, author=AUTHOR)
-        services.create_article(session, title="Match Recap", summary="", body_md="x",
+        services.create_article(session, title="Match Recap", summary="", body_html="<p>x</p>",
                                   category="Match Highlight", cover_image=None, published=True, author=AUTHOR)
         transfers = services.list_articles(session, category="Transfer")
         assert [a.title for a in transfers] == ["Transfer News"]
@@ -72,25 +74,25 @@ def test_list_articles_filters_by_category():
 
 def test_update_article_keeps_category_if_not_given():
     with database.get_session() as session:
-        article = services.create_article(session, title="Original", summary="", body_md="x",
+        article = services.create_article(session, title="Original", summary="", body_html="<p>x</p>",
                                              category="Transfer", cover_image=None, published=True, author=AUTHOR)
         updated = services.update_article(session, article, title="Original", summary="",
-                                            body_md="y", cover_image=None, published=True)
+                                            body_html="<p>y</p>", cover_image=None, published=True)
         assert updated.category == "Transfer"
 
         updated = services.update_article(session, article, title="Original", summary="",
-                                            body_md="z", cover_image=None, published=True, category="News")
+                                            body_html="<p>z</p>", cover_image=None, published=True, category="News")
         assert updated.category == "News"
 
 
 def test_duplicate_titles_get_unique_slugs():
     with database.get_session() as session:
         first = services.create_article(
-            session, title="Match Report", summary="", body_md="x",
+            session, title="Match Report", summary="", body_html="<p>x</p>",
             cover_image=None, published=True, author=AUTHOR,
         )
         second = services.create_article(
-            session, title="Match Report", summary="", body_md="y",
+            session, title="Match Report", summary="", body_html="<p>y</p>",
             cover_image=None, published=True, author=AUTHOR,
         )
         assert first.slug == "match-report"
@@ -100,18 +102,40 @@ def test_duplicate_titles_get_unique_slugs():
 def test_create_article_requires_title_and_body():
     with database.get_session() as session:
         with pytest.raises(services.ServiceError):
-            services.create_article(session, title="  ", summary="", body_md="x",
+            services.create_article(session, title="  ", summary="", body_html="<p>x</p>",
                                       cover_image=None, published=True, author=AUTHOR)
         with pytest.raises(services.ServiceError):
-            services.create_article(session, title="Title", summary="", body_md="   ",
+            # Quill's "empty" state is still markup, not an empty string.
+            services.create_article(session, title="Title", summary="", body_html="<p><br></p>",
                                       cover_image=None, published=True, author=AUTHOR)
+
+
+def test_create_article_allows_image_only_body_with_no_text():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Photo Dump", summary="",
+            body_html='<p><img src="data:image/png;base64,iVBORw0KGgo="></p>',
+            cover_image=None, published=True, author=AUTHOR,
+        )
+        assert "<img" in article.body_html
+
+
+def test_create_article_rejects_body_over_max_length(monkeypatch):
+    import html_sanitize
+    monkeypatch.setattr(html_sanitize, "MAX_BODY_LENGTH", 100)
+    with database.get_session() as session:
+        with pytest.raises(services.ServiceError, match="too long"):
+            services.create_article(
+                session, title="Huge", summary="", body_html="<p>" + ("x" * 200) + "</p>",
+                cover_image=None, published=True, author=AUTHOR,
+            )
 
 
 def test_unpublished_articles_excluded_by_default():
     with database.get_session() as session:
-        services.create_article(session, title="Draft One", summary="", body_md="x",
+        services.create_article(session, title="Draft One", summary="", body_html="<p>x</p>",
                                   cover_image=None, published=False, author=AUTHOR)
-        services.create_article(session, title="Live One", summary="", body_md="x",
+        services.create_article(session, title="Live One", summary="", body_html="<p>x</p>",
                                   cover_image=None, published=True, author=AUTHOR)
 
         public = services.list_articles(session)
@@ -123,10 +147,10 @@ def test_unpublished_articles_excluded_by_default():
 
 def test_update_article_reslugs_on_title_change():
     with database.get_session() as session:
-        article = services.create_article(session, title="Old Title", summary="", body_md="x",
+        article = services.create_article(session, title="Old Title", summary="", body_html="<p>x</p>",
                                             cover_image=None, published=True, author=AUTHOR)
         updated = services.update_article(session, article, title="New Title", summary="",
-                                            body_md="y", cover_image=None, published=True)
+                                            body_html="<p>y</p>", cover_image=None, published=True)
         assert updated.slug == "new-title"
         assert services.get_article(session, "old-title") is None
         assert services.get_article(session, "new-title") is not None
@@ -134,7 +158,7 @@ def test_update_article_reslugs_on_title_change():
 
 def test_delete_article():
     with database.get_session() as session:
-        article = services.create_article(session, title="Gone Soon", summary="", body_md="x",
+        article = services.create_article(session, title="Gone Soon", summary="", body_html="<p>x</p>",
                                             cover_image=None, published=True, author=AUTHOR)
         slug = article.slug
         services.delete_article(session, article)

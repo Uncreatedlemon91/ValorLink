@@ -22,8 +22,10 @@ def _utcnow() -> datetime:
 
 
 class Article(Base):
-    """A news/blog post. Markdown source is what's stored and edited;
-    rendered HTML is cached alongside it so a read doesn't re-render."""
+    """A news/blog post, written with a rich-text (WYSIWYG) editor -- the
+    editor produces HTML directly, so body_html is both the editable
+    source (loaded back into the editor) and what gets rendered; see
+    html_sanitize.py for why it's still sanitized rather than trusted."""
 
     __tablename__ = "articles"
 
@@ -32,7 +34,6 @@ class Article(Base):
     slug = Column(String, nullable=False, unique=True, index=True)
     category = Column(String, nullable=False, server_default="News")  # see ARTICLE_CATEGORIES
     summary = Column(String, nullable=True)          # dek shown in list views
-    body_md = Column(Text, nullable=False)
     body_html = Column(Text, nullable=False)
     cover_image = Column(Text, nullable=True)         # data URI
     author_discord_id = Column(BigInteger, nullable=True)

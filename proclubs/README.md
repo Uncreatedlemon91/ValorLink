@@ -109,6 +109,38 @@ site that pushes back to Discord.
   Discord's own list).
 - Synced events show a "Discord" pill next to the event type badge.
 
+## The article editor
+
+`/news/new` and `/news/<slug>/edit` use [Quill](https://quilljs.com) as a
+proper rich-text (WYSIWYG) editor -- headings, bold/italic/underline/
+strike, blockquotes, code blocks, lists, links, and inline images -- not
+raw Markdown. A few things worth knowing:
+
+- **Vendored, not a CDN.** `static/vendor/quill/` is Quill's own unmodified
+  build, checked into the repo (BSD-3-Clause, see the LICENSE file there)
+  rather than loaded from jsdelivr/unpkg/cdnjs. That's deliberate: this
+  site otherwise avoids third-party script origins (the one exception is
+  Google Fonts, disclosed in base.html), and a vendored copy keeps working
+  even if a CDN is down or blocked.
+- **The toolbar is deliberately narrow.** Every button maps to something
+  `html_sanitize.py` actually allows through (see below); options Quill
+  supports beyond that -- text color, fonts, alignment, embedded video --
+  are left off rather than offered and then silently stripped on save.
+- **Inline images are embedded as data URIs**, the same "no upload
+  endpoint, just embed it" pattern as the cover image and streamer
+  avatars elsewhere on this site -- capped client-side at 3MB per image.
+  A long article with several photos can get large; `MAX_BODY_LENGTH` in
+  html_sanitize.py caps the total stored size as a backstop.
+- **Still sanitized server-side**, same as the old Markdown pipeline was --
+  the editor's output is HTML reaching every visitor's browser unescaped,
+  so a compromised staff account or a bug in Quill's own JS shouldn't
+  turn into stored XSS. One accepted tradeoff: allowing `data:` image
+  sources through the sanitizer also permits a `data:` link (nh3 applies
+  its URL-scheme allowlist to every URL attribute uniformly, not per-tag)
+  -- modern browsers already refuse top-level navigation to a cross-origin
+  `data:` URL, so the realistic risk is low, but it's a real tradeoff, not
+  an oversight. See the comment in html_sanitize.py.
+
 ## Important caveats about the EA stats dashboard
 
 - The EA API (`proclubs.ea.com/api/fc`) is **not official**. It's the same
@@ -133,7 +165,7 @@ proclubs/
   database.py            SQLAlchemy engine/session for the site's own content DB
   models.py              Article / Event / Streamer
   services.py            CRUD + validation for articles/events/streamers
-  markdown_render.py    Article Markdown -> sanitized HTML
+  html_sanitize.py       Sanitizes the rich-text editor's HTML before it's stored
   twitch_client.py       Twitch Helix: is-this-channel-live, with a short cache
   discord_events.py      Discord Scheduled Events REST client (read-only)
   discord_events_poll.py Standalone poller, mirrors Discord events -> Event rows
@@ -145,6 +177,8 @@ proclubs/
   static/css/site.css    Design system (also read by charts.js as CSS vars)
   static/js/app.js       Stats dashboard UI (fetches /api/*)
   static/js/charts.js    Dependency-free SVG charts
+  static/js/article-editor.js  Wires up the Quill rich-text article editor
+  static/vendor/quill/   Vendored Quill 2.x build (no CDN dependency -- see its README)
   tests/                 pytest suite
 ```
 
@@ -154,7 +188,7 @@ proclubs/
 |---|---|---|
 | `/` | everyone | Hero, latest news, next event, featured live stream, stats teaser |
 | `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
-| `/news/new`, `/news/<slug>/edit` | staff | Article form (Markdown + optional cover image) |
+| `/news/new`, `/news/<slug>/edit` | staff | Article form: rich-text (WYSIWYG) editor + optional cover image |
 | `/events` | everyone | Upcoming + past events -- read-only, see below |
 | `/streamers` (nav label: "Live") | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
 | `/stats` | everyone | EA stats dashboard for our club |
