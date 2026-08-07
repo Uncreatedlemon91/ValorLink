@@ -169,14 +169,35 @@
   {% endif %}
 
   {% if stats_teaser %}
+    {% set band_color = crest_colors.crest if crest_colors and crest_colors.crest else None %}
     <div class="section-head"><h2>Club Standing</h2><a href="/stats">Full stats &rarr;</a></div>
-    <div class="stat-grid">
-      <div class="stat-card"><div class="label">Division</div><div class="value">{{ stats_teaser.currentDivision or '—' }}</div></div>
-      <div class="stat-card"><div class="label">Points</div><div class="value">{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div></div>
-      <div class="stat-card"><div class="label">Best division</div><div class="value">{{ stats_teaser.bestDivision or '—' }}</div></div>
+    <div class="standing-band" data-reveal>
+      <div class="standing-glow" {% if band_color %}style="background: radial-gradient(circle, {{ band_color }}59, transparent 70%);"{% endif %}></div>
+      <div class="standing-shine"></div>
+      <div class="standing-grid">
+        <div class="standing-item">
+          <div class="division-ring" {% if band_color %}style="border-color: {{ band_color }};"{% endif %}>
+            <span>{{ stats_teaser.currentDivision or '—' }}</span>
+          </div>
+          <div class="standing-label">Current Division</div>
+        </div>
+        <div class="standing-item standing-item--hero">
+          <div class="standing-value--hero" {% if stats_teaser.points is not none %}data-countup="{{ stats_teaser.points }}"{% endif %}>{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div>
+          <div class="standing-label">Points</div>
+        </div>
+        <div class="standing-item">
+          <div class="division-ring division-ring--muted">
+            <span>{{ stats_teaser.bestDivision or '—' }}</span>
+          </div>
+          <div class="standing-label">Best Division</div>
+        </div>
+      </div>
     </div>
   {% endif %}
 
 </div>
 {% endblock %}
-{% block scripts %}<script src="/static/js/countdown.js" defer></script>{% endblock %}
+{% block scripts %}
+<script src="/static/js/countdown.js" defer></script>
+<script src="/static/js/countup.js" defer></script>
+{% endblock %}
