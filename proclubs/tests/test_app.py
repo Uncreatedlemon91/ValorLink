@@ -288,27 +288,47 @@ def test_feature_route_switches_the_featured_channel(client):
     assert f'action="/streamers/{second_id}/feature"' not in page.text
 
 
-def test_home_shows_featured_stream_embed_only_when_live(client, monkeypatch):
+def test_home_hides_the_entire_live_section_unless_someone_is_live(client, monkeypatch):
     _login_staff(client)
     token = _csrf(client, "/streamers")
     client.post("/streamers/add", data={
         "display_name": "n0v84", "twitch_login": "n0v84", "featured": "1", "csrf_token": token,
     }, follow_redirects=False)
 
-    # Offline (the default in tests -- Twitch isn't configured): no iframe,
-    # just the compact "follow for the next stream" card.
+    # Offline (the default in tests -- Twitch isn't configured): the whole
+    # Live section is gone, not just the player -- no heading, no card.
     home = client.get("/")
     assert "player.twitch.tv/?channel=n0v84" not in home.text
-    assert "featured-stream--offline" in home.text
-    assert "follow for the next stream" in home.text
+    assert "featured-stream" not in home.text
+    assert ">Live Now<" not in home.text
 
-    # Live: the embedded player replaces the offline card.
+    # Live: the section reappears with the embedded player.
     monkeypatch.setattr(appmod.twitch_client, "live_streams", lambda logins: {
         "n0v84": {"title": "ranked grind", "viewer_count": 12, "thumbnail_url": "", "url": "https://twitch.tv/n0v84"},
     })
     home = client.get("/")
     assert "player.twitch.tv/?channel=n0v84" in home.text
-    assert "featured-stream--offline" not in home.text
+    assert ">Live Now<" in home.text
+
+
+def test_home_shows_live_section_for_a_non_featured_streamer_even_if_featured_is_offline(client, monkeypatch):
+    _login_staff(client)
+    for name in ["n0v84", "sidekick"]:
+        token = _csrf(client, "/streamers")
+        client.post("/streamers/add", data={
+            "display_name": name, "twitch_login": name,
+            "featured": "1" if name == "n0v84" else "", "csrf_token": token,
+        }, follow_redirects=False)
+
+    # Only the non-featured one is live -- featured stays offline (hidden),
+    # but the section still shows for the one that is live.
+    monkeypatch.setattr(appmod.twitch_client, "live_streams", lambda logins: {
+        "sidekick": {"title": "grinding ranked", "viewer_count": 3, "thumbnail_url": "", "url": "https://twitch.tv/sidekick"},
+    })
+    home = client.get("/")
+    assert ">Live Now<" in home.text
+    assert "player.twitch.tv/?channel=n0v84" not in home.text  # featured is offline, no embed
+    assert "Also live now" in home.text
 
 
 def test_logout_clears_session(client):

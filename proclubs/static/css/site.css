@@ -419,11 +419,6 @@ button:active, .btn:active { transform: translateY(0); }
   padding: 1rem 1.25rem; flex-wrap: wrap;
 }
 .featured-stream-text { flex: 1; min-width: 0; }
-
-/* No player box when the channel is offline -- a plain info bar instead of
-   an empty 16:9 slab. */
-.featured-stream--offline .featured-stream-info { padding: 1.25rem 1.5rem; }
-.featured-stream--offline .streamer-avatar { width: 52px; height: 52px; }
 .featured-pill {
   display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--live); border: 1px solid var(--live);
