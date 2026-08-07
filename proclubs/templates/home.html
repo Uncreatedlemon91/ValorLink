@@ -214,6 +214,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/countdown.js" defer></script>
-<script src="/static/js/countup.js" defer></script>
+<script src="/static/js/countdown.js?v={{ asset_version('js/countdown.js') }}" defer></script>
+<script src="/static/js/countup.js?v={{ asset_version('js/countup.js') }}" defer></script>
 {% endblock %}

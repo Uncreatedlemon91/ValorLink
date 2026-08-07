@@ -197,6 +197,150 @@ def test_article_with_cover_image_shows_focal_picker_on_edit(client):
     assert "top: 85.0%" in edit.text
 
 
+def test_cover_image_route_serves_decoded_bytes(client):
+    import base64
+    raw = b"fake-png-bytes"
+    encoded = base64.b64encode(raw).decode("ascii")
+    slug = _seed_article(cover_image=f"data:image/png;base64,{encoded}")
+
+    r = client.get(f"/news/{slug}/cover-image")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.content == raw
+
+
+def test_cover_image_route_404_when_no_cover_image(client):
+    slug = _seed_article(cover_image=None)
+    assert client.get(f"/news/{slug}/cover-image").status_code == 404
+
+
+def test_cover_image_route_404_for_missing_article(client):
+    assert client.get("/news/does-not-exist/cover-image").status_code == 404
+
+
+def _enable_announcements(monkeypatch, base_url="https://example.com"):
+    monkeypatch.setattr(config, "NEWS_ANNOUNCE_ENABLED", True)
+    monkeypatch.setattr(config, "NEWS_ANNOUNCE_CHANNEL_ID", "555")
+    monkeypatch.setattr(config, "SITE_BASE_URL", base_url)
+
+
+def test_publishing_a_new_article_announces_to_discord(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+    captured = {}
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda channel_id, embed: captured.update(channel_id=channel_id, embed=embed))
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "Season Opener Win", "summary": "Great start.", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    assert captured["channel_id"] == "555"
+    assert captured["embed"]["title"] == "Season Opener Win"
+    assert captured["embed"]["url"] == "https://example.com/news/season-opener-win"
+
+
+def test_saving_a_draft_does_not_announce(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+    called = []
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda *a, **k: called.append(1))
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "Draft Only", "summary": "", "body_html": "<p>x</p>",
+        "published": "", "csrf_token": token,
+    }, follow_redirects=False)
+
+    assert called == []
+
+
+def test_editing_an_already_published_article_does_not_reannounce(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+    called = []
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda *a, **k: called.append(1))
+    slug = _seed_article(title="Already Live", published=True)
+
+    _login_staff(client)
+    token = _csrf(client, f"/news/{slug}/edit")
+    client.post(f"/news/{slug}/edit", data={
+        "title": "Already Live", "summary": "typo fix", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    assert called == []
+
+
+def test_publishing_a_draft_via_edit_announces(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+    called = []
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda *a, **k: called.append(1))
+    slug = _seed_article(title="Coming Soon", published=False)
+
+    _login_staff(client)
+    token = _csrf(client, f"/news/{slug}/edit")
+    client.post(f"/news/{slug}/edit", data={
+        "title": "Coming Soon", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    assert called == [1]
+
+
+def test_announce_skipped_when_not_configured(client, monkeypatch):
+    monkeypatch.setattr(config, "NEWS_ANNOUNCE_ENABLED", False)
+    called = []
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda *a, **k: called.append(1))
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "No Announce Config", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    assert called == []
+
+
+def test_announce_skipped_and_flashed_when_site_base_url_missing(client, monkeypatch):
+    monkeypatch.setattr(config, "NEWS_ANNOUNCE_ENABLED", True)
+    monkeypatch.setattr(config, "NEWS_ANNOUNCE_CHANNEL_ID", "555")
+    monkeypatch.setattr(config, "SITE_BASE_URL", "")
+    called = []
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda *a, **k: called.append(1))
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    r = client.post("/news/new", data={
+        "title": "No Base URL", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=True)
+
+    assert called == []
+    assert "SITE_BASE_URL" in r.text
+
+
+def test_publish_still_succeeds_when_discord_announce_fails(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+
+    def fail(*a, **k):
+        raise appmod.discord_announce.DiscordApiError("discord is down")
+
+    monkeypatch.setattr(appmod.discord_announce, "announce", fail)
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    r = client.post("/news/new", data={
+        "title": "Resilient Publish", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=True)
+
+    assert r.status_code == 200
+    assert "Resilient Publish" in r.text
+    assert "announcement failed" in r.text
+
+
 def test_draft_article_hidden_from_fans_visible_to_staff(client):
     _login_staff(client)
     token = _csrf(client, "/news/new")

@@ -75,7 +75,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-  <script src="/static/vendor/quill/quill.js"></script>
-  <script src="/static/js/article-editor.js"></script>
-  <script src="/static/js/cover-focal.js"></script>
+  <script src="/static/vendor/quill/quill.js?v={{ asset_version('vendor/quill/quill.js') }}"></script>
+  <script src="/static/js/article-editor.js?v={{ asset_version('js/article-editor.js') }}"></script>
+  <script src="/static/js/cover-focal.js?v={{ asset_version('js/cover-focal.js') }}"></script>
 {% endblock %}

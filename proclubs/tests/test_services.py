@@ -2,6 +2,7 @@
 
 Run with: pytest proclubs/tests/test_services.py
 """
+import base64
 import os
 import sys
 import tempfile
@@ -332,6 +333,27 @@ def test_comment_counts_for_batches_across_articles():
 def test_comment_counts_for_empty_list_returns_empty_dict():
     with database.get_session() as session:
         assert services.comment_counts_for(session, []) == {}
+
+
+def test_decode_data_uri_round_trips_image_to_data_uri():
+    raw = b"not-really-a-png-but-bytes-are-bytes"
+    encoded = base64.b64encode(raw).decode("ascii")
+    content_type, decoded = services.decode_data_uri(f"data:image/png;base64,{encoded}")
+    assert content_type == "image/png"
+    assert decoded == raw
+
+
+def test_decode_data_uri_returns_none_for_non_data_uri():
+    assert services.decode_data_uri("https://example.com/x.png") == (None, None)
+
+
+def test_decode_data_uri_returns_none_for_none_or_empty():
+    assert services.decode_data_uri(None) == (None, None)
+    assert services.decode_data_uri("") == (None, None)
+
+
+def test_decode_data_uri_returns_none_for_garbage_base64():
+    assert services.decode_data_uri("data:image/png;base64,not-valid-base64!!!") == (None, None)
 
 
 def _make_clip(session, *, title="Nice goal", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
