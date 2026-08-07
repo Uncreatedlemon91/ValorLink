@@ -114,6 +114,45 @@ def test_init_db_drops_legacy_body_md_column_so_new_articles_can_be_created():
         assert new.slug == "new-post"
 
 
+def test_init_db_adds_cover_focal_columns_with_center_default():
+    # Simulate a deployment from before the focal-point picker existed.
+    database.Base.metadata.drop_all(database.engine)
+    with database.engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE articles (
+                id INTEGER PRIMARY KEY,
+                title VARCHAR NOT NULL,
+                slug VARCHAR NOT NULL UNIQUE,
+                category VARCHAR NOT NULL DEFAULT 'News',
+                summary VARCHAR,
+                body_html TEXT NOT NULL,
+                cover_image TEXT,
+                author_discord_id BIGINT,
+                author_name VARCHAR NOT NULL,
+                author_avatar VARCHAR,
+                published BOOLEAN NOT NULL,
+                published_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            INSERT INTO articles (title, slug, body_html, author_name, published)
+            VALUES ('Pre-Focal Post', 'pre-focal-post', '<p>x</p>', 'Coach', 1)
+        """))
+
+    database.init_db()
+
+    inspector = inspect(database.engine)
+    columns = {c["name"] for c in inspector.get_columns("articles")}
+    assert "cover_focal_x" in columns
+    assert "cover_focal_y" in columns
+
+    with database.get_session() as session:
+        article = services.get_article(session, "pre-focal-post")
+        assert article.cover_focal_x == 50
+        assert article.cover_focal_y == 50
+
+
 def test_init_db_is_idempotent_on_a_fresh_database():
     database.Base.metadata.drop_all(database.engine)
     database.init_db()

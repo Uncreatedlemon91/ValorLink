@@ -19,7 +19,7 @@
     {% endif %}
   </div>
 
-  {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" />{% endif %}
+  {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" style="object-position: {{ focal_position(article) }};" />{% endif %}
   <div class="article-body">{{ article.body_html | safe }}</div>
 
   <div class="article-reactions">

@@ -206,6 +206,20 @@ button:active, .btn:active { transform: translateY(0); }
 .field-row { display: flex; gap: 1rem; flex-wrap: wrap; }
 .field-row .field { flex: 1 1 200px; }
 .field-hint { color: var(--muted); font-size: 0.78rem; margin: 0; }
+
+/* --- Cover image focal-point picker ------------------------------------- */
+.focal-picker {
+  position: relative; display: inline-block; max-width: 320px; width: 100%;
+  margin: 0.5rem 0; cursor: crosshair; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.focal-picker[hidden] { display: none; }
+.focal-preview { display: block; width: 100%; aspect-ratio: 21/9; object-fit: cover; background: var(--panel-2); }
+.focal-marker {
+  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border: 2px solid #fff; border-radius: 50%; background: rgba(76, 175, 125, 0.85);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none;
+}
 .checkbox-field { flex-direction: row; align-items: center; gap: 0.5rem; }
 .checkbox-field input { width: auto; }
 

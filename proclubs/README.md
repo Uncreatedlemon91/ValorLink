@@ -188,6 +188,18 @@ raw Markdown. A few things worth knowing:
   `data:` URL, so the realistic risk is low, but it's a real tradeoff, not
   an oversight. See the comment in html_sanitize.py.
 
+**The cover image has a focal point.** The same cover photo gets cropped
+to several different shapes across the site -- a short wide banner in the
+home hero, a 21:9 header on the article page, ~4:3/16:9 card thumbnails in
+the news rail/grid -- and a plain center crop often cuts off the part that
+actually matters (a face at the edge of the frame, for instance). On the
+article form, clicking the cover preview sets `Article.cover_focal_x`/`
+cover_focal_y` (percentages, defaulting to 50/50 -- dead center), which
+every template that renders that cover image reads back via `app.py`'s
+`focal_position()` helper and applies as `object-position`/
+`background-position`. Repositioning doesn't require re-uploading the
+image -- the two fields save independently of the file input.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see

@@ -28,14 +28,25 @@
 
     <div class="field">
       <label for="summary">Summary</label>
-      <input id="summary" name="summary" placeholder="One line shown in article lists" value="{{ article.summary if article else '' }}" />
+      <input id="summary" name="summary" placeholder="One line shown in article lists" value="{{ (article.summary if article else '') or '' }}" />
     </div>
 
+    {% set fx = article.cover_focal_x if article and article.cover_focal_x is not none else 50 %}
+    {% set fy = article.cover_focal_y if article and article.cover_focal_y is not none else 50 %}
     <div class="field">
       <label for="cover_image">Cover image</label>
-      {% if article and article.cover_image %}<img class="article-cover" style="max-width:240px;" src="{{ article.cover_image }}" alt="" />{% endif %}
+      <div class="focal-picker" id="focal-picker" {% if not (article and article.cover_image) %}hidden{% endif %}>
+        <img class="focal-preview" id="focal-preview" src="{{ article.cover_image if article and article.cover_image else '' }}" alt="" style="object-position: {{ fx }}% {{ fy }}%;" />
+        <span class="focal-marker" id="focal-marker" style="left: {{ fx }}%; top: {{ fy }}%;"></span>
+      </div>
       <input id="cover_image" name="cover_image" type="file" accept="image/*" />
-      <p class="field-hint">Leave blank to keep the current image. Max 2MB.</p>
+      <input type="hidden" name="cover_focal_x" id="cover_focal_x" value="{{ fx }}" />
+      <input type="hidden" name="cover_focal_y" id="cover_focal_y" value="{{ fy }}" />
+      <p class="field-hint">
+        Click the preview to set the focal point -- the part of the image that stays visible when it's
+        cropped narrower, like the home page banner or article header. Leave the file blank to keep the
+        current image. Max 2MB.
+      </p>
     </div>
 
     <div class="field">
@@ -60,4 +71,5 @@
 {% block scripts %}
   <script src="/static/vendor/quill/quill.js"></script>
   <script src="/static/js/article-editor.js"></script>
+  <script src="/static/js/cover-focal.js"></script>
 {% endblock %}
