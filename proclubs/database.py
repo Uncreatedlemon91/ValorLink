@@ -29,6 +29,7 @@ def init_db():
 
     Base.metadata.create_all(engine)
     _add_missing_columns()
+    _drop_legacy_columns()
 
 
 def _add_missing_columns():
@@ -52,6 +53,34 @@ def _add_missing_columns():
                 if column.server_default is not None:
                     ddl += f" DEFAULT '{column.server_default.arg}'"
                 conn.execute(text(ddl))
+
+
+# Columns a past model used to declare, since removed, that an
+# already-deployed database may still be carrying. Additive-only sync
+# above only ever adds columns, so these linger after the code that used
+# them is gone -- harmless for a nullable leftover, but NOT NULL ones
+# (like this) break every future insert into that table, since a new row
+# just never supplies a value for a column its model no longer knows
+# about. SQLite has supported DROP COLUMN since 3.35 (2021), so this is
+# safe to run unconditionally on every startup -- a no-op once it's gone.
+_LEGACY_COLUMNS = {
+    # Replaced by Article.body_html when the article editor became
+    # Quill-based rich text instead of Markdown -- see html_sanitize.py.
+    "articles": ["body_md"],
+}
+
+
+def _drop_legacy_columns():
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table_name, columns in _LEGACY_COLUMNS.items():
+            if table_name not in existing_tables:
+                continue
+            existing_columns = {c["name"] for c in inspector.get_columns(table_name)}
+            for column_name in columns:
+                if column_name in existing_columns:
+                    conn.execute(text(f'ALTER TABLE {table_name} DROP COLUMN "{column_name}"'))
 
 
 @contextmanager
