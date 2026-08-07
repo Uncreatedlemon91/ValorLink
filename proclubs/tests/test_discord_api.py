@@ -139,6 +139,37 @@ def test_post_raises_on_other_http_error(monkeypatch):
         discord_api.post("/channels/999/messages", json={})
 
 
+def test_post_error_includes_discords_message_and_code(monkeypatch):
+    # e.g. the bot isn't in the channel's server, or lacks Send Messages/
+    # Embed Links there -- Discord's JSON body says exactly why, which
+    # matters a lot more to someone debugging this than "403 Forbidden".
+    monkeypatch.setattr(discord_api.httpx, "post", lambda *a, **k: _FakeResponse(
+        {"message": "Missing Access", "code": 50001}, status_code=403,
+    ))
+    with pytest.raises(discord_api.DiscordApiError, match="Missing Access.*50001"):
+        discord_api.post("/channels/999/messages", json={})
+
+
+def test_get_error_includes_discords_message_and_code(monkeypatch):
+    monkeypatch.setattr(discord_api.httpx, "get", lambda *a, **k: _FakeResponse(
+        {"message": "Unknown Channel", "code": 10003}, status_code=404,
+    ))
+    with pytest.raises(discord_api.DiscordApiError, match="Unknown Channel.*10003"):
+        discord_api.get("/channels/999/messages")
+
+
+def test_error_detail_falls_back_gracefully_when_body_has_no_message():
+    resp = _FakeResponse({}, status_code=403)
+    assert discord_api._discord_error_detail(resp) == ""
+
+
+def test_error_detail_falls_back_gracefully_when_body_is_not_json():
+    class _NotJson:
+        def json(self):
+            raise ValueError("not json")
+    assert discord_api._discord_error_detail(_NotJson()) == ""
+
+
 def test_retry_after_seconds_prefers_header_over_body():
     resp = _FakeResponse({"retry_after": 99}, status_code=429, headers={"Retry-After": "2.5"})
     assert discord_api._retry_after_seconds(resp) == 2.5

@@ -49,6 +49,26 @@ def _request(path: str, params: dict | None) -> httpx.Response:
         raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
 
 
+def _discord_error_detail(resp: httpx.Response) -> str:
+    """Discord's error responses carry a JSON body like {"message": "Missing
+    Access", "code": 50001} -- httpx's own HTTPStatusError text is just the
+    status line ("403 Forbidden"), which isn't enough to tell "bad token"
+    apart from "bot isn't in that channel" apart from "channel doesn't
+    exist". Appended to the raised DiscordApiError so that detail reaches
+    wherever the error is surfaced (a flash message, a log line)."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return ""
+    message = body.get("message") if isinstance(body, dict) else None
+    code = body.get("code") if isinstance(body, dict) else None
+    if message and code is not None:
+        return f" ({message}, code {code})"
+    if message:
+        return f" ({message})"
+    return ""
+
+
 def _retry_after_seconds(resp: httpx.Response, default: float = 1.0) -> float:
     header = resp.headers.get("Retry-After")
     if header is not None:
@@ -91,7 +111,7 @@ def post(path: str, json: dict) -> httpx.Response:
                 "still rate-limited after retrying -- DISCORD_BOT_TOKEN is shared with the "
                 "main ValorLink bot, so this can happen under contention"
             ) from exc
-        raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+        raise DiscordApiError(f"could not reach Discord's API: {exc}{_discord_error_detail(resp)}") from exc
 
     return resp
 
@@ -117,6 +137,6 @@ def get(path: str, params: dict | None = None) -> httpx.Response:
                 "main ValorLink bot, so this can happen under contention; the next scheduled "
                 "poll will likely succeed"
             ) from exc
-        raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+        raise DiscordApiError(f"could not reach Discord's API: {exc}{_discord_error_detail(resp)}") from exc
 
     return resp
