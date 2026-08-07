@@ -14,12 +14,22 @@ module, accordingly.
 """
 from __future__ import annotations
 
+import time
+
 import httpx
 
 import config
 
 _API = "https://discord.com/api/v10"
 _TIMEOUT = 15
+
+# A single bounded retry on 429 -- long enough to ride out the kind of
+# sub-second-to-low-single-digit-second rate limit a low-volume route like
+# this one gets, short enough not to hang a oneshot systemd run if Discord
+# asks for longer. Sharing DISCORD_BOT_TOKEN with the always-on ValorLink
+# bot means an occasional 429 here is expected contention, not a bug -- see
+# the module docstring.
+_MAX_RETRY_WAIT = 5.0
 
 # Discord's status enum for a guild scheduled event.
 STATUS_SCHEDULED = 1
@@ -32,6 +42,28 @@ class DiscordApiError(Exception):
     pass
 
 
+def _get(url: str) -> httpx.Response:
+    try:
+        return httpx.get(
+            url, headers={"Authorization": f"Bot {config.DISCORD_BOT_TOKEN}"}, timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+
+
+def _retry_after_seconds(resp: httpx.Response, default: float = 1.0) -> float:
+    header = resp.headers.get("Retry-After")
+    if header is not None:
+        try:
+            return float(header)
+        except ValueError:
+            pass
+    try:
+        return float(resp.json().get("retry_after", default))
+    except (ValueError, TypeError, KeyError):
+        return default
+
+
 def list_scheduled_events() -> list[dict]:
     """Every scheduled event Discord currently has for DISCORD_GUILD_ID,
     unfiltered (includes completed/canceled ones -- see is_upcoming).
@@ -41,15 +73,24 @@ def list_scheduled_events() -> list[dict]:
     make services.sync_discord_events delete every previously-synced
     fixture, since it reads an empty list as "Discord canceled all of
     these." """
+    url = f"{_API}/guilds/{config.DISCORD_GUILD_ID}/scheduled-events"
+    resp = _get(url)
+
+    if resp.status_code == 429:
+        time.sleep(min(_MAX_RETRY_WAIT, _retry_after_seconds(resp)))
+        resp = _get(url)
+
     try:
-        resp = httpx.get(
-            f"{_API}/guilds/{config.DISCORD_GUILD_ID}/scheduled-events",
-            headers={"Authorization": f"Bot {config.DISCORD_BOT_TOKEN}"},
-            timeout=_TIMEOUT,
-        )
         resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
+        if resp.status_code == 429:
+            raise DiscordApiError(
+                "still rate-limited after retrying -- DISCORD_BOT_TOKEN is shared with the "
+                "main ValorLink bot, so this can happen under contention; the next scheduled "
+                "poll will likely succeed"
+            ) from exc
         raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+
     try:
         return resp.json()
     except ValueError as exc:
