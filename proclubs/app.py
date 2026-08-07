@@ -108,6 +108,7 @@ def _ctx(request: Request, **extra) -> dict:
         "is_staff": auth.is_staff(user),
         "is_member": auth.is_member(user),
         "csrf_token": auth.get_csrf_token(request),
+        "DISCORD_INVITE_URL": config.DISCORD_INVITE_URL,
     }
     ctx.update(extra)
     return ctx

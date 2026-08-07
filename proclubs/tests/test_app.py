@@ -207,6 +207,60 @@ def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):
     assert "crest-branded" not in home.text
 
 
+def test_home_shows_connect_with_us_button_to_the_discord_invite(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
+    home = client.get("/")
+    assert "Connect with us" in home.text
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in home.text
+
+
+def test_home_hides_connect_band_when_invite_not_configured(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "")
+    home = client.get("/")
+    assert "Connect with us" not in home.text
+
+
+def test_discord_banner_shows_for_signed_out_visitors(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
+    home = client.get("/")
+    assert "discord-banner" in home.text
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in home.text
+    assert "Sign in with Discord" in home.text
+
+
+def test_discord_banner_shows_for_signed_in_non_members(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
+    _login_non_member(client)
+    home = client.get("/")
+    assert "discord-banner" in home.text
+    assert "not in our Discord server" in home.text
+
+
+def test_discord_banner_hidden_for_guild_members(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
+    _login_fan(client)
+    home = client.get("/")
+    assert "discord-banner" not in home.text
+
+
+def test_discord_banner_hidden_when_invite_not_configured(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "")
+    home = client.get("/")
+    assert "discord-banner" not in home.text
+
+
+def test_news_detail_comment_prompt_links_invite_for_signed_out_and_non_members(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
+    slug = _seed_article()
+
+    signed_out = client.get(f"/news/{slug}")
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in signed_out.text
+
+    _login_non_member(client)
+    non_member = client.get(f"/news/{slug}")
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in non_member.text
+
+
 def test_article_category_defaults_and_can_be_set(client):
     _login_staff(client)
     token = _csrf(client, "/news/new")

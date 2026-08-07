@@ -40,10 +40,15 @@
 
     {% if not user %}
       <p class="field-hint">
-        <a href="/login?next=/news/{{ article.slug }}#comments">Sign in with Discord</a> and join our server to comment.
+        <a href="/login?next=/news/{{ article.slug }}#comments">Sign in with Discord</a>
+        {% if DISCORD_INVITE_URL %}and <a href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">join our server</a>{% endif %}
+        to comment.
       </p>
     {% elif not is_member %}
-      <p class="field-hint">You're signed in, but need to be a member of our Discord server to comment.</p>
+      <p class="field-hint">
+        You're signed in, but need to be a member of our Discord server to comment.
+        {% if DISCORD_INVITE_URL %}<a href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>{% endif %}
+      </p>
     {% else %}
       <form method="post" action="/news/{{ article.slug }}/comments" class="comment-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
