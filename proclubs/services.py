@@ -15,15 +15,16 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import UploadFile
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
-from models import ARTICLE_CATEGORIES, Article, Clip, Event, Streamer
+from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
+_MAX_COMMENT_LENGTH = 2000
 
 
 class ServiceError(Exception):
@@ -157,8 +158,75 @@ def update_article(session: Session, article: Article, *, title: str, summary: s
 
 
 def delete_article(session: Session, article: Article) -> None:
+    # Comments/likes reference article_id as a plain column, not a real FK
+    # (matching this app's existing no-ORM-relationships style), so nothing
+    # cascades automatically -- clean them up by hand.
+    session.execute(delete(Comment).where(Comment.article_id == article.id))
+    session.execute(delete(Like).where(Like.article_id == article.id))
     session.delete(article)
     session.commit()
+
+
+# --- Comments -------------------------------------------------------------- #
+def list_comments(session: Session, article: Article) -> list[Comment]:
+    return list(session.execute(
+        select(Comment).where(Comment.article_id == article.id).order_by(Comment.created_at.asc())
+    ).scalars())
+
+
+def get_comment(session: Session, comment_id: int) -> Comment | None:
+    return session.get(Comment, comment_id)
+
+
+def add_comment(session: Session, article: Article, *, author: dict, body: str) -> Comment:
+    body = (body or "").strip()
+    if not body:
+        raise ServiceError("Say something first.")
+    if len(body) > _MAX_COMMENT_LENGTH:
+        raise ServiceError(f"Comments are limited to {_MAX_COMMENT_LENGTH} characters.")
+    comment = Comment(
+        article_id=article.id,
+        author_discord_id=author["id"],
+        author_name=author.get("name", "Fan"),
+        author_avatar=author.get("avatar"),
+        body=body,
+    )
+    session.add(comment)
+    session.commit()
+    session.refresh(comment)
+    return comment
+
+
+def delete_comment(session: Session, comment: Comment) -> None:
+    session.delete(comment)
+    session.commit()
+
+
+# --- Likes ------------------------------------------------------------------ #
+def count_likes(session: Session, article: Article) -> int:
+    return len(list(session.execute(select(Like.id).where(Like.article_id == article.id)).scalars()))
+
+
+def has_liked(session: Session, article: Article, user_id: int) -> bool:
+    return session.execute(
+        select(Like.id).where(Like.article_id == article.id, Like.user_discord_id == user_id)
+    ).first() is not None
+
+
+def toggle_like(session: Session, article: Article, user_id: int) -> bool:
+    """Adds or removes the like, returning the new state (True == now
+    liked). The unique (article_id, user_discord_id) constraint is what
+    keeps this safe if the same click somehow lands twice."""
+    existing = session.execute(
+        select(Like).where(Like.article_id == article.id, Like.user_discord_id == user_id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        session.delete(existing)
+        session.commit()
+        return False
+    session.add(Like(article_id=article.id, user_discord_id=user_id))
+    session.commit()
+    return True
 
 
 # --- Events -------------------------------------------------------------- #

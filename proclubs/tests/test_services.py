@@ -14,10 +14,12 @@ os.environ["SITE_DB_PATH"] = os.path.join(_TMP, "site.db")
 
 import pytest  # noqa: E402
 
+from sqlalchemy import select  # noqa: E402
+
 import database  # noqa: E402
 import discord_events as discord_events_mod  # noqa: E402
 import services  # noqa: E402
-from models import Article, Clip, Event, Streamer  # noqa: E402, F401
+from models import Article, Clip, Comment, Event, Like, Streamer  # noqa: E402, F401
 
 
 @pytest.fixture(autouse=True)
@@ -163,6 +165,89 @@ def test_delete_article():
         slug = article.slug
         services.delete_article(session, article)
         assert services.get_article(session, slug) is None
+
+
+MEMBER = {"id": 42, "name": "Fan", "avatar": None}
+
+
+def test_add_comment_and_list_comments_ordered_oldest_first():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Match Recap", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        services.add_comment(session, article, author=MEMBER, body="First!")
+        services.add_comment(session, article, author={"id": 43, "name": "Other Fan", "avatar": None}, body="Second")
+
+        comments = services.list_comments(session, article)
+        assert [c.body for c in comments] == ["First!", "Second"]
+        assert comments[0].author_name == "Fan"
+        assert comments[0].author_discord_id == 42
+
+
+def test_add_comment_rejects_empty_body():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Empty Comment Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        with pytest.raises(services.ServiceError):
+            services.add_comment(session, article, author=MEMBER, body="   ")
+
+
+def test_add_comment_rejects_over_max_length():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Long Comment Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        with pytest.raises(services.ServiceError):
+            services.add_comment(session, article, author=MEMBER, body="x" * 2001)
+
+
+def test_delete_comment():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Delete Comment Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        comment = services.add_comment(session, article, author=MEMBER, body="temp")
+        services.delete_comment(session, comment)
+        assert services.list_comments(session, article) == []
+
+
+def test_toggle_like_adds_then_removes():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Like Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        assert services.has_liked(session, article, 42) is False
+        assert services.count_likes(session, article) == 0
+
+        liked = services.toggle_like(session, article, 42)
+        assert liked is True
+        assert services.has_liked(session, article, 42) is True
+        assert services.count_likes(session, article) == 1
+
+        liked = services.toggle_like(session, article, 42)
+        assert liked is False
+        assert services.has_liked(session, article, 42) is False
+        assert services.count_likes(session, article) == 0
+
+
+def test_toggle_like_is_per_user():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Multi Like Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        services.toggle_like(session, article, 1)
+        services.toggle_like(session, article, 2)
+        assert services.count_likes(session, article) == 2
+        assert services.has_liked(session, article, 1) is True
+        assert services.has_liked(session, article, 3) is False
+
+
+def test_delete_article_cascades_comments_and_likes():
+    with database.get_session() as session:
+        article = services.create_article(session, title="Cascade Test", summary="", body_html="<p>x</p>",
+                                            cover_image=None, published=True, author=AUTHOR)
+        services.add_comment(session, article, author=MEMBER, body="won't survive")
+        services.toggle_like(session, article, 42)
+
+        services.delete_article(session, article)
+
+        assert session.execute(select(Comment)).first() is None
+        assert session.execute(select(Like)).first() is None
 
 
 def _make_event(session, **overrides):

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
 
 from database import Base
 
@@ -66,6 +66,37 @@ class Event(Base):
     # update or remove them without duplicating on every run. Null for
     # events created directly on the site.
     discord_event_id = Column(String, nullable=True, index=True)
+
+
+class Comment(Base):
+    """A comment on a news article, left by a signed-in Discord user who's a
+    member of DISCORD_GUILD_ID (see auth.require_member) -- not staff-only,
+    unlike everything else that writes to this site. Plain text: rendered
+    through Jinja's normal auto-escaping, no rich-text/HTML story here."""
+
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, nullable=False, index=True)
+    author_discord_id = Column(BigInteger, nullable=False)
+    author_name = Column(String, nullable=False)
+    author_avatar = Column(String, nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class Like(Base):
+    """One row per (article, Discord user) that has liked it -- existence is
+    the like, nothing to update, so unliking just deletes the row. The
+    unique constraint is what makes "toggle" safe against double-clicks."""
+
+    __tablename__ = "likes"
+    __table_args__ = (UniqueConstraint("article_id", "user_discord_id", name="uq_like_article_user"),)
+
+    id = Column(Integer, primary_key=True)
+    article_id = Column(Integer, nullable=False, index=True)
+    user_discord_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class Clip(Base):

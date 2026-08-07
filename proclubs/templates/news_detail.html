@@ -21,5 +21,60 @@
 
   {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" />{% endif %}
   <div class="article-body">{{ article.body_html | safe }}</div>
+
+  <div class="article-reactions">
+    {% if is_member %}
+      <form method="post" action="/news/{{ article.slug }}/like">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="like-btn {{ 'liked' if user_has_liked else '' }}">
+          {{ '♥' if user_has_liked else '♡' }} {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}
+        </button>
+      </form>
+    {% else %}
+      <span class="like-btn static">♡ {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}</span>
+    {% endif %}
+  </div>
+
+  <div class="comments" id="comments">
+    <h2 class="comments-head">{{ comments | length }} Comment{{ '' if comments | length == 1 else 's' }}</h2>
+
+    {% if not user %}
+      <p class="field-hint">
+        <a href="/login?next=/news/{{ article.slug }}#comments">Sign in with Discord</a> and join our server to comment.
+      </p>
+    {% elif not is_member %}
+      <p class="field-hint">You're signed in, but need to be a member of our Discord server to comment.</p>
+    {% else %}
+      <form method="post" action="/news/{{ article.slug }}/comments" class="comment-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <textarea name="body" placeholder="Say something about this one..." maxlength="2000" required></textarea>
+        <div class="form-actions"><button type="submit" class="btn">Comment</button></div>
+      </form>
+    {% endif %}
+
+    {% for c in comments %}
+      <div class="comment">
+        {% if c.author_avatar %}
+          <img class="comment-avatar" src="https://cdn.discordapp.com/avatars/{{ c.author_discord_id }}/{{ c.author_avatar }}.png" alt="" />
+        {% else %}
+          <span class="comment-avatar comment-avatar-fallback">{{ initials(c.author_name, 2) }}</span>
+        {% endif %}
+        <div class="comment-body">
+          <div class="comment-meta">
+            <strong>{{ c.author_name }}</strong>
+            <span class="article-meta">{{ c.created_at.strftime('%b %-d, %Y') }}</span>
+            {% if user and (is_staff or user.id == c.author_discord_id) %}
+              <form method="post" action="/news/{{ article.slug }}/comments/{{ c.id }}/delete"
+                    class="comment-delete" onsubmit="return confirm('Delete this comment?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="link-btn">Delete</button>
+              </form>
+            {% endif %}
+          </div>
+          <p class="comment-text">{{ c.body }}</p>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
 </div>
 {% endblock %}
