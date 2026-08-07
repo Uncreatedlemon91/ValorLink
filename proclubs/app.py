@@ -132,7 +132,10 @@ def home(request: Request):
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
-        live_streamers = [s for s in streamers if s.twitch_login in live]
+        featured_streamer = services.get_featured_streamer(session)
+        other_live_streamers = [
+            s for s in streamers if s.twitch_login in live and (not featured_streamer or s.id != featured_streamer.id)
+        ]
         stats_teaser = None
         crest_colors = None
         if config.CLUB_ID:
@@ -148,7 +151,9 @@ def home(request: Request):
             transfers=transfers,
             highlights=highlights,
             next_event=upcoming[0] if upcoming else None,
-            live_streamers=live_streamers,
+            featured_streamer=featured_streamer,
+            featured_streamer_live=bool(featured_streamer and featured_streamer.twitch_login in live),
+            other_live_streamers=other_live_streamers,
             live=live,
             stats_teaser=stats_teaser,
             crest_colors=crest_colors,
@@ -350,24 +355,43 @@ def streamers_page(request: Request):
     with get_session() as session:
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
+        featured_streamer = services.get_featured_streamer(session)
+        other_streamers = [s for s in streamers if not featured_streamer or s.id != featured_streamer.id]
         return templates.TemplateResponse(request, "streamers.html", _ctx(
-            request, streamers=streamers, live=live, twitch_enabled=config.TWITCH_ENABLED,
+            request, featured_streamer=featured_streamer,
+            featured_streamer_live=bool(featured_streamer and featured_streamer.twitch_login in live),
+            streamers=other_streamers, live=live, twitch_enabled=config.TWITCH_ENABLED,
         ))
 
 
 @app.post("/streamers/add")
 async def streamer_add(
     request: Request, display_name: str = Form(...), twitch_login: str = Form(...),
-    csrf_token: str = Form(...), avatar: UploadFile | None = None, staff=Depends(auth.require_staff),
+    featured: str = Form(""), csrf_token: str = Form(...),
+    avatar: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
     avatar_uri = await services.image_to_data_uri(avatar)
     with get_session() as session:
         services.create_streamer(
             session, display_name=display_name, twitch_login=twitch_login,
-            avatar=avatar_uri, author_name=staff.get("name", "Staff"),
+            avatar=avatar_uri, author_name=staff.get("name", "Staff"), featured=bool(featured),
         )
         _flash(request, "Streamer added to the showcase.")
+    return RedirectResponse("/streamers", status_code=303)
+
+
+@app.post("/streamers/{streamer_id}/feature")
+def streamer_feature(request: Request, streamer_id: int, csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        streamer = services.get_streamer(session, streamer_id)
+        if streamer is None:
+            return templates.TemplateResponse(
+                request, "error.html", _ctx(request, message="That streamer doesn't exist."), status_code=404,
+            )
+        services.set_featured_streamer(session, streamer)
+        _flash(request, f"{streamer.display_name} is now the featured channel.")
     return RedirectResponse("/streamers", status_code=303)
 
 

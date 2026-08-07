@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 import markdown_render
@@ -213,8 +213,12 @@ def get_streamer(session: Session, streamer_id: int) -> Streamer | None:
     return session.get(Streamer, streamer_id)
 
 
+def get_featured_streamer(session: Session) -> Streamer | None:
+    return session.execute(select(Streamer).where(Streamer.featured.is_(True))).scalar_one_or_none()
+
+
 def create_streamer(session: Session, *, display_name: str, twitch_login: str,
-                     avatar: str | None, author_name: str) -> Streamer:
+                     avatar: str | None, author_name: str, featured: bool = False) -> Streamer:
     display_name = display_name.strip()
     twitch_login = twitch_login.strip().lower().lstrip("@")
     if not display_name or not twitch_login:
@@ -224,17 +228,28 @@ def create_streamer(session: Session, *, display_name: str, twitch_login: str,
     next_position = (
         session.execute(select(Streamer.position).order_by(Streamer.position.desc())).scalars().first() or 0
     ) + 1
+    if featured:
+        session.execute(update(Streamer).values(featured=False))
     streamer = Streamer(
         display_name=display_name,
         twitch_login=twitch_login,
         avatar=avatar,
         position=next_position,
+        featured=featured,
         added_by_name=author_name,
     )
     session.add(streamer)
     session.commit()
     session.refresh(streamer)
     return streamer
+
+
+def set_featured_streamer(session: Session, streamer: Streamer) -> None:
+    """Only one streamer is ever featured -- setting one clears the rest,
+    like a radio button, so there's always at most one embedded player."""
+    session.execute(update(Streamer).values(featured=False))
+    streamer.featured = True
+    session.commit()
 
 
 def delete_streamer(session: Session, streamer: Streamer) -> None:

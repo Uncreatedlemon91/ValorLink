@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app as appmod  # noqa: E402
 import database  # noqa: E402
+import services  # noqa: E402
 
 
 @pytest.fixture
@@ -216,6 +217,57 @@ def test_duplicate_streamer_is_rejected(client):
         "display_name": "Cap Again", "twitch_login": "shroud", "csrf_token": token,
     })
     assert r.status_code == 400
+
+
+def test_nav_says_live_not_streamers(client):
+    home = client.get("/")
+    assert ">Live</a>" in home.text
+    assert ">Streamers</a>" not in home.text
+
+
+def test_featured_streamer_gets_embedded_player_on_live_page(client):
+    _login_staff(client)
+    token = _csrf(client, "/streamers")
+    client.post("/streamers/add", data={
+        "display_name": "n0v84", "twitch_login": "n0v84", "featured": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    page = client.get("/streamers")
+    assert "player.twitch.tv/?channel=n0v84" in page.text
+    assert "Featured" in page.text
+
+
+def test_feature_route_switches_the_featured_channel(client):
+    _login_staff(client)
+    for name in ["first_streamer", "second_streamer"]:
+        token = _csrf(client, "/streamers")
+        client.post("/streamers/add", data={
+            "display_name": name, "twitch_login": name, "csrf_token": token,
+        }, follow_redirects=False)
+
+    with database.get_session() as session:
+        second = next(s for s in services.list_streamers(session) if s.twitch_login == "second_streamer")
+        second_id = second.id
+
+    token = _csrf(client, "/streamers")
+    r = client.post(f"/streamers/{second_id}/feature", data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+
+    page = client.get("/streamers")
+    assert "player.twitch.tv/?channel=second_streamer" in page.text
+    # And it's no longer offered as "Make Featured" now that it's the featured one.
+    assert f'action="/streamers/{second_id}/feature"' not in page.text
+
+
+def test_home_shows_featured_stream_embed(client):
+    _login_staff(client)
+    token = _csrf(client, "/streamers")
+    client.post("/streamers/add", data={
+        "display_name": "n0v84", "twitch_login": "n0v84", "featured": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    home = client.get("/")
+    assert "player.twitch.tv/?channel=n0v84" in home.text
 
 
 def test_logout_clears_session(client):

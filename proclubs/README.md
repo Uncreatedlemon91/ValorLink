@@ -111,12 +111,12 @@ proclubs/
 
 | Path | Who | What |
 |---|---|---|
-| `/` | everyone | Hero, latest news, next event, live streamers, stats teaser |
+| `/` | everyone | Hero, latest news, next event, featured live stream, stats teaser |
 | `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
 | `/news/new`, `/news/<slug>/edit` | staff | Article form (Markdown + optional cover image) |
 | `/events` | everyone | Upcoming + past events |
 | `/events/new`, `/events/<id>/edit` | staff | Event form |
-| `/streamers` | everyone | Showcase, live status from Twitch |
+| `/streamers` (nav label: "Live") | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
 | `/stats` | everyone | EA stats dashboard for our club |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
 

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Streamers{% endblock %}
+{% block title %}Live{% endblock %}
 {% block content %}
 <div class="page">
   <div class="page-head">
     <div>
-      <h1>Streamers</h1>
+      <h1>Live</h1>
       <p class="page-lede">Catch the squad live on Twitch.</p>
     </div>
   </div>
@@ -13,7 +13,28 @@
     <div class="card empty-state">Twitch isn't configured on this deployment yet, so live status can't be shown.</div>
   {% endif %}
 
+  {% if featured_streamer %}
+    <div class="featured-stream card">
+      <div class="featured-stream-player">
+        <iframe
+          src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
+          allowfullscreen frameborder="0" scrolling="no"></iframe>
+      </div>
+      <div class="featured-stream-info">
+        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ featured_streamer.avatar }}" alt="" />{% endif %}
+        <div class="featured-stream-text">
+          <div class="streamer-name">{{ featured_streamer.display_name }} <span class="featured-pill">Featured</span></div>
+          <div class="streamer-status {{ 'is-live' if featured_streamer_live else '' }}">
+            {{ 'Live now' if featured_streamer_live else 'Offline right now — follow for the next stream' }}
+          </div>
+        </div>
+        <a class="btn secondary" href="https://twitch.tv/{{ featured_streamer.twitch_login }}" target="_blank" rel="noopener noreferrer">Open on Twitch</a>
+      </div>
+    </div>
+  {% endif %}
+
   {% if streamers %}
+    <div class="section-head"><h2>{{ 'More Channels' if featured_streamer else 'Channels' }}</h2></div>
     <div class="card-grid">
       {% for s in streamers %}
         {% set info = live.get(s.twitch_login) %}
@@ -34,20 +55,26 @@
             </div>
           </div>
           {% if is_staff %}
-            <form method="post" action="/streamers/{{ s.id }}/delete" onsubmit="return confirm('Remove this streamer?');" style="padding:0 1rem 1rem;">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-              <button type="submit" class="btn danger">Remove</button>
-            </form>
+            <div class="form-actions" style="padding:0 1rem 1rem;">
+              <form method="post" action="/streamers/{{ s.id }}/feature">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn secondary">Make Featured</button>
+              </form>
+              <form method="post" action="/streamers/{{ s.id }}/delete" onsubmit="return confirm('Remove this streamer?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn danger">Remove</button>
+              </form>
+            </div>
           {% endif %}
         </div>
       {% endfor %}
     </div>
-  {% else %}
-    <div class="card empty-state">No streamers on the showcase yet.</div>
+  {% elif not featured_streamer %}
+    <div class="card empty-state">No channels on the showcase yet.</div>
   {% endif %}
 
   {% if is_staff %}
-    <div class="section-head"><h2>Add a streamer</h2></div>
+    <div class="section-head"><h2>Add a channel</h2></div>
     <form class="card" method="post" enctype="multipart/form-data" action="/streamers/add">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <div class="field-row">
@@ -64,7 +91,11 @@
         <label for="avatar">Avatar (optional)</label>
         <input id="avatar" name="avatar" type="file" accept="image/*" />
       </div>
-      <div class="form-actions"><button type="submit">Add streamer</button></div>
+      <label class="field checkbox-field">
+        <input type="checkbox" name="featured" value="1" {% if not featured_streamer %}checked{% endif %} />
+        Feature this channel (shows the embedded player on Home and Live)
+      </label>
+      <div class="form-actions"><button type="submit">Add channel</button></div>
     </form>
   {% endif %}
 </div>

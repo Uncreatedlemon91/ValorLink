@@ -178,3 +178,38 @@ def test_streamer_ordering_increments_position():
         second = services.create_streamer(session, display_name="B", twitch_login="b",
                                            avatar=None, author_name="Coach")
         assert second.position > first.position
+
+
+def test_new_streamer_is_not_featured_by_default():
+    with database.get_session() as session:
+        streamer = services.create_streamer(session, display_name="A", twitch_login="a",
+                                              avatar=None, author_name="Coach")
+        assert streamer.featured is False
+        assert services.get_featured_streamer(session) is None
+
+
+def test_creating_a_featured_streamer_unfeatures_the_previous_one():
+    with database.get_session() as session:
+        first = services.create_streamer(session, display_name="A", twitch_login="a",
+                                           avatar=None, author_name="Coach", featured=True)
+        assert services.get_featured_streamer(session).id == first.id
+
+        second = services.create_streamer(session, display_name="B", twitch_login="b",
+                                            avatar=None, author_name="Coach", featured=True)
+        session.refresh(first)
+        assert first.featured is False
+        assert services.get_featured_streamer(session).id == second.id
+
+
+def test_set_featured_streamer_is_exclusive():
+    with database.get_session() as session:
+        first = services.create_streamer(session, display_name="A", twitch_login="a",
+                                           avatar=None, author_name="Coach", featured=True)
+        second = services.create_streamer(session, display_name="B", twitch_login="b",
+                                            avatar=None, author_name="Coach")
+
+        services.set_featured_streamer(session, second)
+        session.refresh(first)
+        assert first.featured is False
+        assert second.featured is True
+        assert services.get_featured_streamer(session).id == second.id

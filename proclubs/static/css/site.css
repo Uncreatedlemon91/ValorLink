@@ -410,6 +410,21 @@ button:active, .btn:active { transform: translateY(0); }
 .band-arrow { color: var(--status-warning); font-weight: 700; flex: none; }
 .band-title { flex: 1; font-weight: 600; }
 
+/* --- Featured stream (embedded Twitch player) ---------------------------- */
+.featured-stream { padding: 0; overflow: hidden; margin-bottom: 1.5rem; }
+.featured-stream-player { position: relative; aspect-ratio: 16/9; background: #000; }
+.featured-stream-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+.featured-stream-info {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 1rem 1.25rem; flex-wrap: wrap;
+}
+.featured-stream-text { flex: 1; min-width: 0; }
+.featured-pill {
+  display: inline-block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--live); border: 1px solid var(--live);
+  border-radius: 4px; padding: 0.05rem 0.4rem; vertical-align: middle; margin-left: 0.3rem;
+}
+
 /* --- Live banner ------------------------------------------------------------ */
 .live-banner { margin: 2.5rem 0; }
 .live-banner-head {
