@@ -128,12 +128,14 @@
       <h2>{{ 'Live Now' if featured_streamer_live else 'Live' }}</h2>
       <a href="/streamers">{{ 'Watch on Live' if featured_streamer_live else 'All channels' }} &rarr;</a>
     </div>
-    <div class="featured-stream card">
-      <div class="featured-stream-player">
-        <iframe
-          src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
-          allowfullscreen frameborder="0" scrolling="no"></iframe>
-      </div>
+    <div class="featured-stream card {{ '' if featured_streamer_live else 'featured-stream--offline' }}">
+      {% if featured_streamer_live %}
+        <div class="featured-stream-player">
+          <iframe
+            src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
+            allowfullscreen frameborder="0" scrolling="no"></iframe>
+        </div>
+      {% endif %}
       <div class="featured-stream-info">
         {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ featured_streamer.avatar }}" alt="" />{% endif %}
         <div class="featured-stream-text">
@@ -142,7 +144,9 @@
             {{ 'Live now' if featured_streamer_live else 'Offline right now — follow for the next stream' }}
           </div>
         </div>
-        <a class="btn secondary" href="https://twitch.tv/{{ featured_streamer.twitch_login }}" target="_blank" rel="noopener noreferrer">Open on Twitch</a>
+        <a class="btn secondary" href="https://twitch.tv/{{ featured_streamer.twitch_login }}" target="_blank" rel="noopener noreferrer">
+          {{ 'Open on Twitch' if featured_streamer_live else 'Follow on Twitch' }}
+        </a>
       </div>
     </div>
   {% endif %}
