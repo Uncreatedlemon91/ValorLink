@@ -1,4 +1,8 @@
-"""CRUD helpers for articles, events, and streamers.
+"""CRUD helpers for articles and streamers, plus read/sync for events.
+
+Events are read-only from the site's own UI -- they exist only via the
+Discord Scheduled Events sync (see sync_discord_events below); there's no
+create/update/delete path left for staff to use directly, by design.
 
 Kept separate from app.py so the routes stay thin (parse request -> call
 service -> render/redirect), matching the ValorLink web app's own
@@ -153,56 +157,6 @@ def list_events(session: Session, *, upcoming_only: bool = False, limit: int | N
     if limit:
         query = query.limit(limit)
     return list(session.execute(query).scalars())
-
-
-def get_event(session: Session, event_id: int) -> Event | None:
-    return session.get(Event, event_id)
-
-
-def create_event(session: Session, *, title: str, event_type: str, opponent: str,
-                  description: str, scheduled_at: datetime, image: str | None,
-                  result: str, author_name: str) -> Event:
-    title = title.strip()
-    if not title:
-        raise ServiceError("Give the event a title.")
-    event = Event(
-        title=title,
-        event_type=event_type or "Match",
-        opponent=opponent.strip() or None,
-        description=description.strip() or None,
-        scheduled_at=scheduled_at,
-        image=image,
-        result=result.strip() or None,
-        created_by_name=author_name,
-    )
-    session.add(event)
-    session.commit()
-    session.refresh(event)
-    return event
-
-
-def update_event(session: Session, event: Event, *, title: str, event_type: str,
-                  opponent: str, description: str, scheduled_at: datetime,
-                  image: str | None, result: str) -> Event:
-    title = title.strip()
-    if not title:
-        raise ServiceError("Give the event a title.")
-    event.title = title
-    event.event_type = event_type or "Match"
-    event.opponent = opponent.strip() or None
-    event.description = description.strip() or None
-    event.scheduled_at = scheduled_at
-    if image is not None:
-        event.image = image
-    event.result = result.strip() or None
-    session.commit()
-    session.refresh(event)
-    return event
-
-
-def delete_event(session: Session, event: Event) -> None:
-    session.delete(event)
-    session.commit()
 
 
 def _parse_discord_time(value: str) -> datetime:

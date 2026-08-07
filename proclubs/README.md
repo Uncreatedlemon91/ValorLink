@@ -21,8 +21,10 @@ session, OAuth client -- stays as described above.
 Two tiers, both derived live from Discord roles at sign-in time (never
 stored): everyone -- including signed-out visitors -- can read the site.
 **Staff** -- holders of `DISCORD_STAFF_ROLE_ID` in `DISCORD_GUILD_ID` -- can
-write articles, manage events, and manage the streamer list. A role change
-in Discord takes effect on that person's next sign-in.
+write articles and manage the streamer list. A role change in Discord
+takes effect on that person's next sign-in. Events are the one exception:
+there's no staff editing UI for them at all -- see "Events are
+Discord-only" below.
 
 ## Local dev
 
@@ -80,29 +82,32 @@ unconfigured -- the site degrades gracefully (sign-in shows "not
 configured," the streamer showcase shows profiles without live status, no
 events get auto-created) rather than erroring.
 
-## Discord Scheduled Events sync
+## Events are Discord-only
 
-One-directional: create an event in Discord (Server → Events → New Event)
-and it shows up as a site fixture automatically, no site action needed.
-It is **not** the reverse -- creating a fixture on the site does not
-create a Discord event.
+`/events` is **read-only** on the site -- there is no create/edit/delete
+UI, for anyone, staff included. Events exist only via the one-directional
+Discord Scheduled Events sync: create an event in Discord (Server →
+Events → New Event) and it shows up as a site fixture automatically. It
+is **not** the reverse -- there's no way to create a fixture from the
+site that pushes back to Discord.
 
 - Runs on a schedule (`proclubs-discord-events-poll.timer`, every 10
   minutes -- see `../deploy/README.md`), not instantly on creation. This
   app has no always-on bot/gateway connection, so polling Discord's REST
   API is the only way to notice a change made there.
 - Discord is the source of truth for **title, description, and
-  date/time** on synced events -- each sync overwrites them from Discord.
+  date/time** on every synced event -- each sync overwrites them.
   **Type** (Match/Scrim/Tournament/Community), **opponent**, and
   **result** are site-only fields Discord has no equivalent for; they're
-  set to a sensible default on first sync and never touched again, so
-  staff can fill them in on the site without the next sync reverting them.
+  set to a sensible default (Type: Match, no opponent, no result) on
+  first sync and never touched again by later syncs -- but since there's
+  no site UI to change them either, they stay at that default unless set
+  by hand directly in the database.
 - If a Discord event is canceled or deleted, its mirrored site fixture is
   removed on the next sync too (as long as it's still in the future --
   past fixtures are left alone even if their Discord event ages out of
   Discord's own list).
-- Synced events show a "Discord" pill next to the event type badge, and
-  the edit form explains what will and won't get overwritten.
+- Synced events show a "Discord" pill next to the event type badge.
 
 ## Important caveats about the EA stats dashboard
 
@@ -150,8 +155,7 @@ proclubs/
 | `/` | everyone | Hero, latest news, next event, featured live stream, stats teaser |
 | `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
 | `/news/new`, `/news/<slug>/edit` | staff | Article form (Markdown + optional cover image) |
-| `/events` | everyone | Upcoming + past events |
-| `/events/new`, `/events/<id>/edit` | staff | Event form |
+| `/events` | everyone | Upcoming + past events -- read-only, see below |
 | `/streamers` (nav label: "Live") | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
 | `/stats` | everyone | EA stats dashboard for our club |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |

@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import tempfile
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -22,6 +23,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import app as appmod  # noqa: E402
 import database  # noqa: E402
 import services  # noqa: E402
+from models import Event  # noqa: E402
 
 
 @pytest.fixture
@@ -48,6 +50,23 @@ def _csrf(client, path):
     m = re.search(r'name="csrf_token" value="([^"]+)"', html)
     assert m, f"no csrf token found on {path}"
     return m.group(1)
+
+
+def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None,
+                 event_type="Match", discord_event_id=None) -> int:
+    """Events are read-only from the site now (Discord-sync only, see
+    services.sync_discord_events) -- tests that need one on the page seed
+    it directly rather than going through a since-removed /events/new."""
+    with database.get_session() as session:
+        event = Event(
+            title=title, event_type=event_type, opponent=opponent,
+            scheduled_at=scheduled_at or (datetime.utcnow() + timedelta(days=7)),
+            discord_event_id=discord_event_id,
+        )
+        session.add(event)
+        session.commit()
+        session.refresh(event)
+        return event.id
 
 
 def test_public_pages_load_signed_out(client):
@@ -123,13 +142,7 @@ def test_home_shows_most_recent_article_as_featured(client):
 
 
 def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
-    _login_staff(client)
-    token = _csrf(client, "/events/new")
-    client.post("/events/new", data={
-        "title": "League Match", "event_type": "Match", "opponent": "Rivals FC",
-        "description": "", "scheduled_at": "2027-01-15T18:00", "result": "",
-        "csrf_token": token,
-    }, follow_redirects=False)
+    _seed_event()
 
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: None)
@@ -211,27 +224,27 @@ def test_csrf_token_is_required_on_writes(client):
     assert r.status_code == 400
 
 
-def test_event_crud_round_trip(client):
+def test_events_page_shows_events_but_has_no_editing_ui_even_for_staff(client):
     _login_staff(client)
-    token = _csrf(client, "/events/new")
-    r = client.post("/events/new", data={
-        "title": "League Match", "event_type": "Match", "opponent": "Rivals FC",
-        "description": "", "scheduled_at": "2027-01-15T18:00", "result": "",
-        "csrf_token": token,
-    }, follow_redirects=False)
-    assert r.status_code == 303
+    _seed_event(title="League Match", opponent="Rivals FC")
 
     listing = client.get("/events")
     assert "Rivals FC" in listing.text
+    assert "New event" not in listing.text
+    assert ">Edit<" not in listing.text
+    assert "/events/new" not in listing.text
+    assert "/edit" not in listing.text
 
-    m = re.search(r"/events/(\d+)/edit", listing.text)
-    assert m, "expected an edit link for staff"
-    event_id = m.group(1)
 
-    edit_token = _csrf(client, f"/events/{event_id}/edit")
-    r = client.post(f"/events/{event_id}/delete", data={"csrf_token": edit_token}, follow_redirects=False)
-    assert r.status_code == 303
-    assert "Rivals FC" not in client.get("/events").text
+def test_event_editing_routes_no_longer_exist(client):
+    _login_staff(client)
+    event_id = _seed_event()
+
+    assert client.get("/events/new").status_code == 404
+    assert client.post("/events/new", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
+    assert client.get(f"/events/{event_id}/edit").status_code == 404
+    assert client.post(f"/events/{event_id}/edit", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
+    assert client.post(f"/events/{event_id}/delete", data={"csrf_token": "x"}).status_code == 404
 
 
 def test_duplicate_streamer_is_rejected(client):
