@@ -18,9 +18,10 @@ from fastapi import UploadFile
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
-from models import ARTICLE_CATEGORIES, Article, Event, Streamer
+from models import ARTICLE_CATEGORIES, Article, Clip, Event, Streamer
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
 
@@ -233,6 +234,58 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
 
     session.commit()
     return {"created": created, "updated": updated, "removed": removed}
+
+
+# --- Clips ------------------------------------------------------------------ #
+def list_clips(session: Session, *, limit: int | None = None) -> list[Clip]:
+    query = select(Clip).order_by(Clip.posted_at.desc())
+    if limit:
+        query = query.limit(limit)
+    return list(session.execute(query).scalars())
+
+
+def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
+    """Mirrors video attachments from a Discord channel's recent messages
+    into Clip rows. Every sync refreshes video_url for a clip whose message
+    is still within the polled window, since Discord's attachment URLs are
+    signed and expire (~24h) -- see discord_clips.py.
+
+    Unlike events, a message no longer in the polled window isn't treated
+    as deleted (older messages just age out of the default fetch -- they
+    aren't "canceled" the way a Discord event can be): existing Clip rows
+    are never removed here, only added to or refreshed.
+    """
+    created = updated = 0
+    for message in messages:
+        videos = discord_clips_mod.video_attachments(message)
+        if not videos:
+            continue
+        attachment = videos[0]  # one clip per message, first video wins
+        message_id = message["id"]
+        posted_at = _parse_discord_time(message["timestamp"])
+        author = message.get("author") or {}
+        author_name = author.get("global_name") or author.get("username")
+
+        clip = session.execute(
+            select(Clip).where(Clip.discord_message_id == message_id)
+        ).scalar_one_or_none()
+        if clip is None:
+            session.add(Clip(
+                discord_message_id=message_id,
+                title=(message.get("content") or "").strip() or None,
+                video_url=attachment.get("url"),
+                filename=attachment.get("filename"),
+                author_name=author_name,
+                jump_url=discord_clips_mod.jump_url(channel_id, message_id),
+                posted_at=posted_at,
+            ))
+            created += 1
+        else:
+            clip.video_url = attachment.get("url")
+            updated += 1
+
+    session.commit()
+    return {"created": created, "updated": updated}
 
 
 # --- Streamers ------------------------------------------------------------ #

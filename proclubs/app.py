@@ -271,6 +271,18 @@ def events_list(request: Request):
 
 
 # --------------------------------------------------------------------------- #
+# Clips
+# --------------------------------------------------------------------------- #
+@app.get("/clips", response_class=HTMLResponse)
+def clips_list(request: Request):
+    with get_session() as session:
+        clips = services.list_clips(session)
+        return templates.TemplateResponse(request, "clips.html", _ctx(
+            request, clips=clips, clips_enabled=config.CLIPS_SYNC_ENABLED,
+        ))
+
+
+# --------------------------------------------------------------------------- #
 # Streamers
 # --------------------------------------------------------------------------- #
 @app.get("/streamers", response_class=HTMLResponse)

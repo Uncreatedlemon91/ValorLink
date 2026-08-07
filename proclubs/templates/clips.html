@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Clips{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Clips</h1>
+      <p class="page-lede">Highlights and moments from the squad, straight from Discord.</p>
+    </div>
+  </div>
+
+  {% if not clips_enabled %}
+    <div class="card empty-state">Clip syncing isn't configured on this deployment yet.</div>
+  {% elif not clips %}
+    <div class="card empty-state">No clips yet -- post a video in the configured Discord channel and it'll show up here.</div>
+  {% else %}
+    <div class="clip-grid">
+      {% for c in clips %}
+        <div class="card clip-card">
+          <video class="clip-video" controls preload="metadata" src="{{ c.video_url }}"></video>
+          <div class="clip-info">
+            {% if c.title %}<p class="clip-title">{{ c.title }}</p>{% endif %}
+            <div class="article-meta">
+              {% if c.author_name %}{{ c.author_name }} &middot; {% endif %}{{ c.posted_at.strftime('%b %-d, %Y') }}
+              &middot; <a href="{{ c.jump_url }}" target="_blank" rel="noopener noreferrer">View in Discord</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

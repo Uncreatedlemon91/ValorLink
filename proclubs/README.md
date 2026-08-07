@@ -73,14 +73,21 @@ The pieces that need real setup:
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
 - **`DISCORD_BOT_TOKEN`** (optional) -- enables the Discord Scheduled
-  Events sync, below. Copy `DISCORD_BOT_TOKEN` from `/opt/valorlink/.env`
-  (the main bot's own token) rather than registering a separate bot -- an
-  accepted exception to this app's usual isolation, see above.
+  Events sync and the Clips sync, below. Copy `DISCORD_BOT_TOKEN` from
+  `/opt/valorlink/.env` (the main bot's own token) rather than registering
+  a separate bot -- an accepted exception to this app's usual isolation,
+  see above.
+- **`CLIPS_CHANNEL_ID`** (optional) -- enables the Clips page sync, below.
+  The ID of the Discord channel to pull video clips from (enable Developer
+  Mode in Discord, right-click the channel, "Copy Channel ID"). Needs
+  `DISCORD_BOT_TOKEN` too, and the bot needs View Channel + Read Message
+  History in that channel.
 
-Any of Discord OAuth, Twitch, or the Discord Events sync can be left
+Any of Discord OAuth, Twitch, or the Discord Events/Clips syncs can be left
 unconfigured -- the site degrades gracefully (sign-in shows "not
 configured," the streamer showcase shows profiles without live status, no
-events get auto-created) rather than erroring.
+events get auto-created, the Clips page shows "not configured yet") rather
+than erroring.
 
 ## Events are Discord-only
 
@@ -108,6 +115,36 @@ site that pushes back to Discord.
   past fixtures are left alone even if their Discord event ages out of
   Discord's own list).
 - Synced events show a "Discord" pill next to the event type badge.
+
+## Clips are Discord-only
+
+`/clips` is **read-only** too, same idea as events -- no upload UI on the
+site. Post a video directly in the configured Discord channel (an actual
+file attachment, not a link) and it shows up on the site's Clips page
+automatically.
+
+- **Scope, deliberately narrow:** only video *files* uploaded straight to
+  Discord (`content_type` starting `video/`) are picked up. A pasted
+  YouTube/Twitch/Streamable link shows up in Discord as a rich embed, not
+  a file attachment, and isn't turned into a clip here -- reliably
+  converting an arbitrary link into an embeddable player is a bigger job
+  than this first pass covers. If a message has more than one video
+  attached, only the first is used.
+- Runs on a schedule (`proclubs-clips-poll.timer`, every 30 minutes -- see
+  `../deploy/README.md`), same polling reasoning as the Events sync: no
+  always-on bot/gateway connection here, so REST polling is the only way
+  to notice a new clip.
+- **Video URLs expire and get refreshed, not the messages themselves.**
+  Discord's attachment CDN URLs are signed and valid roughly 24h, reissued
+  fresh on every fetch; each sync updates `video_url` for any clip whose
+  message is still within the polled window (the most recent 50 messages).
+  A clip that scrolls out of that window keeps whatever URL it last had,
+  which will eventually go stale -- every clip also stores a permanent
+  Discord "jump" link (`discord.com/channels/...`) as a fallback that never
+  expires, shown under the player.
+- Unlike events, a clip that ages out of the polled window is **not**
+  deleted from the site -- there's no equivalent of Discord "canceling" a
+  clip, so old clips just stop refreshing rather than disappearing.
 
 ## The article editor
 

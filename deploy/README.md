@@ -392,6 +392,35 @@ sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/procl
 Check on it with `systemctl list-timers proclubs-discord-events-poll.timer`
 and `journalctl -u proclubs-discord-events-poll`.
 
+**Discord clips sync (optional, on top of the above).** Video files posted
+directly in a configured Discord channel can mirror onto the site's Clips
+page automatically -- see
+`proclubs/README.md#clips-are-discord-only` for exactly what does and
+doesn't sync (short version: real video *file* attachments only, not
+pasted links). Reuses the same `DISCORD_BOT_TOKEN` as the Events sync
+above, plus one more setting, `CLIPS_CHANNEL_ID` -- the ID of the channel
+to pull from (enable Developer Mode in Discord, right-click the channel,
+"Copy Channel ID"). The bot needs View Channel + Read Message History in
+that channel. Leave `CLIPS_CHANNEL_ID` unset to skip this; the Clips page
+just shows "not configured yet."
+
+```bash
+sudo -u valorlink nano /opt/valorlink/proclubs/.env
+# CLIPS_CHANNEL_ID=<the channel ID>
+sudo systemctl restart valorlink-proclubs
+```
+
+`proclubs-clips-poll.timer` (already installed by `install.sh`) fires
+`discord_clips_poll.py` every 30 minutes. Run it once to confirm it works
+instead of waiting:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_clips_poll.py
+```
+
+Check on it with `systemctl list-timers proclubs-clips-poll.timer` and
+`journalctl -u proclubs-clips-poll`.
+
 **Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
 delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming
 space -- none of that touches the bot, the web app, or their database.

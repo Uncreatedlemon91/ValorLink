@@ -17,7 +17,7 @@ import pytest  # noqa: E402
 import database  # noqa: E402
 import discord_events as discord_events_mod  # noqa: E402
 import services  # noqa: E402
-from models import Article, Event, Streamer  # noqa: E402, F401
+from models import Article, Clip, Event, Streamer  # noqa: E402, F401
 
 
 @pytest.fixture(autouse=True)
@@ -299,6 +299,87 @@ def test_sync_discord_events_leaves_past_events_alone_even_if_discord_drops_them
         result = services.sync_discord_events(session, [])
         assert result["removed"] == 0
         assert len(services.list_events(session)) == 1
+
+
+def _discord_message(message_id, content="", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
+                      filename="clip.mp4", content_type="video/mp4",
+                      timestamp="2027-06-01T18:00:00+00:00", author_name="Coach"):
+    attachments = []
+    if video_url is not None:
+        attachments.append({"url": video_url, "filename": filename, "content_type": content_type})
+    return {
+        "id": message_id, "content": content, "timestamp": timestamp,
+        "attachments": attachments, "author": {"username": author_name, "global_name": None},
+    }
+
+
+def test_sync_clips_creates_new_clip_from_video_attachment():
+    with database.get_session() as session:
+        result = services.sync_clips(session, "999", [_discord_message("m1", content="Nice goal")])
+        assert result == {"created": 1, "updated": 0}
+
+        clips = services.list_clips(session)
+        assert len(clips) == 1
+        assert clips[0].discord_message_id == "m1"
+        assert clips[0].title == "Nice goal"
+        assert clips[0].video_url == "https://cdn.discordapp.com/attachments/1/2/clip.mp4"
+        assert clips[0].filename == "clip.mp4"
+        assert clips[0].author_name == "Coach"
+        assert "999/m1" in clips[0].jump_url
+
+
+def test_sync_clips_ignores_messages_with_no_video_attachment():
+    with database.get_session() as session:
+        result = services.sync_clips(session, "999", [
+            _discord_message("m1", video_url=None),
+            {"id": "m2", "content": "just text", "timestamp": "2027-06-01T18:00:00+00:00",
+             "attachments": [{"url": "https://cdn.discordapp.com/x.png", "filename": "screenshot.png",
+                               "content_type": "image/png"}],
+             "author": {"username": "Coach"}},
+        ])
+        assert result == {"created": 0, "updated": 0}
+        assert services.list_clips(session) == []
+
+
+def test_sync_clips_blank_content_yields_no_title():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [_discord_message("m1", content="   ")])
+        assert services.list_clips(session)[0].title is None
+
+
+def test_sync_clips_refreshes_video_url_on_resync_without_duplicating():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [
+            _discord_message("m1", video_url="https://cdn.discordapp.com/old.mp4"),
+        ])
+        result = services.sync_clips(session, "999", [
+            _discord_message("m1", video_url="https://cdn.discordapp.com/refreshed.mp4"),
+        ])
+        assert result == {"created": 0, "updated": 1}
+
+        clips = services.list_clips(session)
+        assert len(clips) == 1
+        assert clips[0].video_url == "https://cdn.discordapp.com/refreshed.mp4"
+
+
+def test_sync_clips_never_removes_clips_that_age_out_of_the_polled_window():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [_discord_message("m1")])
+        # Discord's most-recent-N window no longer includes m1 -- unlike
+        # events, that's not a deletion signal.
+        result = services.sync_clips(session, "999", [])
+        assert result == {"created": 0, "updated": 0}
+        assert len(services.list_clips(session)) == 1
+
+
+def test_list_clips_orders_newest_first():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [
+            _discord_message("m1", timestamp="2027-01-01T00:00:00+00:00"),
+            _discord_message("m2", timestamp="2027-06-01T00:00:00+00:00"),
+        ])
+        clips = services.list_clips(session)
+        assert [c.discord_message_id for c in clips] == ["m2", "m1"]
 
 
 def test_streamer_login_is_normalized_and_unique():

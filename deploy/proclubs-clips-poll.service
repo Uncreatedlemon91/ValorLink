@@ -1,0 +1,12 @@
+[Unit]
+Description=Pro Clubs Discord clips sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (DISCORD_BOT_TOKEN, CLIPS_CHANNEL_ID) -- config.py
+# loads it itself via python-dotenv, same as valorlink-proclubs.service.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 discord_clips_poll.py
