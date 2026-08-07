@@ -74,5 +74,6 @@ class Streamer(Base):
     twitch_login = Column(String, nullable=False, unique=True)
     avatar = Column(Text, nullable=True)               # data URI, optional override
     position = Column(Integer, nullable=False, default=0)   # display order
+    featured = Column(Boolean, nullable=False, server_default="0")  # gets the embedded player on Live/Home
     added_by_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
