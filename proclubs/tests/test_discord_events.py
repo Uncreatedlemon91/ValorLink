@@ -15,9 +15,10 @@ import discord_events  # noqa: E402
 
 
 class _FakeResponse:
-    def __init__(self, json_data, status_code=200):
+    def __init__(self, json_data, status_code=200, headers=None):
         self._json = json_data
         self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -63,6 +64,45 @@ def test_list_scheduled_events_raises_on_bad_json(monkeypatch):
     monkeypatch.setattr(discord_events.httpx, "get", lambda *a, **k: _BadJsonResponse(None))
     with pytest.raises(discord_events.DiscordApiError):
         discord_events.list_scheduled_events()
+
+
+def test_list_scheduled_events_retries_once_on_429_then_succeeds(monkeypatch):
+    monkeypatch.setattr(discord_events.time, "sleep", lambda seconds: None)
+    responses = [
+        _FakeResponse({"retry_after": 0.5}, status_code=429, headers={"Retry-After": "0.5"}),
+        _FakeResponse([{"id": "1", "name": "Scrim Night"}]),
+    ]
+    monkeypatch.setattr(discord_events.httpx, "get", lambda *a, **k: responses.pop(0))
+
+    events = discord_events.list_scheduled_events()
+    assert events == [{"id": "1", "name": "Scrim Night"}]
+    assert responses == []  # both queued responses were consumed (one retry happened)
+
+
+def test_list_scheduled_events_raises_clear_error_if_still_rate_limited(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(discord_events.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(discord_events.httpx, "get", lambda *a, **k: _FakeResponse(
+        {"retry_after": 30}, status_code=429, headers={"Retry-After": "30"},
+    ))
+
+    with pytest.raises(discord_events.DiscordApiError, match="still rate-limited"):
+        discord_events.list_scheduled_events()
+    # Waited, but capped -- never the full 30s Discord asked for.
+    assert sleeps == [discord_events._MAX_RETRY_WAIT]
+
+
+def test_retry_after_seconds_prefers_header_over_body():
+    resp = _FakeResponse({"retry_after": 99}, status_code=429, headers={"Retry-After": "2.5"})
+    assert discord_events._retry_after_seconds(resp) == 2.5
+
+
+def test_retry_after_seconds_falls_back_to_body_then_default():
+    resp = _FakeResponse({"retry_after": 3}, status_code=429)
+    assert discord_events._retry_after_seconds(resp) == 3.0
+
+    resp_no_info = _FakeResponse({}, status_code=429)
+    assert discord_events._retry_after_seconds(resp_no_info) == 1.0
 
 
 def test_is_upcoming():
