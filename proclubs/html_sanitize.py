@@ -19,11 +19,19 @@ _ALLOWED_TAGS = {
     "pre", "code", "span", "ul", "ol", "li", "a", "img",
     "h1", "h2", "h3", "h4", "h5", "h6",
     "table", "thead", "tbody", "tr", "th", "td",
+    "clip-embed",
 }
 _ALLOWED_ATTRIBUTES = {
     "a": {"href", "title"},
     "img": {"src", "alt", "title"},
     "code": {"class"},
+    # A placeholder the article editor inserts for a Discord clip (see the
+    # "Insert Clip" button in article-editor.js) -- deliberately just an id,
+    # not the clip's video URL: that URL is Discord's signed CDN link, which
+    # expires (~24h), so baking it into stored body_html would go stale.
+    # services.render_clip_embeds() resolves this into a live <video> on
+    # every render instead, using whatever's currently in the Clip table.
+    "clip-embed": {"data-clip-id"},
 }
 
 # "data" is needed so inline images the editor embeds as data URIs (see the

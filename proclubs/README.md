@@ -160,6 +160,23 @@ automatically.
   deleted from the site -- there's no equivalent of Discord "canceling" a
   clip, so old clips just stop refreshing rather than disappearing.
 
+**Clips can be embedded in an article.** The article editor's "Insert
+Clip" button (only shown when `CLIPS_SYNC_ENABLED`) opens a picker over
+`GET /api/clips` and drops the chosen clip into the body. What actually
+gets stored is a placeholder -- `<clip-embed data-clip-id="N">` -- never
+the clip's `video_url` itself, because that URL is the same signed,
+~24h-expiring Discord CDN link described above; baking it into an
+article's stored HTML at save time would go stale even while
+`sync_clips` keeps the underlying `Clip` row's URL fresh. Instead,
+`services.render_clip_embeds()` resolves each placeholder to a live
+`<video>` on every view of `/news/<slug>`, reading whatever `video_url`
+is currently in the `Clip` table -- so an embed keeps working for as
+long as its clip stays in the synced window, exactly like `/clips`
+itself, and shows "This clip is no longer available" instead of a dead
+player if the clip row is gone. `html_sanitize.py` allows the
+`clip-embed` tag with only its `data-clip-id` attribute -- nothing else
+about the embed is staff-controlled HTML.
+
 ## The article editor
 
 `/news/new` and `/news/<slug>/edit` use [Quill](https://quilljs.com) as a
@@ -175,8 +192,10 @@ raw Markdown. A few things worth knowing:
   even if a CDN is down or blocked.
 - **The toolbar is deliberately narrow.** Every button maps to something
   `html_sanitize.py` actually allows through (see below); options Quill
-  supports beyond that -- text color, fonts, alignment, embedded video --
-  are left off rather than offered and then silently stripped on save.
+  supports beyond that -- text color, fonts, alignment -- are left off
+  rather than offered and then silently stripped on save. The one
+  exception is Discord clips: not a stock Quill format, but a custom
+  "Insert Clip" button and blot (see "Clips are Discord-only" above).
 - **Inline images are embedded as data URIs**, the same "no upload
   endpoint, just embed it" pattern as the cover image and streamer
   avatars elsewhere on this site -- capped client-side at 3MB per image.

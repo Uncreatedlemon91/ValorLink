@@ -75,6 +75,7 @@ templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
 templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
 templates.env.globals["initials"] = _initials
 templates.env.globals["focal_position"] = _focal_position
+templates.env.globals["CLIPS_SYNC_ENABLED"] = config.CLIPS_SYNC_ENABLED
 
 
 @app.on_event("startup")
@@ -250,6 +251,7 @@ def news_detail(request: Request, slug: str):
         user = auth.current_user(request)
         return templates.TemplateResponse(request, "news_detail.html", _ctx(
             request, article=article,
+            body_html=services.render_clip_embeds(session, article.body_html),
             comments=services.list_comments(session, article),
             like_count=services.count_likes(session, article),
             user_has_liked=bool(user) and services.has_liked(session, article, user["id"]),
@@ -365,6 +367,25 @@ def clips_list(request: Request):
         return templates.TemplateResponse(request, "clips.html", _ctx(
             request, clips=clips, clips_enabled=config.CLIPS_SYNC_ENABLED,
         ))
+
+
+@app.get("/api/clips")
+def api_clips(_staff=Depends(auth.require_staff)):
+    """Feeds the "Insert Clip" picker in the article editor -- staff-only,
+    same as the editor page it's called from. Deliberately omits video_url:
+    the picker only needs enough to identify a clip, and the URL would be
+    dead within a day anyway (see services.render_clip_embeds)."""
+    with get_session() as session:
+        return [
+            {
+                "id": c.id,
+                "title": c.title,
+                "filename": c.filename,
+                "authorName": c.author_name,
+                "postedAt": c.posted_at.isoformat(),
+            }
+            for c in services.list_clips(session, limit=30)
+        ]
 
 
 # --------------------------------------------------------------------------- #

@@ -223,6 +223,31 @@ button:active, .btn:active { transform: translateY(0); }
 .checkbox-field { flex-direction: row; align-items: center; gap: 0.5rem; }
 .checkbox-field input { width: auto; }
 
+/* --- Article editor: clip embeds ---------------------------------------- */
+.ql-editor clip-embed {
+  display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0;
+  padding: 0.6rem 0.8rem; border-radius: 8px;
+  background: var(--panel-2); border: 1px dashed var(--border);
+  color: var(--muted); font-size: 0.88rem; cursor: default; user-select: none;
+}
+.clip-picker-wrap { position: relative; display: inline-block; margin-bottom: 0.5rem; }
+.clip-picker-panel {
+  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 5;
+  width: 320px; max-height: 320px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); padding: 0.4rem;
+}
+.clip-picker-panel[hidden] { display: none; }
+.clip-picker-empty { margin: 0; padding: 0.6rem; color: var(--muted); font-size: 0.85rem; }
+.clip-picker-row {
+  display: flex; flex-direction: column; gap: 0.1rem; width: 100%; text-align: left;
+  background: none; border: none; border-radius: 6px; padding: 0.5rem 0.6rem;
+  color: var(--text); cursor: pointer; font: inherit;
+}
+.clip-picker-row:hover { background: var(--panel-2); }
+.clip-picker-row-title { font-weight: 600; font-size: 0.88rem; }
+.clip-picker-row-meta { font-size: 0.75rem; color: var(--muted); }
+
 .form-actions { display: flex; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
 
 /* --- Cards ----------------------------------------------------------- */
@@ -661,6 +686,20 @@ button:active, .btn:active { transform: translateY(0); }
 }
 .article-body img { border-radius: 10px; margin: 0.5rem 0; }
 .article-body h2, .article-body h3 { margin-top: 2rem; }
+.clip-embed-card {
+  margin: 1.25rem 0; border-radius: 10px; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--border);
+}
+.clip-embed-card .clip-video { border-radius: 0; }
+.clip-embed-jump {
+  display: block; padding: 0.6rem 0.9rem; font-size: 0.82rem; font-weight: 600;
+  color: var(--muted); text-decoration: none;
+}
+.clip-embed-jump:hover { color: var(--accent); }
+.clip-embed-missing {
+  color: var(--muted); font-style: italic; padding: 0.75rem 1rem;
+  background: var(--panel); border: 1px dashed var(--border); border-radius: 10px;
+}
 .article-body pre {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 1rem; overflow-x: auto;

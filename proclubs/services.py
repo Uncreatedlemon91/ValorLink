@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import re
 from datetime import datetime, timezone
+from html import escape as _escape_html
 
 from fastapi import UploadFile
 from sqlalchemy import delete, func, select, update
@@ -394,6 +395,44 @@ def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
 
     session.commit()
     return {"created": created, "updated": updated}
+
+
+_CLIP_EMBED_RE = re.compile(r'<clip-embed[^>]*\bdata-clip-id="(\d+)"[^>]*>.*?</clip-embed>', re.S)
+
+
+def render_clip_embeds(session: Session, body_html: str) -> str:
+    """Resolves <clip-embed data-clip-id="N"> placeholders (see the "Insert
+    Clip" button in article-editor.js) into a live <video> embed, using
+    each Clip's CURRENT video_url.
+
+    Deliberately not done at save time: Discord's attachment URL is signed
+    and expires (~24h, see discord_clips.py), so baking it into the stored
+    body_html would go stale even though sync_clips keeps refreshing the
+    Clip row itself. Resolving on every render instead means an embed
+    keeps working for as long as the clip stays in the synced window,
+    exactly like the /clips page.
+    """
+    if "<clip-embed" not in body_html:
+        return body_html
+
+    ids = {int(m.group(1)) for m in _CLIP_EMBED_RE.finditer(body_html)}
+    if not ids:
+        return body_html
+    clips = {c.id: c for c in session.execute(select(Clip).where(Clip.id.in_(ids))).scalars()}
+
+    def _replace(match: re.Match) -> str:
+        clip = clips.get(int(match.group(1)))
+        if clip is None:
+            return '<p class="clip-embed-missing">This clip is no longer available.</p>'
+        title = f' title="{_escape_html(clip.title)}"' if clip.title else ""
+        return (
+            '<div class="clip-embed-card">'
+            f'<video class="clip-video" controls preload="metadata" src="{_escape_html(clip.video_url)}"{title}></video>'
+            f'<a class="clip-embed-jump" href="{_escape_html(clip.jump_url)}" target="_blank" rel="noopener noreferrer">View in Discord</a>'
+            '</div>'
+        )
+
+    return _CLIP_EMBED_RE.sub(_replace, body_html)
 
 
 # --- Streamers ------------------------------------------------------------ #

@@ -665,6 +665,60 @@ def test_clips_page_has_no_upload_or_editing_ui(client, monkeypatch):
     assert "/clips/new" not in r.text
 
 
+def test_api_clips_requires_staff(client):
+    r = client.get("/api/clips", follow_redirects=False)
+    assert r.status_code in (303, 401, 403)
+
+
+def test_api_clips_lists_synced_clips_without_video_url(client):
+    _login_staff(client)
+    _seed_clip(title="Great save", author_name="Coach")
+
+    r = client.get("/api/clips")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["title"] == "Great save"
+    assert body[0]["authorName"] == "Coach"
+    assert "video_url" not in body[0] and "videoUrl" not in body[0]
+
+
+def test_article_resolves_clip_embed_to_live_video(client):
+    clip_id = _seed_clip(title="Golazo", video_url="https://cdn.discordapp.com/attachments/1/2/golazo.mp4",
+                          jump_url="https://discord.com/channels/1/2/m1")
+    slug = _seed_article(body_html=f'<p>Check this out:</p><clip-embed data-clip-id="{clip_id}"></clip-embed>')
+
+    detail = client.get(f"/news/{slug}")
+    assert detail.status_code == 200
+    assert 'src="https://cdn.discordapp.com/attachments/1/2/golazo.mp4"' in detail.text
+    assert 'href="https://discord.com/channels/1/2/m1"' in detail.text
+    assert "<clip-embed" not in detail.text
+
+
+def test_article_clip_embed_falls_back_when_clip_gone(client):
+    slug = _seed_article(body_html='<p>Old clip:</p><clip-embed data-clip-id="99999"></clip-embed>')
+
+    detail = client.get(f"/news/{slug}")
+    assert detail.status_code == 200
+    assert "no longer available" in detail.text
+    assert "<clip-embed" not in detail.text
+
+
+def test_viewing_article_does_not_persist_resolved_clip_html(client):
+    """render_clip_embeds must not mutate the ORM object in place -- doing
+    so would get flushed back to the DB, permanently baking in whatever
+    video_url happened to be live at that moment (see services.py)."""
+    clip_id = _seed_clip(video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4")
+    slug = _seed_article(body_html=f'<p>Clip:</p><clip-embed data-clip-id="{clip_id}"></clip-embed>')
+
+    client.get(f"/news/{slug}")
+
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        assert "<clip-embed" in article.body_html
+        assert "cdn.discordapp.com" not in article.body_html
+
+
 def test_duplicate_streamer_is_rejected(client):
     _login_staff(client)
     token = _csrf(client, "/streamers")
