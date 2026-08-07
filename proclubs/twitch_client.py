@@ -56,10 +56,13 @@ def _app_token() -> str:
 
 def live_streams(logins: list[str]) -> dict[str, dict]:
     """login (lowercase) -> stream info, for whichever of ``logins`` are
-    currently live. Logins that aren't live are simply absent from the
-    result. Returns {} if Twitch isn't configured or the lookup fails --
-    "can't tell who's live" degrades to "show nobody as live," never an
-    error page."""
+    currently live AND playing config.TWITCH_GAME_FILTER (case-insensitive;
+    an empty filter disables this and counts any live stream). A roster
+    member streaming some other game is simply absent from the result, same
+    as if they weren't live at all -- this showcase is "who's playing our
+    game right now," not "who's live at all." Returns {} if Twitch isn't
+    configured or the lookup fails -- "can't tell who's live" degrades to
+    "show nobody as live," never an error page."""
     if not config.TWITCH_ENABLED or not logins:
         return {}
 
@@ -80,8 +83,11 @@ def live_streams(logins: list[str]) -> dict[str, dict]:
             timeout=_TIMEOUT,
         )
         resp.raise_for_status()
+        game_filter = config.TWITCH_GAME_FILTER.strip().lower()
         result = {}
         for stream in resp.json().get("data", []):
+            if game_filter and stream.get("game_name", "").strip().lower() != game_filter:
+                continue
             login = stream.get("user_login", "").lower()
             result[login] = {
                 "title": stream.get("title", ""),

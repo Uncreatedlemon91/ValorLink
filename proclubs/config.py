@@ -62,6 +62,15 @@ CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")
 TWITCH_ENABLED = bool(TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET)
+# A showcased streamer only counts as "live" here if Twitch reports them
+# playing this category -- someone from the roster live on some other game
+# doesn't light up the site as if they were playing Pro Clubs. Matched
+# case-insensitively (see twitch_client.py). Set to an empty string to
+# disable the filter entirely (any live stream counts, regardless of game --
+# the old behavior). Twitch's exact category name changes with each yearly
+# title; verify it at twitch.tv/directory/category/<slug> if this ever looks
+# wrong (a mismatched string just makes everyone look offline, not an error).
+TWITCH_GAME_FILTER = os.getenv("TWITCH_GAME_FILTER", "EA Sports FC 26")
 
 # --- Sessions --------------------------------------------------------------- #
 # Opt-in, not opt-out -- matching ValorLink's own WEB_HTTPS_ONLY default.

@@ -79,7 +79,11 @@ The pieces that need real setup:
   [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps). This
   site only uses the app-level client-credentials grant to check "is this
   channel live," never a user login, so any redirect URL satisfies
-  registration.
+  registration. "Live" also means *playing our game* -- see
+  `TWITCH_GAME_FILTER` in `.env.example`; a roster member streaming
+  something else doesn't show up as live here. Its default
+  (`EA Sports FC 26`) is Twitch's actual category name as of this writing,
+  not a guess to double-check, but it does change with each yearly title.
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
 - **`DISCORD_BOT_TOKEN`** (optional) -- enables the Discord Scheduled
