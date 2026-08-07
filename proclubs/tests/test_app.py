@@ -234,6 +234,42 @@ def test_home_shows_most_recent_article_as_featured(client):
     assert home.text.count('href="/news/second-post"') == 2
 
 
+def test_home_shows_engagement_badge_with_like_and_comment_counts(client):
+    # Must not be the single most-recent article -- that one is the hero
+    # "featured" story, which doesn't render through the news-rail badge.
+    slug = _seed_article(title="Big Win", cover_image="/static/img/cover.jpg")
+    _seed_article(title="Newer Post", cover_image="/static/img/cover2.jpg")
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        services.toggle_like(session, article, 1)
+        services.toggle_like(session, article, 2)
+        services.add_comment(session, article, author={"id": 3, "name": "Fan", "avatar": None}, body="Nice!")
+
+    home = client.get("/").text
+    assert "engagement-badge" in home
+    badge = home[home.index("engagement-badge"):home.index("engagement-badge") + 600]
+    assert "2" in badge
+    assert "1" in badge
+
+
+def test_home_hides_engagement_badge_when_no_engagement(client):
+    _seed_article(title="Quiet Post", cover_image="/static/img/cover.jpg")
+    _seed_article(title="Newer Post", cover_image="/static/img/cover2.jpg")
+    home = client.get("/").text
+    assert "engagement-badge" not in home
+
+
+def test_home_hides_engagement_badge_without_cover_image(client):
+    slug = _seed_article(title="No Cover", cover_image=None)
+    _seed_article(title="Newer Post", cover_image="/static/img/cover2.jpg")
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        services.toggle_like(session, article, 1)
+
+    home = client.get("/").text
+    assert "engagement-badge" not in home
+
+
 def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     _seed_event()
 
@@ -384,6 +420,25 @@ def test_news_list_filters_by_category(client):
     filtered = client.get("/news?category=Transfer")
     assert "Transfer Item" in filtered.text
     assert "News Item" not in filtered.text
+
+
+def test_news_list_shows_engagement_badge_with_counts(client):
+    slug = _seed_article(title="Popular Post", cover_image="/static/img/cover.jpg")
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        services.toggle_like(session, article, 1)
+        services.add_comment(session, article, author={"id": 3, "name": "Fan", "avatar": None}, body="Nice!")
+
+    listing = client.get("/news").text
+    assert "engagement-badge" in listing
+    badge = listing[listing.index("engagement-badge"):listing.index("engagement-badge") + 600]
+    assert "1" in badge
+
+
+def test_news_list_hides_engagement_badge_when_no_engagement(client):
+    _seed_article(title="Quiet Post", cover_image="/static/img/cover.jpg")
+    listing = client.get("/news").text
+    assert "engagement-badge" not in listing
 
 
 def test_comments_section_prompts_sign_in_when_signed_out(client):
