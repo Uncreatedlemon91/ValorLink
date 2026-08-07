@@ -156,6 +156,13 @@ main { flex: 1; }
 .flash.ok { border-color: var(--status-good); }
 .flash.error { border-color: var(--status-critical); }
 
+/* --- Discord invite banner ---------------------------------------------- */
+.discord-banner {
+  display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap;
+  background: #2c2f7a; color: #fff; padding: 0.6rem 1.5rem; font-size: 0.85rem; text-align: center;
+}
+.discord-banner .btn.discord { flex: none; padding: 0.4rem 0.9rem; }
+
 /* --- Buttons / forms -------------------------------------------------- */
 input, select, textarea, button {
   background: var(--panel);
@@ -645,6 +652,16 @@ button:active, .btn:active { transform: translateY(0); }
 }
 .article-cover { width: 100%; border-radius: 14px; margin-bottom: 1.5rem; aspect-ratio: 21/9; object-fit: cover; }
 
+/* --- Connect with us (home page) ---------------------------------------- */
+.connect-band {
+  margin-top: 2.5rem; display: flex; align-items: center; justify-content: space-between;
+  gap: 1.5rem; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(88, 101, 242, 0.16), transparent 70%), var(--panel);
+}
+.connect-band-text h2 { margin: 0 0 0.35rem; font-family: var(--font-display); font-weight: 800; font-size: 1.5rem; }
+.connect-band-text p { margin: 0; color: var(--muted); }
+.connect-band-cta { flex: none; padding: 0.75rem 1.5rem; }
+
 .article-reactions { margin-top: 1.75rem; }
 .like-btn {
   display: inline-flex; align-items: center; gap: 0.4rem;
@@ -741,7 +758,8 @@ button:active, .btn:active { transform: translateY(0); }
 /* --- Login ----------------------------------------------------------------- */
 .login-card { max-width: 380px; margin: 3rem auto; text-align: center; }
 .login-card h1 { margin-top: 0; font-size: 1.4rem; }
-.login-card .btn.discord { background: #5865f2; color: #fff; width: 100%; justify-content: center; padding: 0.75rem; }
+.btn.discord { background: #5865f2; color: #fff; }
+.login-card .btn.discord { width: 100%; justify-content: center; padding: 0.75rem; }
 .login-card .divider { color: var(--muted); font-size: 0.8rem; margin: 1.25rem 0; }
 .dev-login-form { display: grid; gap: 0.6rem; }
 

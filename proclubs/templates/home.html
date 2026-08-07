@@ -199,6 +199,16 @@
     </div>
   {% endif %}
 
+  {% if DISCORD_INVITE_URL %}
+    <div class="connect-band card">
+      <div class="connect-band-text">
+        <h2>Connect with us</h2>
+        <p>Join the {{ SITE_NAME }} Discord for match threads and clips, and to comment and like news posts.</p>
+      </div>
+      <a class="btn discord connect-band-cta" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Connect with us</a>
+    </div>
+  {% endif %}
+
 </div>
 {% endblock %}
 {% block scripts %}

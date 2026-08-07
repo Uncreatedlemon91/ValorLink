@@ -211,6 +211,14 @@ unlike everything else that writes to this site.
   (`services.delete_article`) -- they're plain `article_id` columns, not a
   real foreign key (matching this app's existing no-ORM-relationships
   style), so nothing cascades automatically without that explicit cleanup.
+- **Getting people from "not a member" to "member"**: a site-wide banner
+  (every page, `base.html`) points anyone who isn't a guild member --
+  signed out, or signed in without being in the server -- at
+  `DISCORD_INVITE_URL`. The home page also has a standalone "Connect with
+  us" button to the same invite, shown to everyone regardless of sign-in
+  state. Not a secret, so it's fine to ship a real default in
+  `config.py`/`.env.example`; override `DISCORD_INVITE_URL` if the invite
+  link ever needs to be regenerated.
 
 ## Important caveats about the EA stats dashboard
 

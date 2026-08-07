@@ -35,6 +35,13 @@
     </div>
   </header>
 
+  {% if not is_member and DISCORD_INVITE_URL %}
+    <div class="discord-banner">
+      <span>{{ 'Sign in with Discord and join our server' if not user else "You're signed in, but not in our Discord server" }} to comment, like posts, and get event pings.</span>
+      <a class="btn discord" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>
+    </div>
+  {% endif %}
+
   {% set flashes = pop_flash(request) %}
   {% if flashes %}
     <div class="flash-stack">

@@ -32,6 +32,11 @@ DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DISCORD_OAUTH_REDIRECT = os.getenv("DISCORD_OAUTH_REDIRECT", "")
 DISCORD_GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", "0") or "0")
 DISCORD_STAFF_ROLE_ID = int(os.getenv("DISCORD_STAFF_ROLE_ID", "0") or "0")
+# Public invite link, shown to anyone who isn't a guild member yet (signed
+# out, or signed in with Discord but not in our server) -- see base.html's
+# banner and the "Connect with us" button on the home page. Unlike the rest
+# of this block, this isn't a secret, so it's fine to ship a real default.
+DISCORD_INVITE_URL = os.getenv("DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
 OAUTH_ENABLED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
                      and DISCORD_OAUTH_REDIRECT and DISCORD_GUILD_ID)
 
