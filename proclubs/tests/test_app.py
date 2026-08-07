@@ -53,7 +53,7 @@ def _csrf(client, path):
 
 
 def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None,
-                 event_type="Match", discord_event_id=None) -> int:
+                 event_type="Match", discord_event_id=None, image=None) -> int:
     """Events are read-only from the site now (Discord-sync only, see
     services.sync_discord_events) -- tests that need one on the page seed
     it directly rather than going through a since-removed /events/new."""
@@ -61,7 +61,7 @@ def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None
         event = Event(
             title=title, event_type=event_type, opponent=opponent,
             scheduled_at=scheduled_at or (datetime.utcnow() + timedelta(days=7)),
-            discord_event_id=discord_event_id,
+            discord_event_id=discord_event_id, image=image,
         )
         session.add(event)
         session.commit()
@@ -234,6 +234,15 @@ def test_events_page_shows_events_but_has_no_editing_ui_even_for_staff(client):
     assert ">Edit<" not in listing.text
     assert "/events/new" not in listing.text
     assert "/edit" not in listing.text
+
+
+def test_events_page_shows_the_event_cover_image_when_present(client):
+    _seed_event(title="With A Cover", image="https://cdn.discordapp.com/guild-events/1/hash.png")
+    _seed_event(title="No Cover", opponent="")
+
+    listing = client.get("/events")
+    assert '<img class="event-thumb" src="https://cdn.discordapp.com/guild-events/1/hash.png"' in listing.text
+    assert listing.text.count('class="event-thumb"') == 1
 
 
 def test_event_editing_routes_no_longer_exist(client):

@@ -110,3 +110,13 @@ def test_is_upcoming():
     assert discord_events.is_upcoming({"status": discord_events.STATUS_ACTIVE}) is True
     assert discord_events.is_upcoming({"status": discord_events.STATUS_COMPLETED}) is False
     assert discord_events.is_upcoming({"status": discord_events.STATUS_CANCELED}) is False
+
+
+def test_cover_image_url_builds_cdn_url_from_hash():
+    url = discord_events.cover_image_url({"id": "123", "image": "abc123hash"})
+    assert url == "https://cdn.discordapp.com/guild-events/123/abc123hash.png"
+
+
+def test_cover_image_url_none_without_a_cover_set():
+    assert discord_events.cover_image_url({"id": "123", "image": None}) is None
+    assert discord_events.cover_image_url({"id": "123"}) is None

@@ -613,6 +613,10 @@ button:active, .btn:active { transform: translateY(0); }
 }
 .event-date .month { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .event-date .day { font-size: 1.3rem; font-weight: 700; }
+.event-thumb {
+  flex: none; width: 96px; height: 60px; border-radius: 8px;
+  object-fit: cover; background: var(--panel-2);
+}
 .event-info { flex: 1; min-width: 0; }
 .event-info h3 { margin: 0 0 0.2rem; font-size: 1.05rem; }
 .event-info p { margin: 0; color: var(--muted); font-size: 0.85rem; }

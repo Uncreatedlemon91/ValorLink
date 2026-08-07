@@ -169,10 +169,11 @@ def _parse_discord_time(value: str) -> datetime:
 
 def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
     """Mirrors Discord's Scheduled Events into Event rows. Discord is the
-    source of truth for title/description/scheduled_at on these rows --
-    each sync overwrites them. event_type/opponent/result stay whatever
-    staff set on the site, since Discord has no equivalent fields; they're
-    only defaulted on first creation, never touched again here.
+    source of truth for title/description/scheduled_at/image on these rows
+    -- each sync overwrites them. event_type/opponent/result have no
+    Discord equivalent and no site UI to set them either; they're only
+    defaulted on first creation (Match / no opponent / no result) and never
+    touched again here.
 
     Events this function previously created that Discord no longer lists
     as upcoming (canceled, or the event itself deleted) are removed, so a
@@ -188,6 +189,7 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
         title = de.get("name") or "Discord Event"
         description = de.get("description")
         scheduled_at = _parse_discord_time(de["scheduled_start_time"])
+        image = discord_events_mod.cover_image_url(de)
 
         event = session.execute(
             select(Event).where(Event.discord_event_id == discord_id)
@@ -195,13 +197,14 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
         if event is None:
             session.add(Event(
                 discord_event_id=discord_id, title=title, event_type="Match",
-                description=description, scheduled_at=scheduled_at,
+                description=description, scheduled_at=scheduled_at, image=image,
                 created_by_name="Discord sync",
             ))
             created += 1
         else:
             event.title = title
             event.description = description
+            event.image = image
             event.scheduled_at = scheduled_at
             updated += 1
 

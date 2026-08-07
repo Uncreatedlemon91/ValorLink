@@ -21,6 +21,7 @@ import httpx
 import config
 
 _API = "https://discord.com/api/v10"
+_CDN = "https://cdn.discordapp.com"
 _TIMEOUT = 15
 
 # A single bounded retry on 429 -- long enough to ride out the kind of
@@ -101,3 +102,14 @@ def is_upcoming(discord_event: dict) -> bool:
     """False for events Discord has already marked completed or canceled --
     those shouldn't be (re)created as site fixtures."""
     return discord_event.get("status") not in (STATUS_COMPLETED, STATUS_CANCELED)
+
+
+def cover_image_url(discord_event: dict) -> str | None:
+    """The event's cover photo, if the organizer set one when creating it in
+    Discord. Discord's API only gives back an image hash, not a full URL --
+    same idea as a user avatar hash -- so build the actual CDN URL from it.
+    None if the event has no cover image."""
+    image_hash = discord_event.get("image")
+    if not image_hash:
+        return None
+    return f"{_CDN}/guild-events/{discord_event['id']}/{image_hash}.png"
