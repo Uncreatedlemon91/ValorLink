@@ -169,24 +169,25 @@
   {% endif %}
 
   {% if stats_teaser %}
-    {% set band_color = crest_colors.crest if crest_colors and crest_colors.crest else None %}
+    {% set band_accent = crest_colors.accent if crest_colors and crest_colors.accent else None %}
+    {% set band_trim = crest_colors.accent_trim if crest_colors and crest_colors.accent_trim else None %}
     <div class="section-head"><h2>Club Standing</h2><a href="/stats">Full stats &rarr;</a></div>
     <div class="standing-band" data-reveal>
-      <div class="standing-glow" {% if band_color %}style="background: radial-gradient(circle, {{ band_color }}59, transparent 70%);"{% endif %}></div>
+      <div class="standing-glow" {% if band_accent %}style="background: radial-gradient(circle, {{ band_accent }}59, transparent 70%);"{% endif %}></div>
       <div class="standing-shine"></div>
       <div class="standing-grid">
         <div class="standing-item">
-          <div class="division-ring" {% if band_color %}style="border-color: {{ band_color }};"{% endif %}>
+          <div class="division-ring" {% if band_accent %}style="border-color: {{ band_accent }};"{% endif %}>
             <span>{{ stats_teaser.currentDivision or '—' }}</span>
           </div>
           <div class="standing-label">Current Division</div>
         </div>
         <div class="standing-item standing-item--hero">
-          <div class="standing-value--hero" {% if stats_teaser.points is not none %}data-countup="{{ stats_teaser.points }}"{% endif %}>{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div>
+          <div class="standing-value--hero" {% if band_accent %}style="background: linear-gradient(135deg, var(--text) 30%, {{ band_accent }}); background-clip: text; -webkit-background-clip: text; color: transparent;"{% endif %} {% if stats_teaser.points is not none %}data-countup="{{ stats_teaser.points }}"{% endif %}>{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div>
           <div class="standing-label">Points</div>
         </div>
         <div class="standing-item">
-          <div class="division-ring division-ring--muted">
+          <div class="division-ring division-ring--muted" {% if band_trim %}style="border-color: {{ band_trim }};"{% endif %}>
             <span>{{ stats_teaser.bestDivision or '—' }}</span>
           </div>
           <div class="standing-label">Best Division</div>

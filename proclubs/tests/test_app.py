@@ -141,18 +141,22 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     assert "crest-branded" in home.text
 
 
-def test_home_standing_band_shows_countup_points_and_crest_colored_ring(client, monkeypatch):
+def test_home_standing_band_shows_countup_points_and_accent_colored_ring(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
         "currentDivision": 3, "bestDivision": 1, "points": 1450,
     })
     monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
+        "accent": "#6CACDE", "accent_trim": "#F2F2F2",
     })
     home = client.get("/")
     assert 'class="standing-band"' in home.text
     assert 'data-countup="1450"' in home.text
-    assert 'border-color: #C91B1B;' in home.text
+    # Uses the third-kit accent duo (blue + white), not the crest red.
+    assert 'border-color: #6CACDE;' in home.text
+    assert 'border-color: #F2F2F2;' in home.text
+    assert '#C91B1B' not in home.text
 
 
 def test_home_standing_band_handles_missing_points_gracefully(client, monkeypatch):

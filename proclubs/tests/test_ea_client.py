@@ -26,10 +26,26 @@ def test_hex_color_handles_bad_input():
 def test_crest_colors_decodes_custom_kit(monkeypatch):
     monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: {
         "name": "Yeehaw FC",
-        "customKit": {"crestColor": "13179675", "kitColor1": "15921906", "kitColor2": "14358546"},
+        "customKit": {
+            "crestColor": "13179675", "kitColor1": "15921906", "kitColor2": "14358546",
+            "kitThrdColor2": "7122142", "kitThrdColor4": "15921906",
+        },
     })
     colors = ea_client.crest_colors("common-gen5", "8481799")
-    assert colors == {"crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812"}
+    assert colors == {
+        "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
+        "accent": "#6CACDE", "accent_trim": "#F2F2F2",
+    }
+
+
+def test_crest_colors_falls_back_to_crest_and_home_kit_without_a_third_kit(monkeypatch):
+    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: {
+        "name": "No Third Kit FC",
+        "customKit": {"crestColor": "13179675", "kitColor1": "15921906", "kitColor2": "14358546"},
+    })
+    colors = ea_client.crest_colors("common-gen5", "1")
+    assert colors["accent"] == "#C91B1B"       # falls back to crestColor
+    assert colors["accent_trim"] == "#F2F2F2"  # falls back to kitColor1
 
 
 def test_crest_colors_returns_none_without_custom_kit(monkeypatch):
