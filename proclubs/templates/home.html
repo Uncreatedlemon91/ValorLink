@@ -76,6 +76,7 @@
           <div class="rail-card-image">
             {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
             {% if a.category == 'Match Highlight' %}<span class="play-badge">&#9658;</span>{% endif %}
+            {% include "_engagement_badge.html" %}
           </div>
           <div class="rail-card-body">
             <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
@@ -113,6 +114,7 @@
           <div class="rail-card-image" style="aspect-ratio: 16/9;">
             {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
             <span class="play-badge">&#9658;</span>
+            {% include "_engagement_badge.html" %}
           </div>
           <div class="body">
             <h3>{{ a.title }}</h3>

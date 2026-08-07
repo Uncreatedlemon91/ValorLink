@@ -21,7 +21,12 @@
     <div class="card-grid">
       {% for a in articles %}
         <a class="card article-card" href="/news/{{ a.slug }}">
-          {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
+          {% if a.cover_image %}
+            <div class="article-thumb">
+              <img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />
+              {% include "_engagement_badge.html" %}
+            </div>
+          {% endif %}
           <div class="body">
             <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
             <h3>{{ a.title }}{% if not a.published %} <span class="draft-pill">Draft</span>{% endif %}</h3>

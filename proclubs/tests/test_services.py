@@ -295,6 +295,45 @@ def test_toggle_like_is_per_user():
         assert services.has_liked(session, article, 3) is False
 
 
+def test_like_counts_for_batches_across_articles():
+    with database.get_session() as session:
+        a1 = services.create_article(session, title="Batch Likes 1", summary="", body_html="<p>x</p>",
+                                      cover_image=None, published=True, author=AUTHOR)
+        a2 = services.create_article(session, title="Batch Likes 2", summary="", body_html="<p>x</p>",
+                                      cover_image=None, published=True, author=AUTHOR)
+        a3 = services.create_article(session, title="Batch Likes 3 (no likes)", summary="", body_html="<p>x</p>",
+                                      cover_image=None, published=True, author=AUTHOR)
+        services.toggle_like(session, a1, 1)
+        services.toggle_like(session, a1, 2)
+        services.toggle_like(session, a2, 1)
+
+        counts = services.like_counts_for(session, [a1.id, a2.id, a3.id])
+        assert counts == {a1.id: 2, a2.id: 1}
+
+
+def test_like_counts_for_empty_list_returns_empty_dict():
+    with database.get_session() as session:
+        assert services.like_counts_for(session, []) == {}
+
+
+def test_comment_counts_for_batches_across_articles():
+    with database.get_session() as session:
+        a1 = services.create_article(session, title="Batch Comments 1", summary="", body_html="<p>x</p>",
+                                      cover_image=None, published=True, author=AUTHOR)
+        a2 = services.create_article(session, title="Batch Comments 2 (no comments)", summary="", body_html="<p>x</p>",
+                                      cover_image=None, published=True, author=AUTHOR)
+        services.add_comment(session, a1, author=MEMBER, body="First")
+        services.add_comment(session, a1, author=MEMBER, body="Second")
+
+        counts = services.comment_counts_for(session, [a1.id, a2.id])
+        assert counts == {a1.id: 2}
+
+
+def test_comment_counts_for_empty_list_returns_empty_dict():
+    with database.get_session() as session:
+        assert services.comment_counts_for(session, []) == {}
+
+
 def test_delete_article_cascades_comments_and_likes():
     with database.get_session() as session:
         article = services.create_article(session, title="Cascade Test", summary="", body_html="<p>x</p>",

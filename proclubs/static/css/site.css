@@ -641,7 +641,8 @@ button:active, .btn:active { transform: translateY(0); }
 
 /* --- Articles ---------------------------------------------------------- */
 .article-card { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
-.article-card .cover { aspect-ratio: 16/9; object-fit: cover; width: 100%; background: var(--panel-2); }
+.article-thumb { position: relative; }
+.article-card .cover { aspect-ratio: 16/9; object-fit: cover; width: 100%; display: block; background: var(--panel-2); }
 .article-card .body { padding: 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
 .article-card h3 { margin: 0; font-size: 1.1rem; }
 .article-card p { margin: 0; color: var(--muted); font-size: 0.9rem; flex: 1; }
@@ -763,6 +764,17 @@ button:active, .btn:active { transform: translateY(0); }
   position: absolute; bottom: 0.5rem; right: 0.5rem; background: rgba(0,0,0,0.65);
   color: #fff; font-size: 0.72rem; border-radius: 4px; padding: 0.1rem 0.4rem;
 }
+
+/* --- Article thumbnails: like/comment counts, same corner-badge family as
+   .viewer-count above -- only rendered at all when there's something to
+   show, so a fresh article's thumbnail isn't cluttered with zeroes. */
+.engagement-badge {
+  position: absolute; bottom: 0.5rem; left: 0.5rem; display: flex; align-items: center; gap: 0.55rem;
+  background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.72rem; font-weight: 600;
+  border-radius: 4px; padding: 0.15rem 0.45rem;
+}
+.engagement-badge .eng-item { display: inline-flex; align-items: center; gap: 0.25rem; }
+.engagement-badge svg { width: 12px; height: 12px; flex: none; }
 .streamer-info { padding: 0.9rem 1rem; display: flex; align-items: center; gap: 0.7rem; }
 .streamer-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--panel-2); flex: none; }
 .streamer-name { font-weight: 700; }

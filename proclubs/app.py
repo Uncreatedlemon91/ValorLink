@@ -152,6 +152,12 @@ def home(request: Request):
         featured, rest = (latest[0], latest[1:]) if latest else (None, [])
         transfers = services.list_articles(session, category="Transfer", limit=4)
         highlights = services.list_articles(session, category="Match Highlight", limit=4)
+        # Engagement counts shown on thumbnails -- only the two sections that
+        # actually have thumbnails (Latest News rail, Match Highlights grid);
+        # one batched query each rather than one round-trip per card.
+        thumbnail_article_ids = [a.id for a in rest] + [a.id for a in highlights]
+        like_counts = services.like_counts_for(session, thumbnail_article_ids)
+        comment_counts = services.comment_counts_for(session, thumbnail_article_ids)
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
@@ -180,6 +186,8 @@ def home(request: Request):
             live=live,
             stats_teaser=stats_teaser,
             crest_colors=crest_colors,
+            like_counts=like_counts,
+            comment_counts=comment_counts,
         ))
 
 
@@ -198,8 +206,12 @@ def news_list(request: Request, category: str = ""):
     with get_session() as session:
         user = auth.current_user(request)
         articles = services.list_articles(session, include_drafts=auth.is_staff(user), category=category or None)
+        article_ids = [a.id for a in articles]
+        like_counts = services.like_counts_for(session, article_ids)
+        comment_counts = services.comment_counts_for(session, article_ids)
         return templates.TemplateResponse(request, "news_list.html", _ctx(
             request, articles=articles, selected_category=category,
+            like_counts=like_counts, comment_counts=comment_counts,
         ))
 
 

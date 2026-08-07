@@ -15,7 +15,7 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import UploadFile
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 import discord_clips as discord_clips_mod
@@ -216,9 +216,35 @@ def delete_comment(session: Session, comment: Comment) -> None:
     session.commit()
 
 
+def comment_counts_for(session: Session, article_ids: list[int]) -> dict[int, int]:
+    """article_id -> comment count, for a batch of articles in one query --
+    for a listing page (home, /news) showing counts on every card, not one
+    round-trip per card."""
+    if not article_ids:
+        return {}
+    rows = session.execute(
+        select(Comment.article_id, func.count(Comment.id))
+        .where(Comment.article_id.in_(article_ids))
+        .group_by(Comment.article_id)
+    ).all()
+    return {article_id: count for article_id, count in rows}
+
+
 # --- Likes ------------------------------------------------------------------ #
 def count_likes(session: Session, article: Article) -> int:
     return len(list(session.execute(select(Like.id).where(Like.article_id == article.id)).scalars()))
+
+
+def like_counts_for(session: Session, article_ids: list[int]) -> dict[int, int]:
+    """Same idea as comment_counts_for, for likes."""
+    if not article_ids:
+        return {}
+    rows = session.execute(
+        select(Like.article_id, func.count(Like.id))
+        .where(Like.article_id.in_(article_ids))
+        .group_by(Like.article_id)
+    ).all()
+    return {article_id: count for article_id, count in rows}
 
 
 def has_liked(session: Session, article: Article, user_id: int) -> bool:
