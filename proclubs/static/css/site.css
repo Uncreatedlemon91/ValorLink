@@ -443,6 +443,103 @@ button:active, .btn:active { transform: translateY(0); }
 .live-banner-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
 .live-banner-info { display: flex; align-items: center; gap: 0.6rem; padding: 0.75rem; }
 
+/* --- Scroll reveal (see countup.js) --------------------------------------- */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+[data-reveal].is-visible { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
+
+/* --- Club standing hero band (home page) ---------------------------------- */
+.standing-band {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, #141a24 0%, #0b0f14 100%);
+  padding: clamp(2rem, 5vw, 3.25rem) 2rem;
+  margin-bottom: 1rem;
+}
+.standing-glow {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle, rgba(76, 175, 125, 0.35), transparent 70%);
+  animation: standingDrift 10s ease-in-out infinite alternate;
+  z-index: -2;
+  pointer-events: none;
+}
+.standing-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.08) 45%, transparent 60%);
+  background-size: 250% 100%;
+  animation: standingShine 6s ease-in-out infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+@keyframes standingDrift {
+  from { transform: translate(-6%, -4%) scale(1); }
+  to { transform: translate(6%, 4%) scale(1.15); }
+}
+@keyframes standingShine {
+  0% { background-position: 150% 0; }
+  55%, 100% { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .standing-glow, .standing-shine { animation: none; }
+}
+
+.standing-grid {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.75rem, 6vw, 4.5rem);
+  flex-wrap: wrap;
+  text-align: center;
+}
+.standing-item { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; }
+.standing-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.division-ring {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 0 4px rgba(76, 175, 125, 0.12);
+  transition: transform 0.2s ease;
+}
+.division-ring:hover { transform: scale(1.06); }
+.division-ring span { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; color: var(--text); }
+.division-ring--muted { border-color: var(--border); box-shadow: none; }
+
+.standing-value--hero {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(3.5rem, 9vw, 5.5rem);
+  line-height: 1;
+  background: linear-gradient(135deg, var(--text) 30%, var(--accent));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
 /* --- Category badges --------------------------------------------------- */
 .category-badge {
   display: inline-block;
