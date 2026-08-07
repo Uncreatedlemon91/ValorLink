@@ -163,8 +163,11 @@ def _announce_article(request: Request, article) -> None:
     )
     try:
         discord_announce.announce(config.NEWS_ANNOUNCE_CHANNEL_ID, embed)
-    except discord_announce.DiscordApiError:
-        _flash(request, "Published, but the Discord announcement failed to send.", level="error")
+    except discord_announce.DiscordApiError as exc:
+        # The specific reason (bad token, bot not in that channel/guild,
+        # missing Send Messages/Embed Links permission, etc.) matters for
+        # staff to actually fix this -- see discord_api._discord_error_detail.
+        _flash(request, f"Published, but the Discord announcement failed to send: {exc}", level="error")
 
 
 def _check_csrf(request: Request, token: str):
