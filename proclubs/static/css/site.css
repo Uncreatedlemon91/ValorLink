@@ -677,6 +677,13 @@ button:active, .btn:active { transform: translateY(0); }
 .event-result.win { color: var(--status-good); }
 .event-result.loss { color: var(--status-critical); }
 
+/* --- Clips ----------------------------------------------------------------- */
+.clip-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.clip-card { padding: 0; overflow: hidden; }
+.clip-video { width: 100%; aspect-ratio: 16/9; background: #000; display: block; }
+.clip-info { padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.clip-title { margin: 0; font-weight: 600; font-size: 0.95rem; }
+
 /* --- Streamers ----------------------------------------------------------- */
 .streamer-card { padding: 0; overflow: hidden; }
 .streamer-thumb { position: relative; aspect-ratio: 16/9; background: var(--panel-2); }

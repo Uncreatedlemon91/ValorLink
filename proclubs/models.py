@@ -68,6 +68,30 @@ class Event(Base):
     discord_event_id = Column(String, nullable=True, index=True)
 
 
+class Clip(Base):
+    """A video clip, mirrored in from a Discord channel (see
+    discord_clips.py / services.sync_clips). Read-only from the site, same
+    as Event -- there's no create/edit UI, only what's synced from Discord.
+
+    video_url is Discord's signed CDN URL, which expires (Discord issues a
+    fresh one on every fetch, valid roughly 24h) -- refreshed on every
+    sync a clip's message is still within the polled window. jump_url is a
+    permanent link to the message itself, which never expires, used as a
+    fallback once video_url is too stale to still work."""
+
+    __tablename__ = "clips"
+
+    id = Column(Integer, primary_key=True)
+    discord_message_id = Column(String, nullable=False, unique=True, index=True)
+    title = Column(String, nullable=True)               # message content, if any
+    video_url = Column(Text, nullable=False)
+    filename = Column(String, nullable=True)
+    author_name = Column(String, nullable=True)
+    jump_url = Column(Text, nullable=False)
+    posted_at = Column(DateTime, nullable=False)
+    synced_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
 class Streamer(Base):
     """A team member (or the team's own channel) featured in the "live now"
     showcase. Live status itself is never stored -- it's checked against

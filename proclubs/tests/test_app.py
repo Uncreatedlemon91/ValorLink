@@ -21,9 +21,10 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as appmod  # noqa: E402
+import config  # noqa: E402
 import database  # noqa: E402
 import services  # noqa: E402
-from models import Event  # noqa: E402
+from models import Clip, Event  # noqa: E402
 
 
 @pytest.fixture
@@ -254,6 +255,58 @@ def test_event_editing_routes_no_longer_exist(client):
     assert client.get(f"/events/{event_id}/edit").status_code == 404
     assert client.post(f"/events/{event_id}/edit", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
     assert client.post(f"/events/{event_id}/delete", data={"csrf_token": "x"}).status_code == 404
+
+
+def _seed_clip(*, discord_message_id="m1", title="Nice goal",
+                video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
+                jump_url="https://discord.com/channels/1/2/m1",
+                author_name="Coach", posted_at=None) -> int:
+    with database.get_session() as session:
+        clip = Clip(
+            discord_message_id=discord_message_id, title=title, video_url=video_url,
+            filename="clip.mp4", author_name=author_name, jump_url=jump_url,
+            posted_at=posted_at or datetime.utcnow(),
+        )
+        session.add(clip)
+        session.commit()
+        return clip.id
+
+
+def test_clips_page_shows_not_configured_message_when_sync_disabled(client, monkeypatch):
+    monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", False)
+    r = client.get("/clips")
+    assert r.status_code == 200
+    assert "isn't configured" in r.text
+
+
+def test_clips_page_shows_empty_state_when_enabled_but_no_clips(client, monkeypatch):
+    monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
+    r = client.get("/clips")
+    assert r.status_code == 200
+    assert "No clips yet" in r.text
+
+
+def test_clips_page_lists_synced_clips(client, monkeypatch):
+    monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
+    _seed_clip(title="Nice goal", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
+               jump_url="https://discord.com/channels/1/2/m1")
+
+    r = client.get("/clips")
+    assert "Nice goal" in r.text
+    assert 'src="https://cdn.discordapp.com/attachments/1/2/clip.mp4"' in r.text
+    assert 'href="https://discord.com/channels/1/2/m1"' in r.text
+    assert "View in Discord" in r.text
+
+
+def test_clips_page_has_no_upload_or_editing_ui(client, monkeypatch):
+    monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
+    _login_staff(client)
+    _seed_clip()
+
+    r = client.get("/clips")
+    assert "New clip" not in r.text
+    assert ">Edit<" not in r.text
+    assert "/clips/new" not in r.text
 
 
 def test_duplicate_streamer_is_rejected(client):

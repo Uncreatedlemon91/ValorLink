@@ -45,6 +45,14 @@ OAUTH_ENABLED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
 
+# --- Discord clips sync (Clips page) ----------------------------------------- #
+# One-directional, same shape as the events sync above: video files posted
+# in one configured Discord channel get mirrored onto the site's Clips
+# page (see discord_clips.py / discord_clips_poll.py). Reuses
+# DISCORD_BOT_TOKEN above -- no separate credential needed.
+CLIPS_CHANNEL_ID = os.getenv("CLIPS_CHANNEL_ID", "")
+CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
+
 # --- Twitch (streamer showcase) -------------------------------------------- #
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")
