@@ -628,7 +628,6 @@ button:active, .btn:active { transform: translateY(0); }
 .event-result { font-weight: 700; font-size: 0.9rem; }
 .event-result.win { color: var(--status-good); }
 .event-result.loss { color: var(--status-critical); }
-.event-actions { display: flex; gap: 0.4rem; flex: none; }
 
 /* --- Streamers ----------------------------------------------------------- */
 .streamer-card { padding: 0; overflow: hidden; }

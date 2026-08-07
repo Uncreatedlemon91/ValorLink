@@ -5,9 +5,8 @@
   <div class="page-head">
     <div>
       <h1>Events</h1>
-      <p class="page-lede">Upcoming fixtures, scrims, and community events.</p>
+      <p class="page-lede">Upcoming fixtures, scrims, and community events -- scheduled in Discord.</p>
     </div>
-    {% if is_staff %}<a class="btn" href="/events/new">New event</a>{% endif %}
   </div>
 
   <div class="section-head"><h2>Upcoming</h2></div>
@@ -24,15 +23,10 @@
           <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
           <p>{{ e.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}{% if e.description %} &middot; {{ e.description }}{% endif %}</p>
         </div>
-        {% if is_staff %}
-          <div class="event-actions">
-            <a class="btn secondary" href="/events/{{ e.id }}/edit">Edit</a>
-          </div>
-        {% endif %}
       </div>
     {% endfor %}
   {% else %}
-    <div class="card empty-state">Nothing scheduled yet.</div>
+    <div class="card empty-state">Nothing scheduled yet -- create an event in Discord and it'll show up here.</div>
   {% endif %}
 
   {% if past %}
@@ -51,11 +45,6 @@
         </div>
         {% if e.result %}
           <div class="event-result {{ 'win' if e.result.startswith('W') else ('loss' if e.result.startswith('L') else '') }}">{{ e.result }}</div>
-        {% endif %}
-        {% if is_staff %}
-          <div class="event-actions">
-            <a class="btn secondary" href="/events/{{ e.id }}/edit">Edit</a>
-          </div>
         {% endif %}
       </div>
     {% endfor %}

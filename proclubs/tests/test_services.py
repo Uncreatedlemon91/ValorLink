@@ -141,20 +141,30 @@ def test_delete_article():
         assert services.get_article(session, slug) is None
 
 
+def _make_event(session, **overrides):
+    """Events have no create/update path left in services.py -- they're
+    read-only from the site's own UI, populated only via
+    services.sync_discord_events. Tests that need one on the board build
+    the row directly instead."""
+    fields = {
+        "title": "Match", "event_type": "Match", "opponent": None,
+        "description": None, "scheduled_at": datetime.utcnow(),
+        "result": None, "created_by_name": "Coach", "discord_event_id": None,
+    }
+    fields.update(overrides)
+    event = Event(**fields)
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
 def test_event_upcoming_only_filters_past():
     from datetime import datetime, timedelta
 
     with database.get_session() as session:
-        services.create_event(
-            session, title="Yesterday's Match", event_type="Match", opponent="",
-            description="", scheduled_at=datetime.utcnow() - timedelta(days=1),
-            image=None, result="W 2-0", author_name="Coach",
-        )
-        services.create_event(
-            session, title="Tomorrow's Match", event_type="Match", opponent="",
-            description="", scheduled_at=datetime.utcnow() + timedelta(days=1),
-            image=None, result="", author_name="Coach",
-        )
+        _make_event(session, title="Yesterday's Match", scheduled_at=datetime.utcnow() - timedelta(days=1), result="W 2-0")
+        _make_event(session, title="Tomorrow's Match", scheduled_at=datetime.utcnow() + timedelta(days=1))
         upcoming = services.list_events(session, upcoming_only=True)
         assert [e.title for e in upcoming] == ["Tomorrow's Match"]
 
@@ -183,10 +193,12 @@ def test_sync_discord_events_updates_existing_by_discord_id():
         services.sync_discord_events(session, [_discord_event("d1", name="Original Name")])
         event = services.list_events(session)[0]
 
-        # Staff enriches fields Discord has no equivalent for.
-        services.update_event(session, event, title=event.title, event_type="Tournament",
-                                opponent="Rivals FC", description=event.description or "",
-                                scheduled_at=event.scheduled_at, image=None, result="")
+        # Staff enriches fields Discord has no equivalent for (there's no
+        # site UI for this anymore, but the sync itself must still leave
+        # hand-set values alone -- simulate it by writing directly).
+        event.event_type = "Tournament"
+        event.opponent = "Rivals FC"
+        session.commit()
 
         result = services.sync_discord_events(session, [_discord_event("d1", name="Renamed Event")])
         assert result == {"created": 0, "updated": 1, "removed": 0}
@@ -221,9 +233,8 @@ def test_sync_discord_events_ignores_completed_and_canceled_statuses():
 
 def test_sync_discord_events_never_touches_manually_created_events():
     with database.get_session() as session:
-        services.create_event(session, title="Community Night", event_type="Community",
-                                opponent="", description="", scheduled_at=datetime.utcnow() + timedelta(days=3),
-                                image=None, result="", author_name="Coach")
+        _make_event(session, title="Community Night", event_type="Community",
+                    scheduled_at=datetime.utcnow() + timedelta(days=3))
         # Discord reports nothing at all -- a manually-created event (no
         # discord_event_id) must survive regardless.
         result = services.sync_discord_events(session, [])
