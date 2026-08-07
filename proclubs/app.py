@@ -134,11 +134,13 @@ def home(request: Request):
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
         live_streamers = [s for s in streamers if s.twitch_login in live]
         stats_teaser = None
+        crest_colors = None
         if config.CLUB_ID:
             try:
                 stats_teaser = ea_client.division_stats(config.CLUB_PLATFORM, config.CLUB_ID)
+                crest_colors = ea_client.crest_colors(config.CLUB_PLATFORM, config.CLUB_ID)
             except ea_client.EAApiError:
-                stats_teaser = None
+                pass
         return templates.TemplateResponse(request, "home.html", _ctx(
             request,
             featured=featured,
@@ -149,6 +151,7 @@ def home(request: Request):
             live_streamers=live_streamers,
             live=live,
             stats_teaser=stats_teaser,
+            crest_colors=crest_colors,
         ))
 
 

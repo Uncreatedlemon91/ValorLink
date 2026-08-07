@@ -340,6 +340,11 @@ button:active, .btn:active { transform: translateY(0); }
   font-family: var(--font-display); font-weight: 800; font-size: 0.9rem;
   flex: none;
 }
+/* Real club colors from EA's crestColor, when available -- see
+   ea_client.crest_colors(). White text with a shadow reads fine against
+   the saturated colors EA actually issues (team kit colors), even though
+   it isn't a true contrast check against arbitrary values. */
+.crest-branded { color: #fff; border-color: rgba(255, 255, 255, 0.35); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 .mc-team-name { font-weight: 700; font-size: 0.95rem; }
 .mc-vs { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; color: var(--muted); font-size: 0.72rem; }
 .mc-vs-text { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; color: var(--text); }
