@@ -675,7 +675,7 @@ button:active, .btn:active { transform: translateY(0); }
 .comments { margin-top: 2.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
 .comments-head { font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; margin: 0 0 1rem; }
 .comment-form { margin-bottom: 1.5rem; }
-.comment-form textarea { min-height: 90px; }
+.comment-form textarea { width: 100%; min-height: 90px; }
 .comment { display: flex; gap: 0.75rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
 .comment:last-child { border-bottom: none; }
 .comment-avatar {
