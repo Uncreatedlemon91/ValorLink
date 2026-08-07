@@ -253,9 +253,12 @@ button:active, .btn:active { transform: translateY(0); }
   content: "";
   position: absolute;
   inset: -4%;
+  /* `background: inherit` already pulls background-position from the parent
+     (which carries the article's focal point via inline style) -- an
+     explicit background-position here would silently override it back to
+     dead-center for every featured story. */
   background: inherit;
   background-size: cover;
-  background-position: center;
   animation: heroZoom 22s ease-in-out infinite alternate;
   z-index: -2;
 }
