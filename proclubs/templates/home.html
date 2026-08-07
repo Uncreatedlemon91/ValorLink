@@ -31,7 +31,8 @@
       <span class="mc-kicker-label">Next {{ next_event.event_type }}</span>
       <div class="mc-matchup">
         <div class="mc-team">
-          <span class="crest">{{ initials(SITE_NAME) }}</span>
+          <span class="crest{{ ' crest-branded' if crest_colors and crest_colors.crest else '' }}"
+                {% if crest_colors and crest_colors.crest %}style="background:{{ crest_colors.crest }};"{% endif %}>{{ initials(SITE_NAME) }}</span>
           <span class="mc-team-name">{{ SITE_NAME }}</span>
         </div>
         <div class="mc-vs">

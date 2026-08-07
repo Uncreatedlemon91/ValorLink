@@ -121,6 +121,31 @@ def test_home_shows_most_recent_article_as_featured(client):
     assert home.text.count('href="/news/second-post"') == 2
 
 
+def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
+    _login_staff(client)
+    token = _csrf(client, "/events/new")
+    client.post("/events/new", data={
+        "title": "League Match", "event_type": "Match", "opponent": "Rivals FC",
+        "description": "", "scheduled_at": "2027-01-15T18:00", "result": "",
+        "csrf_token": token,
+    }, follow_redirects=False)
+
+    monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+        "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
+    })
+    home = client.get("/")
+    assert 'style="background:#C91B1B;"' in home.text
+    assert "crest-branded" in home.text
+
+
+def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):
+    monkeypatch.setattr(appmod.config, "CLUB_ID", "")
+    home = client.get("/")
+    assert "crest-branded" not in home.text
+
+
 def test_article_category_defaults_and_can_be_set(client):
     _login_staff(client)
     token = _csrf(client, "/news/new")

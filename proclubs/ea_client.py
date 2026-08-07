@@ -115,6 +115,33 @@ def club_info(platform, club_id):
     return records[0] if records else None
 
 
+def _hex_color(value):
+    """EA reports kit/crest colors as a plain decimal RGB integer (e.g.
+    "15921906"), not a hex string -- convert it to the #RRGGBB CSS expects."""
+    try:
+        return f"#{int(value):06X}"
+    except (TypeError, ValueError):
+        return None
+
+
+def crest_colors(platform, club_id):
+    """The club's actual kit/crest colors, decoded to CSS hex. There's no
+    real crest *image* available here -- EA's clubs/info only returns
+    numeric asset IDs (crestAssetId, kitId, ...) that its own game client
+    renders from internal asset packs, not a public image URL. Colors are
+    the only usable branding this endpoint offers. Returns None if the club
+    has no custom kit set or the club can't be found."""
+    info = club_info(platform, club_id)
+    kit = (info or {}).get("customKit") or {}
+    if not kit:
+        return None
+    return {
+        "crest": _hex_color(kit.get("crestColor")),
+        "kit1": _hex_color(kit.get("kitColor1")),
+        "kit2": _hex_color(kit.get("kitColor2")),
+    }
+
+
 def overall_stats(platform, club_id):
     data = _get("clubs/overallStats", {"platform": platform, "clubIds": club_id})
     records = _normalize_dict_or_list(data)
