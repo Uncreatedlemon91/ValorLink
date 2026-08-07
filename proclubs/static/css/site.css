@@ -540,6 +540,50 @@ button:active, .btn:active { transform: translateY(0); }
   color: transparent;
 }
 
+/* --- Quill rich text editor (dark theme override, see article-editor.js) - */
+.ql-toolbar.ql-snow {
+  border-color: var(--border);
+  border-radius: 8px 8px 0 0;
+  background: var(--panel-2);
+}
+.ql-container.ql-snow {
+  border-color: var(--border);
+  border-radius: 0 0 8px 8px;
+  background: var(--panel);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.ql-editor { min-height: 260px; color: var(--text); }
+.ql-editor.ql-blank::before { color: var(--muted); font-style: normal; }
+.ql-snow .ql-stroke { stroke: var(--muted); }
+.ql-snow .ql-fill, .ql-snow .ql-stroke.ql-fill { fill: var(--muted); }
+.ql-snow .ql-picker { color: var(--muted); }
+.ql-snow .ql-picker-options { background: var(--panel); border-color: var(--border) !important; }
+.ql-snow .ql-picker-item:hover, .ql-snow .ql-picker-label:hover { color: var(--accent); }
+.ql-snow.ql-toolbar button:hover, .ql-snow .ql-toolbar button:hover,
+.ql-snow.ql-toolbar button.ql-active, .ql-snow .ql-toolbar button.ql-active {
+  color: var(--accent);
+}
+.ql-snow.ql-toolbar button:hover .ql-stroke, .ql-snow .ql-toolbar button:hover .ql-stroke,
+.ql-snow.ql-toolbar button.ql-active .ql-stroke, .ql-snow .ql-toolbar button.ql-active .ql-stroke {
+  stroke: var(--accent);
+}
+.ql-snow.ql-toolbar button:hover .ql-fill, .ql-snow .ql-toolbar button:hover .ql-fill,
+.ql-snow.ql-toolbar button.ql-active .ql-fill, .ql-snow .ql-toolbar button.ql-active .ql-fill {
+  fill: var(--accent);
+}
+.ql-snow .ql-tooltip {
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.ql-snow .ql-tooltip input[type=text] {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 4px;
+}
+.ql-snow .ql-tooltip a.ql-action, .ql-snow .ql-tooltip a.ql-remove { color: var(--accent-2); }
+.ql-editor pre.ql-syntax { background: var(--panel-2); color: var(--text); border-radius: 8px; }
+.ql-editor blockquote { border-left: 3px solid var(--accent); color: var(--muted); margin: 0.5rem 0; padding-left: 1rem; }
+.ql-editor img { max-width: 100%; border-radius: 8px; }
+
 /* --- Category badges --------------------------------------------------- */
 .category-badge {
   display: inline-block;

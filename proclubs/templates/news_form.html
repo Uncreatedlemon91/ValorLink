@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Edit article' if article else 'New article' }}{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="/static/vendor/quill/quill.snow.css" />
+{% endblock %}
 {% block content %}
 <div class="page narrow">
   <div class="page-head"><h1>{{ 'Edit article' if article else 'New article' }}</h1></div>
 
-  <form class="card" method="post" enctype="multipart/form-data"
+  <form class="card" id="article-form" method="post" enctype="multipart/form-data"
         action="{{ '/news/' ~ article.slug ~ '/edit' if article else '/news/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
@@ -36,8 +39,10 @@
     </div>
 
     <div class="field">
-      <label for="body_md">Body (Markdown)</label>
-      <textarea id="body_md" name="body_md" rows="16" required>{{ article.body_md if article else '' }}</textarea>
+      <label>Body</label>
+      <div id="editor">{% if article %}{{ article.body_html | safe }}{% endif %}</div>
+      <input type="hidden" name="body_html" id="body_html_input" />
+      <p class="field-hint">You can drop images straight into the body, in addition to the cover image above.</p>
     </div>
 
     <label class="field checkbox-field">
@@ -51,4 +56,8 @@
     </div>
   </form>
 </div>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/vendor/quill/quill.js"></script>
+  <script src="/static/js/article-editor.js"></script>
 {% endblock %}

@@ -188,14 +188,14 @@ def news_new_form(request: Request, _staff=Depends(auth.require_staff)):
 @app.post("/news/new")
 async def news_new(
     request: Request, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
-    body_md: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
+    body_html: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
     cover = await services.image_to_data_uri(cover_image)
     with get_session() as session:
         article = services.create_article(
-            session, title=title, category=category, summary=summary, body_md=body_md,
+            session, title=title, category=category, summary=summary, body_html=body_html,
             cover_image=cover, published=bool(published), author=staff,
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
@@ -227,7 +227,7 @@ def news_edit_form(request: Request, slug: str, _staff=Depends(auth.require_staf
 @app.post("/news/{slug}/edit")
 async def news_edit(
     request: Request, slug: str, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
-    body_md: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
+    body_html: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
@@ -239,7 +239,7 @@ async def news_edit(
                 request, "error.html", _ctx(request, message="That article doesn't exist."), status_code=404,
             )
         article = services.update_article(
-            session, article, title=title, category=category, summary=summary, body_md=body_md,
+            session, article, title=title, category=category, summary=summary, body_html=body_html,
             cover_image=cover, published=bool(published),
         )
         _flash(request, "Article updated.")

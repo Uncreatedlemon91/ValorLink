@@ -19,7 +19,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 import discord_events as discord_events_mod
-import markdown_render
+import html_sanitize
 from models import ARTICLE_CATEGORIES, Article, Event, Streamer
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
@@ -68,6 +68,17 @@ def _normalize_category(category: str) -> str:
     return category if category in ARTICLE_CATEGORIES else ARTICLE_CATEGORIES[0]
 
 
+def _is_meaningfully_empty(html: str) -> bool:
+    """The rich-text editor's "empty" state is still markup (Quill always
+    keeps a trailing <p><br></p>), so a plain truthiness/strip() check on
+    the raw HTML doesn't catch it -- strip tags and check what's left. An
+    image-only body (no text) still counts as real content."""
+    html = html or ""
+    if "<img" in html:
+        return False
+    return not re.sub(r"<[^>]+>", "", html).strip()
+
+
 # --- Articles ---------------------------------------------------------- #
 def list_articles(session: Session, *, include_drafts: bool = False,
                    category: str | None = None, limit: int | None = None) -> list[Article]:
@@ -89,21 +100,22 @@ def get_article_by_id(session: Session, article_id: int) -> Article | None:
     return session.get(Article, article_id)
 
 
-def create_article(session: Session, *, title: str, summary: str, body_md: str,
+def create_article(session: Session, *, title: str, summary: str, body_html: str,
                     cover_image: str | None, published: bool, author: dict,
                     category: str = "News") -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
-    if not body_md.strip():
+    if len(body_html or "") > html_sanitize.MAX_BODY_LENGTH:
+        raise ServiceError("That article is too long (likely too many embedded images).")
+    if _is_meaningfully_empty(body_html):
         raise ServiceError("The article needs some body text.")
     article = Article(
         title=title,
         slug=unique_slug(session, title),
         category=_normalize_category(category),
         summary=summary.strip() or None,
-        body_md=body_md,
-        body_html=markdown_render.render(body_md),
+        body_html=html_sanitize.sanitize(body_html),
         cover_image=cover_image,
         author_discord_id=author.get("id") or None,
         author_name=author.get("name", "Staff"),
@@ -118,20 +130,21 @@ def create_article(session: Session, *, title: str, summary: str, body_md: str,
 
 
 def update_article(session: Session, article: Article, *, title: str, summary: str,
-                    body_md: str, cover_image: str | None, published: bool,
+                    body_html: str, cover_image: str | None, published: bool,
                     category: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
-    if not body_md.strip():
+    if len(body_html or "") > html_sanitize.MAX_BODY_LENGTH:
+        raise ServiceError("That article is too long (likely too many embedded images).")
+    if _is_meaningfully_empty(body_html):
         raise ServiceError("The article needs some body text.")
     if title != article.title:
         article.slug = unique_slug(session, title, exclude_id=article.id)
     article.title = title
     article.category = _normalize_category(category if category is not None else article.category)
     article.summary = summary.strip() or None
-    article.body_md = body_md
-    article.body_html = markdown_render.render(body_md)
+    article.body_html = html_sanitize.sanitize(body_html)
     if cover_image is not None:
         article.cover_image = cover_image
     if published and not article.published:

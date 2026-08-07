@@ -91,7 +91,7 @@ def test_staff_can_publish_an_article(client):
     token = _csrf(client, "/news/new")
     r = client.post("/news/new", data={
         "title": "Season Opener", "summary": "We're back",
-        "body_md": "# Big news\n\nHere we go.", "published": "1", "csrf_token": token,
+        "body_html": "<h1>Big news</h1><p>Here we go.</p>", "published": "1", "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/news/season-opener"
@@ -108,7 +108,7 @@ def test_draft_article_hidden_from_fans_visible_to_staff(client):
     _login_staff(client)
     token = _csrf(client, "/news/new")
     client.post("/news/new", data={
-        "title": "Unfinished Draft", "summary": "", "body_md": "wip",
+        "title": "Unfinished Draft", "summary": "", "body_html": "<p>wip</p>",
         "published": "", "csrf_token": token,
     }, follow_redirects=False)
 
@@ -128,7 +128,7 @@ def test_home_shows_most_recent_article_as_featured(client):
     for title in ["First Post", "Second Post"]:
         token = _csrf(client, "/news/new")
         client.post("/news/new", data={
-            "title": title, "summary": "", "body_md": "x",
+            "title": title, "summary": "", "body_html": "<p>x</p>",
             "published": "1", "csrf_token": token,
         }, follow_redirects=False)
 
@@ -194,7 +194,7 @@ def test_article_category_defaults_and_can_be_set(client):
     token = _csrf(client, "/news/new")
     r = client.post("/news/new", data={
         "title": "Transfer Window Update", "category": "Transfer", "summary": "",
-        "body_md": "x", "published": "1", "csrf_token": token,
+        "body_html": "<p>x</p>", "published": "1", "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 303
 
@@ -208,7 +208,7 @@ def test_news_list_filters_by_category(client):
         token = _csrf(client, "/news/new")
         client.post("/news/new", data={
             "title": title, "category": category, "summary": "",
-            "body_md": "x", "published": "1", "csrf_token": token,
+            "body_html": "<p>x</p>", "published": "1", "csrf_token": token,
         }, follow_redirects=False)
 
     filtered = client.get("/news?category=Transfer")
