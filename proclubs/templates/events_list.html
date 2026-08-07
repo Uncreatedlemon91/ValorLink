@@ -20,6 +20,7 @@
         </div>
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
+          {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
           <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
           <p>{{ e.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}{% if e.description %} &middot; {{ e.description }}{% endif %}</p>
         </div>
@@ -44,6 +45,7 @@
         </div>
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
+          {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
           <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
           <p>{{ e.scheduled_at.strftime('%A, %b %-d, %Y') }}</p>
         </div>

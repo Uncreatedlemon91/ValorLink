@@ -365,6 +365,33 @@ it with `systemctl list-timers proclubs-poll.timer` and
 whenever a club is added here -- there's no way to backfill matches EA has
 already evicted from its own rolling window.
 
+**Discord Scheduled Events sync (optional, on top of the above).** Events
+scheduled in Discord (Server → Events → New Event) can mirror in as site
+fixtures automatically -- see `proclubs/README.md#discord-scheduled-events-sync`
+for exactly what does and doesn't sync. Needs `DISCORD_BOT_TOKEN` in
+`proclubs/.env`; deliberately the **same token the main bot already
+uses** (copy it from `/opt/valorlink/.env`) rather than a separate bot
+registration -- a real exception to this app's normal "share nothing"
+isolation, accepted for this one feature. Leave `DISCORD_BOT_TOKEN` unset
+to skip this entirely; the site works fine without it.
+
+```bash
+sudo -u valorlink nano /opt/valorlink/proclubs/.env
+# DISCORD_BOT_TOKEN=<copy from /opt/valorlink/.env>
+sudo systemctl restart valorlink-proclubs
+```
+
+`proclubs-discord-events-poll.timer` (already installed by `install.sh`)
+fires `discord_events_poll.py` every 10 minutes. Run it once to confirm it
+works instead of waiting:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_events_poll.py
+```
+
+Check on it with `systemctl list-timers proclubs-discord-events-poll.timer`
+and `journalctl -u proclubs-discord-events-poll`.
+
 **Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
 delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming
 space -- none of that touches the bot, the web app, or their database.

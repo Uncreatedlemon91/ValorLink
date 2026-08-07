@@ -1,0 +1,12 @@
+[Unit]
+Description=Pro Clubs Discord Scheduled Events sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (DISCORD_BOT_TOKEN, DISCORD_GUILD_ID) -- config.py
+# loads it itself via python-dotenv, same as valorlink-proclubs.service.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 discord_events_poll.py

@@ -35,6 +35,16 @@ DISCORD_STAFF_ROLE_ID = int(os.getenv("DISCORD_STAFF_ROLE_ID", "0") or "0")
 OAUTH_ENABLED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
                      and DISCORD_OAUTH_REDIRECT and DISCORD_GUILD_ID)
 
+# --- Discord Scheduled Events sync (fixtures) ------------------------------- #
+# One-directional: Discord's own Scheduled Events are the source of truth,
+# mirrored in as site Events (see discord_events.py / discord_events_poll.py).
+# Reuses the same DISCORD_GUILD_ID as OAuth above. DISCORD_BOT_TOKEN is
+# deliberately the same token the main ValorLink bot already uses -- a
+# reused secret, by explicit choice, not a separately-registered bot (see
+# proclubs/README.md for the tradeoff that was accepted here).
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
+
 # --- Twitch (streamer showcase) -------------------------------------------- #
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")

@@ -5,6 +5,7 @@ Run with: pytest proclubs/tests/test_services.py
 import os
 import sys
 import tempfile
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -14,6 +15,7 @@ os.environ["SITE_DB_PATH"] = os.path.join(_TMP, "site.db")
 import pytest  # noqa: E402
 
 import database  # noqa: E402
+import discord_events as discord_events_mod  # noqa: E402
 import services  # noqa: E402
 from models import Article, Event, Streamer  # noqa: E402, F401
 
@@ -155,6 +157,92 @@ def test_event_upcoming_only_filters_past():
         )
         upcoming = services.list_events(session, upcoming_only=True)
         assert [e.title for e in upcoming] == ["Tomorrow's Match"]
+
+
+def _discord_event(event_id, name="Scrim Night", status=1, start="2027-06-01T18:00:00+00:00", description=None):
+    return {
+        "id": event_id, "name": name, "description": description,
+        "scheduled_start_time": start, "status": status,
+    }
+
+
+def test_sync_discord_events_creates_new_events():
+    with database.get_session() as session:
+        result = services.sync_discord_events(session, [_discord_event("d1", name="Scrim Night")])
+        assert result == {"created": 1, "updated": 0, "removed": 0}
+
+        events = services.list_events(session)
+        assert len(events) == 1
+        assert events[0].discord_event_id == "d1"
+        assert events[0].title == "Scrim Night"
+        assert events[0].event_type == "Match"  # sensible default, not from Discord
+
+
+def test_sync_discord_events_updates_existing_by_discord_id():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1", name="Original Name")])
+        event = services.list_events(session)[0]
+
+        # Staff enriches fields Discord has no equivalent for.
+        services.update_event(session, event, title=event.title, event_type="Tournament",
+                                opponent="Rivals FC", description=event.description or "",
+                                scheduled_at=event.scheduled_at, image=None, result="")
+
+        result = services.sync_discord_events(session, [_discord_event("d1", name="Renamed Event")])
+        assert result == {"created": 0, "updated": 1, "removed": 0}
+
+        events = services.list_events(session)
+        assert len(events) == 1
+        assert events[0].title == "Renamed Event"       # overwritten from Discord
+        assert events[0].event_type == "Tournament"      # site-only field, untouched
+        assert events[0].opponent == "Rivals FC"          # site-only field, untouched
+
+
+def test_sync_discord_events_removes_canceled_upcoming_events():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1")])
+        assert len(services.list_events(session)) == 1
+
+        # Discord no longer lists it at all (deleted) -- treated as canceled.
+        result = services.sync_discord_events(session, [])
+        assert result == {"created": 0, "updated": 0, "removed": 1}
+        assert services.list_events(session) == []
+
+
+def test_sync_discord_events_ignores_completed_and_canceled_statuses():
+    with database.get_session() as session:
+        result = services.sync_discord_events(session, [
+            _discord_event("d1", status=discord_events_mod.STATUS_COMPLETED),
+            _discord_event("d2", status=discord_events_mod.STATUS_CANCELED),
+        ])
+        assert result == {"created": 0, "updated": 0, "removed": 0}
+        assert services.list_events(session) == []
+
+
+def test_sync_discord_events_never_touches_manually_created_events():
+    with database.get_session() as session:
+        services.create_event(session, title="Community Night", event_type="Community",
+                                opponent="", description="", scheduled_at=datetime.utcnow() + timedelta(days=3),
+                                image=None, result="", author_name="Coach")
+        # Discord reports nothing at all -- a manually-created event (no
+        # discord_event_id) must survive regardless.
+        result = services.sync_discord_events(session, [])
+        assert result == {"created": 0, "updated": 0, "removed": 0}
+        assert [e.title for e in services.list_events(session)] == ["Community Night"]
+
+
+def test_sync_discord_events_leaves_past_events_alone_even_if_discord_drops_them():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [
+            _discord_event("d1", start="2020-01-01T18:00:00+00:00"),
+        ])
+        assert len(services.list_events(session)) == 1
+
+        # Discord's list no longer includes it (it's aged out on their side),
+        # but it's in the past -- leave it as a historical record.
+        result = services.sync_discord_events(session, [])
+        assert result["removed"] == 0
+        assert len(services.list_events(session)) == 1
 
 
 def test_streamer_login_is_normalized_and_unique():

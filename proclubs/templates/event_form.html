@@ -4,6 +4,14 @@
 <div class="page narrow">
   <div class="page-head"><h1>{{ 'Edit event' if event else 'New event' }}</h1></div>
 
+  {% if event and event.discord_event_id %}
+    <div class="flash" style="margin-bottom:1rem;">
+      This event is synced from a Discord Scheduled Event. Title, description, and date/time are
+      overwritten from Discord on the next sync -- edit those in Discord instead. Type, opponent,
+      and result are only set here and won't be touched by the sync.
+    </div>
+  {% endif %}
+
   <form class="card" method="post" enctype="multipart/form-data"
         action="{{ '/events/' ~ event.id ~ '/edit' if event else '/events/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

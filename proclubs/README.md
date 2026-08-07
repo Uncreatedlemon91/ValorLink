@@ -11,6 +11,11 @@ This runs as its own independent service alongside the ValorLink bot/web app
 with `web/`, `db/`, `tenancy/`, or `utils/`. See
 [`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
 
+One deliberate exception: if `DISCORD_BOT_TOKEN` is set (for the Discord
+Scheduled Events sync, below), it's a copy of the main bot's actual token,
+not a separately-registered credential. Everything else -- database,
+session, OAuth client -- stays as described above.
+
 ## Permissions
 
 Two tiers, both derived live from Discord roles at sign-in time (never
@@ -65,10 +70,39 @@ The pieces that need real setup:
   registration.
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
+- **`DISCORD_BOT_TOKEN`** (optional) -- enables the Discord Scheduled
+  Events sync, below. Copy `DISCORD_BOT_TOKEN` from `/opt/valorlink/.env`
+  (the main bot's own token) rather than registering a separate bot -- an
+  accepted exception to this app's usual isolation, see above.
 
-Any of Discord OAuth or Twitch can be left unconfigured -- the site
-degrades gracefully (sign-in shows "not configured," the streamer showcase
-shows profiles without live status) rather than erroring.
+Any of Discord OAuth, Twitch, or the Discord Events sync can be left
+unconfigured -- the site degrades gracefully (sign-in shows "not
+configured," the streamer showcase shows profiles without live status, no
+events get auto-created) rather than erroring.
+
+## Discord Scheduled Events sync
+
+One-directional: create an event in Discord (Server → Events → New Event)
+and it shows up as a site fixture automatically, no site action needed.
+It is **not** the reverse -- creating a fixture on the site does not
+create a Discord event.
+
+- Runs on a schedule (`proclubs-discord-events-poll.timer`, every 10
+  minutes -- see `../deploy/README.md`), not instantly on creation. This
+  app has no always-on bot/gateway connection, so polling Discord's REST
+  API is the only way to notice a change made there.
+- Discord is the source of truth for **title, description, and
+  date/time** on synced events -- each sync overwrites them from Discord.
+  **Type** (Match/Scrim/Tournament/Community), **opponent**, and
+  **result** are site-only fields Discord has no equivalent for; they're
+  set to a sensible default on first sync and never touched again, so
+  staff can fill them in on the site without the next sync reverting them.
+- If a Discord event is canceled or deleted, its mirrored site fixture is
+  removed on the next sync too (as long as it's still in the future --
+  past fixtures are left alone even if their Discord event ages out of
+  Discord's own list).
+- Synced events show a "Discord" pill next to the event type badge, and
+  the edit form explains what will and won't get overwritten.
 
 ## Important caveats about the EA stats dashboard
 
@@ -96,6 +130,8 @@ proclubs/
   services.py            CRUD + validation for articles/events/streamers
   markdown_render.py    Article Markdown -> sanitized HTML
   twitch_client.py       Twitch Helix: is-this-channel-live, with a short cache
+  discord_events.py      Discord Scheduled Events REST client (read-only)
+  discord_events_poll.py Standalone poller, mirrors Discord events -> Event rows
   ea_client.py           EA Pro Clubs API client (curl_cffi, unrelated to the above)
   db.py                  Locally-accumulated EA stats history (own sqlite3 file)
   poll.py                Standalone poller for db.py, run by proclubs-poll.timer
