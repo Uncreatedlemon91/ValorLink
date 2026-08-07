@@ -288,15 +288,27 @@ def test_feature_route_switches_the_featured_channel(client):
     assert f'action="/streamers/{second_id}/feature"' not in page.text
 
 
-def test_home_shows_featured_stream_embed(client):
+def test_home_shows_featured_stream_embed_only_when_live(client, monkeypatch):
     _login_staff(client)
     token = _csrf(client, "/streamers")
     client.post("/streamers/add", data={
         "display_name": "n0v84", "twitch_login": "n0v84", "featured": "1", "csrf_token": token,
     }, follow_redirects=False)
 
+    # Offline (the default in tests -- Twitch isn't configured): no iframe,
+    # just the compact "follow for the next stream" card.
+    home = client.get("/")
+    assert "player.twitch.tv/?channel=n0v84" not in home.text
+    assert "featured-stream--offline" in home.text
+    assert "follow for the next stream" in home.text
+
+    # Live: the embedded player replaces the offline card.
+    monkeypatch.setattr(appmod.twitch_client, "live_streams", lambda logins: {
+        "n0v84": {"title": "ranked grind", "viewer_count": 12, "thumbnail_url": "", "url": "https://twitch.tv/n0v84"},
+    })
     home = client.get("/")
     assert "player.twitch.tv/?channel=n0v84" in home.text
+    assert "featured-stream--offline" not in home.text
 
 
 def test_logout_clears_session(client):
