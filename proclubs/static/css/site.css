@@ -952,6 +952,72 @@ pre {
 .badge-warn { background: var(--status-warning); }
 .badge-good { background: var(--status-good); color: #fff; }
 
+/* --- Overview: recent-form strip (last N results, oldest -> newest) ------ */
+.form-strip { display: flex; gap: 0.3rem; }
+.form-chip {
+  width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  font-size: 0.72rem; font-weight: 800; font-family: var(--font-display); cursor: default;
+}
+.form-chip.W { background: rgba(12, 163, 12, 0.18); color: #7fe07f; }
+.form-chip.D { background: rgba(107, 111, 122, 0.24); color: #c7cad2; }
+.form-chip.L { background: rgba(208, 59, 59, 0.18); color: #ef9494; }
+
+/* --- Overview: explore cards, linking into the other three reports ------- */
+.explore-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem 0 0.5rem; }
+@media (max-width: 900px) { .explore-grid { grid-template-columns: 1fr; } }
+.explore-card {
+  display: block; text-align: left; width: 100%; cursor: pointer; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 14px; padding: 1.15rem 1.3rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.explore-card:hover { border-color: rgba(76, 175, 125, 0.5); transform: translateY(-2px); }
+.explore-card h4 { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; margin: 0 0 0.3rem; }
+.explore-card p { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.65rem; line-height: 1.45; }
+.explore-cta { font-size: 0.8rem; font-weight: 700; color: var(--accent); }
+
+/* --- Players/Matches: sort + position/type filter row --------------------- */
+.filter-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.chip-group { display: flex; gap: 0.3rem; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 0.2rem; }
+.chip {
+  border: none; background: none; color: var(--muted); font-size: 0.8rem; font-weight: 600;
+  padding: 0.35rem 0.75rem; border-radius: 999px; cursor: pointer;
+}
+.chip.active { background: var(--accent); color: #0a0f0c; }
+.sort-select { margin-left: auto; width: auto; }
+
+/* --- Matches: team-vs-team totals comparison strip ------------------------ */
+.compare-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.compare-team { font-family: var(--font-display); font-weight: 800; font-size: 1rem; }
+.compare-vs { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.team-compare { display: grid; gap: 0.6rem; margin-bottom: 1.15rem; }
+.compare-stat { display: grid; gap: 0.2rem; }
+.compare-label { font-size: 0.72rem; color: var(--muted); text-align: center; }
+.compare-row { display: grid; grid-template-columns: 2.6rem 1fr 2.6rem; align-items: center; gap: 0.65rem; }
+.compare-row .compare-value { font-family: var(--font-display); font-weight: 800; font-size: 0.92rem; }
+.compare-row .compare-value:first-child { text-align: right; }
+.compare-bar { height: 8px; border-radius: 4px; overflow: hidden; display: flex; gap: 2px; background: var(--panel-2); }
+.compare-bar span:first-child { background: var(--series-1); border-radius: 4px 0 0 4px; }
+.compare-bar span:last-child { background: var(--series-2); border-radius: 0 4px 4px 0; }
+
+/* --- Competition: division ladder ----------------------------------------- */
+.ladder { display: flex; flex-direction: column-reverse; gap: 0.3rem; }
+.ladder.compact { gap: 0.22rem; }
+.rung { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid transparent; }
+.rung .rn { width: 2rem; font-family: var(--font-display); font-weight: 800; font-size: 0.82rem; color: var(--muted); flex: none; }
+.rung .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.rung .bar > span { display: block; height: 100%; background: var(--border); }
+.rung .rung-note { font-size: 0.7rem; color: var(--muted); min-width: 5.5rem; text-align: right; flex: none; }
+.rung.current { border-color: rgba(76, 175, 125, 0.5); background: rgba(76, 175, 125, 0.08); }
+.rung.current .rn, .rung.current .rung-note { color: var(--accent); }
+.rung.current .bar > span { background: var(--accent); }
+.rung.best .rn::after { content: " \2605"; color: var(--status-warning); font-size: 0.7em; }
+
+/* --- Competition: head-to-head (rivals) table ------------------------------ */
+.rival-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; width: 96px; background: var(--panel-2); }
+.rival-bar span:first-child { background: var(--status-good); }
+.rival-bar span:nth-child(2) { background: var(--status-neutral); }
+.rival-bar span:last-child { background: var(--status-critical); }
+
 @media (max-width: 640px) {
   .page { padding: 1.25rem; }
   .site-header { padding: 0.85rem 1.25rem; }

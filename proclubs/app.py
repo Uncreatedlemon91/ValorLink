@@ -529,6 +529,14 @@ def api_history_players(name: str = ""):
     return {"trackedSince": tracked_since, "players": db.player_names(config.CLUB_PLATFORM, config.CLUB_ID)}
 
 
+@app.get("/api/history/rivals")
+def api_history_rivals():
+    return {
+        "trackedSince": db.tracked_since(config.CLUB_PLATFORM, config.CLUB_ID),
+        "rivals": db.rival_records(config.CLUB_PLATFORM, config.CLUB_ID),
+    }
+
+
 @app.get("/api/streamers/live")
 def api_streamers_live():
     with get_session() as session:

@@ -94,6 +94,28 @@ def test_public_pages_load_signed_out(client):
         assert client.get(path).status_code == 200
 
 
+def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatch):
+    monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: 1700000000)
+    monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [
+        {"name": "Rivals FC", "played": 3, "wins": 2, "draws": 1, "losses": 0,
+         "gf": 7, "ga": 4, "last_outcome": "W", "last_played_at": 1700000500},
+    ])
+    r = client.get("/api/history/rivals")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["trackedSince"] == 1700000000
+    assert body["rivals"][0]["name"] == "Rivals FC"
+    assert body["rivals"][0]["played"] == 3
+
+
+def test_api_history_rivals_empty_when_untracked(client, monkeypatch):
+    monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [])
+    r = client.get("/api/history/rivals")
+    assert r.status_code == 200
+    assert r.json() == {"trackedSince": None, "rivals": []}
+
+
 def test_anonymous_staff_route_redirects_to_login(client):
     r = client.get("/news/new", follow_redirects=False)
     assert r.status_code == 303

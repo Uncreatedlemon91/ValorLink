@@ -5,9 +5,14 @@ const clubHeader = document.getElementById('club-header');
 let currentClubId = null;
 let currentPlatform = null;
 let latestMatches = []; // raw match list from the last /matches fetch, shared
-                         // with the Members tab so a goalkeeper's detail
+                         // with the Players tab so a goalkeeper's detail
                          // panel can aggregate save stats without an extra
                          // API call.
+
+// Filter/sort state for the Players tab's roster table -- kept at module
+// scope so a re-render (position chip, search, sort change) doesn't need to
+// refetch anything, just re-derive the table from the already-loaded roster.
+let playerFilterState = { pos: 'ALL', sort: 'goals', q: '' };
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg || '';
@@ -23,13 +28,21 @@ async function api(path) {
   return body;
 }
 
+// --------------------------------------------------------------------------
+// Report tabs -- Overview / Players / Matches / Competition. Overview's
+// "Explore" cards and cross-links (data-goto) jump straight into one of the
+// other three via the same activateTab() the tab bar itself uses.
+// --------------------------------------------------------------------------
+function activateTab(name) {
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `tab-${name}`));
+}
+function goToTab(name) {
+  activateTab(name);
+  document.getElementById('tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 document.querySelectorAll('#tabs button').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#tabs button').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-  });
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
 
 async function loadClub(clubId, platform) {
@@ -38,7 +51,7 @@ async function loadClub(clubId, platform) {
   clubView.classList.remove('hidden');
   setStatus('Loading club...');
 
-  const [overview, standings, members, matches, historyDivision, historyMatches, historyPlayers] =
+  const [overview, standings, members, matches, historyDivision, historyMatches, historyRivals] =
     await Promise.allSettled([
       api('/api/overview'),
       api('/api/standings'),
@@ -46,23 +59,22 @@ async function loadClub(clubId, platform) {
       api('/api/matches?matchType=leagueMatch&count=10'),
       api('/api/history/division'),
       api('/api/history/matches'),
-      api('/api/history/players'),
+      api('/api/history/rivals'),
     ]);
 
   latestMatches = matches.status === 'fulfilled' ? matches.value || [] : [];
 
-  renderOverview(overview);
-  renderStandings(standings);
-  renderMembers(members);
+  renderOverview(overview, standings, members, matches, historyDivision);
+  renderPlayers(members);
   renderMatches(matches, 'leagueMatch', 10);
-  renderHistory(historyDivision, historyMatches, historyPlayers);
+  renderCompetition(standings, historyDivision, historyMatches, historyRivals);
   setStatus('');
 }
 
 // Re-fetches just the Matches tab with new matchType/count controls, without
 // reloading the other three tabs. Also refreshes latestMatches, so a
-// goalkeeper's save breakdown on the Members tab reflects whatever sample
-// is currently loaded here.
+// goalkeeper's save breakdown on the Players tab reflects whatever sample is
+// currently loaded here.
 async function reloadMatches(matchType, count) {
   const panel = document.getElementById('tab-matches');
   panel.style.opacity = '0.5'; // hold the previous render while refetching
@@ -96,13 +108,26 @@ function esc(v) {
   }[c]));
 }
 
-function renderOverview(result) {
-  const panel = document.getElementById('tab-overview');
-  if (result.status !== 'fulfilled') return panelError(panel, result);
-  const { info, stats } = result.value;
-  const name = info?.name || `Club ${currentClubId}`;
-  clubHeader.innerHTML = '';
+// --------------------------------------------------------------------------
+// Overview -- an executive summary: identity, headline KPIs, the skill-
+// rating trend (real tracked history, not a sample), a season result mix,
+// a squad spotlight, and cards into the three detail reports.
+// --------------------------------------------------------------------------
 
+function matchOutcomeFor(rawMatch, clubId) {
+  const us = (rawMatch.clubs || {})[clubId];
+  if (!us) return 'D';
+  return us.wins === '1' ? 'W' : us.losses === '1' ? 'L' : 'D';
+}
+
+function renderOverview(overviewResult, standingsResult, membersResult, matchesResult, historyResult) {
+  const panel = document.getElementById('tab-overview');
+  if (overviewResult.status !== 'fulfilled') return panelError(panel, overviewResult);
+  const { info, stats } = overviewResult.value;
+  const name = info?.name || `Club ${currentClubId}`;
+  const standings = standingsResult.status === 'fulfilled' ? standingsResult.value : {};
+
+  clubHeader.innerHTML = '';
   const identity = document.createElement('div');
   identity.className = 'club-hero-identity';
   const h2 = document.createElement('h2');
@@ -127,81 +152,144 @@ function renderOverview(result) {
   ratingBadge.className = 'hero-badge accent';
   ratingBadge.textContent = `${stats.skillRating ?? '-'} SR`;
   badges.append(recordBadge, ratingBadge);
+  if (standings.currentDivision != null) {
+    const divBadge = document.createElement('span');
+    divBadge.className = 'hero-badge';
+    divBadge.textContent = `Division ${standings.currentDivision}`;
+    badges.append(divBadge);
+  }
   clubHeader.append(badges);
 
+  const recentMatches = matchesResult.status === 'fulfilled' ? (matchesResult.value || []) : [];
+  if (recentMatches.length) {
+    const strip = document.createElement('div');
+    strip.className = 'form-strip';
+    strip.setAttribute('aria-label', 'Recent results, oldest to newest');
+    [...recentMatches].reverse().forEach((m) => {
+      const oc = matchOutcomeFor(m, currentClubId);
+      const oppId = Object.keys(m.clubs || {}).find((id) => id !== currentClubId);
+      const oppName = m.clubs?.[oppId]?.details?.name ?? 'opponent';
+      const chip = document.createElement('span');
+      chip.className = `form-chip ${oc}`;
+      chip.title = `${oc} vs ${oppName}`;
+      chip.textContent = oc;
+      strip.appendChild(chip);
+    });
+    clubHeader.append(strip);
+  }
+
+  const played = num(stats.wins) + num(stats.losses) + num(stats.ties);
+  const winRate = played > 0 ? Math.round((num(stats.wins) / played) * 100) : null;
+  const goalDiff = stats.goals != null && stats.goalsAgainst != null ? num(stats.goals) - num(stats.goalsAgainst) : null;
+
   panel.innerHTML = `
+    <div class="stat-grid">
+      ${statCard('Points', standings.points)}
+      ${statCard('Skill Rating', stats.skillRating)}
+      ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-')}
+      ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-')}
+      ${statCard('Win Streak', stats.wstreak)}
+      ${statCard('Unbeaten Streak', standings.unbeatenstreak)}
+    </div>
     <div class="chart-row">
       <div class="chart-card">
-        <h3>Record</h3>
-        <div id="chart-record"></div>
+        <h3>Skill Rating Over Time</h3>
+        <div id="chart-overview-rating"></div>
       </div>
       <div class="chart-card">
-        <h3>Goals For / Against</h3>
-        <div id="chart-goals"></div>
+        <h3>Result Mix (season)</h3>
+        <div id="chart-record"></div>
       </div>
     </div>
-    <div class="stat-grid">
-      ${statCard('Wins', stats.wins)}
-      ${statCard('Losses', stats.losses)}
-      ${statCard('Ties', stats.ties)}
-      ${statCard('Games Played', stats.gamesPlayed)}
-      ${statCard('Goals', stats.goals)}
-      ${statCard('Goals Against', stats.goalsAgainst)}
-      ${statCard('Skill Rating', stats.skillRating)}
-      ${statCard('Win Streak', stats.wstreak)}
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3>Top Scorers</h3>
+        <div id="chart-spotlight-scorers"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top Assists</h3>
+        <div id="chart-spotlight-assists"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Man of the Match</h3>
+        <div id="chart-spotlight-motm"></div>
+      </div>
+    </div>
+    <p class="page-lede" style="margin-top:2rem; font-weight:600">Explore</p>
+    <div class="explore-grid">
+      <button class="explore-card" data-goto="players" type="button">
+        <h4>Players</h4>
+        <p>Every rostered player, filterable by position and sortable by any stat -- click through for a full per-player breakdown.</p>
+        <span class="explore-cta">Open report &rarr;</span>
+      </button>
+      <button class="explore-card" data-goto="matches" type="button">
+        <h4>Matches</h4>
+        <p>Every tracked result with shots, pass accuracy, and tackle trends -- expand any match for a full team-vs-team comparison.</p>
+        <span class="explore-cta">Open report &rarr;</span>
+      </button>
+      <button class="explore-card" data-goto="competition" type="button">
+        <h4>Competition</h4>
+        <p>Division standing and promotion history, plus a full head-to-head record against every club we've faced.</p>
+        <span class="explore-cta">Open report &rarr;</span>
+      </button>
     </div>
   `;
+
+  panel.querySelectorAll('[data-goto]').forEach((btn) => btn.addEventListener('click', () => goToTab(btn.dataset.goto)));
+
+  const ratingEl = document.getElementById('chart-overview-rating');
+  const snapshots = historyResult.status === 'fulfilled' ? (historyResult.value.snapshots || []) : [];
+  if (snapshots.length) {
+    Charts.trendBarChart(ratingEl, {
+      data: snapshots.map((s) => ({
+        label: new Date(s.captured_at * 1000).toLocaleString(),
+        value: num(s.skill_rating),
+      })),
+      color: 'var(--series-1)',
+    });
+  } else {
+    Charts.emptyState(ratingEl, 'Not enough tracked snapshots yet -- check back after the next poll.');
+  }
 
   Charts.donutChart(document.getElementById('chart-record'), {
     data: [
       { label: 'Wins', value: num(stats.wins), color: 'var(--status-good)' },
-      { label: 'Losses', value: num(stats.losses), color: 'var(--status-critical)' },
       { label: 'Ties', value: num(stats.ties), color: 'var(--status-neutral)' },
+      { label: 'Losses', value: num(stats.losses), color: 'var(--status-critical)' },
     ],
   });
 
-  Charts.vBarChart(document.getElementById('chart-goals'), {
-    data: [
-      { label: 'For', value: num(stats.goals), color: 'var(--series-1)' },
-      { label: 'Against', value: num(stats.goalsAgainst), color: 'var(--series-2)' },
-    ],
+  const members = membersResult.status === 'fulfilled' ? (membersResult.value.members || []) : [];
+  const nameOf = (m) => m.proName || m.name || 'Unknown';
+  Charts.hBarChart(document.getElementById('chart-spotlight-scorers'), {
+    data: [...members].sort((a, b) => num(b.goals) - num(a.goals)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.goals) })),
+    color: 'var(--series-1)',
   });
-}
-
-function renderStandings(result) {
-  const panel = document.getElementById('tab-standings');
-  if (result.status !== 'fulfilled') return panelError(panel, result);
-  const s = result.value;
-  panel.innerHTML = `
-    <p style="color:var(--muted)">EA's Pro Clubs API does not expose a full league table -- only your club's own divisional progress.</p>
-    <div class="chart-row">
-      <div class="chart-card">
-        <h3>Promotions vs Relegations</h3>
-        <div id="chart-promo"></div>
-      </div>
-    </div>
-    <div class="stat-grid">
-      ${statCard('Current Division', s.currentDivision)}
-      ${statCard('Points', s.points)}
-      ${statCard('Best Division', s.bestDivision)}
-      ${statCard('Best Finish', s.bestFinishGroup)}
-      ${statCard('Promotions', s.promotions)}
-      ${statCard('Relegations', s.relegations)}
-      ${statCard('League Appearances', s.leagueAppearances)}
-      ${statCard('Unbeaten Streak', s.unbeatenstreak)}
-    </div>
-  `;
-
-  Charts.vBarChart(document.getElementById('chart-promo'), {
-    data: [
-      { label: 'Promotions', value: num(s.promotions), color: 'var(--status-good)' },
-      { label: 'Relegations', value: num(s.relegations), color: 'var(--status-critical)' },
-    ],
+  Charts.hBarChart(document.getElementById('chart-spotlight-assists'), {
+    data: [...members].sort((a, b) => num(b.assists) - num(a.assists)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.assists) })),
+    color: 'var(--series-2)',
+  });
+  Charts.hBarChart(document.getElementById('chart-spotlight-motm'), {
+    data: [...members].sort((a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.manOfTheMatch) })),
+    color: 'var(--series-4)',
   });
 }
 
-function renderMembers(result) {
-  const panel = document.getElementById('tab-members');
+// --------------------------------------------------------------------------
+// Players (formerly "Members") -- the full roster: filter by position,
+// search by name, sort by any column, click a row for the full breakdown.
+// --------------------------------------------------------------------------
+
+const PLAYER_SORTERS = {
+  goals: (a, b) => num(b.goals) - num(a.goals),
+  assists: (a, b) => num(b.assists) - num(a.assists),
+  rating: (a, b) => num(b.ratingAve) - num(a.ratingAve),
+  motm: (a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch),
+  name: (a, b) => (a.proName || a.name || '').localeCompare(b.proName || b.name || ''),
+};
+
+function renderPlayers(result) {
+  const panel = document.getElementById('tab-players');
   if (result.status !== 'fulfilled') return panelError(panel, result);
   const members = result.value.members || [];
   const positionCount = result.value.positionCount || {};
@@ -210,20 +298,102 @@ function renderMembers(result) {
     return;
   }
 
-  const nameOf = (m) => m.proName || m.name || 'Unknown';
-  const topScorers = [...members]
-    .sort((a, b) => num(b.goals) - num(a.goals))
-    .slice(0, 8)
-    .map((m) => ({ label: nameOf(m), value: num(m.goals) }));
-  const topAssists = [...members]
-    .sort((a, b) => num(b.assists) - num(a.assists))
-    .slice(0, 8)
-    .map((m) => ({ label: nameOf(m), value: num(m.assists) }));
+  playerFilterState = { pos: 'ALL', sort: 'goals', q: '' };
 
-  const rows = members
-    .map(
-      (m, i) => `
-      <tr class="member-row" data-idx="${i}" tabindex="0">
+  panel.innerHTML = `
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3>Position Mix</h3>
+        <div id="chart-positions"></div>
+      </div>
+    </div>
+    <div class="filter-row">
+      <div class="chip-group" id="pos-filter">
+        <button class="chip active" data-pos="ALL" type="button">All</button>
+        <button class="chip" data-pos="goalkeeper" type="button">GK</button>
+        <button class="chip" data-pos="defender" type="button">DEF</button>
+        <button class="chip" data-pos="midfielder" type="button">MID</button>
+        <button class="chip" data-pos="forward" type="button">FWD</button>
+      </div>
+      <input id="member-filter" type="text" placeholder="Filter roster by name..." style="min-width:200px" />
+      <select id="player-sort" class="sort-select">
+        <option value="goals">Sort: Goals</option>
+        <option value="assists">Sort: Assists</option>
+        <option value="rating">Sort: Avg rating</option>
+        <option value="motm">Sort: MOTM</option>
+        <option value="name">Sort: Name</option>
+      </select>
+    </div>
+    <p class="chart-caption">
+      The name filter searches this club's roster only -- EA's API has no way to look up a player
+      across clubs, only within a club you already have loaded. Click a player for their full stat breakdown.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th><th>Position</th><th>GP</th><th>Goals</th>
+          <th>Assists</th><th>Avg Rating</th><th>MOTM</th><th>Career Goals</th>
+        </tr>
+      </thead>
+      <tbody id="players-body"></tbody>
+    </table>
+  `;
+
+  document.getElementById('pos-filter').addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn) return;
+    document.querySelectorAll('#pos-filter .chip').forEach((c) => c.classList.remove('active'));
+    btn.classList.add('active');
+    playerFilterState.pos = btn.dataset.pos;
+    renderPlayersTable(members);
+  });
+  document.getElementById('member-filter').addEventListener('input', (e) => {
+    playerFilterState.q = e.target.value.trim().toLowerCase();
+    renderPlayersTable(members);
+  });
+  document.getElementById('player-sort').addEventListener('change', (e) => {
+    playerFilterState.sort = e.target.value;
+    renderPlayersTable(members);
+  });
+
+  renderPlayersTable(members);
+
+  Charts.donutChart(document.getElementById('chart-positions'), {
+    data: [
+      { label: 'Goalkeeper', value: num(positionCount.goalkeeper), color: 'var(--series-1)' },
+      { label: 'Defender', value: num(positionCount.defender), color: 'var(--series-2)' },
+      { label: 'Midfielder', value: num(positionCount.midfielder), color: 'var(--series-3)' },
+      { label: 'Forward', value: num(positionCount.forward), color: 'var(--series-4)' },
+    ],
+  });
+}
+
+function renderPlayersTable(members) {
+  const body = document.getElementById('players-body');
+  const { pos, q, sort } = playerFilterState;
+
+  const filtered = members
+    .filter((m) => {
+      const mp = (m.favoritePosition || m.proPos || '').toLowerCase();
+      if (pos !== 'ALL' && mp !== pos) return false;
+      if (q) {
+        const hay = `${m.proName ?? ''} ${m.name ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort(PLAYER_SORTERS[sort]);
+
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="8" class="chart-empty" style="padding:1rem 0.75rem">No players match this filter.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = filtered
+    .map((m) => {
+      const idx = members.indexOf(m);
+      return `
+      <tr class="member-row" data-idx="${idx}" tabindex="0">
         <td>${esc(m.proName ?? m.name ?? '-')}</td>
         <td>${esc(m.favoritePosition ?? m.proPos ?? '-')}</td>
         <td>${m.gamesPlayed ?? '-'}</td>
@@ -232,45 +402,11 @@ function renderMembers(result) {
         <td>${m.ratingAve ?? '-'}</td>
         <td>${m.manOfTheMatch ?? '-'}</td>
         <td>${m.careerGoals ?? '-'}</td>
-      </tr>`
-    )
+      </tr>`;
+    })
     .join('');
 
-  panel.innerHTML = `
-    <div class="chart-row">
-      <div class="chart-card">
-        <h3>Top Scorers</h3>
-        <div id="chart-scorers"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Top Assists</h3>
-        <div id="chart-assists"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Position Mix</h3>
-        <div id="chart-positions"></div>
-      </div>
-    </div>
-    <div class="search-row">
-      <input id="member-filter" type="text" placeholder="Filter this club's roster by name..." />
-      <p class="chart-caption">
-        Searches this club's roster only -- EA's API has no way to look up a
-        player across clubs, only within a club you already have loaded.
-      </p>
-    </div>
-    <p class="chart-caption">Click a player for their full stat breakdown.</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th><th>Position</th><th>GP</th><th>Goals</th>
-          <th>Assists</th><th>Avg Rating</th><th>MOTM</th><th>Career Goals</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-
-  panel.querySelectorAll('.member-row').forEach((row) => {
+  body.querySelectorAll('.member-row').forEach((row) => {
     row.addEventListener('click', () => togglePlayerDetail(row, members[Number(row.dataset.idx)]));
     row.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -278,38 +414,6 @@ function renderMembers(result) {
         togglePlayerDetail(row, members[Number(row.dataset.idx)]);
       }
     });
-  });
-
-  document.getElementById('member-filter').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    panel.querySelectorAll('.member-row').forEach((row) => {
-      const m = members[Number(row.dataset.idx)];
-      const hay = `${m.proName ?? ''} ${m.name ?? ''}`.toLowerCase();
-      const isMatch = !q || hay.includes(q);
-      row.style.display = isMatch ? '' : 'none';
-      if (!isMatch) {
-        const next = row.nextElementSibling;
-        if (next?.classList.contains('member-detail-row')) next.remove();
-        row.classList.remove('expanded');
-      }
-    });
-  });
-
-  Charts.hBarChart(document.getElementById('chart-scorers'), {
-    data: topScorers,
-    color: 'var(--series-1)',
-  });
-  Charts.hBarChart(document.getElementById('chart-assists'), {
-    data: topAssists,
-    color: 'var(--series-2)',
-  });
-  Charts.donutChart(document.getElementById('chart-positions'), {
-    data: [
-      { label: 'Goalkeeper', value: num(positionCount.goalkeeper), color: 'var(--series-1)' },
-      { label: 'Defender', value: num(positionCount.defender), color: 'var(--series-2)' },
-      { label: 'Midfielder', value: num(positionCount.midfielder), color: 'var(--series-3)' },
-      { label: 'Forward', value: num(positionCount.forward), color: 'var(--series-4)' },
-    ],
   });
 }
 
@@ -474,6 +578,16 @@ function togglePlayerDetail(row, member) {
           <p class="chart-caption">Oldest &rarr; most recent match.</p>
         </div>
       </div>
+      <div class="chart-row">
+        <div class="chart-card">
+          <h3>Rating &mdash; Full Tracked History</h3>
+          <p class="chart-caption">
+            Every match we've captured for this player since tracking began (see Competition),
+            not just the recent sample above.
+          </p>
+          <div id="history-rating-${idx}"></div>
+        </div>
+      </div>
       ${member.favoritePosition === 'goalkeeper' ? goalkeeperSectionHtml(idx) : ''}
     </div>
   `;
@@ -520,6 +634,8 @@ function togglePlayerDetail(row, member) {
     });
   }
 
+  loadPlayerHistoryTrend(member.name, idx);
+
   if (member.favoritePosition === 'goalkeeper') {
     const summary = document.getElementById(`gk-summary-${idx}`);
     if (agg.gkMatches === 0) {
@@ -561,6 +677,35 @@ function goalkeeperSectionHtml(idx) {
   `;
 }
 
+// A player's rating across every match we've ever tracked for this club
+// (see db.py's match_players / player_trend) -- deeper than the "matches
+// currently loaded" sample above, but only goes back to whenever this
+// server started tracking the club. Loaded on demand, not on every roster
+// render, since most players won't have this drawer opened.
+async function loadPlayerHistoryTrend(playerName, idx) {
+  const container = document.getElementById(`history-rating-${idx}`);
+  if (!container) return;
+  try {
+    const data = await api(`/api/history/players?name=${encodeURIComponent(playerName)}`);
+    const rows = data.matches || [];
+    if (!rows.length) {
+      Charts.emptyState(container, 'No tracked history for this player yet.');
+      return;
+    }
+    Charts.sparkline(container, {
+      values: rows.map((r) => num(r.rating)),
+      color: 'var(--series-3)',
+      formatValue: (v) => v.toFixed(1),
+    });
+  } catch (err) {
+    Charts.emptyState(container, err.message);
+  }
+}
+
+// --------------------------------------------------------------------------
+// Matches
+// --------------------------------------------------------------------------
+
 const MATCH_TYPES = [
   { value: 'leagueMatch', label: 'League' },
   { value: 'playoffMatch', label: 'Playoff' },
@@ -593,14 +738,18 @@ function wireMatchControls(matchType, count) {
   });
 }
 
-// Team-level totals for OUR club from one match's per-player breakdown --
-// used for the shots/pass-accuracy trend charts and the MOTM leaderboard.
-function teamMatchAggregate(rawMatch) {
-  const roster = Object.values(rawMatch.players?.[currentClubId] || {});
+// Team-level totals from one match's per-player breakdown, for a given
+// club -- used for the shots/pass-accuracy trend charts, the MOTM
+// leaderboard, and the team-vs-team comparison strip in the match detail
+// (which needs this for BOTH sides, not just our own club).
+function teamMatchAggregate(rawMatch, clubId) {
+  const roster = Object.values(rawMatch.players?.[clubId] || {});
   return {
     shots: roster.reduce((s, p) => s + num(p.shots), 0),
     passesMade: roster.reduce((s, p) => s + num(p.passesmade), 0),
     passAttempts: roster.reduce((s, p) => s + num(p.passattempts), 0),
+    tacklesMade: roster.reduce((s, p) => s + num(p.tacklesmade), 0),
+    tackleAttempts: roster.reduce((s, p) => s + num(p.tackleattempts), 0),
     redCards: roster.reduce((s, p) => s + num(p.redcards), 0),
     motm: roster.find((p) => num(p.mom) === 1)?.playername ?? null,
   };
@@ -637,7 +786,7 @@ function renderMatches(result, matchType = 'leagueMatch', count = 10) {
       const when = m.timeAgo ? `${m.timeAgo.number} ${m.timeAgo.unit} ago` : '-';
       const forfeit = usClub?.winnerByDnf === '1' || oppClub?.winnerByDnf === '1';
       const cleanSheet = !forfeit && oppScore === 0;
-      const team = teamMatchAggregate(m);
+      const team = teamMatchAggregate(m, currentClubId);
       return { when, outcome, usScore, oppScore, oppName, forfeit, cleanSheet, team };
     });
 
@@ -695,7 +844,7 @@ function renderMatches(result, matchType = 'leagueMatch', count = 10) {
           </div>
         </div>
       </div>
-      <p class="chart-caption">Click a match for each player's individual stats from that game.</p>
+      <p class="chart-caption">Click a match for a team-vs-team comparison and each player's individual stats.</p>
       <table>
         <thead><tr><th>When</th><th>Result</th><th>Score</th><th>Opponent</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -836,6 +985,24 @@ function rosterTableHtml(rawMatch, clubId, isOwnClub) {
     </div>`;
 }
 
+// A single "us vs them" stat row for the match-detail comparison strip --
+// a thin two-color bar split proportionally, values leading (dataviz spec).
+function compareStatHtml(label, usVal, oppVal, unit = '') {
+  const total = usVal + oppVal || 1;
+  return `
+    <div class="compare-stat">
+      <div class="compare-label">${esc(label)}</div>
+      <div class="compare-row">
+        <span class="compare-value">${usVal}${unit}</span>
+        <div class="compare-bar">
+          <span style="width:${((usVal / total) * 100).toFixed(0)}%"></span>
+          <span style="width:${((oppVal / total) * 100).toFixed(0)}%"></span>
+        </div>
+        <span class="compare-value">${oppVal}${unit}</span>
+      </div>
+    </div>`;
+}
+
 function toggleMatchDetail(row, rawMatch) {
   const idx = row.dataset.idx;
   const existing = row.nextElementSibling;
@@ -858,8 +1025,32 @@ function toggleMatchDetail(row, rawMatch) {
   const orderedIds = [currentClubId, ...clubIds.filter((id) => id !== currentClubId)].filter((id) =>
     clubIds.includes(id)
   );
+  const oppId = orderedIds.find((id) => id !== currentClubId);
+
+  let compareHtml = '';
+  if (oppId) {
+    const us = teamMatchAggregate(rawMatch, currentClubId);
+    const opp = teamMatchAggregate(rawMatch, oppId);
+    const oppName = esc(rawMatch.clubs?.[oppId]?.details?.name ?? 'Opponent');
+    const usPassAcc = us.passAttempts ? Math.round((us.passesMade / us.passAttempts) * 100) : 0;
+    const oppPassAcc = opp.passAttempts ? Math.round((opp.passesMade / opp.passAttempts) * 100) : 0;
+    const usTackleAcc = us.tackleAttempts ? Math.round((us.tacklesMade / us.tackleAttempts) * 100) : 0;
+    const oppTackleAcc = opp.tackleAttempts ? Math.round((opp.tacklesMade / opp.tackleAttempts) * 100) : 0;
+    compareHtml = `
+      <div class="compare-head">
+        <span class="compare-team">Your club</span>
+        <span class="compare-vs">Team totals</span>
+        <span class="compare-team">${oppName}</span>
+      </div>
+      <div class="team-compare">
+        ${compareStatHtml('Shots', us.shots, opp.shots)}
+        ${compareStatHtml('Pass accuracy', usPassAcc, oppPassAcc, '%')}
+        ${compareStatHtml('Tackle accuracy', usTackleAcc, oppTackleAcc, '%')}
+      </div>`;
+  }
 
   td.innerHTML = `
+    ${compareHtml}
     <div class="chart-row match-detail">
       ${orderedIds.map((id) => rosterTableHtml(rawMatch, id, id === currentClubId)).join('')}
     </div>
@@ -869,115 +1060,168 @@ function toggleMatchDetail(row, rawMatch) {
   row.after(detailRow);
 }
 
-// The History tab reads from our own accumulated SQLite copy (see
-// db.py/poll.py), not a live EA call -- so it can show trends beyond
-// whatever slice of matches EA currently happens to expose. It only ever
-// gets deeper going forward from whenever a club was first tracked; there's
-// no backfill, and the UI says so rather than implying more than we have.
-function renderHistory(divisionResult, matchesResult, playersResult) {
-  const panel = document.getElementById('tab-history');
-  if (divisionResult.status !== 'fulfilled') return panelError(panel, divisionResult);
+// --------------------------------------------------------------------------
+// Competition -- our own divisional progress (EA has no full league table
+// to show), plus a head-to-head record against every club we've actually
+// played, built from tracked match history (see db.py's rival_records).
+// --------------------------------------------------------------------------
 
-  const trackedSince = divisionResult.value.trackedSince;
-  if (!trackedSince) {
-    panel.innerHTML = `
-      <p>This club isn't being tracked yet, so there's no history to show.</p>
-      <p class="chart-caption">
-        History only accumulates going forward from when a club is added to
-        this server's tracked-clubs list -- it can't be backfilled from
-        before that, since EA doesn't expose match data that old.
-      </p>
-    `;
-    return;
+// EA Sports FC Pro Clubs has 10 divisions as of this writing -- undocumented
+// by EA (see ea_client.py), so this is a reasonable default rather than a
+// hard fact; the ladder extends past it automatically if a club's current
+// or best division ever reports higher, rather than silently truncating.
+const DIVISION_COUNT_DEFAULT = 10;
+
+function renderDivisionLadder(container, current, best) {
+  const cur = num(current);
+  const bestNum = num(best);
+  const top = Math.max(DIVISION_COUNT_DEFAULT, cur, bestNum, 1);
+  const rows = [];
+  for (let d = 1; d <= top; d++) {
+    const isCurrent = cur > 0 && d === cur;
+    const isBest = bestNum > 0 && d === bestNum;
+    rows.push(`
+      <div class="rung ${isCurrent ? 'current' : ''} ${isBest ? 'best' : ''}">
+        <span class="rn">D${d}</span>
+        <div class="bar"><span style="width:${isCurrent ? 100 : isBest ? 45 : 8}%"></span></div>
+        <span class="rung-note">${isCurrent ? 'Current' : isBest ? 'Best finish' : ''}</span>
+      </div>`);
   }
+  container.innerHTML = `<div class="ladder">${rows.reverse().join('')}</div>`;
+}
 
-  const snapshots = divisionResult.value.snapshots || [];
-  const matches = matchesResult.status === 'fulfilled' ? matchesResult.value.matches || [] : [];
-  const players = playersResult.status === 'fulfilled' ? playersResult.value.players || [] : [];
-
-  const since = new Date(trackedSince * 1000).toLocaleDateString();
-  const playerOptions = players.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+function renderCompetition(standingsResult, historyDivisionResult, historyMatchesResult, rivalsResult) {
+  const panel = document.getElementById('tab-competition');
+  if (standingsResult.status !== 'fulfilled') return panelError(panel, standingsResult);
+  const s = standingsResult.value;
 
   panel.innerHTML = `
-    <p class="chart-caption">
-      Tracking since ${since} &middot; ${matches.length} match${matches.length === 1 ? '' : 'es'}
-      captured so far. This deepens over time -- it isn't backfilled.
+    <p style="color:var(--muted)">
+      EA's Pro Clubs API does not expose a full league table -- only your club's own divisional
+      progress, and, below, your own head-to-head record against clubs you've actually played.
     </p>
     <div class="chart-row">
       <div class="chart-card">
-        <h3>Skill Rating Over Time</h3>
-        <div id="chart-hist-rating"></div>
+        <h3>Division Ladder</h3>
+        <div id="chart-ladder"></div>
       </div>
       <div class="chart-card">
-        <h3>Cumulative Win Rate</h3>
-        <div id="chart-hist-record"></div>
+        <h3>Promotions vs Relegations</h3>
+        <div id="chart-promo"></div>
       </div>
     </div>
+    <div class="stat-grid">
+      ${statCard('Current Division', s.currentDivision)}
+      ${statCard('Points', s.points)}
+      ${statCard('Best Division', s.bestDivision)}
+      ${statCard('Best Finish', s.bestFinishGroup)}
+      ${statCard('Promotions', s.promotions)}
+      ${statCard('Relegations', s.relegations)}
+      ${statCard('League Appearances', s.leagueAppearances)}
+      ${statCard('Unbeaten Streak', s.unbeatenstreak)}
+    </div>
+    <div class="chart-row" id="competition-history-row"></div>
     <div class="chart-row">
-      <div class="chart-card">
-        <h3>Player Trend (full tracked history)</h3>
-        <select id="history-player-select">
-          <option value="">Choose a player...</option>
-          ${playerOptions}
-        </select>
-        <div id="chart-hist-player" style="margin-top: 0.75rem"></div>
+      <div class="chart-card" style="flex-basis:100%">
+        <h3>Head-to-Head Record</h3>
+        <p class="chart-caption">
+          Every club we've faced since tracking began -- built from our own tracked match history,
+          not EA's API (which has no cross-club lookup at all).
+        </p>
+        <div id="rivals-wrap"></div>
       </div>
     </div>
   `;
 
-  const ratingEl = document.getElementById('chart-hist-rating');
-  if (snapshots.length) {
-    Charts.trendBarChart(ratingEl, {
-      data: snapshots.map((s) => ({
-        label: new Date(s.captured_at * 1000).toLocaleString(),
-        value: num(s.skill_rating),
-      })),
-      color: 'var(--series-1)',
-    });
-  } else {
-    Charts.emptyState(ratingEl, 'Not enough snapshots yet -- check back after the next poll.');
-  }
+  renderDivisionLadder(document.getElementById('chart-ladder'), s.currentDivision, s.bestDivision);
 
-  const recordEl = document.getElementById('chart-hist-record');
-  if (matches.length) {
-    let wins = 0;
-    const cumData = matches.map((m, i) => {
-      if (m.outcome === 'W') wins += 1;
-      return { label: `vs ${m.opp_name}`, value: Math.round((wins / (i + 1)) * 100) };
-    });
-    Charts.trendBarChart(recordEl, { data: cumData, color: 'var(--status-good)', unit: '%' });
-  } else {
-    Charts.emptyState(recordEl, 'No matches captured yet -- check back after the next poll.');
-  }
-
-  document.getElementById('history-player-select').addEventListener('change', (e) => {
-    loadPlayerHistory(e.target.value);
+  Charts.vBarChart(document.getElementById('chart-promo'), {
+    data: [
+      { label: 'Promotions', value: num(s.promotions), color: 'var(--status-good)' },
+      { label: 'Relegations', value: num(s.relegations), color: 'var(--status-critical)' },
+    ],
   });
+
+  const historyRow = document.getElementById('competition-history-row');
+  const trackedSince = historyDivisionResult.status === 'fulfilled' ? historyDivisionResult.value.trackedSince : null;
+  if (!trackedSince) {
+    historyRow.innerHTML = `
+      <div class="chart-card" style="flex-basis:100%">
+        <p>This club isn't being tracked yet, so there's no season-long history to show here.</p>
+        <p class="chart-caption">
+          History only accumulates going forward from when a club is added to this server's
+          tracked-clubs list -- it can't be backfilled from before that, since EA doesn't expose
+          match data that old.
+        </p>
+      </div>`;
+  } else {
+    const matches = historyMatchesResult.status === 'fulfilled' ? (historyMatchesResult.value.matches || []) : [];
+    const since = new Date(trackedSince * 1000).toLocaleDateString();
+    historyRow.innerHTML = `
+      <div class="chart-card" style="flex-basis:100%">
+        <h3>Cumulative Win Rate</h3>
+        <p class="chart-caption">Tracking since ${since} &middot; ${matches.length} match${matches.length === 1 ? '' : 'es'} captured so far.</p>
+        <div id="chart-hist-record"></div>
+      </div>`;
+    const recordEl = document.getElementById('chart-hist-record');
+    if (matches.length) {
+      let wins = 0;
+      const cumData = matches.map((m, i) => {
+        if (m.outcome === 'W') wins += 1;
+        return { label: `vs ${m.opp_name}`, value: Math.round((wins / (i + 1)) * 100) };
+      });
+      Charts.trendBarChart(recordEl, { data: cumData, color: 'var(--status-good)', unit: '%' });
+    } else {
+      Charts.emptyState(recordEl, 'No matches captured yet -- check back after the next poll.');
+    }
+  }
+
+  renderRivalsTable(rivalsResult);
 }
 
-async function loadPlayerHistory(name) {
-  const container = document.getElementById('chart-hist-player');
-  if (!name) {
-    container.innerHTML = '';
+function renderRivalsTable(rivalsResult) {
+  const wrap = document.getElementById('rivals-wrap');
+  if (rivalsResult.status !== 'fulfilled') {
+    wrap.innerHTML = `<p style="color:#e05a5a">${esc(rivalsResult.reason.message)}</p>`;
     return;
   }
-  container.innerHTML = '<p class="chart-empty">Loading...</p>';
-  try {
-    const data = await api(`/api/history/players?name=${encodeURIComponent(name)}`);
-    const rows = data.matches || [];
-    if (!rows.length) {
-      Charts.emptyState(container, 'No tracked matches for this player yet.');
-      return;
-    }
-    container.innerHTML = '<div id="chart-hist-player-inner"></div>';
-    Charts.sparkline(document.getElementById('chart-hist-player-inner'), {
-      values: rows.map((r) => num(r.rating)),
-      color: 'var(--series-3)',
-      formatValue: (v) => v.toFixed(1),
-    });
-  } catch (err) {
-    container.innerHTML = `<p style="color:#e05a5a">${esc(err.message)}</p>`;
+  const rivals = rivalsResult.value.rivals || [];
+  if (!rivals.length) {
+    wrap.innerHTML = '<p class="chart-empty">No tracked matches yet -- check back after the next poll.</p>';
+    return;
   }
+
+  const outcomeColor = (o) => (o === 'W' ? 'var(--status-good)' : o === 'L' ? 'var(--status-critical)' : 'var(--status-neutral)');
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Club</th><th>Played</th><th>Record</th><th>GF</th><th>GA</th><th>Diff</th><th>Last Result</th></tr>
+      </thead>
+      <tbody>
+        ${rivals
+          .map((r) => {
+            const diff = r.gf - r.ga;
+            return `
+          <tr>
+            <td>${esc(r.name)}</td>
+            <td>${r.played}</td>
+            <td>
+              <div class="rival-bar" title="${r.wins}W ${r.draws}D ${r.losses}L">
+                <span style="width:${(r.wins / r.played) * 100}%"></span>
+                <span style="width:${(r.draws / r.played) * 100}%"></span>
+                <span style="width:${(r.losses / r.played) * 100}%"></span>
+              </div>
+            </td>
+            <td>${r.gf}</td>
+            <td>${r.ga}</td>
+            <td>${diff > 0 ? `+${diff}` : diff}</td>
+            <td><span style="color:${outcomeColor(r.last_outcome)}; font-weight:700">${esc(r.last_outcome ?? '-')}</span></td>
+          </tr>`;
+          })
+          .join('')}
+      </tbody>
+    </table>`;
 }
 
 // This site tracks exactly one club, configured server-side (CLUB_ID /
