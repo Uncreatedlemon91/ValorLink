@@ -87,6 +87,64 @@ def test_update_article_keeps_category_if_not_given():
         assert updated.category == "News"
 
 
+def test_create_article_defaults_focal_point_to_center():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="No Focal Given", summary="", body_html="<p>x</p>",
+            cover_image=None, published=True, author=AUTHOR,
+        )
+        assert article.cover_focal_x == 50
+        assert article.cover_focal_y == 50
+
+
+def test_create_article_stores_given_focal_point():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Focal Given", summary="", body_html="<p>x</p>",
+            cover_image="data:image/png;base64,x", published=True, author=AUTHOR,
+            cover_focal_x="18.5", cover_focal_y="82",
+        )
+        assert article.cover_focal_x == 18.5
+        assert article.cover_focal_y == 82.0
+
+
+def test_create_article_clamps_out_of_range_focal_point():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Focal Out Of Range", summary="", body_html="<p>x</p>",
+            cover_image=None, published=True, author=AUTHOR,
+            cover_focal_x="150", cover_focal_y="-30",
+        )
+        assert article.cover_focal_x == 100
+        assert article.cover_focal_y == 0
+
+
+def test_create_article_falls_back_to_center_on_garbage_focal_point():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Focal Garbage", summary="", body_html="<p>x</p>",
+            cover_image=None, published=True, author=AUTHOR,
+            cover_focal_x="not-a-number", cover_focal_y=None,
+        )
+        assert article.cover_focal_x == 50
+        assert article.cover_focal_y == 50
+
+
+def test_update_article_can_change_focal_point_without_a_new_image():
+    with database.get_session() as session:
+        article = services.create_article(
+            session, title="Reposition Me", summary="", body_html="<p>x</p>",
+            cover_image="data:image/png;base64,x", published=True, author=AUTHOR,
+        )
+        updated = services.update_article(
+            session, article, title="Reposition Me", summary="", body_html="<p>x</p>",
+            cover_image=None, published=True, cover_focal_x="10", cover_focal_y="90",
+        )
+        assert updated.cover_image == "data:image/png;base64,x"  # unchanged
+        assert updated.cover_focal_x == 10
+        assert updated.cover_focal_y == 90
+
+
 def test_duplicate_titles_get_unique_slugs():
     with database.get_session() as session:
         first = services.create_article(

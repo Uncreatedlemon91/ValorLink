@@ -56,6 +56,17 @@ def _initials(name: str, limit: int = 3) -> str:
     return (letters[:limit] or "?").upper()
 
 
+def _focal_position(article) -> str:
+    """CSS object-position/background-position value for an article's
+    cover image -- the same image gets cropped to several different aspect
+    ratios across the site (home hero, article header, card thumbnails),
+    so a plain center crop often loses the part that matters. Falls back
+    to dead-center for rows saved before this field existed."""
+    x = article.cover_focal_x if article.cover_focal_x is not None else 50
+    y = article.cover_focal_y if article.cover_focal_y is not None else 50
+    return f"{x}% {y}%"
+
+
 templates.env.globals["css_v"] = _asset_version()
 templates.env.globals["SITE_NAME"] = config.SITE_NAME
 templates.env.globals["SITE_TAGLINE"] = config.SITE_TAGLINE
@@ -63,6 +74,7 @@ templates.env.globals["OAUTH_ENABLED"] = config.OAUTH_ENABLED
 templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
 templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
 templates.env.globals["initials"] = _initials
+templates.env.globals["focal_position"] = _focal_position
 
 
 @app.on_event("startup")
@@ -200,6 +212,7 @@ def news_new_form(request: Request, _staff=Depends(auth.require_staff)):
 async def news_new(
     request: Request, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
     body_html: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
+    cover_focal_x: str = Form("50"), cover_focal_y: str = Form("50"),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
@@ -208,6 +221,7 @@ async def news_new(
         article = services.create_article(
             session, title=title, category=category, summary=summary, body_html=body_html,
             cover_image=cover, published=bool(published), author=staff,
+            cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
         return RedirectResponse(f"/news/{article.slug}", status_code=303)
@@ -245,6 +259,7 @@ def news_edit_form(request: Request, slug: str, _staff=Depends(auth.require_staf
 async def news_edit(
     request: Request, slug: str, title: str = Form(...), category: str = Form("News"), summary: str = Form(""),
     body_html: str = Form(...), published: str = Form(""), csrf_token: str = Form(...),
+    cover_focal_x: str = Form("50"), cover_focal_y: str = Form("50"),
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
@@ -258,6 +273,7 @@ async def news_edit(
         article = services.update_article(
             session, article, title=title, category=category, summary=summary, body_html=body_html,
             cover_image=cover, published=bool(published),
+            cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article updated.")
         return RedirectResponse(f"/news/{article.slug}", status_code=303)

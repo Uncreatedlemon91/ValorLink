@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
 
 from database import Base
 
@@ -36,6 +36,12 @@ class Article(Base):
     summary = Column(String, nullable=True)          # dek shown in list views
     body_html = Column(Text, nullable=False)
     cover_image = Column(Text, nullable=True)         # data URI
+    # Where the cover image should stay centered when it's cropped narrower
+    # than its native shape -- the home hero, the article header, and card
+    # thumbnails all crop it to a different aspect ratio (see focal_position
+    # in app.py). Percentages, 0-100; (50, 50) is a plain center crop.
+    cover_focal_x = Column(Float, nullable=False, server_default="50")
+    cover_focal_y = Column(Float, nullable=False, server_default="50")
     author_discord_id = Column(BigInteger, nullable=True)
     author_name = Column(String, nullable=False)
     author_avatar = Column(String, nullable=True)

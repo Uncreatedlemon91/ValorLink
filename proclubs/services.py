@@ -102,9 +102,19 @@ def get_article_by_id(session: Session, article_id: int) -> Article | None:
     return session.get(Article, article_id)
 
 
+def _clamp_focal(value) -> float:
+    """A focal-point coordinate is a percentage into the image (0-100);
+    anything unparseable or out of range just falls back to a plain center
+    crop rather than erroring the whole save over a cosmetic field."""
+    try:
+        return max(0.0, min(100.0, float(value)))
+    except (TypeError, ValueError):
+        return 50.0
+
+
 def create_article(session: Session, *, title: str, summary: str, body_html: str,
                     cover_image: str | None, published: bool, author: dict,
-                    category: str = "News") -> Article:
+                    category: str = "News", cover_focal_x=50, cover_focal_y=50) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -119,6 +129,8 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
         summary=summary.strip() or None,
         body_html=html_sanitize.sanitize(body_html),
         cover_image=cover_image,
+        cover_focal_x=_clamp_focal(cover_focal_x),
+        cover_focal_y=_clamp_focal(cover_focal_y),
         author_discord_id=author.get("id") or None,
         author_name=author.get("name", "Staff"),
         author_avatar=author.get("avatar"),
@@ -133,7 +145,7 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
 
 def update_article(session: Session, article: Article, *, title: str, summary: str,
                     body_html: str, cover_image: str | None, published: bool,
-                    category: str | None = None) -> Article:
+                    category: str | None = None, cover_focal_x=50, cover_focal_y=50) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -149,6 +161,8 @@ def update_article(session: Session, article: Article, *, title: str, summary: s
     article.body_html = html_sanitize.sanitize(body_html)
     if cover_image is not None:
         article.cover_image = cover_image
+    article.cover_focal_x = _clamp_focal(cover_focal_x)
+    article.cover_focal_y = _clamp_focal(cover_focal_y)
     if published and not article.published:
         article.published_at = datetime.utcnow()
     article.published = published

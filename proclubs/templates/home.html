@@ -3,7 +3,7 @@
 {% block content %}
 
 <section class="hero-featured {{ '' if (featured and featured.cover_image) else 'no-image' }}"
-         {% if featured and featured.cover_image %}style="background-image: url('{{ featured.cover_image }}');"{% endif %}>
+         {% if featured and featured.cover_image %}style="background-image: url('{{ featured.cover_image }}'); background-position: {{ focal_position(featured) }};"{% endif %}>
   <div class="hero-scrim"></div>
   <div class="hero-content">
     {% if featured %}
@@ -74,7 +74,7 @@
       {% for a in articles %}
         <a class="rail-card" href="/news/{{ a.slug }}">
           <div class="rail-card-image">
-            {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" />{% endif %}
+            {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
             {% if a.category == 'Match Highlight' %}<span class="play-badge">&#9658;</span>{% endif %}
           </div>
           <div class="rail-card-body">
@@ -111,7 +111,7 @@
       {% for a in highlights %}
         <a class="card article-card" href="/news/{{ a.slug }}">
           <div class="rail-card-image" style="aspect-ratio: 16/9;">
-            {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" />{% endif %}
+            {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
             <span class="play-badge">&#9658;</span>
           </div>
           <div class="body">

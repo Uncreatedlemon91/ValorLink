@@ -54,11 +54,13 @@ def _login_non_member(client, name="Outsider"):
     return client
 
 
-def _seed_article(*, title="Recap", body_html="<p>Great win.</p>", published=True) -> str:
+def _seed_article(*, title="Recap", body_html="<p>Great win.</p>", published=True,
+                   cover_image=None, cover_focal_x=50, cover_focal_y=50) -> str:
     with database.get_session() as session:
         article = services.create_article(
-            session, title=title, summary="", body_html=body_html, cover_image=None,
+            session, title=title, summary="", body_html=body_html, cover_image=cover_image,
             published=published, author={"id": 999, "name": "Coach", "avatar": None},
+            cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         return article.slug
 
@@ -120,6 +122,57 @@ def test_staff_can_publish_an_article(client):
 
     listing = client.get("/news")
     assert "Season Opener" in listing.text
+
+
+def test_staff_can_set_focal_point_when_publishing_an_article(client):
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    r = client.post("/news/new", data={
+        "title": "Focal Point Feature", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+        "cover_focal_x": "22.5", "cover_focal_y": "75",
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    edit = client.get("/news/focal-point-feature/edit")
+    assert 'id="cover_focal_x" value="22.5"' in edit.text
+    assert 'id="cover_focal_y" value="75.0"' in edit.text
+
+
+def test_focal_point_out_of_range_is_clamped_on_save(client):
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "Clamp Test", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+        "cover_focal_x": "500", "cover_focal_y": "-40",
+    }, follow_redirects=False)
+
+    edit = client.get("/news/clamp-test/edit")
+    assert 'id="cover_focal_x" value="100.0"' in edit.text
+    assert 'id="cover_focal_y" value="0.0"' in edit.text
+
+
+def test_article_cover_image_renders_with_its_focal_position(client):
+    slug = _seed_article(cover_image="data:image/png;base64,x", cover_focal_x=30, cover_focal_y=70)
+    detail = client.get(f"/news/{slug}")
+    assert 'style="object-position: 30.0% 70.0%;"' in detail.text
+
+
+def test_article_without_cover_image_has_no_focal_picker_on_edit(client):
+    slug = _seed_article(cover_image=None)
+    _login_staff(client)
+    edit = client.get(f"/news/{slug}/edit")
+    assert 'id="focal-picker" hidden' in edit.text
+
+
+def test_article_with_cover_image_shows_focal_picker_on_edit(client):
+    slug = _seed_article(cover_image="data:image/png;base64,x", cover_focal_x=15, cover_focal_y=85)
+    _login_staff(client)
+    edit = client.get(f"/news/{slug}/edit")
+    assert 'id="focal-picker" hidden' not in edit.text
+    assert "left: 15.0%" in edit.text
+    assert "top: 85.0%" in edit.text
 
 
 def test_draft_article_hidden_from_fans_visible_to_staff(client):
@@ -259,6 +312,29 @@ def test_news_detail_comment_prompt_links_invite_for_signed_out_and_non_members(
     _login_non_member(client)
     non_member = client.get(f"/news/{slug}")
     assert 'href="https://discord.gg/J4d7D5kDX8"' in non_member.text
+
+
+def test_editing_article_with_no_summary_does_not_prefill_the_literal_word_none(client):
+    # Regression: news_form.html used to prefill the summary input with
+    # `article.summary if article else ''`, which for an article that has
+    # a real summary of None (not "no article at all") rendered Jinja's
+    # str(None) into the value attribute -- editing and re-saving without
+    # touching that field then overwrote the actual NULL with the literal
+    # text "None", which went on to display everywhere the summary shows.
+    slug = _seed_article()  # default summary is unset -> None
+    _login_staff(client)
+    edit = client.get(f"/news/{slug}/edit")
+    assert 'id="summary"' in edit.text
+    assert 'value="None"' not in edit.text
+
+    token = _csrf(client, f"/news/{slug}/edit")
+    client.post(f"/news/{slug}/edit", data={
+        "title": "Recap", "summary": "", "body_html": "<p>Great win.</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    listing = client.get("/news")
+    assert "None" not in listing.text
 
 
 def test_article_category_defaults_and_can_be_set(client):
