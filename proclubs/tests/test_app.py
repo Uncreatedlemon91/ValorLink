@@ -116,8 +116,9 @@ def test_home_shows_most_recent_article_as_featured(client):
     # The most recently published article leads as the featured story...
     assert 'href="/news/second-post"' in home.text
     assert home.text.index("second-post") < home.text.index("first-post")
-    # ...and doesn't also appear a second time in the "Latest news" grid.
-    assert home.text.count('href="/news/second-post"') == 1
+    # ...linked twice within the hero itself (headline + CTA button), but
+    # not a third time from the "Latest news" rail below it.
+    assert home.text.count('href="/news/second-post"') == 2
 
 
 def test_article_category_defaults_and_can_be_set(client):
