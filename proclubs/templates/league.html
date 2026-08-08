@@ -70,6 +70,20 @@
       </div>
       <p class="league-table-footnote">{{ roster_size }} of {{ max_teams }} table slots filled.</p>
     {% endif %}
+
+    {% if excluded %}
+      <div class="league-excluded">
+        <p class="league-excluded-head">
+          {{ excluded | length }} more tracked club{{ 's' if excluded | length != 1 else '' }}
+          not shown above (different division, or not polled yet):
+        </p>
+        <ul class="league-excluded-list">
+          {% for e in excluded %}
+            <li>{{ e.label }} &middot; {% if e.division %}Division {{ e.division }}{% else %}not polled yet{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
   </div>
 {% endif %}
 {% endblock %}

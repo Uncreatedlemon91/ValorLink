@@ -1037,6 +1037,9 @@ pre {
 }
 .lt-no-form { color: var(--muted); }
 .league-table-footnote { margin: 0.75rem 0 0; color: var(--muted); font-size: 0.8rem; }
+.league-excluded { margin-top: 1.5rem; }
+.league-excluded-head { margin: 0 0 0.4rem; color: var(--muted); font-size: 0.82rem; }
+.league-excluded-list { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.82rem; display: grid; gap: 0.2rem; }
 
 /* --- Overview: explore cards, linking into the other three reports ------- */
 .explore-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem 0 0.5rem; }

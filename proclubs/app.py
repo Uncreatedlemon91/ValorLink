@@ -519,14 +519,30 @@ def stats_page(request: Request):
 @app.get("/league", response_class=HTMLResponse)
 def league_page(request: Request):
     table = []
+    excluded = []
     our_snapshot = None
     roster_size = 0
     if config.CLUB_ID:
         table = db.league_table(config.CLUB_PLATFORM, config.CLUB_ID)
         our_snapshot = db.latest_snapshot(config.CLUB_PLATFORM, config.CLUB_ID)
-        roster_size = len(db.league_roster(config.CLUB_PLATFORM))
+        roster = db.league_roster(config.CLUB_PLATFORM)
+        roster_size = len(roster)
+        # Clubs in the roster but not the main table -- either a different
+        # division (a real, working exclusion) or no snapshot yet (just
+        # added, hasn't been polled). league_table() only ever returns the
+        # first kind, so surface the difference here instead of a tracked
+        # club silently vanishing with no explanation (see README.md).
+        shown_ids = {row["club_id"] for row in table}
+        for entry in roster:
+            if entry["club_id"] in shown_ids:
+                continue
+            snap = db.latest_snapshot(config.CLUB_PLATFORM, entry["club_id"])
+            excluded.append({
+                "label": entry["label"] or entry["club_id"],
+                "division": snap.get("division") if snap else None,
+            })
     return templates.TemplateResponse(request, "league.html", _ctx(
-        request, club_id=config.CLUB_ID, table=table,
+        request, club_id=config.CLUB_ID, table=table, excluded=excluded,
         our_division=our_snapshot.get("division") if our_snapshot else None,
         max_teams=config.LEAGUE_TABLE_MAX_TEAMS, roster_size=roster_size,
     ))

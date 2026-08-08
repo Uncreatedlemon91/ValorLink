@@ -120,7 +120,10 @@ def test_league_page_renders_table_rows(client, monkeypatch):
          "played": 2, "team_size": 5, "form": ["L", "W"], "has_data": True},
     ])
     monkeypatch.setattr(appmod.db, "latest_snapshot", lambda platform, club_id: {"division": "3"})
-    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [1, 2])
+    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [
+        {"club_id": "c2", "label": "Rivals FC", "added_at": 1, "pinned": 0},
+        {"club_id": "8481799", "label": "YeeHaw FC", "added_at": 1, "pinned": 1},
+    ])
 
     r = client.get("/league")
     assert r.status_code == 200
@@ -133,6 +136,59 @@ def test_league_page_renders_table_rows(client, monkeypatch):
     # name, shown in the nav/footer well before the table itself).
     assert r.text.index('lt-name">Rivals FC') < r.text.index('lt-name">YeeHaw FC')
     assert 'class="lt-us-pill"' in r.text
+
+
+def test_league_page_explains_roster_members_hidden_by_division(client, monkeypatch):
+    # A club can be in the roster (we've played them) without appearing in
+    # the main table (different division right now) -- the page must say
+    # so explicitly rather than the club just silently not being there.
+    monkeypatch.setattr(config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
+        {"club_id": "8481799", "label": "YeeHaw FC", "is_us": True, "division": "8", "points": 10,
+         "played": 2, "team_size": 5, "form": ["L", "W"], "has_data": True},
+    ])
+
+    def fake_latest_snapshot(platform, club_id):
+        if club_id == "8481799":
+            return {"division": "8"}
+        return {"division": "5"}  # the other tracked club -- a different division
+
+    monkeypatch.setattr(appmod.db, "latest_snapshot", fake_latest_snapshot)
+    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [
+        {"club_id": "8481799", "label": "YeeHaw FC", "added_at": 1, "pinned": 1},
+        {"club_id": "c2", "label": "Rivals FC", "added_at": 2, "pinned": 0},
+    ])
+
+    r = client.get("/league")
+    assert r.status_code == 200
+    assert "1 more tracked club" in r.text
+    assert "not shown above" in r.text
+    assert "Rivals FC" in r.text
+    assert "Division 5" in r.text
+
+
+def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch):
+    monkeypatch.setattr(config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
+        {"club_id": "8481799", "label": "YeeHaw FC", "is_us": True, "division": "8", "points": 10,
+         "played": 2, "team_size": 5, "form": ["L", "W"], "has_data": True},
+    ])
+
+    def fake_latest_snapshot(platform, club_id):
+        if club_id == "8481799":
+            return {"division": "8"}
+        return None  # just added this run, not polled yet
+
+    monkeypatch.setattr(appmod.db, "latest_snapshot", fake_latest_snapshot)
+    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [
+        {"club_id": "8481799", "label": "YeeHaw FC", "added_at": 1, "pinned": 1},
+        {"club_id": "c2", "label": "Rivals FC", "added_at": 2, "pinned": 0},
+    ])
+
+    r = client.get("/league")
+    assert r.status_code == 200
+    assert "not polled yet" in r.text
+    assert "Rivals FC" in r.text
 
 
 def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatch):
