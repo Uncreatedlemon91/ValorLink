@@ -1016,6 +1016,28 @@ pre {
 .form-chip.D { background: rgba(107, 111, 122, 0.24); color: #c7cad2; }
 .form-chip.L { background: rgba(208, 59, 59, 0.18); color: #ef9494; }
 
+/* --- League table (auto-built from clubs we actually play, see db.py) --- */
+.league-table-card { padding: 0; overflow-x: auto; }
+.league-table { width: 100%; border-collapse: collapse; min-width: 520px; }
+.league-table th, .league-table td { padding: 0.75rem 1rem; text-align: left; }
+.league-table thead th {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.league-table tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+.league-table .lt-num { text-align: center; white-space: nowrap; }
+.league-table .lt-points { font-weight: 700; color: var(--text); }
+.league-table .lt-club { display: flex; align-items: center; gap: 0.65rem; }
+.lt-crest { width: 30px; height: 30px; font-size: 0.68rem; }
+.lt-name { font-weight: 600; }
+.lt-us td { background: rgba(76, 175, 125, 0.08); }
+.lt-us-pill {
+  display: inline-block; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+  background: var(--status-good); color: #fff; border-radius: 4px; padding: 0.05rem 0.35rem; margin-left: 0.35rem;
+}
+.lt-no-form { color: var(--muted); }
+.league-table-footnote { margin: 0.75rem 0 0; color: var(--muted); font-size: 0.8rem; }
+
 /* --- Overview: explore cards, linking into the other three reports ------- */
 .explore-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem 0 0.5rem; }
 @media (max-width: 900px) { .explore-grid { grid-template-columns: 1fr; } }

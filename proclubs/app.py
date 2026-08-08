@@ -513,6 +513,25 @@ def stats_page(request: Request):
     ))
 
 
+# --------------------------------------------------------------------------- #
+# League table (auto-built from clubs we actually play -- see db.py)
+# --------------------------------------------------------------------------- #
+@app.get("/league", response_class=HTMLResponse)
+def league_page(request: Request):
+    table = []
+    our_snapshot = None
+    roster_size = 0
+    if config.CLUB_ID:
+        table = db.league_table(config.CLUB_PLATFORM, config.CLUB_ID)
+        our_snapshot = db.latest_snapshot(config.CLUB_PLATFORM, config.CLUB_ID)
+        roster_size = len(db.league_roster(config.CLUB_PLATFORM))
+    return templates.TemplateResponse(request, "league.html", _ctx(
+        request, club_id=config.CLUB_ID, table=table,
+        our_division=our_snapshot.get("division") if our_snapshot else None,
+        max_teams=config.LEAGUE_TABLE_MAX_TEAMS, roster_size=roster_size,
+    ))
+
+
 def _stats_error(exc: ea_client.EAApiError) -> JSONResponse:
     status = exc.status_code if isinstance(exc.status_code, int) else 502
     return JSONResponse({"error": str(exc)}, status_code=status)
