@@ -365,6 +365,14 @@ it with `systemctl list-timers proclubs-poll.timer` and
 whenever a club is added here -- there's no way to backfill matches EA has
 already evicted from its own rolling window.
 
+This same run also maintains `/league` -- see
+`proclubs/README.md#the-league-table-auto-built-not-manually-curated` for
+how that table builds itself from real opponents rather than a manually
+curated list. No setup needed beyond what's already here, but it does mean
+poll runtime and EA API calls grow as more distinct opponents get polled
+(capped by `LEAGUE_TABLE_MAX_TEAMS` in `proclubs/.env`, default 25 --
+`proclubs/.env.example` has the details).
+
 **Discord Scheduled Events sync (optional, on top of the above).** Events
 scheduled in Discord (Server → Events → New Event) can mirror in as site
 fixtures automatically -- see `proclubs/README.md#discord-scheduled-events-sync`

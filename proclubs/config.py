@@ -23,6 +23,14 @@ SITE_TAGLINE = os.getenv("SITE_TAGLINE", "Pro Clubs")
 CLUB_PLATFORM = os.getenv("CLUB_PLATFORM", "common-gen5")
 CLUB_ID = os.getenv("CLUB_ID", "")
 
+# --- League table (auto-built from clubs we actually play) ----------------- #
+# EA's API has no real league/region grouping to query (see ea_client.py), so
+# there's no way to ask it for "every team in NA East 2" -- instead, poll.py
+# grows this roster on its own from real opponents (see db.sync_league_roster),
+# capped here so poll runtime and EA API load stay bounded regardless of how
+# many different clubs get faced over a season.
+LEAGUE_TABLE_MAX_TEAMS = int(os.getenv("LEAGUE_TABLE_MAX_TEAMS", "25"))
+
 # --- Discord OAuth2 (staff sign-in) ---------------------------------------- #
 # A single guild, unlike ValorLink's multi-tenant auth -- this site belongs to
 # one team's one Discord server, so "is this person staff" is just "do they

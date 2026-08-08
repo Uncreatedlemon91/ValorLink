@@ -320,6 +320,47 @@ against every club we've played).
   beyond that rolling window; history only accumulates from whenever polling
   started, never backfilled.
 
+## The league table (auto-built, not manually curated)
+
+`/league` shows every club we've actually played that's currently in the
+same division as us, sorted by points -- games played, points, squad size,
+and a last-5-results form strip per row. See `db.py`'s `league_table()`,
+`sync_league_roster()`, and `known_opponents()`.
+
+- **There's no roster to maintain.** EA's API has no region/league concept
+  to query (see the caveats above -- it can't even list every club in a
+  division, let alone a community-defined group like "NA East 2"), so
+  instead of a hand-edited file the table builds itself from real match
+  history: `record_matches()` already sees each opponent's real club ID
+  inside the raw match payload (`db.py`'s `matches.opp_club_id` column),
+  it's just never been persisted before this. Every poll, any newly-seen
+  opponent gets folded into the table.
+- **Capped at `LEAGUE_TABLE_MAX_TEAMS`** (default 25, `.env`-configurable)
+  so poll runtime and EA API load stay bounded no matter how many
+  different clubs get faced over a season. Our own club is pinned and
+  never evicted; once full, a newly-discovered opponent replaces whichever
+  non-pinned member currently has the fewest points in its own latest
+  snapshot -- see `sync_league_roster()`'s docstring for the exact tie-break
+  rules.
+- **Every club in the table gets polled like our own club does** --
+  `poll.py`'s `sync_and_poll_league_table()` runs `poll_club()` (division,
+  points, matches, and now squad size via `members/stats`) against each
+  league-table member after syncing membership, so its own "last 5" form
+  and points are real, current data, not just our record against them
+  (that's still `rival_records()`, a different report on the Competition
+  tab). This roughly triples-plus the number of EA API calls a poll run
+  makes once the table has real members -- accepted cost of the 25-team
+  cap, tune `LEAGUE_TABLE_MAX_TEAMS` down if that's too much load.
+- **"Same division" is the closest available proxy for a real bracket.**
+  EA's division number is a skill tier that moves independently per club
+  (see above), not a fixed league assignment -- filtering the table to
+  "whoever's currently in our division" is an approximation, not a
+  guarantee those clubs are in the same actual competition as us.
+- **No retroactive backfill.** A match recorded before `opp_club_id`
+  existed doesn't have one and is excluded from opponent discovery --
+  coverage starts building from whenever this shipped, same limitation as
+  every other tracked-history feature in this app.
+
 ## Project layout
 
 ```

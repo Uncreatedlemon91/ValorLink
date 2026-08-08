@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}League{% endblock %}
+{% block content %}
+{% if not club_id %}
+  <div class="page narrow">
+    <div class="card empty-state">
+      The league table isn't configured on this deployment yet. Set <code>CLUB_ID</code>
+      and <code>CLUB_PLATFORM</code> in the environment to enable this page.
+    </div>
+  </div>
+{% else %}
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1>League table</h1>
+        <p class="page-lede">
+          {% if our_division %}
+            Every club we've faced currently in Division {{ our_division }}, built automatically from real matches --
+          {% else %}
+            Every club we've faced --
+          {% endif %}
+          not a manually curated list, and not EA's own leaderboard (it doesn't expose one). Up to
+          {{ max_teams }} teams; the lowest-ranked drops off to make room for a newly-played opponent once full.
+        </p>
+      </div>
+    </div>
+
+    {% if not table %}
+      <div class="card empty-state">
+        No league data yet. This fills in automatically as matches are polled and recorded -- check back after
+        the next scheduled poll, or once we've played someone new.
+      </div>
+    {% else %}
+      <div class="card league-table-card">
+        <table class="league-table">
+          <thead>
+            <tr>
+              <th class="lt-club">Club</th>
+              <th class="lt-num">P</th>
+              <th class="lt-num">Pts</th>
+              <th class="lt-num">Squad</th>
+              <th class="lt-form">Last 5</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in table %}
+              <tr class="{{ 'lt-us' if row.is_us else '' }}">
+                <td class="lt-club">
+                  <span class="crest lt-crest">{{ initials(row.label) }}</span>
+                  <span class="lt-name">{{ row.label }}{% if row.is_us %} <span class="lt-us-pill">Us</span>{% endif %}</span>
+                </td>
+                <td class="lt-num">{{ row.played if row.has_data else '—' }}</td>
+                <td class="lt-num lt-points">{{ row.points if row.points is not none else '—' }}</td>
+                <td class="lt-num">{{ row.team_size if row.team_size is not none else '—' }}</td>
+                <td class="lt-form">
+                  {% if row.form %}
+                    <div class="form-strip" aria-label="Last {{ row.form | length }} results, oldest to newest">
+                      {% for outcome in row.form %}
+                        <span class="form-chip {{ outcome }}">{{ outcome }}</span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="lt-no-form">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="league-table-footnote">{{ roster_size }} of {{ max_teams }} table slots filled.</p>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

@@ -90,8 +90,49 @@ def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None
 
 
 def test_public_pages_load_signed_out(client):
-    for path in ["/", "/news", "/events", "/streamers", "/stats", "/login"]:
+    for path in ["/", "/news", "/events", "/streamers", "/stats", "/league", "/login"]:
         assert client.get(path).status_code == 200
+
+
+def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch):
+    monkeypatch.setattr(config, "CLUB_ID", "")
+    r = client.get("/league")
+    assert r.status_code == 200
+    assert "isn't configured" in r.text
+
+
+def test_league_page_shows_empty_state_when_no_data_yet(client, monkeypatch):
+    monkeypatch.setattr(config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [])
+    monkeypatch.setattr(appmod.db, "latest_snapshot", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [])
+    r = client.get("/league")
+    assert r.status_code == 200
+    assert "No league data yet" in r.text
+
+
+def test_league_page_renders_table_rows(client, monkeypatch):
+    monkeypatch.setattr(config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
+        {"club_id": "c2", "label": "Rivals FC", "is_us": False, "division": "3", "points": 15,
+         "played": 3, "team_size": 6, "form": ["W", "W", "D"], "has_data": True},
+        {"club_id": "8481799", "label": "YeeHaw FC", "is_us": True, "division": "3", "points": 10,
+         "played": 2, "team_size": 5, "form": ["L", "W"], "has_data": True},
+    ])
+    monkeypatch.setattr(appmod.db, "latest_snapshot", lambda platform, club_id: {"division": "3"})
+    monkeypatch.setattr(appmod.db, "league_roster", lambda platform: [1, 2])
+
+    r = client.get("/league")
+    assert r.status_code == 200
+    assert "Rivals FC" in r.text
+    assert "YeeHaw FC" in r.text
+    assert "Division 3" in r.text
+    assert "2 of" in r.text  # roster_size footnote
+    # Sorted by points, highest first -- match the specific table-row spans,
+    # not just any mention of "YeeHaw FC" (which is also the site's own brand
+    # name, shown in the nav/footer well before the table itself).
+    assert r.text.index('lt-name">Rivals FC') < r.text.index('lt-name">YeeHaw FC')
+    assert 'class="lt-us-pill"' in r.text
 
 
 def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatch):

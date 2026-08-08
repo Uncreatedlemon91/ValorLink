@@ -52,6 +52,19 @@ CREATE TABLE IF NOT EXISTS matches (
     PRIMARY KEY (match_id, club_id)
 );
 
+-- Membership of the auto-built league table (see sync_league_roster) --
+-- capped at LEAGUE_TABLE_MAX_TEAMS, populated from real opponents (see
+-- matches.opp_club_id below), not manually curated. `pinned` protects our
+-- own club's row from ever being evicted to make room for a new opponent.
+CREATE TABLE IF NOT EXISTS league_clubs (
+    platform TEXT NOT NULL,
+    club_id TEXT NOT NULL,
+    label TEXT,
+    added_at INTEGER NOT NULL,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (platform, club_id)
+);
+
 CREATE TABLE IF NOT EXISTS match_players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     match_id TEXT NOT NULL,
@@ -76,11 +89,33 @@ CREATE TABLE IF NOT EXISTS match_players (
 """
 
 
+# Columns added after this file's tables first shipped -- `CREATE TABLE IF
+# NOT EXISTS` doesn't touch a table that already exists, so an existing
+# history.db needs these added in place (never dropped/recreated: this data
+# isn't reconstructable, see the module docstring). (table, column, type).
+_MIGRATIONS = [
+    ("matches", "opp_club_id", "TEXT"),
+    ("club_snapshots", "team_size", "INTEGER"),
+]
+
+
+def _migrate(conn):
+    changed = False
+    for table, column, coltype in _MIGRATIONS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+            changed = True
+    if changed:
+        conn.commit()  # DDL isn't auto-committed by executescript's own commit above
+
+
 def _connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
 
 
@@ -91,7 +126,7 @@ def _num(v, cast=int):
         return None
 
 
-def record_snapshot(platform, club_id, stats, division):
+def record_snapshot(platform, club_id, stats, division, team_size=None):
     stats = stats or {}
     division = division or {}
     conn = _connect()
@@ -99,8 +134,9 @@ def record_snapshot(platform, club_id, stats, division):
         conn.execute(
             """INSERT INTO club_snapshots
                (platform, club_id, captured_at, division, best_division, points,
-                skill_rating, wins, losses, ties, goals, goals_against, promotions, relegations)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                skill_rating, wins, losses, ties, goals, goals_against, promotions,
+                relegations, team_size)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 platform,
                 club_id,
@@ -116,6 +152,7 @@ def record_snapshot(platform, club_id, stats, division):
                 stats.get("goalsAgainst"),
                 stats.get("promotions") or division.get("promotions"),
                 stats.get("relegations") or division.get("relegations"),
+                team_size,
             ),
         )
     conn.close()
@@ -149,10 +186,10 @@ def record_matches(platform, club_id, match_type, raw_matches):
             cur = conn.execute(
                 """INSERT OR IGNORE INTO matches
                    (match_id, platform, club_id, played_at, match_type, us_score, opp_score,
-                    opp_name, outcome, forfeit, captured_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    opp_name, outcome, forfeit, captured_at, opp_club_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (match_id, platform, club_id, played_at, match_type, us_score, opp_score,
-                 opp_name, outcome, forfeit, now),
+                 opp_name, outcome, forfeit, now, opp_id),
             )
             if not cur.rowcount:
                 continue  # already had this match from a previous poll
@@ -223,9 +260,10 @@ def match_history(platform, club_id, match_type=None):
 def rival_records(platform, club_id):
     """Head-to-head record against every opponent we've faced, aggregated
     from tracked match history -- this is the "Competition" report's
-    answer to a question EA's API can't: not a league table (EA doesn't
-    expose one, see ea_client.py), but our own actual results against each
-    club, built from data we're already capturing on every poll.
+    answer to a question EA's API can't answer directly (see ea_client.py):
+    our own actual results against each club, built from data we're
+    already capturing on every poll. See league_table() below for the
+    separate auto-built standings table across all tracked opponents.
 
     Forfeits are excluded from the tally the same way the rest of this
     module treats them -- a DNF isn't a real result to build a rivalry
@@ -253,6 +291,174 @@ def rival_records(platform, club_id):
         r["last_outcome"] = m["outcome"]
         r["last_played_at"] = m["played_at"]
     return sorted(rivals.values(), key=lambda r: -r["played"])
+
+
+def latest_snapshot(platform, club_id):
+    """Most recent club_snapshots row for a club, or None if it's never
+    been polled. Tie-broken by id, not just captured_at -- two snapshots
+    recorded within the same second (e.g. two polls in quick succession,
+    or just test setup) would otherwise be ambiguous."""
+    conn = _connect()
+    row = conn.execute(
+        """SELECT captured_at, division, best_division, points, skill_rating,
+                  wins, losses, ties, goals, goals_against, promotions,
+                  relegations, team_size
+           FROM club_snapshots WHERE platform=? AND club_id=?
+           ORDER BY captured_at DESC, id DESC LIMIT 1""",
+        (platform, club_id),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def known_opponents(platform, club_id):
+    """Every club we've actually played, with a real EA club id -- the
+    self-updating source for the league table (see sync_league_roster),
+    as opposed to a manually maintained roster. Matches recorded before
+    matches.opp_club_id existed won't have one and are excluded -- not
+    backfillable, see the migration note above SCHEMA."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT DISTINCT opp_club_id AS club_id, opp_name AS label
+           FROM matches WHERE platform=? AND club_id=? AND opp_club_id IS NOT NULL""",
+        (platform, club_id),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def league_roster(platform):
+    """Current membership of the auto-built league table -- see
+    sync_league_roster(), which is what actually maintains this."""
+    conn = _connect()
+    rows = conn.execute(
+        "SELECT club_id, label, added_at, pinned FROM league_clubs WHERE platform=? ORDER BY added_at",
+        (platform,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
+    """Keeps league_clubs in sync with who we've actually played (see
+    known_opponents), capped at max_teams -- no manual roster to maintain.
+    Our own club is always present and pinned (protected from eviction).
+    Once full, a newly-discovered opponent replaces whichever non-pinned
+    member currently has the fewest points in their latest snapshot, ties
+    broken by whichever has been sitting in the table longest. A club with
+    no snapshot yet counts as the lowest possible, so an unpolled/unproven
+    member is the first to go if nothing else ranks lower -- except one
+    just added in this same call, which won't have had a chance to be
+    polled yet either; the added_at tiebreak protects it from immediately
+    evicting itself."""
+    our_club_id = str(our_club_id)
+    conn = _connect()
+    with conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO league_clubs (platform, club_id, label, added_at, pinned)
+               VALUES (?,?,?,?,1)""",
+            (platform, our_club_id, our_label, int(time.time())),
+        )
+        known_ids = {r["club_id"] for r in conn.execute(
+            "SELECT club_id FROM league_clubs WHERE platform=?", (platform,)
+        ).fetchall()}
+
+        def _points_for(club_id):
+            row = conn.execute(
+                """SELECT points FROM club_snapshots WHERE platform=? AND club_id=?
+                   ORDER BY captured_at DESC, id DESC LIMIT 1""",
+                (platform, club_id),
+            ).fetchone()
+            if not row or row["points"] is None:
+                return -1
+            try:
+                return int(float(row["points"]))
+            except (TypeError, ValueError):
+                return -1
+
+        opponents = conn.execute(
+            """SELECT DISTINCT opp_club_id AS club_id, opp_name AS label
+               FROM matches WHERE platform=? AND club_id=? AND opp_club_id IS NOT NULL""",
+            (platform, our_club_id),
+        ).fetchall()
+
+        for opp in opponents:
+            cid, label = opp["club_id"], opp["label"]
+            if cid in known_ids:
+                continue
+
+            count = conn.execute(
+                "SELECT COUNT(*) AS n FROM league_clubs WHERE platform=?", (platform,)
+            ).fetchone()["n"]
+
+            if count >= max_teams:
+                candidates = conn.execute(
+                    "SELECT club_id, added_at FROM league_clubs WHERE platform=? AND pinned=0",
+                    (platform,),
+                ).fetchall()
+                if not candidates:
+                    continue  # everyone left is pinned -- no room to make
+                evict = min(candidates, key=lambda r: (_points_for(r["club_id"]), r["added_at"]))
+                conn.execute(
+                    "DELETE FROM league_clubs WHERE platform=? AND club_id=?",
+                    (platform, evict["club_id"]),
+                )
+                known_ids.discard(evict["club_id"])
+
+            conn.execute(
+                "INSERT INTO league_clubs (platform, club_id, label, added_at, pinned) VALUES (?,?,?,?,0)",
+                (platform, cid, label, int(time.time())),
+            )
+            known_ids.add(cid)
+    conn.close()
+
+
+def recent_form(platform, club_id, limit=5):
+    """This club's last `limit` results, oldest of the batch first --
+    'W'/'L'/'D' per match_history()'s outcome field. Forfeits are skipped,
+    matching rival_records()'s treatment."""
+    history = [m for m in match_history(platform, club_id) if not m["forfeit"]]
+    return [m["outcome"] for m in history[-limit:]]
+
+
+def league_table(platform, our_club_id):
+    """The auto-built league table: every club in league_clubs with its
+    current division/points/record from its latest snapshot, filtered to
+    clubs currently in the SAME division as us. Division numbers are a
+    skill tier that moves independently per club (see ea_client.py) --
+    not a real league/region grouping, EA doesn't expose one -- so "same
+    division right now" is the closest available proxy for "who's
+    actually in our bracket." Sorted by points, highest first. A club
+    that's never been polled sorts last (unknown standing, not zero)."""
+    our_club_id = str(our_club_id)
+    rows = []
+    our_division = None
+    for entry in league_roster(platform):
+        snap = latest_snapshot(platform, entry["club_id"]) or {}
+        wins = _num(snap.get("wins")) or 0
+        losses = _num(snap.get("losses")) or 0
+        ties = _num(snap.get("ties")) or 0
+        is_us = entry["club_id"] == our_club_id
+        row = {
+            "club_id": entry["club_id"],
+            "label": entry["label"] or entry["club_id"],
+            "is_us": is_us,
+            "division": snap.get("division"),
+            "points": _num(snap.get("points")),
+            "played": wins + losses + ties,
+            "team_size": _num(snap.get("team_size")),
+            "form": recent_form(platform, entry["club_id"]),
+            "has_data": bool(snap),
+        }
+        if is_us:
+            our_division = row["division"]
+        rows.append(row)
+
+    if our_division is not None:
+        rows = [r for r in rows if r["division"] == our_division]
+
+    rows.sort(key=lambda r: r["points"] if r["points"] is not None else -1, reverse=True)
+    return rows
 
 
 def player_names(platform, club_id):
