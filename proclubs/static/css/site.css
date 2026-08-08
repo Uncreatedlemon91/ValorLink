@@ -992,7 +992,13 @@ pre {
 .match-row.expanded { background: rgba(76, 175, 125, 0.08); }
 .match-detail-row td { background: var(--bg); padding: 1rem; border-bottom: 1px solid var(--border); }
 .match-detail { align-items: flex-start; }
-.match-roster { flex: 1 1 460px; }
+/* min-width: 0 overrides .chart-card's own min-width: 240px -- without it
+   a flex item won't shrink below its content's natural size, so once this
+   card gets squeezed by its sibling the wide (white-space: nowrap) table
+   inside just spills out past the card's own edge instead of shrinking.
+   overflow-x then gives that table somewhere to go: a scrollbar inside the
+   card, not a bleed into the next column or off the page. */
+.match-roster { flex: 1 1 460px; min-width: 0; overflow-x: auto; }
 .mini-table { font-size: 0.8rem; }
 .mini-table th, .mini-table td { padding: 0.35rem 0.5rem; white-space: nowrap; }
 .match-controls { display: flex; gap: 0.5rem; }
