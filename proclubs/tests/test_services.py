@@ -572,15 +572,19 @@ def _discord_message(message_id, content="", video_url="https://cdn.discordapp.c
 
 def test_sync_clips_creates_new_clip_from_video_attachment():
     with database.get_session() as session:
-        result = services.sync_clips(session, "999", [_discord_message("m1", content="Nice goal")])
+        result = services.sync_clips(session, "999", [
+            _discord_message("m1", content="Nice goal", filename="EA SPORTS FC 25_Amazing Goal.mp4"),
+        ])
         assert result == {"created": 1, "updated": 0}
 
         clips = services.list_clips(session)
         assert len(clips) == 1
         assert clips[0].discord_message_id == "m1"
-        assert clips[0].title == "Nice goal"
+        # The title comes from the clip's own filename, not the chat
+        # message content (which is often blank, banter, or unrelated).
+        assert clips[0].title == "EA SPORTS FC 25 Amazing Goal"
         assert clips[0].video_url == "https://cdn.discordapp.com/attachments/1/2/clip.mp4"
-        assert clips[0].filename == "clip.mp4"
+        assert clips[0].filename == "EA SPORTS FC 25_Amazing Goal.mp4"
         assert clips[0].author_name == "Coach"
         assert "999/m1" in clips[0].jump_url
 
@@ -598,10 +602,37 @@ def test_sync_clips_ignores_messages_with_no_video_attachment():
         assert services.list_clips(session) == []
 
 
-def test_sync_clips_blank_content_yields_no_title():
+def test_sync_clips_ignores_message_content_for_title():
     with database.get_session() as session:
-        services.sync_clips(session, "999", [_discord_message("m1", content="   ")])
+        services.sync_clips(session, "999", [
+            _discord_message("m1", content="check this out!!", filename="clip.mp4"),
+        ])
+        # Message content is never used for the title, even when present.
+        assert services.list_clips(session)[0].title == "clip"
+
+
+def test_sync_clips_yields_no_title_when_filename_missing():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [_discord_message("m1", filename=None)])
         assert services.list_clips(session)[0].title is None
+
+
+def test_sync_clips_refreshes_title_on_resync():
+    with database.get_session() as session:
+        services.sync_clips(session, "999", [_discord_message("m1", filename="old_name.mp4")])
+        assert services.list_clips(session)[0].title == "old name"
+
+        services.sync_clips(session, "999", [_discord_message("m1", filename="renamed_clip.mp4")])
+        assert services.list_clips(session)[0].title == "renamed clip"
+
+
+def test_title_from_filename_strips_extension_and_separators():
+    assert services._title_from_filename("EA SPORTS FC 25_2027-06-01_20-15-30.mp4") == \
+        "EA SPORTS FC 25 2027 06 01 20 15 30"
+    assert services._title_from_filename("clip.mov") == "clip"
+    assert services._title_from_filename(None) is None
+    assert services._title_from_filename("") is None
+    assert services._title_from_filename("___.mp4") is None
 
 
 def test_sync_clips_refreshes_video_url_on_resync_without_duplicating():

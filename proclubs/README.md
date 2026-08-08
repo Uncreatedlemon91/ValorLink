@@ -144,6 +144,13 @@ automatically.
   converting an arbitrary link into an embeddable player is a bigger job
   than this first pass covers. If a message has more than one video
   attached, only the first is used.
+- **The displayed title comes from the clip's filename, not the Discord
+  message's text.** Whatever caption (if any) someone typed alongside the
+  upload is ignored -- it's often blank, unrelated chat, or just an emoji.
+  The filename (what the console/game capture named the file) is cleaned
+  up instead (extension stripped, underscores/dashes turned into spaces --
+  see `services._title_from_filename`), and refreshed on every sync the
+  same way `video_url` is.
 - Runs on a schedule (`proclubs-clips-poll.timer`, every 30 minutes -- see
   `../deploy/README.md`), same polling reasoning as the Events sync: no
   always-on bot/gateway connection here, so REST polling is the only way
