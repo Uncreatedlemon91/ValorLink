@@ -373,11 +373,30 @@ def list_clips(session: Session, *, limit: int | None = None) -> list[Clip]:
     return list(session.execute(query).scalars())
 
 
+_FILENAME_STEM_RE = re.compile(r"[_\-]+")
+_FILENAME_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _title_from_filename(filename: str | None) -> str | None:
+    """A clip's title, derived from its own filename rather than whatever
+    (if anything) someone typed as a Discord chat message alongside it --
+    that's often blank, unrelated banter, or just an emoji, while
+    console/game capture uploads name the file itself (e.g.
+    "EA SPORTS FC 25 2027-06-01 20-15-30.mp4"), which is the closer thing
+    to an actual title a clip has."""
+    if not filename:
+        return None
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    cleaned = _FILENAME_WHITESPACE_RE.sub(" ", _FILENAME_STEM_RE.sub(" ", stem)).strip()
+    return cleaned or None
+
+
 def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
     """Mirrors video attachments from a Discord channel's recent messages
-    into Clip rows. Every sync refreshes video_url for a clip whose message
-    is still within the polled window, since Discord's attachment URLs are
-    signed and expire (~24h) -- see discord_clips.py.
+    into Clip rows. Every sync refreshes video_url (and title -- see
+    _title_from_filename) for a clip whose message is still within the
+    polled window, since Discord's attachment URLs are signed and expire
+    (~24h) -- see discord_clips.py.
 
     Unlike events, a message no longer in the polled window isn't treated
     as deleted (older messages just age out of the default fetch -- they
@@ -394,6 +413,7 @@ def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
         posted_at = _parse_discord_time(message["timestamp"])
         author = message.get("author") or {}
         author_name = author.get("global_name") or author.get("username")
+        title = _title_from_filename(attachment.get("filename"))
 
         clip = session.execute(
             select(Clip).where(Clip.discord_message_id == message_id)
@@ -401,7 +421,7 @@ def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
         if clip is None:
             session.add(Clip(
                 discord_message_id=message_id,
-                title=(message.get("content") or "").strip() or None,
+                title=title,
                 video_url=attachment.get("url"),
                 filename=attachment.get("filename"),
                 author_name=author_name,
@@ -411,6 +431,7 @@ def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
             created += 1
         else:
             clip.video_url = attachment.get("url")
+            clip.title = title
             updated += 1
 
     session.commit()
