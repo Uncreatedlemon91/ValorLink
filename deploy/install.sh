@@ -14,7 +14,8 @@ cp "$DIR/valorlink-bot.service" "$DIR/valorlink-web.service" "$DIR/valorlink-pro
    "$DIR/valorlink-backup.service" "$DIR/valorlink-backup.timer" \
    "$DIR/proclubs-poll.service" "$DIR/proclubs-poll.timer" \
    "$DIR/proclubs-discord-events-poll.service" "$DIR/proclubs-discord-events-poll.timer" \
-   "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" /etc/systemd/system/
+   "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" \
+   "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now valorlink-bot valorlink-web valorlink-proclubs
 systemctl restart valorlink-bot valorlink-web valorlink-proclubs
@@ -29,6 +30,10 @@ systemctl enable --now proclubs-discord-events-poll.timer
 # Discord clips -> site Clips page sync, every 30 minutes (optional -- only
 # does anything if DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID are set).
 systemctl enable --now proclubs-clips-poll.timer
+# Discord reaction counts on article announcements, every 30 minutes
+# (optional -- only does anything if DISCORD_BOT_TOKEN and
+# NEWS_ANNOUNCE_CHANNEL_ID are set).
+systemctl enable --now proclubs-reactions-poll.timer
 systemctl --no-pager --lines=0 status valorlink-bot valorlink-web valorlink-proclubs
 
 echo
@@ -52,3 +57,7 @@ echo
 echo "Discord clips sync runs every 30 minutes. Check with:"
 echo "  systemctl list-timers proclubs-clips-poll.timer"
 echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_clips_poll.py    # run one now"
+echo
+echo "Discord article-reaction poll runs every 30 minutes. Check with:"
+echo "  systemctl list-timers proclubs-reactions-poll.timer"
+echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_reactions_poll.py    # run one now"

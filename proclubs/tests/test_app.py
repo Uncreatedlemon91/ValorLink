@@ -338,6 +338,69 @@ def test_publishing_a_new_article_announces_to_discord(client, monkeypatch):
     assert captured["embed"]["url"] == "https://example.com/news/season-opener-win"
 
 
+def test_publishing_saves_the_announcement_message_id(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+    monkeypatch.setattr(appmod.discord_announce, "announce", lambda channel_id, embed: "999888777")
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "Saved Message Id", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    with database.get_session() as session:
+        article = services.get_article(session, "saved-message-id")
+        assert article.discord_message_id == "999888777"
+
+
+def test_failed_announcement_does_not_save_a_message_id(client, monkeypatch):
+    _enable_announcements(monkeypatch)
+
+    def fail(*a, **k):
+        raise appmod.discord_announce.DiscordApiError("boom")
+
+    monkeypatch.setattr(appmod.discord_announce, "announce", fail)
+
+    _login_staff(client)
+    token = _csrf(client, "/news/new")
+    client.post("/news/new", data={
+        "title": "Failed Announce", "summary": "", "body_html": "<p>x</p>",
+        "published": "1", "csrf_token": token,
+    }, follow_redirects=False)
+
+    with database.get_session() as session:
+        article = services.get_article(session, "failed-announce")
+        assert article.discord_message_id is None
+
+
+def test_article_page_shows_discord_reaction_count(client):
+    slug = _seed_article(title="Popular Post")
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        article.discord_message_id = "999"
+        article.discord_reaction_count = 12
+        session.commit()
+
+    detail = client.get(f"/news/{slug}")
+    assert "12 on Discord" in detail.text
+
+
+def test_article_page_hides_discord_reaction_badge_when_zero_or_unset(client):
+    slug = _seed_article(title="Quiet Post")
+    detail = client.get(f"/news/{slug}")
+    assert "on Discord" not in detail.text
+
+    with database.get_session() as session:
+        article = services.get_article(session, slug)
+        article.discord_message_id = "999"
+        article.discord_reaction_count = 0
+        session.commit()
+
+    detail = client.get(f"/news/{slug}")
+    assert "on Discord" not in detail.text
+
+
 def test_saving_a_draft_does_not_announce(client, monkeypatch):
     _enable_announcements(monkeypatch)
     called = []

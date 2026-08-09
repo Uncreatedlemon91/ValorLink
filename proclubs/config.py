@@ -67,13 +67,18 @@ CLIPS_CHANNEL_ID = os.getenv("CLIPS_CHANNEL_ID", "")
 CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
 
 # --- Discord article announcements ------------------------------------------
-# One-directional (site -> Discord), and unlike the syncs above, sent right
-# when an article goes live rather than polled -- this app is the source of
-# truth for articles, so there's nothing to notice later. Reuses
-# DISCORD_BOT_TOKEN above. See discord_announce.py / app.py's news_new and
-# news_edit routes.
+# The announcement itself is one-directional (site -> Discord) and sent
+# right when an article goes live rather than polled -- this app is the
+# source of truth for the article. Reuses DISCORD_BOT_TOKEN above. See
+# discord_announce.py / app.py's news_new and news_edit routes.
 NEWS_ANNOUNCE_CHANNEL_ID = os.getenv("NEWS_ANNOUNCE_CHANNEL_ID", "")
 NEWS_ANNOUNCE_ENABLED = bool(DISCORD_BOT_TOKEN and NEWS_ANNOUNCE_CHANNEL_ID)
+# Reactions on that message are the other direction (Discord -> site) and
+# DO need polling, since people react whenever -- see
+# discord_reactions_poll.py. Bounded to the N most-recently-announced
+# articles per run, not every article ever announced (see
+# services.articles_with_discord_message).
+DISCORD_REACTIONS_POLL_LIMIT = int(os.getenv("DISCORD_REACTIONS_POLL_LIMIT", "20"))
 
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an

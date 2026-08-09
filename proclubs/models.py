@@ -48,6 +48,16 @@ class Article(Base):
     published = Column(Boolean, nullable=False, default=True)
     published_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    # The Discord announcement message this article got posted as (see
+    # discord_announce.py / app.py's news_new+news_edit), so
+    # discord_reactions_poll.py knows which message to re-check for
+    # reactions. Null for a draft, an article published before this
+    # existed, or one whose announcement failed to send.
+    discord_message_id = Column(String, nullable=True)
+    # Cached total reaction count (every emoji summed, not just one) on
+    # that message -- refreshed periodically by discord_reactions_poll.py,
+    # never fetched live on a page view (see discord_announce.py).
+    discord_reaction_count = Column(Integer, nullable=True)
 
 
 class Event(Base):

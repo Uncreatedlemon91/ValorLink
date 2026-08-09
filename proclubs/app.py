@@ -145,10 +145,12 @@ def _pop_flash(request: Request) -> list[dict]:
 templates.env.globals["pop_flash"] = _pop_flash
 
 
-def _announce_article(request: Request, article) -> None:
+def _announce_article(request: Request, session, article) -> None:
     """Posts to Discord that this article just went live -- best-effort:
     a Discord hiccup must never block publishing, so failure is flashed to
-    staff (so it isn't silently invisible) rather than raised."""
+    staff (so it isn't silently invisible) rather than raised. On success,
+    saves the new message's id (discord_reactions_poll.py needs it later
+    to check reaction counts -- see discord_announce.fetch_reaction_count)."""
     if not config.NEWS_ANNOUNCE_ENABLED:
         return
     if not config.SITE_BASE_URL:
@@ -162,12 +164,15 @@ def _announce_article(request: Request, article) -> None:
         published_at=article.published_at,
     )
     try:
-        discord_announce.announce(config.NEWS_ANNOUNCE_CHANNEL_ID, embed)
+        message_id = discord_announce.announce(config.NEWS_ANNOUNCE_CHANNEL_ID, embed)
     except discord_announce.DiscordApiError as exc:
         # The specific reason (bad token, bot not in that channel/guild,
         # missing Send Messages/Embed Links permission, etc.) matters for
         # staff to actually fix this -- see discord_api._discord_error_detail.
         _flash(request, f"Published, but the Discord announcement failed to send: {exc}", level="error")
+        return
+    article.discord_message_id = message_id
+    session.commit()
 
 
 def _check_csrf(request: Request, token: str):
@@ -270,7 +275,7 @@ async def news_new(
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
         if article.published:
-            _announce_article(request, article)
+            _announce_article(request, session, article)
         return RedirectResponse(f"/news/{article.slug}", status_code=303)
 
 
@@ -345,7 +350,7 @@ async def news_edit(
         # but not a re-save of an article that was already live, or every
         # typo fix would repost it to Discord.
         if article.published and not was_published:
-            _announce_article(request, article)
+            _announce_article(request, session, article)
         return RedirectResponse(f"/news/{article.slug}", status_code=303)
 
 

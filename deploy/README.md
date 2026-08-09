@@ -429,6 +429,23 @@ sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/procl
 Check on it with `systemctl list-timers proclubs-clips-poll.timer` and
 `journalctl -u proclubs-clips-poll`.
 
+**Discord article-reaction counts (optional, needs the announcements
+above).** If `NEWS_ANNOUNCE_CHANNEL_ID` is set (see
+`proclubs/README.md#publishing-announces-to-discord`), reactions on an
+article's announcement message -- any emoji, all summed together -- show
+up on the article page as a heart count. `proclubs-reactions-poll.timer`
+(already installed by `install.sh`) fires `discord_reactions_poll.py`
+every 30 minutes. Run it once to confirm it works instead of waiting:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_reactions_poll.py
+```
+
+Check on it with `systemctl list-timers proclubs-reactions-poll.timer` and
+`journalctl -u proclubs-reactions-poll`. Only the `DISCORD_REACTIONS_POLL_LIMIT`
+most-recently-announced articles (default 20, `.env`-configurable) get
+checked each run.
+
 **Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
 delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming
 space -- none of that touches the bot, the web app, or their database.

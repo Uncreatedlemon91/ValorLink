@@ -1,0 +1,12 @@
+[Unit]
+Description=Pro Clubs Discord article-reaction poll
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (DISCORD_BOT_TOKEN, NEWS_ANNOUNCE_CHANNEL_ID) --
+# config.py loads it itself via python-dotenv, same as valorlink-proclubs.service.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 discord_reactions_poll.py

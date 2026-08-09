@@ -115,6 +115,21 @@ def list_articles(session: Session, *, include_drafts: bool = False,
     return list(session.execute(query).scalars())
 
 
+def articles_with_discord_message(session: Session, limit: int) -> list[Article]:
+    """Most-recently-published articles that were actually announced to
+    Discord (have a message to check) -- see discord_reactions_poll.py.
+    Bounded, not "every article ever announced": reactions settle quickly
+    after posting, so checking an old announcement forever is pointless
+    upkeep, not a real feature gap."""
+    query = (
+        select(Article)
+        .where(Article.discord_message_id.is_not(None))
+        .order_by(Article.published_at.desc())
+        .limit(limit)
+    )
+    return list(session.execute(query).scalars())
+
+
 def get_article(session: Session, slug: str) -> Article | None:
     return session.execute(select(Article).where(Article.slug == slug)).scalar_one_or_none()
 
