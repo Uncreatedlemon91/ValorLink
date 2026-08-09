@@ -742,6 +742,12 @@ FORMATIONS = {
     },
 }
 
+# Substitutes bench -- fixed slots that sit alongside the pitch, independent
+# of formation (a formation only defines the 11 starting positions). Stored
+# in the same TacticsSlot table as pitch slots, keyed by formation +
+# slot_key, so switching formations keeps its own bench too.
+BENCH_SLOTS = {f"SUB{i}": {"label": f"SUB {i}"} for i in range(1, 8)}
+
 
 @app.get("/tactics", response_class=HTMLResponse)
 def tactics_page(request: Request):
@@ -750,6 +756,7 @@ def tactics_page(request: Request):
         all_slots = services.get_all_tactics_slots(session, list(FORMATIONS.keys()))
     return templates.TemplateResponse(request, "tactics.html", _ctx(
         request, formations=FORMATIONS, active_formation=active_formation, all_slots=all_slots,
+        bench_slots=BENCH_SLOTS,
     ))
 
 
@@ -772,7 +779,7 @@ def api_tactics_save(
         try:
             services.save_tactics_lineup(
                 session, formation=formation, slots=slots,
-                valid_slot_keys=set(FORMATIONS[formation]), staff_name=staff["name"],
+                valid_slot_keys=set(FORMATIONS[formation]) | set(BENCH_SLOTS), staff_name=staff["name"],
             )
         except services.ServiceError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)

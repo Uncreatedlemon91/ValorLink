@@ -33,21 +33,30 @@
     </div>
 
     <div class="tactics-layout">
-      <div class="pitch" id="tactics-pitch">
-        <div class="pitch-markings">
-          <div class="pitch-center-circle"></div>
-          <div class="pitch-center-line"></div>
-          <div class="pitch-box pitch-box-top"></div>
-          <div class="pitch-box pitch-box-bottom"></div>
+      <div class="pitch-column">
+        <div class="pitch" id="tactics-pitch">
+          <div class="pitch-markings">
+            <div class="pitch-center-circle"></div>
+            <div class="pitch-center-line"></div>
+            <div class="pitch-box pitch-box-top"></div>
+            <div class="pitch-box pitch-box-bottom"></div>
+          </div>
+          <!-- Slots injected by tactics.js from the embedded formation data -->
         </div>
-        <!-- Slots injected by tactics.js from the embedded formation data -->
+
+        <div class="tactics-subs">
+          <h3>Substitutes Bench</h3>
+          <div id="tactics-subs-list" class="tactics-subs-list">
+            <!-- Slots injected by tactics.js from the embedded bench data -->
+          </div>
+        </div>
       </div>
 
       {% if is_staff %}
-        <div class="tactics-bench">
+        <div class="tactics-roster">
           <h3>Roster</h3>
-          <p class="field-hint">Drag a name onto the pitch.</p>
-          <div id="tactics-bench-list" class="tactics-bench-list">
+          <p class="field-hint">Drag a name onto the pitch or bench.</p>
+          <div id="tactics-roster-list" class="tactics-roster-list">
             <p class="chart-empty">Loading roster&hellip;</p>
           </div>
         </div>
@@ -59,6 +68,7 @@
 {% block scripts %}
 <script>
   window.TACTICS_FORMATIONS = {{ formations | tojson }};
+  window.TACTICS_BENCH_SLOTS = {{ bench_slots | tojson }};
   window.TACTICS_ACTIVE_FORMATION = {{ active_formation | tojson }};
   window.TACTICS_ALL_SLOTS = {{ all_slots | tojson }};
   window.TACTICS_IS_STAFF = {{ (is_staff | default(false)) | tojson }};
