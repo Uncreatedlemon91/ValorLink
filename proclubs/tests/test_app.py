@@ -97,7 +97,8 @@ def test_public_pages_load_signed_out(client):
 def test_tactics_page_hides_editing_ui_from_non_staff(client):
     anon = client.get("/tactics")
     assert "Save Lineup" not in anon.text
-    assert "tactics-bench" not in anon.text
+    assert "tactics-roster" not in anon.text
+    assert "Substitutes Bench" in anon.text  # read-only for everyone, like the pitch
 
     _login_fan(client)
     fan = client.get("/tactics")
@@ -108,7 +109,7 @@ def test_tactics_page_shows_editing_ui_to_staff(client):
     _login_staff(client)
     r = client.get("/tactics")
     assert "Save Lineup" in r.text
-    assert "tactics-bench" in r.text
+    assert "tactics-roster" in r.text
 
 
 def test_api_tactics_save_requires_staff(client):
@@ -144,6 +145,20 @@ def test_api_tactics_save_persists_lineup(client):
     page = client.get("/tactics").text
     assert "Rusty" in page
     assert "Grey" in page
+
+
+def test_api_tactics_save_persists_bench_slots(client):
+    _login_staff(client)
+    token = _csrf(client, "/tactics")
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": '{"GK": "Rusty", "SUB1": "Benchwarmer"}', "csrf_token": token,
+    })
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+    page = client.get("/tactics").text
+    assert "Rusty" in page
+    assert "Benchwarmer" in page
 
 
 def test_api_tactics_save_rejects_unknown_formation(client):
@@ -194,6 +209,17 @@ def test_formations_cover_all_fc26_shapes():
             assert 0 <= slot["top"] <= 100, f"{name}.{slot_key}: top out of range"
             assert 0 <= slot["left"] <= 100, f"{name}.{slot_key}: left out of range"
             assert slot["label"]
+
+
+def test_bench_slots_are_formation_independent():
+    assert set(appmod.BENCH_SLOTS.keys()) == {f"SUB{i}" for i in range(1, 8)}
+    for slot_key, slot in appmod.BENCH_SLOTS.items():
+        assert slot["label"]
+        # Bench slots render in a static row, not positioned on the pitch.
+        assert "top" not in slot and "left" not in slot
+    # No pitch slot key collides with a bench slot key in any formation.
+    for name, layout in appmod.FORMATIONS.items():
+        assert not (set(layout) & set(appmod.BENCH_SLOTS)), f"{name} has a slot key colliding with BENCH_SLOTS"
 
 
 def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch):

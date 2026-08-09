@@ -7,6 +7,7 @@
 // requires auth.require_staff) -- this is convenience, not the boundary.
 (function () {
   const FORMATIONS = window.TACTICS_FORMATIONS || {};
+  const BENCH_SLOTS = window.TACTICS_BENCH_SLOTS || {};
   const ALL_SLOTS = window.TACTICS_ALL_SLOTS || {};
   const IS_STAFF = !!window.TACTICS_IS_STAFF;
   const csrfInput = document.getElementById('tactics-csrf-token');
@@ -18,19 +19,62 @@
   }
   // In-memory working copy -- staff can drag several names around before
   // hitting Save, which sends this whole object in one request rather
-  // than one call per drag.
+  // than one call per drag. Holds both pitch and bench slot keys, since
+  // both are saved together (see save-status listener below).
   let currentSlots = { ...(ALL_SLOTS[activeFormation] || {}) };
 
   const pitch = document.getElementById('tactics-pitch');
+  const subsList = document.getElementById('tactics-subs-list');
   const select = document.getElementById('tactics-formation-select');
   const saveBtn = document.getElementById('tactics-save-btn');
   const saveStatus = document.getElementById('tactics-save-status');
-  const benchList = document.getElementById('tactics-bench-list');
+  const rosterList = document.getElementById('tactics-roster-list');
 
   function esc(v) {
     return String(v ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
+  }
+
+  // Shared by pitch slots and bench slots -- both are "drop a name here,
+  // click to clear" boxes, they just differ in layout (absolute-positioned
+  // on the grass vs. a static row underneath).
+  function makeSlotEl(slotKey, def, extraClass) {
+    const slot = document.createElement('div');
+    slot.className = extraClass ? `pitch-slot ${extraClass}` : 'pitch-slot';
+    slot.dataset.slotKey = slotKey;
+
+    const name = currentSlots[slotKey];
+    slot.classList.toggle('filled', !!name);
+    slot.innerHTML = name
+      ? `<span class="pitch-slot-name">${esc(name)}</span><span class="pitch-slot-pos">${esc(def.label)}</span>`
+      : `<span class="pitch-slot-pos">${esc(def.label)}</span>`;
+
+    if (IS_STAFF) {
+      slot.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        slot.classList.add('drag-over');
+      });
+      slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+      slot.addEventListener('drop', (e) => {
+        e.preventDefault();
+        slot.classList.remove('drag-over');
+        const droppedName = e.dataTransfer.getData('text/plain');
+        if (!droppedName) return;
+        currentSlots[slotKey] = droppedName;
+        renderPitch();
+        renderSubsBench();
+      });
+      // Click a filled slot to clear it -- the touch/no-drag-support fallback.
+      slot.addEventListener('click', () => {
+        if (!currentSlots[slotKey]) return;
+        delete currentSlots[slotKey];
+        renderPitch();
+        renderSubsBench();
+      });
+    }
+
+    return slot;
   }
 
   function renderPitch() {
@@ -39,51 +83,28 @@
     const layout = FORMATIONS[activeFormation] || {};
 
     Object.entries(layout).forEach(([slotKey, def]) => {
-      const slot = document.createElement('div');
-      slot.className = 'pitch-slot';
+      const slot = makeSlotEl(slotKey, def);
       slot.style.top = `${def.top}%`;
       slot.style.left = `${def.left}%`;
-      slot.dataset.slotKey = slotKey;
-
-      const name = currentSlots[slotKey];
-      slot.classList.toggle('filled', !!name);
-      slot.innerHTML = name
-        ? `<span class="pitch-slot-name">${esc(name)}</span><span class="pitch-slot-pos">${esc(def.label)}</span>`
-        : `<span class="pitch-slot-pos">${esc(def.label)}</span>`;
-
-      if (IS_STAFF) {
-        slot.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          slot.classList.add('drag-over');
-        });
-        slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
-        slot.addEventListener('drop', (e) => {
-          e.preventDefault();
-          slot.classList.remove('drag-over');
-          const droppedName = e.dataTransfer.getData('text/plain');
-          if (!droppedName) return;
-          currentSlots[slotKey] = droppedName;
-          renderPitch();
-        });
-        // Click a filled slot to clear it -- the touch/no-drag-support fallback.
-        slot.addEventListener('click', () => {
-          if (!currentSlots[slotKey]) return;
-          delete currentSlots[slotKey];
-          renderPitch();
-        });
-      }
-
       pitch.appendChild(slot);
     });
   }
 
-  function renderBench(names) {
-    if (!benchList) return;
+  function renderSubsBench() {
+    if (!subsList) return;
+    subsList.innerHTML = '';
+    Object.entries(BENCH_SLOTS).forEach(([slotKey, def]) => {
+      subsList.appendChild(makeSlotEl(slotKey, def, 'sub-slot'));
+    });
+  }
+
+  function renderRoster(names) {
+    if (!rosterList) return;
     if (!names.length) {
-      benchList.innerHTML = '<p class="chart-empty">No roster data available right now.</p>';
+      rosterList.innerHTML = '<p class="chart-empty">No roster data available right now.</p>';
       return;
     }
-    benchList.innerHTML = '';
+    rosterList.innerHTML = '';
     names.forEach((name) => {
       const chip = document.createElement('div');
       chip.className = 'tactics-chip';
@@ -93,12 +114,12 @@
         e.dataTransfer.setData('text/plain', name);
         e.dataTransfer.effectAllowed = 'copy';
       });
-      benchList.appendChild(chip);
+      rosterList.appendChild(chip);
     });
   }
 
-  function loadBench() {
-    if (!IS_STAFF || !benchList) return;
+  function loadRoster() {
+    if (!IS_STAFF || !rosterList) return;
     fetch('/api/members')
       .then((r) => {
         if (!r.ok) throw new Error('failed to load roster');
@@ -109,10 +130,10 @@
           .map((m) => m.proName || m.name)
           .filter(Boolean)
           .sort((a, b) => a.localeCompare(b));
-        renderBench(names);
+        renderRoster(names);
       })
       .catch(() => {
-        benchList.innerHTML = '<p class="chart-empty">Couldn’t load the roster right now.</p>';
+        rosterList.innerHTML = '<p class="chart-empty">Couldn’t load the roster right now.</p>';
       });
   }
 
@@ -121,6 +142,7 @@
       activeFormation = select.value;
       currentSlots = { ...(ALL_SLOTS[activeFormation] || {}) };
       renderPitch();
+      renderSubsBench();
     });
   }
 
@@ -151,5 +173,6 @@
   }
 
   renderPitch();
-  loadBench();
+  renderSubsBench();
+  loadRoster();
 })();
