@@ -341,5 +341,91 @@ const Charts = (() => {
     container.appendChild(svg);
   }
 
-  return { hBarChart, vBarChart, trendBarChart, divergingBarChart, donutChart, sparkline, legend, emptyState };
+  // Area chart -- a continuous trend where each x position is already an
+  // aggregate (e.g. one point per day, not one per raw reading), so a
+  // filled region under a connecting line reads as "the whole trend so
+  // far" more naturally than discrete bars. Single hue, matching the
+  // "1-3 series, color alone is comfortable" rule the rest of this file
+  // follows -- the fill is the same color as the line, just faded via a
+  // gradient into transparency rather than a second hue.
+  function areaChart(container, { data, color, unit = '', zeroBaseline = false }) {
+    container.innerHTML = '';
+    if (!data.length) return emptyState(container);
+
+    const values = data.map((d) => d.value);
+    let max = Math.max(...values);
+    let min = Math.min(...values);
+    if (zeroBaseline) {
+      // For a count-like series where 0 is a meaningful floor -- forcing
+      // it in keeps the chart from exaggerating small fluctuations.
+      max = Math.max(max, 0);
+      min = Math.min(min, 0);
+    } else if (max === min) {
+      max += 1; // a flat/single-value series still needs a plottable range
+      min -= 1;
+    } else {
+      // A continuous metric (rating, points) is rarely near zero -- forcing
+      // the axis down to 0 would crush the actual variation into a nearly
+      // flat line. Autoscale to the data instead, same as most trend/price
+      // charts, with a little headroom so points don't sit on the edges.
+      const pad = (max - min) * 0.1;
+      max += pad;
+      min -= pad;
+    }
+    const range = max - min || 1;
+    const chartH = 110;
+    const padTop = 10;
+    const usableH = chartH - padTop;
+    const chartW = Math.max(data.length * 40, 200);
+
+    const xFor = (i) => (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
+    const yFor = (v) => padTop + usableH - ((v - min) / range) * usableH;
+
+    const svg = svgEl('svg', { viewBox: `0 0 ${chartW} ${chartH}`, width: '100%', height: chartH });
+    svg.appendChild(svgEl('line', { x1: 0, y1: chartH, x2: chartW, y2: chartH, class: 'chart-baseline' }));
+
+    // A unique gradient id per chart instance -- multiple area charts can
+    // be on the page at once (e.g. re-rendered on tab switch), and SVG
+    // <defs> ids are global to the document, not scoped to their <svg>.
+    const gradientId = `chart-area-grad-${Math.random().toString(36).slice(2)}`;
+    const defs = svgEl('defs');
+    const gradient = svgEl('linearGradient', { id: gradientId, x1: 0, y1: 0, x2: 0, y2: 1 });
+    const stopTop = svgEl('stop', { offset: '0%' });
+    stopTop.style.stopColor = color;
+    stopTop.style.stopOpacity = 0.35;
+    const stopBottom = svgEl('stop', { offset: '100%' });
+    stopBottom.style.stopColor = color;
+    stopBottom.style.stopOpacity = 0;
+    gradient.append(stopTop, stopBottom);
+    defs.appendChild(gradient);
+    svg.appendChild(defs);
+
+    const points = data.map((d, i) => [xFor(i), yFor(d.value)]);
+    const linePath = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y}`).join(' ');
+    const areaPath = `${linePath} L ${chartW} ${chartH} L 0 ${chartH} Z`;
+
+    svg.appendChild(svgEl('path', { d: areaPath, fill: `url(#${gradientId})`, class: 'chart-area-fill' }));
+
+    const line = svgEl('path', { d: linePath, fill: 'none', class: 'chart-area-line' });
+    line.style.stroke = color;
+    svg.appendChild(line);
+
+    points.forEach(([x, y], i) => {
+      // A wide, invisible hit target -- the visible dot is too small to
+      // hover precisely, same reasoning as the bar/donut hover targets.
+      const hit = svgEl('circle', { cx: x, cy: y, r: 9, class: 'chart-area-hit' });
+      attachHover(hit, () => [{ label: data[i].label, value: `${data[i].value}${unit}`, color }]);
+      svg.appendChild(hit);
+
+      const dot = svgEl('circle', { cx: x, cy: y, r: 2.5, class: 'chart-area-point' });
+      dot.style.fill = color;
+      svg.appendChild(dot);
+    });
+
+    container.appendChild(svg);
+  }
+
+  return {
+    hBarChart, vBarChart, trendBarChart, divergingBarChart, donutChart, areaChart, sparkline, legend, emptyState,
+  };
 })();
