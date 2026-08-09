@@ -108,6 +108,32 @@ function esc(v) {
   }[c]));
 }
 
+// One point per local calendar day (the highest reading that day) --
+// snapshots come from hourly polls (see poll.py), so raw points are
+// closer to "per match" resolution than a real day-over-day trend, and
+// the polled history for a busy club can get noisy. Skips a reading with
+// no usable numeric value for the field rather than treating it as 0.
+function dailyPeak(snapshots, field) {
+  const byDay = new Map();
+  snapshots.forEach((s) => {
+    const raw = s[field];
+    if (raw == null || raw === '') return;
+    const value = num(raw);
+    const d = new Date(s.captured_at * 1000);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const existing = byDay.get(key);
+    if (!existing || value > existing.value) {
+      byDay.set(key, { date: d, value });
+    }
+  });
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, { date, value }]) => ({
+      label: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      value,
+    }));
+}
+
 // --------------------------------------------------------------------------
 // Overview -- an executive summary: identity, headline KPIs, the skill-
 // rating trend (real tracked history, not a sample), a season result mix,
@@ -195,6 +221,7 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
       <div class="chart-card">
         <h3>Skill Rating Over Time</h3>
         <div id="chart-overview-rating"></div>
+        <p class="chart-caption" id="chart-overview-rating-caption"></p>
       </div>
       <div class="chart-card">
         <h3>Result Mix (season)</h3>
@@ -238,15 +265,14 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
   panel.querySelectorAll('[data-goto]').forEach((btn) => btn.addEventListener('click', () => goToTab(btn.dataset.goto)));
 
   const ratingEl = document.getElementById('chart-overview-rating');
+  const ratingCaptionEl = document.getElementById('chart-overview-rating-caption');
   const snapshots = historyResult.status === 'fulfilled' ? (historyResult.value.snapshots || []) : [];
   if (snapshots.length) {
-    Charts.trendBarChart(ratingEl, {
-      data: snapshots.map((s) => ({
-        label: new Date(s.captured_at * 1000).toLocaleString(),
-        value: num(s.skill_rating),
-      })),
+    Charts.areaChart(ratingEl, {
+      data: dailyPeak(snapshots, 'skill_rating'),
       color: 'var(--series-1)',
     });
+    ratingCaptionEl.textContent = 'One point per day (highest reading that day), oldest → most recent.';
   } else {
     Charts.emptyState(ratingEl, 'Not enough tracked snapshots yet -- check back after the next poll.');
   }
