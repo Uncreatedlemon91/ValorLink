@@ -23,6 +23,7 @@
       <a href="/streamers" class="{{ 'active' if request.url.path.startswith('/streamers') else '' }}">Live</a>
       <a href="/stats" class="{{ 'active' if request.url.path.startswith('/stats') else '' }}">Stats</a>
       <a href="/league" class="{{ 'active' if request.url.path.startswith('/league') else '' }}">League</a>
+      <a href="/tactics" class="{{ 'active' if request.url.path.startswith('/tactics') else '' }}">Tactics</a>
     </nav>
     <div class="nav-account">
       {% if user %}

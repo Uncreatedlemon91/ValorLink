@@ -8,6 +8,7 @@ database, no imports from valorlink's web/ or db/ packages (see README.md).
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -551,6 +552,89 @@ def league_page(request: Request):
         our_division=our_snapshot.get("division") if our_snapshot else None,
         max_teams=config.LEAGUE_TABLE_MAX_TEAMS, roster_size=roster_size,
     ))
+
+
+# --------------------------------------------------------------------------- #
+# Tactics board -- staff drag names from the live EA roster onto a pitch;
+# see services.py's tactics functions and templates/tactics.html.
+# --------------------------------------------------------------------------- #
+# Slot coordinates are percentages into the pitch (top/left), pitch attacks
+# upward (GK near the bottom, at ~92%, forwards near the top, at ~12%) --
+# the common vertical tactics-board orientation. `label` is just the chip
+# shown in an empty slot; the dict's own keys are the real slot identity
+# used for validation and storage, not the label text.
+FORMATIONS = {
+    "4-3-3": {
+        "GK": {"label": "GK", "top": 92, "left": 50},
+        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
+        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
+        "CM1": {"label": "CM", "top": 52, "left": 25}, "CM2": {"label": "CM", "top": 48, "left": 50},
+        "CM3": {"label": "CM", "top": 52, "left": 75},
+        "LW": {"label": "LW", "top": 20, "left": 18}, "ST": {"label": "ST", "top": 12, "left": 50},
+        "RW": {"label": "RW", "top": 20, "left": 82},
+    },
+    "4-4-2": {
+        "GK": {"label": "GK", "top": 92, "left": 50},
+        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
+        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
+        "LM": {"label": "LM", "top": 48, "left": 12}, "CM1": {"label": "CM", "top": 50, "left": 38},
+        "CM2": {"label": "CM", "top": 50, "left": 62}, "RM": {"label": "RM", "top": 48, "left": 88},
+        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
+    },
+    "4-2-3-1": {
+        "GK": {"label": "GK", "top": 92, "left": 50},
+        "LB": {"label": "LB", "top": 74, "left": 15}, "CB1": {"label": "CB", "top": 80, "left": 35},
+        "CB2": {"label": "CB", "top": 80, "left": 65}, "RB": {"label": "RB", "top": 74, "left": 85},
+        "CDM1": {"label": "CDM", "top": 58, "left": 38}, "CDM2": {"label": "CDM", "top": 58, "left": 62},
+        "LW": {"label": "LW", "top": 32, "left": 18}, "CAM": {"label": "CAM", "top": 32, "left": 50},
+        "RW": {"label": "RW", "top": 32, "left": 82}, "ST": {"label": "ST", "top": 12, "left": 50},
+    },
+    "3-5-2": {
+        "GK": {"label": "GK", "top": 92, "left": 50},
+        "CB1": {"label": "CB", "top": 78, "left": 25}, "CB2": {"label": "CB", "top": 82, "left": 50},
+        "CB3": {"label": "CB", "top": 78, "left": 75},
+        "LWB": {"label": "LWB", "top": 52, "left": 8}, "CM1": {"label": "CM", "top": 50, "left": 32},
+        "CM2": {"label": "CM", "top": 46, "left": 50}, "CM3": {"label": "CM", "top": 50, "left": 68},
+        "RWB": {"label": "RWB", "top": 52, "left": 92},
+        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
+    },
+}
+
+
+@app.get("/tactics", response_class=HTMLResponse)
+def tactics_page(request: Request):
+    with get_session() as session:
+        active_formation = services.get_active_formation(session)
+        all_slots = services.get_all_tactics_slots(session, list(FORMATIONS.keys()))
+    return templates.TemplateResponse(request, "tactics.html", _ctx(
+        request, formations=FORMATIONS, active_formation=active_formation, all_slots=all_slots,
+    ))
+
+
+@app.post("/api/tactics")
+def api_tactics_save(
+    request: Request, formation: str = Form(...), slots_json: str = Form(...),
+    csrf_token: str = Form(...), staff=Depends(auth.require_staff),
+):
+    _check_csrf(request, csrf_token)
+    if formation not in FORMATIONS:
+        return JSONResponse({"error": f"Unknown formation {formation!r}."}, status_code=400)
+    try:
+        slots = json.loads(slots_json)
+        if not isinstance(slots, dict):
+            raise ValueError("slots must be an object")
+    except (ValueError, TypeError):
+        return JSONResponse({"error": "Malformed lineup data."}, status_code=400)
+
+    with get_session() as session:
+        try:
+            services.save_tactics_lineup(
+                session, formation=formation, slots=slots,
+                valid_slot_keys=set(FORMATIONS[formation]), staff_name=staff["name"],
+            )
+        except services.ServiceError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+    return {"ok": True}
 
 
 def _stats_error(exc: ea_client.EAApiError) -> JSONResponse:

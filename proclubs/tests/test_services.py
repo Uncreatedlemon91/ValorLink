@@ -702,6 +702,78 @@ def test_list_clips_orders_newest_first():
         assert [c.discord_message_id for c in clips] == ["m2", "m1"]
 
 
+def test_get_active_formation_defaults_when_no_board_row():
+    with database.get_session() as session:
+        assert services.get_active_formation(session) == "4-3-3"
+
+
+def test_get_tactics_slots_empty_when_nothing_saved():
+    with database.get_session() as session:
+        assert services.get_tactics_slots(session, "4-3-3") == {}
+
+
+def test_save_tactics_lineup_persists_slots_and_active_formation():
+    with database.get_session() as session:
+        services.save_tactics_lineup(
+            session, formation="4-3-3", slots={"GK": "Rusty", "ST": "Grey"},
+            valid_slot_keys={"GK", "LB", "CB1", "CB2", "RB", "CM1", "CM2", "CM3", "LW", "ST", "RW"},
+            staff_name="Coach",
+        )
+        assert services.get_active_formation(session) == "4-3-3"
+        assert services.get_tactics_slots(session, "4-3-3") == {"GK": "Rusty", "ST": "Grey"}
+
+
+def test_save_tactics_lineup_rejects_unknown_slot_key():
+    with database.get_session() as session:
+        with pytest.raises(services.ServiceError, match="Unknown slot"):
+            services.save_tactics_lineup(
+                session, formation="4-3-3", slots={"NOT_A_SLOT": "Grey"},
+                valid_slot_keys={"GK", "ST"}, staff_name="Coach",
+            )
+
+
+def test_save_tactics_lineup_overwrites_previous_save_for_same_formation():
+    with database.get_session() as session:
+        services.save_tactics_lineup(
+            session, formation="4-3-3", slots={"GK": "Rusty"},
+            valid_slot_keys={"GK", "ST"}, staff_name="Coach",
+        )
+        services.save_tactics_lineup(
+            session, formation="4-3-3", slots={"ST": "Grey"},
+            valid_slot_keys={"GK", "ST"}, staff_name="Coach",
+        )
+        # GK wasn't in the second save's slots dict -- it's cleared, not
+        # left over from the first save (the UI always sends the full
+        # board, so a slot's absence means "now empty").
+        assert services.get_tactics_slots(session, "4-3-3") == {"ST": "Grey"}
+
+
+def test_save_tactics_lineup_keeps_formations_independent():
+    with database.get_session() as session:
+        services.save_tactics_lineup(
+            session, formation="4-3-3", slots={"GK": "Rusty"},
+            valid_slot_keys={"GK"}, staff_name="Coach",
+        )
+        services.save_tactics_lineup(
+            session, formation="4-4-2", slots={"GK": "Tex"},
+            valid_slot_keys={"GK"}, staff_name="Coach",
+        )
+        # Switching to 4-4-2 (now the active formation) didn't touch what
+        # was saved under 4-3-3.
+        assert services.get_tactics_slots(session, "4-3-3") == {"GK": "Rusty"}
+        assert services.get_tactics_slots(session, "4-4-2") == {"GK": "Tex"}
+        assert services.get_active_formation(session) == "4-4-2"
+
+
+def test_get_all_tactics_slots_covers_every_requested_formation():
+    with database.get_session() as session:
+        services.save_tactics_lineup(
+            session, formation="4-3-3", slots={"GK": "Rusty"}, valid_slot_keys={"GK"}, staff_name="Coach",
+        )
+        result = services.get_all_tactics_slots(session, ["4-3-3", "4-4-2"])
+        assert result == {"4-3-3": {"GK": "Rusty"}, "4-4-2": {}}
+
+
 def test_streamer_login_is_normalized_and_unique():
     with database.get_session() as session:
         streamer = services.create_streamer(

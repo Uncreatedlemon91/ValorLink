@@ -423,9 +423,47 @@ proclubs/
 | `/events` | everyone | Upcoming + past events -- read-only, see below |
 | `/streamers` (nav label: "Live") | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
 | `/stats` | everyone | EA stats dashboard for our club |
+| `/league` | everyone | Auto-built league table -- see below |
+| `/tactics` | everyone (editing: staff only) | Drag-and-drop formation board -- see below |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
 
 `/api/overview`, `/api/standings`, `/api/members`, `/api/matches`,
 `/api/history/division`, `/api/history/matches`, `/api/history/players`, and
 `/api/streamers/live` back the `/stats` page's JS and are not meant to be
 called directly, though they're unauthenticated (read-only, no secrets).
+`/api/tactics` is the one write endpoint in this list -- staff-only, CSRF-
+protected, see below.
+
+## The tactics board
+
+`/tactics` is a drag-and-drop formation board: staff drag names from the
+live EA roster (the same `/api/members` the Players tab uses) onto pitch
+slots, then hit Save. Everyone else sees the saved result, read-only. See
+`app.py`'s `FORMATIONS` dict, `services.py`'s tactics functions, and
+`static/js/tactics.js`.
+
+- **Fully manual placement, no Discord-role automation.** A formation slot
+  can hold exactly one person; two people sharing a broad role (e.g. both
+  tagged "Midfielder" in Discord) can't be resolved into "who plays CM vs
+  CDM" without a human decision, so staff makes that call directly by
+  dragging rather than the site guessing from roles or stats.
+- **Several common formations, each remembered independently.** Switching
+  the formation dropdown doesn't discard what's set up for the others --
+  each (formation, slot) pair is its own saved row (`TacticsSlot`), so
+  4-3-3 and 4-4-2 can both have a saved lineup at the same time. Whichever
+  formation was active at last save is what loads by default.
+- **Player names are free text, not linked to any roster row.** There's no
+  local "players" table to foreign-key against -- the bench list is
+  populated live from EA on page load, but what actually gets saved is
+  just the name string that was dragged. A typo'd or since-renamed name
+  doesn't break anything, it just won't highlight against the current
+  bench.
+- **Whole-board save, not per-drag.** Staff can rearrange several names
+  before saving; "Save Lineup" sends the entire slot map for the current
+  formation in one request (`POST /api/tactics`, staff-only + CSRF), which
+  replaces that formation's saved slots outright -- a slot missing from
+  the request is now empty, not left over from before.
+- **Plain HTML5 drag-and-drop**, no external library, matching this app's
+  "no external chart library" precedent in `charts.js`. Click a filled
+  slot to clear it -- the fallback for touch devices without real drag
+  support.
