@@ -33,6 +33,11 @@
     {% else %}
       <span class="like-btn static">♡ {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}</span>
     {% endif %}
+    {% if article.discord_reaction_count %}
+      <span class="like-btn static discord-reactions" title="Reactions on the Discord announcement for this article">
+        ♥ {{ article.discord_reaction_count }} on Discord
+      </span>
+    {% endif %}
   </div>
 
   <div class="comments" id="comments">

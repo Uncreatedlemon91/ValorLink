@@ -728,6 +728,7 @@ button:active, .btn:active { transform: translateY(0); }
 .like-btn:hover { border-color: var(--live); }
 .like-btn.liked { color: var(--live); border-color: var(--live); }
 .like-btn.static { color: var(--muted); cursor: default; }
+.discord-reactions { border-color: rgba(88, 101, 242, 0.4); color: #a8adf5; }
 
 .comments { margin-top: 2.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
 .comments-head { font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; margin: 0 0 1rem; }

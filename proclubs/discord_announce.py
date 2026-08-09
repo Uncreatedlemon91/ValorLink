@@ -2,10 +2,13 @@
 live on the site, linking back to it -- see config.NEWS_ANNOUNCE_CHANNEL_ID
 and app.py's news_new/news_edit routes.
 
-One-directional (site -> Discord) and synchronous, unlike the events/clips
-sync in discord_events.py/discord_clips.py: this app is the source of truth
-for articles, so there's no "did Discord change" to notice later on a poll
--- the message just goes out the moment an article is published.
+The announcement itself is one-directional and synchronous (site ->
+Discord, sent the moment an article is published), unlike the events/clips
+sync in discord_events.py/discord_clips.py -- this app is the source of
+truth for articles, there's no "did Discord change" to notice about the
+post itself. Reactions on that message are the one thing that DOES need
+polling afterward, since people react on their own time -- see
+fetch_reaction_count() and discord_reactions_poll.py.
 
 Reuses DISCORD_BOT_TOKEN, same sharing tradeoff as those two modules -- see
 proclubs/README.md.
@@ -47,9 +50,23 @@ def build_embed(*, title: str, url: str, summary: str | None, category: str,
     return embed
 
 
-def announce(channel_id: str, embed: dict) -> None:
-    """Posts the embed to channel_id. Raises DiscordApiError on failure --
-    callers must decide whether that should be surfaced or swallowed (see
-    app.py: a Discord hiccup never blocks publishing, it's flashed to staff
+def announce(channel_id: str, embed: dict) -> str:
+    """Posts the embed to channel_id, returning the new message's id (so
+    the caller can save it -- see Article.discord_message_id -- and later
+    check reactions on it). Raises DiscordApiError on failure -- callers
+    must decide whether that should be surfaced or swallowed (see app.py:
+    a Discord hiccup never blocks publishing, it's flashed to staff
     instead)."""
-    discord_api.post(f"/channels/{channel_id}/messages", json={"embeds": [embed]})
+    resp = discord_api.post(f"/channels/{channel_id}/messages", json={"embeds": [embed]})
+    return resp.json()["id"]
+
+
+def fetch_reaction_count(channel_id: str, message_id: str) -> int:
+    """Total reactions on a message, every emoji summed together -- not
+    just one specific emoji, so it doesn't matter whether someone reacted
+    with a heart, a fire, or anything else. Raises DiscordApiError on
+    failure (e.g. the message was deleted) -- see discord_reactions_poll.py
+    for how that's handled per-article rather than aborting the whole run."""
+    resp = discord_api.get(f"/channels/{channel_id}/messages/{message_id}")
+    reactions = resp.json().get("reactions") or []
+    return sum(r.get("count", 0) for r in reactions)

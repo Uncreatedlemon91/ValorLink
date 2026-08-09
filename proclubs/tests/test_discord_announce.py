@@ -67,13 +67,27 @@ def test_build_embed_includes_optional_fields_when_present():
     assert embed["image"] == {"url": "https://example.com/news/x/cover-image"}
 
 
-def test_announce_posts_embed_to_the_given_channel(monkeypatch):
-    captured = {}
-    monkeypatch.setattr(discord_announce.discord_api, "post", lambda path, json: captured.update(path=path, json=json))
+class _FakeResponse:
+    def __init__(self, data):
+        self._data = data
 
-    discord_announce.announce("123456", {"title": "hi"})
+    def json(self):
+        return self._data
+
+
+def test_announce_posts_embed_to_the_given_channel_and_returns_message_id(monkeypatch):
+    captured = {}
+
+    def fake_post(path, json):
+        captured.update(path=path, json=json)
+        return _FakeResponse({"id": "999888777"})
+
+    monkeypatch.setattr(discord_announce.discord_api, "post", fake_post)
+
+    message_id = discord_announce.announce("123456", {"title": "hi"})
     assert captured["path"] == "/channels/123456/messages"
     assert captured["json"] == {"embeds": [{"title": "hi"}]}
+    assert message_id == "999888777"
 
 
 def test_announce_propagates_discord_api_errors(monkeypatch):
@@ -83,3 +97,35 @@ def test_announce_propagates_discord_api_errors(monkeypatch):
     monkeypatch.setattr(discord_announce.discord_api, "post", fake_post)
     with pytest.raises(discord_announce.DiscordApiError):
         discord_announce.announce("123456", {"title": "hi"})
+
+
+def test_fetch_reaction_count_sums_every_emoji(monkeypatch):
+    monkeypatch.setattr(discord_announce.discord_api, "get", lambda path: _FakeResponse({
+        "id": "999", "reactions": [
+            {"emoji": {"name": "❤️"}, "count": 3},
+            {"emoji": {"name": "🔥"}, "count": 2},
+            {"emoji": {"name": "👍"}, "count": 1},
+        ],
+    }))
+    assert discord_announce.fetch_reaction_count("123", "999") == 6
+
+
+def test_fetch_reaction_count_zero_when_no_reactions(monkeypatch):
+    monkeypatch.setattr(discord_announce.discord_api, "get", lambda path: _FakeResponse({"id": "999"}))
+    assert discord_announce.fetch_reaction_count("123", "999") == 0
+
+
+def test_fetch_reaction_count_uses_correct_path(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(discord_announce.discord_api, "get", lambda path: captured.update(path=path) or _FakeResponse({}))
+    discord_announce.fetch_reaction_count("123456", "999888777")
+    assert captured["path"] == "/channels/123456/messages/999888777"
+
+
+def test_fetch_reaction_count_propagates_discord_api_errors(monkeypatch):
+    def fake_get(path):
+        raise discord_announce.DiscordApiError("message not found")
+
+    monkeypatch.setattr(discord_announce.discord_api, "get", fake_get)
+    with pytest.raises(discord_announce.DiscordApiError):
+        discord_announce.fetch_reaction_count("123", "999")

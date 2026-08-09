@@ -75,6 +75,38 @@ def test_list_articles_filters_by_category():
         assert [a.title for a in transfers] == ["Transfer News"]
 
 
+def test_articles_with_discord_message_only_returns_announced_articles():
+    with database.get_session() as session:
+        announced = services.create_article(session, title="Announced", summary="", body_html="<p>x</p>",
+                                              cover_image=None, published=True, author=AUTHOR)
+        announced.discord_message_id = "999"
+        services.create_article(session, title="Never Announced", summary="", body_html="<p>x</p>",
+                                 cover_image=None, published=True, author=AUTHOR)
+        session.commit()
+
+        result = services.articles_with_discord_message(session, limit=10)
+        assert [a.title for a in result] == ["Announced"]
+
+
+def test_articles_with_discord_message_orders_by_published_at_desc_and_respects_limit():
+    with database.get_session() as session:
+        older = services.create_article(session, title="Older", summary="", body_html="<p>x</p>",
+                                          cover_image=None, published=True, author=AUTHOR)
+        older.discord_message_id = "1"
+        older.published_at = datetime(2026, 1, 1)
+        newer = services.create_article(session, title="Newer", summary="", body_html="<p>x</p>",
+                                          cover_image=None, published=True, author=AUTHOR)
+        newer.discord_message_id = "2"
+        newer.published_at = datetime(2026, 6, 1)
+        session.commit()
+
+        result = services.articles_with_discord_message(session, limit=10)
+        assert [a.title for a in result] == ["Newer", "Older"]
+
+        limited = services.articles_with_discord_message(session, limit=1)
+        assert [a.title for a in limited] == ["Newer"]
+
+
 def test_update_article_keeps_category_if_not_given():
     with database.get_session() as session:
         article = services.create_article(session, title="Original", summary="", body_html="<p>x</p>",

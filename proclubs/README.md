@@ -264,6 +264,24 @@ article. See `discord_announce.py`.
   be trusted to say `https`. Missing it doesn't block publishing either --
   same flash-and-continue treatment, just naming the actual problem.
 
+**Reactions on that Discord message show up on the article as a heart.**
+`announce()` returns the new message's id, saved as
+`Article.discord_message_id`. `proclubs-reactions-poll.timer` (every 30
+minutes, see `../deploy/README.md`) runs `discord_reactions_poll.py`,
+which re-fetches that message and sums every reaction on it -- any emoji,
+not just ❤️, all counted together (`discord_announce.fetch_reaction_count`)
+-- into `Article.discord_reaction_count`, capped to the
+`DISCORD_REACTIONS_POLL_LIMIT` most-recently-announced articles per run
+(default 20; reactions settle quickly after posting, so checking an old
+announcement forever isn't useful). Shown on the article page next to the
+site's own Like button, but kept visually and functionally separate from
+it -- the site's Like button tracks a signed-in member's own toggle state,
+while the Discord count is just a read-only aggregate with no identity
+behind it, so merging them into one number would misrepresent both. An
+article with no reactions (or that was never announced) shows no badge at
+all, same "don't show a zero" pattern as the engagement badges on article
+thumbnails.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
