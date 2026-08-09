@@ -174,6 +174,28 @@ def test_api_tactics_save_rejects_unknown_slot_key(client):
     assert "Unknown slot" in r.json()["error"]
 
 
+def test_formations_cover_all_fc26_shapes():
+    expected_names = {
+        "4-3-3", "4-3-2-1", "4-2-3-1", "4-2-2-2", "4-4-2", "4-4-1-1",
+        "4-1-2-1-2", "4-1-3-2", "4-1-4-1", "4-5-1",
+        "3-4-3", "3-4-2-1", "3-4-1-2", "3-5-2", "3-5-1-1", "3-1-4-2",
+        "5-2-1-2", "5-2-3", "5-3-2", "5-4-1",
+    }
+    assert set(appmod.FORMATIONS.keys()) == expected_names
+    assert len(appmod.FORMATIONS) == 20
+
+    for name, layout in appmod.FORMATIONS.items():
+        expected_outfield = sum(int(n) for n in name.split("-"))
+        assert len(layout) == expected_outfield + 1, (
+            f"{name}: expected {expected_outfield + 1} slots (incl. GK), got {len(layout)}"
+        )
+        assert "GK" in layout
+        for slot_key, slot in layout.items():
+            assert 0 <= slot["top"] <= 100, f"{name}.{slot_key}: top out of range"
+            assert 0 <= slot["left"] <= 100, f"{name}.{slot_key}: left out of range"
+            assert slot["label"]
+
+
 def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch):
     monkeypatch.setattr(config, "CLUB_ID", "")
     r = client.get("/league")
