@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Tactics{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Tactics</h1>
+      <p class="page-lede">
+        {% if is_staff %}
+          Drag names from the roster onto the pitch, then save. Click a filled slot to clear it.
+        {% else %}
+          The squad's current lineup.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="tactics-board" id="tactics-board" data-is-staff="{{ 'true' if is_staff else 'false' }}">
+    <input type="hidden" id="tactics-csrf-token" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="tactics-toolbar">
+      <label class="field" style="max-width: 220px;">
+        <span class="field-hint" style="margin-bottom: 0.3rem; display: block;">Formation</span>
+        <select id="tactics-formation-select">
+          {% for name in formations.keys() %}
+            <option value="{{ name }}" {{ 'selected' if name == active_formation else '' }}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if is_staff %}
+        <button type="button" id="tactics-save-btn" class="btn">Save Lineup</button>
+        <span id="tactics-save-status" class="field-hint" aria-live="polite"></span>
+      {% endif %}
+    </div>
+
+    <div class="tactics-layout">
+      <div class="pitch" id="tactics-pitch">
+        <div class="pitch-markings">
+          <div class="pitch-center-circle"></div>
+          <div class="pitch-center-line"></div>
+          <div class="pitch-box pitch-box-top"></div>
+          <div class="pitch-box pitch-box-bottom"></div>
+        </div>
+        <!-- Slots injected by tactics.js from the embedded formation data -->
+      </div>
+
+      {% if is_staff %}
+        <div class="tactics-bench">
+          <h3>Roster</h3>
+          <p class="field-hint">Drag a name onto the pitch.</p>
+          <div id="tactics-bench-list" class="tactics-bench-list">
+            <p class="chart-empty">Loading roster&hellip;</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.TACTICS_FORMATIONS = {{ formations | tojson }};
+  window.TACTICS_ACTIVE_FORMATION = {{ active_formation | tojson }};
+  window.TACTICS_ALL_SLOTS = {{ all_slots | tojson }};
+  window.TACTICS_IS_STAFF = {{ (is_staff | default(false)) | tojson }};
+</script>
+<script src="/static/js/tactics.js?v={{ asset_version('js/tactics.js') }}"></script>
+{% endblock %}

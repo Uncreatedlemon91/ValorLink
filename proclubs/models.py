@@ -154,3 +154,36 @@ class Streamer(Base):
     featured = Column(Boolean, nullable=False, server_default="0")  # gets the embedded player on Live/Home
     added_by_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+
+
+class TacticsBoard(Base):
+    """Singleton settings row (always id=1) for the /tactics page -- just
+    which formation is currently the active/shown one. Each formation's
+    own slot assignments live independently in TacticsSlot, so switching
+    formations here doesn't lose what staff set up for the others."""
+
+    __tablename__ = "tactics_board"
+
+    id = Column(Integer, primary_key=True)
+    active_formation = Column(String, nullable=False, default="4-3-3")
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    updated_by_name = Column(String, nullable=True)
+
+
+class TacticsSlot(Base):
+    """Who staff placed in one position slot of one formation -- see
+    app.py's FORMATIONS for the valid (formation, slot_key) pairs and
+    their pitch coordinates. player_name is free text, not a foreign key
+    to any roster table: the pool offered in the UI comes live from EA
+    (see /api/members), but there's no local "players" table to reference,
+    and a name typed in by staff shouldn't be blocked by not matching it
+    exactly. Null/absent means that slot is empty."""
+
+    __tablename__ = "tactics_slots"
+    __table_args__ = (UniqueConstraint("formation", "slot_key", name="uq_tactics_slot"),)
+
+    id = Column(Integer, primary_key=True)
+    formation = Column(String, nullable=False)
+    slot_key = Column(String, nullable=False)
+    player_name = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

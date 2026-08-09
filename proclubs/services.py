@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
-from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer
+from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer, TacticsBoard, TacticsSlot
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
 _MAX_COMMENT_LENGTH = 2000
@@ -541,4 +541,66 @@ def set_featured_streamer(session: Session, streamer: Streamer) -> None:
 
 def delete_streamer(session: Session, streamer: Streamer) -> None:
     session.delete(streamer)
+    session.commit()
+
+
+# --- Tactics board ---------------------------------------------------------- #
+def get_active_formation(session: Session) -> str:
+    """The formation currently shown on /tactics -- creates the singleton
+    settings row with a sane default on first use rather than requiring a
+    migration/seed step."""
+    board = session.get(TacticsBoard, 1)
+    if board is None:
+        return "4-3-3"
+    return board.active_formation
+
+
+def get_tactics_slots(session: Session, formation: str) -> dict[str, str]:
+    """slot_key -> player_name for every filled slot of one formation.
+    Empty slots aren't real rows -- absence from this dict means empty,
+    same as a row with player_name=None."""
+    rows = session.execute(
+        select(TacticsSlot.slot_key, TacticsSlot.player_name).where(TacticsSlot.formation == formation)
+    ).all()
+    return {slot_key: name for slot_key, name in rows if name}
+
+
+def get_all_tactics_slots(session: Session, formations: list[str]) -> dict[str, dict[str, str]]:
+    """get_tactics_slots() for every formation at once -- lets the page
+    embed every formation's saved lineup on load, so switching formations
+    in the UI is instant (no round trip) instead of a fetch per switch."""
+    return {formation: get_tactics_slots(session, formation) for formation in formations}
+
+
+def save_tactics_lineup(session: Session, *, formation: str, slots: dict[str, str | None],
+                         valid_slot_keys: set[str], staff_name: str) -> None:
+    """Replaces a formation's entire slot assignment in one shot (the UI
+    saves the whole board on "Save Lineup", not per-drag) and marks this
+    formation as the active one. `valid_slot_keys` is the caller's
+    authority on what this formation actually has slots for (see app.py's
+    FORMATIONS) -- an unknown key is a bug or a tampered request, not
+    something to silently store."""
+    unknown = set(slots) - valid_slot_keys
+    if unknown:
+        raise ServiceError(f"Unknown slot(s) for {formation}: {', '.join(sorted(unknown))}")
+
+    existing = {
+        row.slot_key: row
+        for row in session.execute(select(TacticsSlot).where(TacticsSlot.formation == formation)).scalars()
+    }
+    for slot_key in valid_slot_keys:
+        name = (slots.get(slot_key) or "").strip() or None
+        row = existing.get(slot_key)
+        if row is None:
+            session.add(TacticsSlot(formation=formation, slot_key=slot_key, player_name=name))
+        else:
+            row.player_name = name
+
+    board = session.get(TacticsBoard, 1)
+    if board is None:
+        board = TacticsBoard(id=1, active_formation=formation, updated_by_name=staff_name)
+        session.add(board)
+    else:
+        board.active_formation = formation
+        board.updated_by_name = staff_name
     session.commit()

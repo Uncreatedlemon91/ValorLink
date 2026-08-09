@@ -90,8 +90,88 @@ def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None
 
 
 def test_public_pages_load_signed_out(client):
-    for path in ["/", "/news", "/events", "/streamers", "/stats", "/league", "/login"]:
+    for path in ["/", "/news", "/events", "/streamers", "/stats", "/league", "/tactics", "/login"]:
         assert client.get(path).status_code == 200
+
+
+def test_tactics_page_hides_editing_ui_from_non_staff(client):
+    anon = client.get("/tactics")
+    assert "Save Lineup" not in anon.text
+    assert "tactics-bench" not in anon.text
+
+    _login_fan(client)
+    fan = client.get("/tactics")
+    assert "Save Lineup" not in fan.text
+
+
+def test_tactics_page_shows_editing_ui_to_staff(client):
+    _login_staff(client)
+    r = client.get("/tactics")
+    assert "Save Lineup" in r.text
+    assert "tactics-bench" in r.text
+
+
+def test_api_tactics_save_requires_staff(client):
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": "{}", "csrf_token": "x",
+    }, follow_redirects=False)
+    assert r.status_code in (303, 401, 403)
+
+    _login_fan(client)
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": "{}", "csrf_token": "x",
+    })
+    assert r.status_code == 403
+
+
+def test_api_tactics_save_requires_csrf(client):
+    _login_staff(client)
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": "{}", "csrf_token": "wrong-token",
+    })
+    assert r.status_code == 400
+
+
+def test_api_tactics_save_persists_lineup(client):
+    _login_staff(client)
+    token = _csrf(client, "/tactics")
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": '{"GK": "Rusty", "ST": "Grey"}', "csrf_token": token,
+    })
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+    page = client.get("/tactics").text
+    assert "Rusty" in page
+    assert "Grey" in page
+
+
+def test_api_tactics_save_rejects_unknown_formation(client):
+    _login_staff(client)
+    token = _csrf(client, "/tactics")
+    r = client.post("/api/tactics", data={
+        "formation": "not-a-real-formation", "slots_json": "{}", "csrf_token": token,
+    })
+    assert r.status_code == 400
+
+
+def test_api_tactics_save_rejects_malformed_json(client):
+    _login_staff(client)
+    token = _csrf(client, "/tactics")
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": "not json", "csrf_token": token,
+    })
+    assert r.status_code == 400
+
+
+def test_api_tactics_save_rejects_unknown_slot_key(client):
+    _login_staff(client)
+    token = _csrf(client, "/tactics")
+    r = client.post("/api/tactics", data={
+        "formation": "4-3-3", "slots_json": '{"NOT_A_REAL_SLOT": "Grey"}', "csrf_token": token,
+    })
+    assert r.status_code == 400
+    assert "Unknown slot" in r.json()["error"]
 
 
 def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch):
