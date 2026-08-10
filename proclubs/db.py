@@ -350,7 +350,20 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
     member is the first to go if nothing else ranks lower -- except one
     just added in this same call, which won't have had a chance to be
     polled yet either; the added_at tiebreak protects it from immediately
-    evicting itself."""
+    evicting itself.
+
+    Members whose last known division has drifted away from ours are
+    dropped outright before any of that, and a discovered opponent whose
+    last known division doesn't match ours is never (re-)added in the
+    first place -- off-division clubs don't belong in our table at all,
+    so they shouldn't occupy one of the max_teams slots either (see
+    league_table(), which also hides them from display, but that alone
+    would leave them silently eating a roster slot forever). This uses
+    club_snapshots, not league_clubs membership, as the source of truth
+    for "do we know this club's division" -- snapshot history persists
+    even after a club is dropped from league_clubs, so a club evicted for
+    being off-division stays excluded on every future call instead of
+    bouncing back in the next time it turns up in `matches`."""
     our_club_id = str(our_club_id)
     conn = _connect()
     with conn:
@@ -363,18 +376,44 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
             "SELECT club_id FROM league_clubs WHERE platform=?", (platform,)
         ).fetchall()}
 
-        def _points_for(club_id):
-            row = conn.execute(
-                """SELECT points FROM club_snapshots WHERE platform=? AND club_id=?
+        def _latest_snapshot(club_id):
+            return conn.execute(
+                """SELECT division, points FROM club_snapshots WHERE platform=? AND club_id=?
                    ORDER BY captured_at DESC, id DESC LIMIT 1""",
                 (platform, club_id),
             ).fetchone()
+
+        def _points_for(club_id):
+            row = _latest_snapshot(club_id)
             if not row or row["points"] is None:
                 return -1
             try:
                 return int(float(row["points"]))
             except (TypeError, ValueError):
                 return -1
+
+        def _off_division(club_id):
+            # A club never polled yet (no snapshot) hasn't had the chance
+            # to show it belongs or not -- treat it as fine until its own
+            # division is known.
+            if our_division is None:
+                return False
+            snap = _latest_snapshot(club_id)
+            return bool(snap and snap["division"] is not None and snap["division"] != our_division)
+
+        our_snap = _latest_snapshot(our_club_id)
+        our_division = our_snap["division"] if our_snap else None
+        if our_division is not None:
+            members = conn.execute(
+                "SELECT club_id FROM league_clubs WHERE platform=? AND pinned=0", (platform,)
+            ).fetchall()
+            for member in members:
+                cid = member["club_id"]
+                if _off_division(cid):
+                    conn.execute(
+                        "DELETE FROM league_clubs WHERE platform=? AND club_id=?", (platform, cid),
+                    )
+                    known_ids.discard(cid)
 
         opponents = conn.execute(
             """SELECT DISTINCT opp_club_id AS club_id, opp_name AS label
@@ -385,6 +424,8 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
         for opp in opponents:
             cid, label = opp["club_id"], opp["label"]
             if cid in known_ids:
+                continue
+            if _off_division(cid):
                 continue
 
             count = conn.execute(
