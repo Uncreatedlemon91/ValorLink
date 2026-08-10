@@ -180,6 +180,76 @@ def test_sync_league_roster_never_evicts_pinned_club():
     assert "c1" in ids  # never evicted even though the roster is already "full" before it's considered
 
 
+def test_sync_league_roster_drops_members_whose_division_has_drifted():
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Same Division Club"),
+        _raw_match("m2", opp_id="c3", opp_name="Different Division Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    ids = {r["club_id"] for r in db.league_roster("common-gen5")}
+    assert ids == {"c1", "c2", "c3"}  # both discovered -- division unknown yet, nothing to drop
+
+    db.record_snapshot("common-gen5", "c1", {}, {"currentDivision": "3", "points": "10"})
+    db.record_snapshot("common-gen5", "c2", {}, {"currentDivision": "3", "points": "8"})
+    db.record_snapshot("common-gen5", "c3", {}, {"currentDivision": "5", "points": "20"})
+
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    ids = {r["club_id"] for r in db.league_roster("common-gen5")}
+    assert ids == {"c1", "c2"}  # c3's division no longer matches ours -- dropped outright
+
+
+def test_sync_league_roster_off_division_drop_frees_a_slot_for_new_opponents():
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Off Division Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=2)  # cap: us + one opponent
+    db.record_snapshot("common-gen5", "c1", {}, {"currentDivision": "3", "points": "10"})
+    # High points would normally protect c2 from the points-based eviction below,
+    # but its division no longer matches ours.
+    db.record_snapshot("common-gen5", "c2", {}, {"currentDivision": "5", "points": "999"})
+
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m2", opp_id="c3", opp_name="Same Division Club", timestamp=2000),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=2)
+
+    ids = {r["club_id"] for r in db.league_roster("common-gen5")}
+    # c2 is dropped for being off-division (not evicted for low points -- it had
+    # the highest), freeing the slot c3 takes instead of being turned away.
+    assert ids == {"c1", "c3"}
+
+
+def test_sync_league_roster_off_division_club_stays_excluded_across_repeated_calls():
+    # Regression: an evicted-for-division club is still in `matches` (we've
+    # played it before), so a naive eviction that only removes it from
+    # league_clubs gets it immediately re-added on the very next call, once
+    # the opponent-discovery loop rediscovers it as "not currently known".
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Different Division Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    db.record_snapshot("common-gen5", "c1", {}, {"currentDivision": "3", "points": "10"})
+    db.record_snapshot("common-gen5", "c2", {}, {"currentDivision": "5", "points": "20"})
+
+    for _ in range(3):
+        db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+        ids = {r["club_id"] for r in db.league_roster("common-gen5")}
+        assert ids == {"c1"}  # c2 must not bounce back in on a later call
+
+
+def test_sync_league_roster_leaves_unpolled_members_alone():
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Unpolled Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    db.record_snapshot("common-gen5", "c1", {}, {"currentDivision": "3", "points": "10"})
+    # c2 never got a snapshot -- its division is unknown, not proven wrong, so a
+    # second sync (now that our own division is known) must leave it alone.
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    ids = {r["club_id"] for r in db.league_roster("common-gen5")}
+    assert "c2" in ids
+
+
 def test_connect_migrates_pre_existing_db_missing_new_columns(tmp_path, monkeypatch):
     # Simulate a history.db from before opp_club_id/team_size existed --
     # ALTER TABLE must add them in place without touching existing rows,
