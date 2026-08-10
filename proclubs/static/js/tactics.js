@@ -30,6 +30,11 @@
   const saveStatus = document.getElementById('tactics-save-status');
   const rosterList = document.getElementById('tactics-roster-list');
 
+  // Full club roster as fetched from the server -- refreshRoster() filters
+  // this down to "not already placed on the pitch or bench" on every
+  // change, so a name can't be dragged onto two slots at once.
+  let allRosterNames = [];
+
   function esc(v) {
     return String(v ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -64,6 +69,7 @@
         currentSlots[slotKey] = droppedName;
         renderPitch();
         renderSubsBench();
+        refreshRoster();
       });
       // Click a filled slot to clear it -- the touch/no-drag-support fallback.
       slot.addEventListener('click', () => {
@@ -71,6 +77,7 @@
         delete currentSlots[slotKey];
         renderPitch();
         renderSubsBench();
+        refreshRoster();
       });
     }
 
@@ -98,10 +105,10 @@
     });
   }
 
-  function renderRoster(names) {
+  function renderRoster(names, emptyMessage) {
     if (!rosterList) return;
     if (!names.length) {
-      rosterList.innerHTML = '<p class="chart-empty">No roster data available right now.</p>';
+      rosterList.innerHTML = `<p class="chart-empty">${esc(emptyMessage)}</p>`;
       return;
     }
     rosterList.innerHTML = '';
@@ -118,6 +125,19 @@
     });
   }
 
+  // Re-derives the draggable pool from the full roster minus whoever's
+  // already on the pitch or bench -- called after every slot change so a
+  // name can't be placed twice.
+  function refreshRoster() {
+    if (!IS_STAFF || !rosterList) return;
+    const placed = new Set(Object.values(currentSlots).filter(Boolean));
+    const available = allRosterNames.filter((name) => !placed.has(name));
+    const emptyMessage = allRosterNames.length
+      ? 'Everyone is on the pitch or bench.'
+      : 'No roster data available right now.';
+    renderRoster(available, emptyMessage);
+  }
+
   function loadRoster() {
     if (!IS_STAFF || !rosterList) return;
     fetch('/api/members')
@@ -126,11 +146,11 @@
         return r.json();
       })
       .then((data) => {
-        const names = (data.members || [])
+        allRosterNames = (data.members || [])
           .map((m) => m.proName || m.name)
           .filter(Boolean)
           .sort((a, b) => a.localeCompare(b));
-        renderRoster(names);
+        refreshRoster();
       })
       .catch(() => {
         rosterList.innerHTML = '<p class="chart-empty">Couldn’t load the roster right now.</p>';
@@ -143,6 +163,7 @@
       currentSlots = { ...(ALL_SLOTS[activeFormation] || {}) };
       renderPitch();
       renderSubsBench();
+      refreshRoster();
     });
   }
 
