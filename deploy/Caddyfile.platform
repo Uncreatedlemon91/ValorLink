@@ -28,16 +28,16 @@ valorlink.co, www.valorlink.co {
 }
 
 # Pro Clubs Tracker -- a separate, unrelated service (not a tenancy unit).
-# Deliberately a NESTED subdomain (two labels before valorlink.co): a
-# single-label host here (e.g. proclubs.valorlink.co) textually matches the
-# *.valorlink.co wildcard above, and Caddy's automatic-HTTPS handling of a
-# hostname covered by both an eager explicit block and a wildcard on-demand
-# block on the same server can end up provisioning it via NEITHER path --
-# no eager obtain, no on-demand ask call, just a bare TLS failure. Nesting
-# it avoids the wildcard match entirely, so this gets an uncontested normal
-# ACME cert. Needs its own DNS A record: proclubs.apps.valorlink.co -> the
-# same droplet IP.
-proclubs.apps.valorlink.co {
+# Deliberately its OWN apex domain, entirely outside valorlink.co: a host
+# under valorlink.co with a single label (e.g. proclubs.valorlink.co)
+# textually matches the *.valorlink.co wildcard above, and Caddy's
+# automatic-HTTPS handling of a hostname covered by both an eager explicit
+# block and a wildcard on-demand block on the same server can end up
+# provisioning it via NEITHER path -- no eager obtain, no on-demand ask
+# call, just a bare TLS failure. A separate domain avoids the wildcard match
+# entirely, so this gets an uncontested normal ACME cert. Needs its own DNS
+# A record: yeehaw-fc.club -> the same droplet IP.
+yeehaw-fc.club {
     encode zstd gzip
     reverse_proxy 127.0.0.1:8001
 }

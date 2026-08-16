@@ -6,8 +6,8 @@ own club. FastAPI + Jinja2 + SQLAlchemy, matching the main ValorLink
 platform's stack.
 
 This runs as its own independent service alongside the ValorLink bot/web app
--- separate venv, separate systemd unit, separate subdomain
-(`proclubs.apps.valorlink.co`), separate `.env`, no shared database or code
+-- separate venv, separate systemd unit, separate domain
+(`yeehaw-fc.club`), separate `.env`, no shared database or code
 with `web/`, `db/`, `tenancy/`, or `utils/`. See
 [`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
 

@@ -302,17 +302,17 @@ A separate FastAPI app under [`proclubs/`](../proclubs): a news/blog,
 events calendar, Twitch streamer showcase, and EA stats dashboard for the
 Pro Clubs team, with Discord-role-gated staff access. It shares the droplet
 but nothing else with the bot/web app: its own venv, its own systemd
-service, its own subdomain, its own database, its own `.env`. Safe to
+service, its own domain, its own database, its own `.env`. Safe to
 install, skip, or remove without affecting anything above.
 
 ```bash
-# 1. DNS: add an A record for proclubs.apps.valorlink.co -> the droplet IP.
-#    (Deliberately a nested, two-label subdomain -- a single-label host like
-#    proclubs.valorlink.co textually matches the *.valorlink.co wildcard used
-#    for tenancy units below, and Caddy's automatic HTTPS can end up
-#    provisioning a hostname covered by both an eager block and that
+# 1. DNS: add an A record for yeehaw-fc.club -> the droplet IP.
+#    (Deliberately its own domain, outside valorlink.co -- a single-label
+#    host like proclubs.valorlink.co textually matches the *.valorlink.co
+#    wildcard used for tenancy units below, and Caddy's automatic HTTPS can
+#    end up provisioning a hostname covered by both an eager block and that
 #    wildcard's on-demand policy via NEITHER path -- no cert, no clear error.
-#    Nesting it sidesteps that entirely.)
+#    A separate domain sidesteps that entirely.)
 
 # 2. Its own venv (deliberately not /opt/valorlink/.venv):
 cd /opt/valorlink
@@ -329,13 +329,13 @@ sudo -u valorlink nano proclubs/.env
 # 4. Install/start the service (install.sh already includes it):
 sudo bash deploy/install.sh
 
-# 5. Caddy: the proclubs.apps.valorlink.co block is already in
+# 5. Caddy: the yeehaw-fc.club block is already in
 #    Caddyfile.platform (or Caddyfile, if you're not running platform mode).
 #    Copy whichever you use to /etc/caddy/Caddyfile, then:
 sudo systemctl reload caddy
 ```
 
-Visit `https://proclubs.apps.valorlink.co`. Check it independently of the
+Visit `https://yeehaw-fc.club`. Check it independently of the
 other two services:
 
 ```bash
