@@ -41,3 +41,12 @@ yeehaw-fc.club {
     encode zstd gzip
     reverse_proxy 127.0.0.1:8001
 }
+
+# www -> apex. The apex is the canonical host: SITE_BASE_URL and the Discord
+# OAuth redirect URI both name it, and Discord rejects a callback whose host
+# doesn't match the registered redirect exactly -- so www must never serve
+# the app itself, only redirect. Needs its own A record (www.yeehaw-fc.club
+# -> the same droplet IP) for Caddy to get a certificate for it.
+www.yeehaw-fc.club {
+    redir https://yeehaw-fc.club{uri} permanent
+}

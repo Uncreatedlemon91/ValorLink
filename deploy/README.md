@@ -306,7 +306,9 @@ service, its own domain, its own database, its own `.env`. Safe to
 install, skip, or remove without affecting anything above.
 
 ```bash
-# 1. DNS: add an A record for yeehaw-fc.club -> the droplet IP.
+# 1. DNS: add an A record for yeehaw-fc.club -> the droplet IP, plus one
+#    for www.yeehaw-fc.club (Caddy redirects www to the apex, but still
+#    needs the record to get a certificate for it).
 #    (Deliberately its own domain, outside valorlink.co -- a single-label
 #    host like proclubs.valorlink.co textually matches the *.valorlink.co
 #    wildcard used for tenancy units below, and Caddy's automatic HTTPS can
