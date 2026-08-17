@@ -41,15 +41,73 @@
   {% elif not event.signups_open %}
     <div class="card empty-state">Sign-ups are closed for this event.</div>
   {% else %}
-    <form class="card signup-choice" method="post" action="/events/{{ event.id }}/signup">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      {% for status in signup_statuses %}
-        <button type="submit" name="status" value="{{ status }}"
-                class="signup-btn {{ status }} {{ 'is-current' if my_signup and my_signup.status == status else '' }}">
-          {{ signup_labels[status] }}
-        </button>
-      {% endfor %}
-    </form>
+    {% if slots %}
+      {# The team sheet IS the sign-up sheet: claiming a shirt sets you to
+         going, so there's no separate "Going" button to contradict it. #}
+      <form class="card team-sheet" method="post" action="/events/{{ event.id }}/claim">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="pitch event-pitch">
+          <div class="pitch-markings">
+            <div class="pitch-center-circle"></div>
+            <div class="pitch-center-line"></div>
+            <div class="pitch-box pitch-box-top"></div>
+            <div class="pitch-box pitch-box-bottom"></div>
+          </div>
+          {% for key, meta in pitch.items() %}
+            {% set holder = claimed.get(key) %}
+            {% set mine = holder and my_signup and holder.id == my_signup.id %}
+            <button type="submit" name="slot_key" value="{{ '' if mine else key }}"
+                    class="pitch-slot claim-slot {{ 'taken' if holder else 'open' }} {{ 'mine' if mine else '' }}"
+                    style="top: {{ meta.top }}%; left: {{ meta.left }}%;"
+                    {{ 'disabled' if holder and not mine else '' }}
+                    title="{{ ('Give up ' ~ meta.label) if mine else (holder.discord_name if holder else ('Claim ' ~ meta.label)) }}">
+              <span class="pitch-slot-pos">{{ meta.label }}</span>
+              <span class="pitch-slot-name">{{ holder.discord_name if holder else 'Open' }}</span>
+            </button>
+          {% endfor %}
+        </div>
+
+        <div class="bench-row">
+          <h3>Bench</h3>
+          <div class="bench-slots">
+            {% for key, meta in bench_slots.items() %}
+              {% set holder = claimed.get(key) %}
+              {% set mine = holder and my_signup and holder.id == my_signup.id %}
+              <button type="submit" name="slot_key" value="{{ '' if mine else key }}"
+                      class="bench-slot {{ 'taken' if holder else 'open' }} {{ 'mine' if mine else '' }}"
+                      {{ 'disabled' if holder and not mine else '' }}>
+                <span class="pitch-slot-pos">{{ meta.label }}</span>
+                <span class="pitch-slot-name">{{ holder.discord_name if holder else 'Open' }}</span>
+              </button>
+            {% endfor %}
+          </div>
+        </div>
+        <p class="field-hint">
+          Click an open position to take it -- that signs you up. Click your own
+          again to give it back. One player per shirt.
+        </p>
+      </form>
+
+      <form class="card signup-choice" method="post" action="/events/{{ event.id }}/signup">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        {% for status in ['maybe', 'out'] %}
+          <button type="submit" name="status" value="{{ status }}"
+                  class="signup-btn {{ status }} {{ 'is-current' if my_signup and my_signup.status == status else '' }}">
+            {{ signup_labels[status] }}
+          </button>
+        {% endfor %}
+      </form>
+    {% else %}
+      <form class="card signup-choice" method="post" action="/events/{{ event.id }}/signup">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        {% for status in signup_statuses %}
+          <button type="submit" name="status" value="{{ status }}"
+                  class="signup-btn {{ status }} {{ 'is-current' if my_signup and my_signup.status == status else '' }}">
+            {{ signup_labels[status] }}
+          </button>
+        {% endfor %}
+      </form>
+    {% endif %}
     {% if not my_link %}
       {# Without a linked gamertag we can't show this person's position, so
          ask for it right where the consequence is visible. #}
@@ -73,7 +131,10 @@
 
   {# ---- The roster ------------------------------------------------------ #}
   <div class="section-head">
-    <h2>Squad ({{ counts.going }} going{% if counts.maybe %}, {{ counts.maybe }} maybe{% endif %})</h2>
+    <h2>
+      Squad ({{ counts.going }} going{% if counts.maybe %}, {{ counts.maybe }} maybe{% endif %})
+      {% if event.formation %}<small class="formation-tag">{{ event.formation }}</small>{% endif %}
+    </h2>
     {% if is_staff %}
       <form method="post" action="/events/{{ event.id }}/signups-open" class="inline-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />

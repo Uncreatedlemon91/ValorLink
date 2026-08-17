@@ -41,6 +41,24 @@
     </div>
 
     <div class="field">
+      <label for="formation">Formation</label>
+      <select id="formation" name="formation">
+        <option value="">No positions -- plain Going / Maybe / Can't make it</option>
+        {% for f in formations %}
+          <option value="{{ f }}" {% if suggested_formation == f %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+      <p class="field-hint">
+        With a formation, signing up means claiming a shirt -- on the site or
+        from the picker on the Discord post -- and one player per position.
+        {% if event and event.formation %}
+          Changing it releases every position already claimed, since slot names
+          differ between formations; those players stay signed up as going.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="field">
       <label for="description">Details</label>
       <textarea id="description" name="description" rows="4"
                 placeholder="In voice 15 minutes before kick-off.">{{ (event.description if event else '') or '' }}</textarea>

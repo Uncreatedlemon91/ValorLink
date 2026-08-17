@@ -42,6 +42,13 @@ RESPONSE_UPDATE_MESSAGE = 7          # edit the message the button lives on
 # Discord echoes custom_id back verbatim on press, so it's how a press is
 # tied to an event without any server-side state between the two requests.
 CUSTOM_ID_PREFIX = "rsvp"
+# The position picker on an event that has a formation. The chosen slot key
+# arrives in data.values[0] rather than in the custom_id, so this one only
+# needs to carry the event: "rsvpslot:<event_id>".
+SLOT_CUSTOM_ID_PREFIX = "rsvpslot"
+# Discord rejects a select menu with no options at all, so a fully-picked
+# squad drops the picker entirely rather than rendering an empty one.
+MAX_SELECT_OPTIONS = 25
 
 _BUTTON_STYLES = {"going": 3, "maybe": 2, "out": 4}  # green, grey, red
 _BUTTON_EMOJI = {"going": "✅", "maybe": "❔", "out": "❌"}
@@ -68,6 +75,17 @@ def verify_signature(*, signature: str, timestamp: str, body: bytes) -> bool:
     except (BadSignatureError, ValueError, TypeError):
         return False
     return True
+
+
+def parse_slot_custom_id(custom_id: str) -> int:
+    """"rsvpslot:12" -> 12."""
+    parts = (custom_id or "").split(":")
+    if len(parts) != 2 or parts[0] != SLOT_CUSTOM_ID_PREFIX:
+        raise InteractionError(f"not a position picker: {custom_id!r}")
+    try:
+        return int(parts[1])
+    except ValueError as exc:
+        raise InteractionError(f"malformed event id in {custom_id!r}") from exc
 
 
 def parse_custom_id(custom_id: str) -> tuple[int, str]:
@@ -114,9 +132,16 @@ def _discord_ts(when: datetime) -> str:
     return f"<t:{int(when.replace(tzinfo=timezone.utc).timestamp())}:F>"
 
 
-def build_embed(event, signups: list, roles: dict[int, str], site_url: str) -> dict:
-    """The announcement body: when, what, and who has answered so far,
-    split into the three columns people actually scan for."""
+def build_embed(event, signups: list, roles: dict[int, str], site_url: str,
+                slots: dict[str, str] | None = None) -> dict:
+    """The announcement body: when, what, and who has answered so far.
+
+    An event with a formation shows the team sheet -- every position and
+    who has it, empty ones included -- because "what's still open" is the
+    question people open the post to answer. Without a formation it falls
+    back to the three plain columns.
+    """
+    slots = slots or {}
     lines = [f"**When:** {_discord_ts(event.scheduled_at)}"]
     if event.opponent:
         lines.append(f"**Opponent:** {event.opponent}")
@@ -124,6 +149,25 @@ def build_embed(event, signups: list, roles: dict[int, str], site_url: str) -> d
         lines.append("")
         lines.append(event.description)
 
+    if slots:
+        fields = _team_sheet_fields(event, signups, slots)
+    else:
+        fields = _flat_rsvp_fields(signups, roles)
+
+    embed = {
+        "title": f"{event.event_type}: {event.title}",
+        "description": "\n".join(lines)[:4096],
+        "fields": fields,
+        "url": site_url,
+    }
+    if not event.signups_open:
+        embed["footer"] = {"text": "Sign-ups are closed"}
+    elif slots:
+        embed["footer"] = {"text": "Pick a position below to sign up"}
+    return embed
+
+
+def _flat_rsvp_fields(signups: list, roles: dict[int, str]) -> list[dict]:
     fields = []
     for status in SIGNUP_STATUSES:
         named = [s for s in signups if s.status == status]
@@ -136,28 +180,100 @@ def build_embed(event, signups: list, roles: dict[int, str], site_url: str) -> d
         ) or "—"
         fields.append({
             "name": f"{SIGNUP_LABELS[status]} ({len(named)})",
-            "value": value[:1024],  # Discord's per-field cap
+            "value": value[:1024],
             "inline": True,
         })
-
-    embed = {
-        "title": f"{event.event_type}: {event.title}",
-        "description": "\n".join(lines)[:4096],
-        "fields": fields,
-        "url": site_url,
-    }
-    if not event.signups_open:
-        embed["footer"] = {"text": "Sign-ups are closed"}
-    return embed
+    return fields
 
 
-def build_components(event) -> list[dict]:
-    """The three sign-up buttons, or none at all once sign-ups close --
-    leaving dead buttons on a closed event would invite presses that can
-    only ever fail."""
+def _team_sheet_fields(event, signups: list, slots: dict[str, str]) -> list[dict]:
+    """The XI and bench as a team sheet, plus whoever answered without
+    taking a shirt. Empty positions are listed too -- an absent line is
+    invisible, and "who still needs covering" is the whole point."""
+    by_slot = {s.slot_key: s for s in signups if s.slot_key}
+    starting = [k for k in slots if not k.startswith("SUB")]
+    bench = [k for k in slots if k.startswith("SUB")]
+
+    def sheet(keys):
+        return "\n".join(
+            f"**{slots[k]}** — {by_slot[k].discord_name}" if k in by_slot
+            else f"{slots[k]} — *open*"
+            for k in keys
+        ) or "—"
+
+    filled = sum(1 for k in starting if k in by_slot)
+    fields = [
+        {"name": f"Starting XI ({filled}/{len(starting)})",
+         "value": sheet(starting)[:1024], "inline": True},
+    ]
+    if any(k in by_slot for k in bench):
+        fields.append({"name": "Bench",
+                       "value": "\n".join(
+                           f"**{slots[k]}** — {by_slot[k].discord_name}"
+                           for k in bench if k in by_slot)[:1024],
+                       "inline": True})
+
+    # Answered but holding no position: still useful to staff (a "maybe" is
+    # a body that might cover a gap), so never drop them off the post.
+    others = [s for s in signups if not s.slot_key]
+    if others:
+        fields.append({
+            "name": "No position yet",
+            "value": "\n".join(
+                f"{s.discord_name} — {SIGNUP_LABELS[s.status]}" for s in others)[:1024],
+            "inline": False,
+        })
+    return fields
+
+
+def build_components(event, signups: list | None = None,
+                     slots: dict[str, str] | None = None) -> list[dict]:
+    """The controls under the post.
+
+    With a formation: a position picker listing every open shirt, plus
+    Maybe / Can't make it. Picking a position IS signing up, so there's no
+    separate "Going" button -- offering both would let someone be going
+    with no position and think they'd picked one.
+
+    Without a formation: the three plain buttons.
+
+    Nothing at all once sign-ups close -- leaving dead controls on a closed
+    event only invites presses that can't be honoured.
+    """
     if not event.signups_open:
         return []
-    return [{
+
+    slots = slots or {}
+    if not slots:
+        return [_button_row(event, SIGNUP_STATUSES)]
+
+    taken = {s.slot_key for s in (signups or []) if s.slot_key}
+    options = [
+        {"label": label, "value": key,
+         "description": "Bench" if key.startswith("SUB") else "Starting XI"}
+        for key, label in slots.items() if key not in taken
+    ][:MAX_SELECT_OPTIONS]
+
+    rows = []
+    if options:
+        rows.append({
+            "type": 1,
+            "components": [{
+                "type": 3,  # string select
+                "custom_id": f"{SLOT_CUSTOM_ID_PREFIX}:{event.id}",
+                "placeholder": "Pick your position",
+                "options": options,
+            }],
+        })
+    # Discord rejects a select with zero options, so a fully-picked squad
+    # simply loses the picker -- the Maybe/Can't buttons stay, which is
+    # exactly what's still meaningful at that point.
+    rows.append(_button_row(event, ["maybe", "out"]))
+    return rows
+
+
+def _button_row(event, statuses: list[str]) -> dict:
+    return {
         "type": 1,  # action row
         "components": [
             {
@@ -167,24 +283,26 @@ def build_components(event) -> list[dict]:
                 "emoji": {"name": _BUTTON_EMOJI[status]},
                 "custom_id": f"{CUSTOM_ID_PREFIX}:{event.id}:{status}",
             }
-            for status in SIGNUP_STATUSES
+            for status in statuses
         ],
-    }]
+    }
 
 
-def announce(event, signups: list, roles: dict[int, str], site_url: str) -> tuple[str, str]:
+def announce(event, signups: list, roles: dict[int, str], site_url: str,
+             slots: dict[str, str] | None = None) -> tuple[str, str]:
     """Posts the event to the configured channel. Returns (channel_id,
     message_id) for the caller to store, so later sign-ups can edit it."""
     channel_id = config.EVENTS_ANNOUNCE_CHANNEL_ID
     resp = discord_api.post(f"/channels/{channel_id}/messages", {
-        "embeds": [build_embed(event, signups, roles, site_url)],
-        "components": build_components(event),
+        "embeds": [build_embed(event, signups, roles, site_url, slots)],
+        "components": build_components(event, signups, slots),
     })
     message_id = str(resp.json()["id"])
     return str(channel_id), message_id
 
 
-def refresh(event, signups: list, roles: dict[int, str], site_url: str) -> None:
+def refresh(event, signups: list, roles: dict[int, str], site_url: str,
+            slots: dict[str, str] | None = None) -> None:
     """Re-renders an already-posted announcement, so a sign-up made on the
     site shows up in Discord too. A no-op for an event that was never
     announced."""
@@ -193,7 +311,7 @@ def refresh(event, signups: list, roles: dict[int, str], site_url: str) -> None:
     discord_api.patch(
         f"/channels/{event.discord_channel_id}/messages/{event.discord_message_id}",
         {
-            "embeds": [build_embed(event, signups, roles, site_url)],
-            "components": build_components(event),
+            "embeds": [build_embed(event, signups, roles, site_url, slots)],
+            "components": build_components(event, signups, slots),
         },
     )

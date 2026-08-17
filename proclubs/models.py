@@ -92,6 +92,11 @@ class Event(Base):
     # Staff can close sign-ups without deleting the event (e.g. once the
     # squad is picked). Closed events still show their roster, read-only.
     signups_open = Column(Boolean, nullable=False, default=True, server_default="1")
+    # When set, signing up means claiming a named position in this formation
+    # rather than answering a flat yes/no -- the team sheet IS the sign-up
+    # sheet. NULL keeps the plain Going/Maybe/Out behaviour, which is what
+    # events mirrored in from Discord's Events tab get.
+    formation = Column(String, nullable=True)
 
 
 # How a player answers the sign-up question. Deliberately three states, not
@@ -127,6 +132,14 @@ class EventSignup(Base):
     discord_name = Column(String, nullable=False)
     discord_avatar = Column(String, nullable=True)
     status = Column(String, nullable=False, default="going")   # see SIGNUP_STATUSES
+    # The position claimed on the event's formation ("GK", "CM2", "SUB1"),
+    # for events that have one. Only ever set alongside status "going" --
+    # you cannot hold a shirt and also be out. At most one player per slot
+    # per event; that's enforced in services.claim_slot rather than by a
+    # DB constraint, because this app's schema is create_all-managed with
+    # no migration tool, so a UniqueConstraint added here would apply only
+    # to databases created after it and silently not to existing ones.
+    slot_key = Column(String, nullable=True)
     source = Column(String, nullable=False, default="site")     # site|discord
     responded_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

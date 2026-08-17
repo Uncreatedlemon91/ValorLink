@@ -326,3 +326,190 @@ def test_deleting_an_event_removes_its_signups(client):
                             discord_avatar=None, status="going")
         services.delete_event(session, event)
         assert services.list_signups(session, event_id) == []
+
+
+# --- Formations and position claims ----------------------------------------- #
+def _seed_formation_event(formation="4-3-3") -> int:
+    with database.get_session() as session:
+        event = services.create_event(
+            session, title="Cup Tie", event_type="Match",
+            scheduled_at=datetime.utcnow() + timedelta(days=1), opponent="Rivals FC",
+            description="", image=None, staff_name="Coach", formation=formation,
+        )
+        return event.id
+
+
+def test_claiming_a_position_signs_you_up(client):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        signup = services.claim_slot(session, event, discord_user_id=1, discord_name="Keeper",
+                                     discord_avatar=None, slot_key="GK")
+        # Picking where you'll play and saying you'll be there are the same
+        # statement -- there is no separate "going" step to forget.
+        assert signup.status == "going" and signup.slot_key == "GK"
+        assert services.signup_counts(session, event_id)["going"] == 1
+
+
+def test_one_player_per_position(client):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Keeper",
+                            discord_avatar=None, slot_key="GK")
+        with pytest.raises(services.ServiceError) as exc:
+            services.claim_slot(session, event, discord_user_id=2, discord_name="Other",
+                                discord_avatar=None, slot_key="GK")
+        assert "Keeper" in str(exc.value)
+
+
+def test_moving_position_releases_the_old_one(client):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Utility",
+                            discord_avatar=None, slot_key="LB")
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Utility",
+                            discord_avatar=None, slot_key="ST")
+        claimed = services.claimed_slots(session, event_id)
+        assert "LB" not in claimed and claimed["ST"].discord_user_id == 1
+        assert len(services.list_signups(session, event_id)) == 1
+
+
+def test_answering_out_frees_the_shirt(client):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Winger",
+                            discord_avatar=None, slot_key="LW")
+        services.set_signup(session, event, discord_user_id=1, discord_name="Winger",
+                            discord_avatar=None, status="out")
+        # Holding a position while saying you can't make it would block a
+        # slot nobody can see is free.
+        assert services.claimed_slots(session, event_id) == {}
+        assert services.get_signup(session, event_id, 1).slot_key is None
+
+
+def test_unknown_slot_is_refused(client):
+    event_id = _seed_formation_event("4-3-3")
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        # CDM1 exists in 4-2-3-1 but not in 4-3-3.
+        with pytest.raises(services.ServiceError):
+            services.claim_slot(session, event, discord_user_id=1, discord_name="X",
+                                discord_avatar=None, slot_key="CDM1")
+
+
+def test_changing_formation_releases_claims(client):
+    event_id = _seed_formation_event("4-3-3")
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Mid",
+                            discord_avatar=None, slot_key="CM1")
+        services.update_event(session, event, title=event.title, event_type=event.event_type,
+                              scheduled_at=event.scheduled_at, opponent=event.opponent,
+                              description=None, image=None, result=None, formation="4-2-3-1")
+        # Slot keys are formation-specific, so the claim can't survive -- but
+        # the player stays signed up rather than being silently dropped.
+        assert services.claimed_slots(session, event_id) == {}
+        assert services.get_signup(session, event_id, 1).status == "going"
+
+
+def test_event_without_formation_keeps_plain_rsvp(client):
+    event_id = _seed_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        assert services.event_slots(event) == {}
+        with pytest.raises(services.ServiceError):
+            services.claim_slot(session, event, discord_user_id=1, discord_name="X",
+                                discord_avatar=None, slot_key="GK")
+
+
+def test_discord_select_claims_a_position(client, discord_key):
+    event_id = _seed_formation_event()
+    r = _signed_request(client, {
+        "type": discord_rsvp.INTERACTION_MESSAGE_COMPONENT,
+        "data": {"custom_id": f"rsvpslot:{event_id}", "component_type": 3, "values": ["ST"]},
+        "member": {"user": {"id": "77", "global_name": "Poacher"}},
+    }, key=discord_key)
+    assert r.status_code == 200
+    assert r.json()["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    with database.get_session() as session:
+        signup = services.get_signup(session, event_id, 77)
+        assert signup.slot_key == "ST" and signup.status == "going"
+        assert signup.source == "discord"
+
+
+def test_discord_select_on_taken_position_is_ephemeral(client, discord_key):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="First",
+                            discord_avatar=None, slot_key="GK")
+    r = _signed_request(client, {
+        "type": discord_rsvp.INTERACTION_MESSAGE_COMPONENT,
+        "data": {"custom_id": f"rsvpslot:{event_id}", "component_type": 3, "values": ["GK"]},
+        "member": {"user": {"id": "88", "global_name": "TooSlow"}},
+    }, key=discord_key)
+    assert r.status_code == 200
+    # Ephemeral, so only the loser of the race sees it and the post is left
+    # showing the state that actually won.
+    assert r.json()["data"]["flags"] == 64
+    assert "First" in r.json()["data"]["content"]
+
+
+def test_taken_positions_drop_out_of_the_discord_picker(client):
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        services.claim_slot(session, event, discord_user_id=1, discord_name="Keeper",
+                            discord_avatar=None, slot_key="GK")
+        signups = services.list_signups(session, event_id)
+        slots = services.event_slots(event)
+        components = discord_rsvp.build_components(event, signups, slots)
+
+    select = components[0]["components"][0]
+    values = [o["value"] for o in select["options"]]
+    assert "GK" not in values and "ST" in values
+    # No "Going" button alongside the picker -- picking a shirt is the sign-up.
+    buttons = [c["custom_id"] for c in components[1]["components"]]
+    assert not any(b.endswith(":going") for b in buttons)
+
+
+def test_full_squad_drops_the_picker_entirely(client):
+    """Discord rejects a select with zero options, so a fully-claimed squad
+    must lose the picker rather than render an empty one."""
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        slots = services.event_slots(event)
+        for i, key in enumerate(slots):
+            services.claim_slot(session, event, discord_user_id=100 + i,
+                                discord_name=f"P{i}", discord_avatar=None, slot_key=key)
+        signups = services.list_signups(session, event_id)
+        components = discord_rsvp.build_components(event, signups, slots)
+
+    assert all(c["components"][0]["type"] != 3 for c in components)
+    assert len(components) == 1  # just the maybe/out row
+
+
+def test_claimed_shirt_beats_tactics_board_on_the_page(client):
+    """The Tactics board is the default lineup; a claim is what they signed
+    up to play in this specific match, so the claim wins."""
+    event_id = _seed_formation_event()
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        session.add(TacticsSlot(formation="4-3-3", slot_key="GK", player_name="Utility"))
+        session.commit()
+        services.set_player_link(session, discord_user_id=5, player_name="Utility")
+        services.claim_slot(session, event, discord_user_id=5, discord_name="Utility",
+                            discord_avatar=None, slot_key="ST")
+
+    _login_staff(client)
+    page = client.get(f"/events/{event_id}").text
+    assert "Cup Tie" in page
+    with database.get_session() as session:
+        event = services.get_event(session, event_id)
+        view = appmod._event_view(session, event, None)
+    assert view["roles"][5] == "ST"          # claimed shirt
+    assert view["tactics_roles"][5] == "GK"  # board default, still available

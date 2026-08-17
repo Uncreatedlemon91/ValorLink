@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
+from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
                     Comment, Event, EventSignup, Like, PlayerLink, Streamer, TacticsBoard,
                     TacticsSlot)
@@ -333,6 +334,41 @@ def get_event(session: Session, event_id: int) -> Event | None:
     return session.get(Event, event_id)
 
 
+def _validated_formation(formation: str | None) -> str | None:
+    formation = (formation or "").strip()
+    if not formation:
+        return None
+    if formation not in FORMATIONS:
+        raise ServiceError(f"Unknown formation {formation!r}.")
+    return formation
+
+
+def event_slots(event: Event) -> dict[str, str]:
+    """slot_key -> display label for everything claimable on this event:
+    the formation's eleven, then the bench. Empty for an event with no
+    formation, which is what makes "does this event use positions" a single
+    truthy check everywhere else."""
+    if not event.formation:
+        return {}
+    slots = {key: meta["label"] for key, meta in FORMATIONS[event.formation].items()}
+    slots.update({key: meta["label"] for key, meta in BENCH_SLOTS.items()})
+    return slots
+
+
+def claimed_slots(session: Session, event_id: int) -> dict[str, EventSignup]:
+    """slot_key -> the sign-up holding it. Only "going" rows can hold a
+    slot, so this is also the starting XI as it currently stands."""
+    return {
+        s.slot_key: s
+        for s in session.execute(
+            select(EventSignup).where(
+                EventSignup.event_id == event_id,
+                EventSignup.slot_key.isnot(None),
+            )
+        ).scalars()
+    }
+
+
 def _validated_event_fields(*, title: str, event_type: str, scheduled_at: datetime | None) -> tuple[str, str]:
     title = (title or "").strip()
     if not title:
@@ -346,7 +382,7 @@ def _validated_event_fields(*, title: str, event_type: str, scheduled_at: dateti
 
 def create_event(session: Session, *, title: str, event_type: str, scheduled_at: datetime,
                  opponent: str | None, description: str | None, image: str | None,
-                 staff_name: str) -> Event:
+                 staff_name: str, formation: str | None = None) -> Event:
     title, event_type = _validated_event_fields(
         title=title, event_type=event_type, scheduled_at=scheduled_at)
     event = Event(
@@ -354,6 +390,7 @@ def create_event(session: Session, *, title: str, event_type: str, scheduled_at:
         opponent=(opponent or "").strip() or None,
         description=(description or "").strip() or None,
         image=image, created_by_name=staff_name,
+        formation=_validated_formation(formation),
     )
     session.add(event)
     session.commit()
@@ -363,9 +400,19 @@ def create_event(session: Session, *, title: str, event_type: str, scheduled_at:
 
 def update_event(session: Session, event: Event, *, title: str, event_type: str,
                  scheduled_at: datetime, opponent: str | None, description: str | None,
-                 image: str | None, result: str | None) -> Event:
+                 image: str | None, result: str | None, formation: str | None = None) -> Event:
     title, event_type = _validated_event_fields(
         title=title, event_type=event_type, scheduled_at=scheduled_at)
+    formation = _validated_formation(formation)
+    if formation != event.formation:
+        # Slot keys are formation-specific, so a claimed CDM2 is meaningless
+        # once the shape becomes 4-3-3. Release every claim rather than
+        # leaving players holding positions that no longer exist -- they
+        # stay signed up as going, they just have to re-pick a shirt.
+        session.execute(
+            update(EventSignup).where(EventSignup.event_id == event.id).values(slot_key=None)
+        )
+        event.formation = formation
     event.title = title
     event.event_type = event_type
     event.scheduled_at = scheduled_at
@@ -458,8 +505,64 @@ def set_signup(session: Session, event: Event, *, discord_user_id: int, discord_
         # name on a live roster is worse than no name.
         signup.discord_name = discord_name
         signup.discord_avatar = discord_avatar
+    if status != "going":
+        # Answering maybe/out frees the shirt for someone else. Holding a
+        # position while saying you can't make it would quietly block a slot
+        # nobody can see is free.
+        signup.slot_key = None
     session.commit()
     session.refresh(signup)
+    return signup
+
+
+def claim_slot(session: Session, event: Event, *, discord_user_id: int, discord_name: str,
+               discord_avatar: str | None, slot_key: str, source: str = "site") -> EventSignup:
+    """Takes a shirt. Claiming a position IS signing up -- it sets status
+    "going" as well, because picking where you'll play and saying you'll be
+    there are the same statement.
+
+    One player per slot: a formation has exactly one GK, so a second
+    claimant is refused rather than silently sharing. A player moving
+    between slots releases their old one first, so nobody can hold two.
+    """
+    if not event.signups_open:
+        raise ServiceError("Sign-ups for this event are closed.")
+    slots = event_slots(event)
+    if not slots:
+        raise ServiceError("This event doesn't use positions.")
+    if slot_key not in slots:
+        raise ServiceError(f"{slot_key} isn't a position in this event's formation.")
+
+    holder = claimed_slots(session, event.id).get(slot_key)
+    if holder is not None and holder.discord_user_id != discord_user_id:
+        raise ServiceError(f"{slots[slot_key]} is already taken by {holder.discord_name}.")
+
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is None:
+        signup = EventSignup(
+            event_id=event.id, discord_user_id=discord_user_id, discord_name=discord_name,
+            discord_avatar=discord_avatar, status="going", slot_key=slot_key, source=source,
+        )
+        session.add(signup)
+    else:
+        signup.status = "going"
+        signup.slot_key = slot_key
+        signup.source = source
+        signup.discord_name = discord_name
+        signup.discord_avatar = discord_avatar
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+def release_slot(session: Session, event: Event, *, discord_user_id: int) -> EventSignup | None:
+    """Gives up the shirt but stays signed up as going -- "I'll be there,
+    just not in that position" is a normal thing to want to say."""
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is not None and signup.slot_key is not None:
+        signup.slot_key = None
+        session.commit()
+        session.refresh(signup)
     return signup
 
 

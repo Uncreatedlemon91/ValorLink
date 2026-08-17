@@ -106,10 +106,26 @@ than erroring.
 
 ## Events and sign-ups
 
-Staff create events on the site (`/events/new`). Players answer **Going /
-Maybe / Can't make it** from either surface -- the event page, or the
-buttons on the event's Discord post -- and both write the same row, so
+Staff create events on the site (`/events/new`), optionally picking a
+**formation**. Players sign up from either surface -- the event page, or
+the controls on the event's Discord post -- and both write the same row, so
 answering in one place updates the other.
+
+**With a formation, the team sheet is the sign-up sheet.** The event page
+shows the pitch and players click an open shirt to take it; the Discord
+post carries a position picker listing whatever is still open. Claiming a
+position *is* signing up -- there's deliberately no separate "Going"
+button next to the picker, because offering both would let someone be down
+as going with no position and believe they'd picked one. One player per
+shirt: a formation has exactly one GK, so a second claimant is refused
+rather than quietly sharing. Moving position releases the old one, and
+answering Maybe or Can't make it frees the shirt, since holding a position
+you can't fill would block a slot nobody can see is open. Changing an
+event's formation releases every claim (slot names differ between shapes),
+leaving those players signed up but needing to re-pick.
+
+**Without a formation** it's the plain **Going / Maybe / Can't make it**,
+which is also what events mirrored in from Discord's Events tab get.
 
 - **The Discord post is not polled.** Discord delivers each button press
   straight to `POST /discord/interactions` as a signed HTTPS request, so
@@ -125,11 +141,15 @@ answering in one place updates the other.
 - **A sign-up made on the site edits the Discord post** so both rosters
   agree. If that edit fails, the sign-up is still saved and the site says
   so -- the post catches up on the next change.
-- **Positions come from the Tactics board**, via a one-time gamertag link.
-  The Tactics board stores EA gamertags (that's what EA's roster gives us)
-  while a sign-up knows only a Discord account, so a member picks their own
+- **The Tactics board is the fallback, not the truth.** A shirt claimed for
+  a specific event wins over that player's usual spot on the board -- the
+  board is the default lineup, the claim is what they signed up to play
+  here. Players with no claim (or on an event with no formation) still show
+  their board position, via a one-time gamertag link.
+  The board stores EA gamertags (that's what EA's roster gives us) while a
+  sign-up knows only a Discord account, so a member picks their own
   gamertag once and the site joins the two from then on. No link, no
-  position shown -- which is a normal state for a new member, not an error.
+  fallback position -- a normal state for a new member, not an error.
 - **"Turns up" is measured, not claimed.** Staff mark who actually
   attended after the event; the percentage is presents over presents plus
   absents. An unmarked event counts as no evidence rather than an absence,

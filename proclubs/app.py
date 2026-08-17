@@ -27,6 +27,7 @@ import ea_client
 import services
 import twitch_client
 from database import get_session, init_db
+from formations import BENCH_SLOTS, FORMATIONS
 from models import ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_LABELS, SIGNUP_STATUSES, EventSignup
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -452,9 +453,21 @@ def _event_view(session, event, user):
     turned up."""
     signups = services.list_signups(session, event.id)
     user_ids = [s.discord_user_id for s in signups]
+    slots = services.event_slots(event)
+    # The shirt someone claimed for THIS event wins over their usual spot on
+    # the Tactics board -- the board is the default lineup, the claim is what
+    # they actually signed up to play here.
+    tactics_roles = services.tactics_roles_for(session, user_ids, _slot_labels())
+    positions = dict(tactics_roles)
+    for signup in signups:
+        if signup.slot_key and signup.slot_key in slots:
+            positions[signup.discord_user_id] = slots[signup.slot_key]
     return {
         "signups": signups,
-        "roles": services.tactics_roles_for(session, user_ids, _slot_labels()),
+        "slots": slots,
+        "claimed": {k: v for k, v in services.claimed_slots(session, event.id).items()},
+        "roles": positions,
+        "tactics_roles": tactics_roles,
         "records": services.attendance_records_for(session, user_ids),
         "counts": services.signup_counts(session, event.id),
         "my_signup": (
@@ -479,22 +492,28 @@ def _refresh_announcement(request: Request, session, event) -> None:
     roles = services.tactics_roles_for(
         session, [s.discord_user_id for s in signups], _slot_labels())
     try:
-        discord_rsvp.refresh(event, signups, roles, _event_url(request, event))
+        discord_rsvp.refresh(event, signups, roles, _event_url(request, event),
+                             services.event_slots(event))
     except discord_rsvp.DiscordApiError as exc:
         _flash(request, f"Saved, but couldn't update the Discord post: {exc}", "warn")
 
 
 @app.get("/events/new", response_class=HTMLResponse)
 def event_new_form(request: Request, _staff=Depends(auth.require_staff)):
+    with get_session() as session:
+        # Default to whatever the Tactics board is currently set to -- that's
+        # the shape the squad is actually drilled in.
+        suggested = services.get_active_formation(session)
     return templates.TemplateResponse(request, "event_form.html", _ctx(
-        request, event=None, event_types=services.EVENT_TYPES))
+        request, event=None, event_types=services.EVENT_TYPES,
+        formations=list(FORMATIONS), suggested_formation=suggested))
 
 
 @app.post("/events/new")
 async def event_new(
     request: Request, title: str = Form(...), event_type: str = Form("Match"),
     scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
-    announce: str = Form(""), csrf_token: str = Form(...),
+    formation: str = Form(""), announce: str = Form(""), csrf_token: str = Form(...),
     image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
@@ -504,6 +523,7 @@ async def event_new(
             session, title=title, event_type=event_type,
             scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
             description=description, image=image_uri, staff_name=staff["name"],
+            formation=formation,
         )
         _flash(request, "Event created.")
         if announce:
@@ -525,7 +545,8 @@ def event_detail(request: Request, event_id: int):
             signup_labels=SIGNUP_LABELS, signup_statuses=SIGNUP_STATUSES,
             attendance_statuses=ATTENDANCE_STATUSES,
             my_link=my_link, is_past=event.scheduled_at < datetime.utcnow(),
-            rsvp_enabled=config.EVENT_RSVP_ENABLED, **view,
+            rsvp_enabled=config.EVENT_RSVP_ENABLED,
+            pitch=FORMATIONS.get(event.formation or "", {}), bench_slots=BENCH_SLOTS, **view,
         ))
 
 
@@ -536,14 +557,15 @@ def event_edit_form(request: Request, event_id: int, _staff=Depends(auth.require
         if event is None:
             raise HTTPException(status_code=404)
         return templates.TemplateResponse(request, "event_form.html", _ctx(
-            request, event=event, event_types=services.EVENT_TYPES))
+            request, event=event, event_types=services.EVENT_TYPES,
+            formations=list(FORMATIONS), suggested_formation=event.formation))
 
 
 @app.post("/events/{event_id}/edit")
 async def event_edit(
     request: Request, event_id: int, title: str = Form(...), event_type: str = Form("Match"),
     scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
-    result: str = Form(""), csrf_token: str = Form(...),
+    result: str = Form(""), formation: str = Form(""), csrf_token: str = Form(...),
     image: UploadFile | None = None, _staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
@@ -555,7 +577,7 @@ async def event_edit(
         services.update_event(
             session, event, title=title, event_type=event_type,
             scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
-            description=description, image=image_uri, result=result,
+            description=description, image=image_uri, result=result, formation=formation,
         )
         _flash(request, "Event updated.")
         _refresh_announcement(request, session, event)
@@ -588,6 +610,32 @@ def event_signup(request: Request, event_id: int, status: str = Form(...),
             discord_avatar=user.get("avatar"), status=status, source="site",
         )
         _flash(request, f"You're down as {SIGNUP_LABELS[status].lower()}.")
+        _refresh_announcement(request, session, event)
+    return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/claim")
+def event_claim(request: Request, event_id: int, slot_key: str = Form(""),
+                csrf_token: str = Form(...), user=Depends(auth.require_member)):
+    """Take a shirt (or hand it back, with an empty slot_key). Claiming a
+    position is itself the sign-up -- see services.claim_slot."""
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        try:
+            if slot_key:
+                services.claim_slot(
+                    session, event, discord_user_id=int(user["id"]), discord_name=user["name"],
+                    discord_avatar=user.get("avatar"), slot_key=slot_key, source="site")
+                _flash(request, f"You're in at {services.event_slots(event).get(slot_key, slot_key)}.")
+            else:
+                services.release_slot(session, event, discord_user_id=int(user["id"]))
+                _flash(request, "Position given up -- you're still down as going.")
+        except services.ServiceError as exc:
+            _flash(request, str(exc), "warn")
+            return RedirectResponse(f"/events/{event_id}", status_code=303)
         _refresh_announcement(request, session, event)
     return RedirectResponse(f"/events/{event_id}", status_code=303)
 
@@ -650,7 +698,7 @@ def _announce_event(request: Request, session, event) -> None:
         session, [s.discord_user_id for s in signups], _slot_labels())
     try:
         channel_id, message_id = discord_rsvp.announce(
-            event, signups, roles, _event_url(request, event))
+            event, signups, roles, _event_url(request, event), services.event_slots(event))
     except discord_rsvp.DiscordApiError as exc:
         _flash(request, f"Couldn't post to Discord: {exc}", "warn")
         return
@@ -683,10 +731,20 @@ async def discord_interactions(request: Request):
     if interaction.get("type") != discord_rsvp.INTERACTION_MESSAGE_COMPONENT:
         raise HTTPException(status_code=400, detail="unsupported interaction type")
 
+    data = interaction.get("data") or {}
+    custom_id = data.get("custom_id", "")
     try:
-        event_id, status = discord_rsvp.parse_custom_id(
-            (interaction.get("data") or {}).get("custom_id", ""))
         presser = discord_rsvp.interaction_user(interaction)
+        # A position pick and a plain answer arrive through the same
+        # interaction type; the custom_id prefix is what tells them apart.
+        if custom_id.startswith(discord_rsvp.SLOT_CUSTOM_ID_PREFIX + ":"):
+            event_id = discord_rsvp.parse_slot_custom_id(custom_id)
+            slot_key, status = (data.get("values") or [None])[0], None
+            if not slot_key:
+                raise discord_rsvp.InteractionError("position picker sent no value")
+        else:
+            event_id, status = discord_rsvp.parse_custom_id(custom_id)
+            slot_key = None
     except discord_rsvp.InteractionError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -695,24 +753,33 @@ async def discord_interactions(request: Request):
         if event is None:
             return _interaction_note("That event no longer exists.")
         try:
-            services.set_signup(
-                session, event, discord_user_id=presser["id"], discord_name=presser["name"],
-                discord_avatar=presser["avatar"], status=status, source="discord",
-            )
+            if slot_key:
+                services.claim_slot(
+                    session, event, discord_user_id=presser["id"], discord_name=presser["name"],
+                    discord_avatar=presser["avatar"], slot_key=slot_key, source="discord",
+                )
+            else:
+                services.set_signup(
+                    session, event, discord_user_id=presser["id"], discord_name=presser["name"],
+                    discord_avatar=presser["avatar"], status=status, source="discord",
+                )
         except services.ServiceError as exc:
+            # e.g. someone took that shirt a second earlier. Ephemeral, so
+            # only the presser sees it, and the post stays as it was.
             return _interaction_note(str(exc))
 
         signups = services.list_signups(session, event.id)
         roles = services.tactics_roles_for(
             session, [s.discord_user_id for s in signups], _slot_labels())
+        slots = services.event_slots(event)
         # Responding with UPDATE_MESSAGE re-renders the announcement in the
         # same round trip -- no follow-up PATCH, and no rate-limit cost.
         return {
             "type": discord_rsvp.RESPONSE_UPDATE_MESSAGE,
             "data": {
                 "embeds": [discord_rsvp.build_embed(
-                    event, signups, roles, _event_url(request, event))],
-                "components": discord_rsvp.build_components(event),
+                    event, signups, roles, _event_url(request, event), slots)],
+                "components": discord_rsvp.build_components(event, signups, slots),
             },
         }
 
@@ -880,199 +947,10 @@ def league_page(request: Request):
     ))
 
 
-# --------------------------------------------------------------------------- #
-# Tactics board -- staff drag names from the live EA roster onto a pitch;
-# see services.py's tactics functions and templates/tactics.html.
-# --------------------------------------------------------------------------- #
-# Slot coordinates are percentages into the pitch (top/left), pitch attacks
-# upward (GK near the bottom, at ~92%, forwards near the top, at ~12%) --
-# the common vertical tactics-board orientation. `label` is just the chip
-# shown in an empty slot; the dict's own keys are the real slot identity
-# used for validation and storage, not the label text.
-FORMATIONS = {
-    "4-3-3": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CM1": {"label": "CM", "top": 52, "left": 25}, "CM2": {"label": "CM", "top": 48, "left": 50},
-        "CM3": {"label": "CM", "top": 52, "left": 75},
-        "LW": {"label": "LW", "top": 20, "left": 18}, "ST": {"label": "ST", "top": 12, "left": 50},
-        "RW": {"label": "RW", "top": 20, "left": 82},
-    },
-    "4-4-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "LM": {"label": "LM", "top": 48, "left": 12}, "CM1": {"label": "CM", "top": 50, "left": 38},
-        "CM2": {"label": "CM", "top": 50, "left": 62}, "RM": {"label": "RM", "top": 48, "left": 88},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "4-2-3-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 74, "left": 15}, "CB1": {"label": "CB", "top": 80, "left": 35},
-        "CB2": {"label": "CB", "top": 80, "left": 65}, "RB": {"label": "RB", "top": 74, "left": 85},
-        "CDM1": {"label": "CDM", "top": 58, "left": 38}, "CDM2": {"label": "CDM", "top": 58, "left": 62},
-        "LW": {"label": "LW", "top": 32, "left": 18}, "CAM": {"label": "CAM", "top": 32, "left": 50},
-        "RW": {"label": "RW", "top": 32, "left": 82}, "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-    "3-5-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 78, "left": 25}, "CB2": {"label": "CB", "top": 82, "left": 50},
-        "CB3": {"label": "CB", "top": 78, "left": 75},
-        "LWB": {"label": "LWB", "top": 52, "left": 8}, "CM1": {"label": "CM", "top": 50, "left": 32},
-        "CM2": {"label": "CM", "top": 46, "left": 50}, "CM3": {"label": "CM", "top": 50, "left": 68},
-        "RWB": {"label": "RWB", "top": 52, "left": 92},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "4-3-2-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CM1": {"label": "CM", "top": 55, "left": 30}, "CM2": {"label": "CM", "top": 50, "left": 50},
-        "CM3": {"label": "CM", "top": 55, "left": 70},
-        "LF": {"label": "LF", "top": 30, "left": 35}, "RF": {"label": "RF", "top": 30, "left": 65},
-        "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-    "4-2-2-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CDM1": {"label": "CDM", "top": 58, "left": 38}, "CDM2": {"label": "CDM", "top": 58, "left": 62},
-        "LAM": {"label": "LAM", "top": 35, "left": 25}, "RAM": {"label": "RAM", "top": 35, "left": 75},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "4-4-1-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "LM": {"label": "LM", "top": 48, "left": 12}, "CM1": {"label": "CM", "top": 50, "left": 38},
-        "CM2": {"label": "CM", "top": 50, "left": 62}, "RM": {"label": "RM", "top": 48, "left": 88},
-        "CF": {"label": "CF", "top": 26, "left": 50}, "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-    "4-1-2-1-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CDM": {"label": "CDM", "top": 62, "left": 50},
-        "CM1": {"label": "CM", "top": 48, "left": 30}, "CM2": {"label": "CM", "top": 48, "left": 70},
-        "CAM": {"label": "CAM", "top": 30, "left": 50},
-        "ST1": {"label": "ST", "top": 14, "left": 38}, "ST2": {"label": "ST", "top": 14, "left": 62},
-    },
-    "4-1-3-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CDM": {"label": "CDM", "top": 62, "left": 50},
-        "LM": {"label": "LM", "top": 42, "left": 18}, "CM": {"label": "CM", "top": 40, "left": 50},
-        "RM": {"label": "RM", "top": 42, "left": 82},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "4-1-4-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "CDM": {"label": "CDM", "top": 62, "left": 50},
-        "LM": {"label": "LM", "top": 42, "left": 12}, "CM1": {"label": "CM", "top": 45, "left": 38},
-        "CM2": {"label": "CM", "top": 45, "left": 62}, "RM": {"label": "RM", "top": 42, "left": 88},
-        "ST": {"label": "ST", "top": 15, "left": 50},
-    },
-    "4-5-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LB": {"label": "LB", "top": 72, "left": 15}, "CB1": {"label": "CB", "top": 78, "left": 35},
-        "CB2": {"label": "CB", "top": 78, "left": 65}, "RB": {"label": "RB", "top": 72, "left": 85},
-        "LM": {"label": "LM", "top": 45, "left": 10}, "CM1": {"label": "CM", "top": 48, "left": 32},
-        "CM2": {"label": "CM", "top": 45, "left": 50}, "CM3": {"label": "CM", "top": 48, "left": 68},
-        "RM": {"label": "RM", "top": 45, "left": 90},
-        "ST": {"label": "ST", "top": 15, "left": 50},
-    },
-    "3-4-3": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 80, "left": 25}, "CB2": {"label": "CB", "top": 84, "left": 50},
-        "CB3": {"label": "CB", "top": 80, "left": 75},
-        "LM": {"label": "LM", "top": 52, "left": 10}, "CM1": {"label": "CM", "top": 50, "left": 35},
-        "CM2": {"label": "CM", "top": 50, "left": 65}, "RM": {"label": "RM", "top": 52, "left": 90},
-        "LW": {"label": "LW", "top": 20, "left": 18}, "ST": {"label": "ST", "top": 12, "left": 50},
-        "RW": {"label": "RW", "top": 20, "left": 82},
-    },
-    "3-4-2-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 80, "left": 25}, "CB2": {"label": "CB", "top": 84, "left": 50},
-        "CB3": {"label": "CB", "top": 80, "left": 75},
-        "LM": {"label": "LM", "top": 52, "left": 10}, "CM1": {"label": "CM", "top": 50, "left": 35},
-        "CM2": {"label": "CM", "top": 50, "left": 65}, "RM": {"label": "RM", "top": 52, "left": 90},
-        "CAM1": {"label": "CAM", "top": 28, "left": 35}, "CAM2": {"label": "CAM", "top": 28, "left": 65},
-        "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-    "3-4-1-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 80, "left": 25}, "CB2": {"label": "CB", "top": 84, "left": 50},
-        "CB3": {"label": "CB", "top": 80, "left": 75},
-        "LM": {"label": "LM", "top": 52, "left": 10}, "CM1": {"label": "CM", "top": 50, "left": 35},
-        "CM2": {"label": "CM", "top": 50, "left": 65}, "RM": {"label": "RM", "top": 52, "left": 90},
-        "CAM": {"label": "CAM", "top": 30, "left": 50},
-        "ST1": {"label": "ST", "top": 14, "left": 38}, "ST2": {"label": "ST", "top": 14, "left": 62},
-    },
-    "3-5-1-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 80, "left": 25}, "CB2": {"label": "CB", "top": 84, "left": 50},
-        "CB3": {"label": "CB", "top": 80, "left": 75},
-        "LWB": {"label": "LWB", "top": 55, "left": 8}, "CM1": {"label": "CM", "top": 50, "left": 32},
-        "CM2": {"label": "CM", "top": 48, "left": 50}, "CM3": {"label": "CM", "top": 50, "left": 68},
-        "RWB": {"label": "RWB", "top": 55, "left": 92},
-        "CF": {"label": "CF", "top": 26, "left": 50}, "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-    "3-1-4-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "CB1": {"label": "CB", "top": 80, "left": 25}, "CB2": {"label": "CB", "top": 84, "left": 50},
-        "CB3": {"label": "CB", "top": 80, "left": 75},
-        "CDM": {"label": "CDM", "top": 65, "left": 50},
-        "LM": {"label": "LM", "top": 45, "left": 12}, "CM1": {"label": "CM", "top": 42, "left": 38},
-        "CM2": {"label": "CM", "top": 42, "left": 62}, "RM": {"label": "RM", "top": 45, "left": 88},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "5-2-1-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LWB": {"label": "LWB", "top": 68, "left": 10}, "CB1": {"label": "CB", "top": 78, "left": 30},
-        "CB2": {"label": "CB", "top": 82, "left": 50}, "CB3": {"label": "CB", "top": 78, "left": 70},
-        "RWB": {"label": "RWB", "top": 68, "left": 90},
-        "CM1": {"label": "CM", "top": 48, "left": 38}, "CM2": {"label": "CM", "top": 48, "left": 62},
-        "CAM": {"label": "CAM", "top": 30, "left": 50},
-        "ST1": {"label": "ST", "top": 14, "left": 38}, "ST2": {"label": "ST", "top": 14, "left": 62},
-    },
-    "5-2-3": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LWB": {"label": "LWB", "top": 68, "left": 10}, "CB1": {"label": "CB", "top": 78, "left": 30},
-        "CB2": {"label": "CB", "top": 82, "left": 50}, "CB3": {"label": "CB", "top": 78, "left": 70},
-        "RWB": {"label": "RWB", "top": 68, "left": 90},
-        "CM1": {"label": "CM", "top": 50, "left": 38}, "CM2": {"label": "CM", "top": 50, "left": 62},
-        "LW": {"label": "LW", "top": 20, "left": 18}, "ST": {"label": "ST", "top": 12, "left": 50},
-        "RW": {"label": "RW", "top": 20, "left": 82},
-    },
-    "5-3-2": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LWB": {"label": "LWB", "top": 68, "left": 10}, "CB1": {"label": "CB", "top": 78, "left": 30},
-        "CB2": {"label": "CB", "top": 82, "left": 50}, "CB3": {"label": "CB", "top": 78, "left": 70},
-        "RWB": {"label": "RWB", "top": 68, "left": 90},
-        "CM1": {"label": "CM", "top": 48, "left": 30}, "CM2": {"label": "CM", "top": 46, "left": 50},
-        "CM3": {"label": "CM", "top": 48, "left": 70},
-        "ST1": {"label": "ST", "top": 15, "left": 38}, "ST2": {"label": "ST", "top": 15, "left": 62},
-    },
-    "5-4-1": {
-        "GK": {"label": "GK", "top": 92, "left": 50},
-        "LWB": {"label": "LWB", "top": 68, "left": 10}, "CB1": {"label": "CB", "top": 78, "left": 30},
-        "CB2": {"label": "CB", "top": 82, "left": 50}, "CB3": {"label": "CB", "top": 78, "left": 70},
-        "RWB": {"label": "RWB", "top": 68, "left": 90},
-        "LM": {"label": "LM", "top": 45, "left": 12}, "CM1": {"label": "CM", "top": 42, "left": 38},
-        "CM2": {"label": "CM", "top": 42, "left": 62}, "RM": {"label": "RM", "top": 45, "left": 88},
-        "ST": {"label": "ST", "top": 12, "left": 50},
-    },
-}
-
-# Substitutes bench -- fixed slots that sit alongside the pitch, independent
-# of formation (a formation only defines the 11 starting positions). Stored
-# in the same TacticsSlot table as pitch slots, keyed by formation +
-# slot_key, so switching formations keeps its own bench too.
-BENCH_SLOTS = {f"SUB{i}": {"label": f"SUB {i}"} for i in range(1, 8)}
+# Formation/bench definitions live in formations.py -- services.py needs
+# them too (validating a claimed position), and importing app.py from
+# there would be a cycle. Re-exported here so the existing references
+# and templates keep working unchanged.
 
 
 @app.get("/tactics", response_class=HTMLResponse)
