@@ -11,8 +11,9 @@ This runs as its own independent service alongside the ValorLink bot/web app
 with `web/`, `db/`, `tenancy/`, or `utils/`. See
 [`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
 
-One deliberate exception: if `DISCORD_BOT_TOKEN` is set (for the Discord
-Scheduled Events sync, below), it's a copy of the main bot's actual token,
+One deliberate exception: if `DISCORD_BOT_TOKEN` is set (for event
+announcements and the Discord syncs below), it's a copy of the main bot's
+actual token,
 not a separately-registered credential. Everything else -- database,
 session, OAuth client -- stays as described above.
 
@@ -23,11 +24,11 @@ everyone -- including signed-out visitors -- can read the site. Anyone
 signed in with Discord **and a member of `DISCORD_GUILD_ID`** can comment
 on and like news articles, staff or not -- see "Comments and likes" below.
 **Staff** -- holders of `DISCORD_STAFF_ROLE_ID` in `DISCORD_GUILD_ID` -- can
-write articles and manage the streamer list (and are always members too,
-since holding a guild role requires being in the guild). A role change in
-Discord takes effect on that person's next sign-in. Events are the one
-exception: there's no staff editing UI for them at all -- see "Events are
-Discord-only" below.
+write articles, create and edit events, mark attendance, and manage the
+streamer list (and are always members too, since holding a guild role
+requires being in the guild). A role change in Discord takes effect on that
+person's next sign-in. Members who aren't staff can still sign up for
+events -- see "Events and sign-ups" below.
 
 Signing in with Discord doesn't by itself mean membership: OAuth just
 proves "this is a real Discord account," and anyone can authorize the
@@ -103,14 +104,48 @@ configured," the streamer showcase shows profiles without live status, no
 events get auto-created, the Clips page shows "not configured yet") rather
 than erroring.
 
-## Events are Discord-only
+## Events and sign-ups
 
-`/events` is **read-only** on the site -- there is no create/edit/delete
-UI, for anyone, staff included. Events exist only via the one-directional
-Discord Scheduled Events sync: create an event in Discord (Server →
-Events → New Event) and it shows up as a site fixture automatically. It
-is **not** the reverse -- there's no way to create a fixture from the
-site that pushes back to Discord.
+Staff create events on the site (`/events/new`). Players answer **Going /
+Maybe / Can't make it** from either surface -- the event page, or the
+buttons on the event's Discord post -- and both write the same row, so
+answering in one place updates the other.
+
+- **The Discord post is not polled.** Discord delivers each button press
+  straight to `POST /discord/interactions` as a signed HTTPS request, so
+  it lands instantly. This still needs no always-on bot process: an
+  interaction is an ordinary webhook, not a gateway connection.
+- **Every interaction request is signature-checked** (Ed25519, against
+  `DISCORD_PUBLIC_KEY`) before it is even JSON-decoded. That check is
+  load-bearing security, not a formality -- the endpoint is public by
+  necessity, so without it anyone who learned the URL could sign up, or
+  un-sign-up, anyone they liked. Discord also probes the endpoint with
+  deliberately-invalid signatures when you save the URL and refuses it
+  unless they are rejected with a 401.
+- **A sign-up made on the site edits the Discord post** so both rosters
+  agree. If that edit fails, the sign-up is still saved and the site says
+  so -- the post catches up on the next change.
+- **Positions come from the Tactics board**, via a one-time gamertag link.
+  The Tactics board stores EA gamertags (that's what EA's roster gives us)
+  while a sign-up knows only a Discord account, so a member picks their own
+  gamertag once and the site joins the two from then on. No link, no
+  position shown -- which is a normal state for a new member, not an error.
+- **"Turns up" is measured, not claimed.** Staff mark who actually
+  attended after the event; the percentage is presents over presents plus
+  absents. An unmarked event counts as no evidence rather than an absence,
+  `excused` is excluded from both halves of the ratio (so telling staff in
+  advance never costs you), and no percentage is shown at all below three
+  marked events -- the raw record is shown instead, since a two-event
+  sample swings 50 points per event.
+- **Staff can close sign-ups** without deleting the event. The buttons come
+  off the Discord post at the same time, rather than being left there to
+  fail.
+
+Events created in Discord's own **Events** tab still mirror in on a timer
+(`proclubs-discord-events-poll.timer`) -- see below. That path is now one
+way of getting an event in, not the only one.
+
+### Mirrored Discord Scheduled Events
 
 - Runs on a schedule (`proclubs-discord-events-poll.timer`, every 10
   minutes -- see `../deploy/README.md`), not instantly on creation. This
@@ -121,9 +156,9 @@ site that pushes back to Discord.
   **Type** (Match/Scrim/Tournament/Community), **opponent**, and
   **result** are site-only fields Discord has no equivalent for; they're
   set to a sensible default (Type: Match, no opponent, no result) on
-  first sync and never touched again by later syncs -- but since there's
-  no site UI to change them either, they stay at that default unless set
-  by hand directly in the database.
+  first sync and never touched again by later syncs -- so a mirrored event
+  keeps whatever staff set for those on the site, and only its title,
+  description, and time follow Discord.
 - If a Discord event is canceled or deleted, its mirrored site fixture is
   removed on the next sync too (as long as it's still in the future --
   past fixtures are left alone even if their Discord event ages out of
@@ -132,8 +167,7 @@ site that pushes back to Discord.
 
 ## Clips are Discord-only
 
-`/clips` is **read-only** too, same idea as events -- no upload UI on the
-site. Post a video directly in the configured Discord channel (an actual
+`/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual
 file attachment, not a link) and it shows up on the site's Clips page
 automatically.
 

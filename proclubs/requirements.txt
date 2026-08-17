@@ -7,6 +7,7 @@ python-multipart>=0.0.9  # form parsing (article/event/streamer forms)
 python-dotenv>=1.0.0
 markdown>=3.6          # renders article Markdown source
 nh3>=0.2.17            # sanitizes the rendered HTML before it's served
+PyNaCl>=1.5.0          # verifies Discord interaction signatures (Ed25519)
 sqlalchemy>=2.0.0      # site content database (articles/events/streamers)
 curl_cffi==0.15.0       # EA Pro Clubs API client (bypasses bot detection)
 gunicorn==22.0.0        # production WSGI/ASGI server (droplet only)

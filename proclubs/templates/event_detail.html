@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }}{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <span class="event-type-badge">{{ event.event_type }}</span>
+      {% if event.discord_message_id %}<span class="discord-sync-badge" title="Posted to Discord with sign-up buttons">Discord</span>{% endif %}
+      <h1>{{ event.title }}{% if event.opponent %} vs {{ event.opponent }}{% endif %}</h1>
+      <p class="page-lede">
+        {{ event.scheduled_at.strftime('%A, %b %-d, %Y at %H:%M UTC') }}
+        {% if event.result %} &middot; <strong>{{ event.result }}</strong>{% endif %}
+      </p>
+    </div>
+    {% if is_staff %}
+      <div class="head-actions">
+        <a class="btn-ghost" href="/events/{{ event.id }}/edit">Edit</a>
+        {% if rsvp_enabled and not event.discord_message_id %}
+          <form method="post" action="/events/{{ event.id }}/announce" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit">Post to Discord</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if event.image %}<img class="event-hero" src="{{ event.image }}" alt="" />{% endif %}
+  {% if event.description %}<div class="card event-description">{{ event.description }}</div>{% endif %}
+
+  {# ---- Your own sign-up ------------------------------------------------ #}
+  <div class="section-head"><h2>Your answer</h2></div>
+  {% if not user %}
+    <div class="card empty-state">
+      <a href="/login">Sign in with Discord</a> to sign up -- or press the buttons on the Discord post.
+    </div>
+  {% elif not is_member %}
+    <div class="card empty-state">
+      Join <a href="{{ DISCORD_INVITE_URL }}">our Discord</a> to sign up for events.
+    </div>
+  {% elif not event.signups_open %}
+    <div class="card empty-state">Sign-ups are closed for this event.</div>
+  {% else %}
+    <form class="card signup-choice" method="post" action="/events/{{ event.id }}/signup">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      {% for status in signup_statuses %}
+        <button type="submit" name="status" value="{{ status }}"
+                class="signup-btn {{ status }} {{ 'is-current' if my_signup and my_signup.status == status else '' }}">
+          {{ signup_labels[status] }}
+        </button>
+      {% endfor %}
+    </form>
+    {% if not my_link %}
+      {# Without a linked gamertag we can't show this person's position, so
+         ask for it right where the consequence is visible. #}
+      <form class="card gamertag-link" method="post" action="/me/gamertag">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="redirect_to" value="/events/{{ event.id }}" />
+        <div class="field">
+          <label for="player_name">Link your gamertag</label>
+          <input id="player_name" name="player_name" list="club-roster" placeholder="Your EA name"
+                 autocomplete="off" />
+          <p class="field-hint">
+            One time only. It's how the roster below knows your position from the
+            <a href="/tactics">Tactics</a> board.
+          </p>
+        </div>
+        <datalist id="club-roster"></datalist>
+        <button type="submit">Link</button>
+      </form>
+    {% endif %}
+  {% endif %}
+
+  {# ---- The roster ------------------------------------------------------ #}
+  <div class="section-head">
+    <h2>Squad ({{ counts.going }} going{% if counts.maybe %}, {{ counts.maybe }} maybe{% endif %})</h2>
+    {% if is_staff %}
+      <form method="post" action="/events/{{ event.id }}/signups-open" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        {% if event.signups_open %}
+          <button type="submit" class="btn-ghost">Close sign-ups</button>
+        {% else %}
+          <input type="hidden" name="open_" value="1" />
+          <button type="submit" class="btn-ghost">Reopen sign-ups</button>
+        {% endif %}
+      </form>
+    {% endif %}
+  </div>
+
+  {% if signups %}
+    <div class="card table-wrap">
+      <table class="signup-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Answer</th>
+            <th>Position</th>
+            <th>Turns up</th>
+            {% if is_staff and is_past %}<th>Attended</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in signups %}
+            {% set rec = records.get(s.discord_user_id) %}
+            <tr class="signup-row {{ s.status }}">
+              <td>
+                {{ s.discord_name }}
+                {% if s.source == 'discord' %}<span class="source-pill" title="Signed up from Discord">D</span>{% endif %}
+              </td>
+              <td><span class="signup-pill {{ s.status }}">{{ signup_labels[s.status] }}</span></td>
+              <td>{{ roles.get(s.discord_user_id) or '—' }}</td>
+              <td>
+                {% if rec and rec.rate is not none %}
+                  <strong>{{ rec.rate }}%</strong>
+                  <small>({{ rec.present }}/{{ rec.counted }})</small>
+                {% elif rec and rec.has_history %}
+                  {# Too few marked events to average honestly -- show the
+                     raw record instead of a percentage the sample can't
+                     support. #}
+                  <small>{{ rec.present }}/{{ rec.counted }} so far</small>
+                {% else %}
+                  <small class="muted">no history</small>
+                {% endif %}
+              </td>
+              {% if is_staff and is_past %}
+                <td>
+                  <form method="post" action="/events/{{ event.id }}/attendance" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <input type="hidden" name="signup_id" value="{{ s.id }}" />
+                    <select name="attendance" onchange="this.form.submit()">
+                      <option value="" {{ 'selected' if not s.attendance else '' }}>Not marked</option>
+                      {% for a in attendance_statuses %}
+                        <option value="{{ a }}" {{ 'selected' if s.attendance == a else '' }}>{{ a|capitalize }}</option>
+                      {% endfor %}
+                    </select>
+                  </form>
+                </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if is_staff and is_past %}
+      <p class="field-hint">
+        Marking who actually turned up is what builds the "turns up" figure.
+        An unmarked event counts as no evidence, not as an absence, and
+        "excused" is left out of the ratio entirely.
+      </p>
+    {% endif %}
+  {% else %}
+    <div class="card empty-state">Nobody has answered yet.</div>
+  {% endif %}
+</div>
+
+{% if user and is_member and not my_link %}
+<script>
+  // Fill the gamertag datalist from the club roster so people pick their
+  // real EA name rather than typing an approximation of it.
+  fetch('/api/members')
+    .then(function (r) { return r.ok ? r.json() : { members: [] }; })
+    .then(function (data) {
+      var list = document.getElementById('club-roster');
+      if (!list) return;
+      (data.members || []).forEach(function (m) {
+        var name = m.name || m;
+        if (!name) return;
+        var opt = document.createElement('option');
+        opt.value = name;
+        list.appendChild(opt);
+      });
+    })
+    .catch(function () { /* roster is a convenience; typing still works */ });
+</script>
+{% endif %}
+{% endblock %}

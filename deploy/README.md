@@ -337,6 +337,15 @@ sudo bash deploy/install.sh
 sudo systemctl reload caddy
 ```
 
+**Event sign-ups (optional).** Set `EVENTS_ANNOUNCE_CHANNEL_ID` and
+`DISCORD_PUBLIC_KEY` in `proclubs/.env`, then in the Discord Developer
+Portal set the application's **Interactions Endpoint URL** to
+`https://yeehaw-fc.club/discord/interactions`. Discord verifies the URL as
+you save it -- it sends a signed PING and a couple of deliberately-invalid
+ones, and rejects the URL unless the bad ones come back 401 -- so save it
+only after the site is deployed and reachable. Without these two settings
+events still work, they just stay site-only with no Discord post.
+
 Visit `https://yeehaw-fc.club`. Check it independently of the
 other two services:
 

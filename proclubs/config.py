@@ -66,6 +66,22 @@ DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
 CLIPS_CHANNEL_ID = os.getenv("CLIPS_CHANNEL_ID", "")
 CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
 
+# --- Discord event RSVP announcements ---------------------------------------
+# Two-directional, unlike everything else here. The site posts an event's
+# announcement with sign-up buttons (site -> Discord), and Discord delivers
+# each button press straight back to /discord/interactions (Discord -> site)
+# as a signed HTTP request -- a webhook, not a gateway connection, which is
+# why this still needs no always-on bot process.
+#
+# DISCORD_PUBLIC_KEY is the Discord *application's* public key (Developer
+# Portal -> General Information), used to verify those requests really came
+# from Discord. It is not a secret -- verification is a signature check, not
+# a shared password -- but interactions are refused without it, since an
+# unverified endpoint would let anyone forge sign-ups.
+EVENTS_ANNOUNCE_CHANNEL_ID = os.getenv("EVENTS_ANNOUNCE_CHANNEL_ID", "")
+DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY", "")
+EVENT_RSVP_ENABLED = bool(DISCORD_BOT_TOKEN and EVENTS_ANNOUNCE_CHANNEL_ID and DISCORD_PUBLIC_KEY)
+
 # --- Discord article announcements ------------------------------------------
 # The announcement itself is one-directional (site -> Discord) and sent
 # right when an article goes live rather than polled -- this app is the

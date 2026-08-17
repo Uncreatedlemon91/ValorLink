@@ -1,8 +1,11 @@
-"""CRUD helpers for articles and streamers, plus read/sync for events.
+"""CRUD helpers for articles, streamers, and events.
 
-Events are read-only from the site's own UI -- they exist only via the
-Discord Scheduled Events sync (see sync_discord_events below); there's no
-create/update/delete path left for staff to use directly, by design.
+Events are created and edited on the site by staff, and players sign up
+from either surface -- the site or the Discord announcement's buttons (see
+discord_rsvp.py). The older Discord Scheduled Events mirror still runs
+alongside that (sync_discord_events below), so an event someone makes in
+Discord's own Events tab still appears here; it just isn't the only way in
+any more.
 
 Kept separate from app.py so the routes stay thin (parse request -> call
 service -> render/redirect), matching the ValorLink web app's own
@@ -23,7 +26,16 @@ from sqlalchemy.orm import Session
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
-from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer, TacticsBoard, TacticsSlot
+from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
+                    Comment, Event, EventSignup, Like, PlayerLink, Streamer, TacticsBoard,
+                    TacticsSlot)
+
+EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
+
+# Below this many marked events, a reliability percentage is noise dressed
+# up as data -- two events is a 50% swing per event. The UI shows the raw
+# record instead until there's enough to average.
+MIN_EVENTS_FOR_RELIABILITY = 3
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
 _MAX_COMMENT_LENGTH = 2000
@@ -315,6 +327,286 @@ def list_events(session: Session, *, upcoming_only: bool = False, limit: int | N
     if limit:
         query = query.limit(limit)
     return list(session.execute(query).scalars())
+
+
+def get_event(session: Session, event_id: int) -> Event | None:
+    return session.get(Event, event_id)
+
+
+def _validated_event_fields(*, title: str, event_type: str, scheduled_at: datetime | None) -> tuple[str, str]:
+    title = (title or "").strip()
+    if not title:
+        raise ServiceError("Give the event a title.")
+    if event_type not in EVENT_TYPES:
+        raise ServiceError(f"Unknown event type {event_type!r}.")
+    if scheduled_at is None:
+        raise ServiceError("Give the event a date and time.")
+    return title, event_type
+
+
+def create_event(session: Session, *, title: str, event_type: str, scheduled_at: datetime,
+                 opponent: str | None, description: str | None, image: str | None,
+                 staff_name: str) -> Event:
+    title, event_type = _validated_event_fields(
+        title=title, event_type=event_type, scheduled_at=scheduled_at)
+    event = Event(
+        title=title, event_type=event_type, scheduled_at=scheduled_at,
+        opponent=(opponent or "").strip() or None,
+        description=(description or "").strip() or None,
+        image=image, created_by_name=staff_name,
+    )
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def update_event(session: Session, event: Event, *, title: str, event_type: str,
+                 scheduled_at: datetime, opponent: str | None, description: str | None,
+                 image: str | None, result: str | None) -> Event:
+    title, event_type = _validated_event_fields(
+        title=title, event_type=event_type, scheduled_at=scheduled_at)
+    event.title = title
+    event.event_type = event_type
+    event.scheduled_at = scheduled_at
+    event.opponent = (opponent or "").strip() or None
+    event.description = (description or "").strip() or None
+    event.result = (result or "").strip() or None
+    if image is not None:
+        event.image = image
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def delete_event(session: Session, event: Event) -> None:
+    """Removes the event and every sign-up for it. Sign-ups have no
+    meaning without their event, and this app manages its schema with
+    create_all rather than a migration tool, so the cascade is done here
+    explicitly rather than relying on a DB-level ON DELETE."""
+    session.execute(delete(EventSignup).where(EventSignup.event_id == event.id))
+    session.delete(event)
+    session.commit()
+
+
+def set_signups_open(session: Session, event: Event, *, open_: bool) -> Event:
+    event.signups_open = open_
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def set_event_announcement(session: Session, event: Event, *, channel_id: str, message_id: str) -> None:
+    event.discord_channel_id = str(channel_id)
+    event.discord_message_id = str(message_id)
+    session.commit()
+
+
+# --- Sign-ups --------------------------------------------------------------- #
+def list_signups(session: Session, event_id: int) -> list[EventSignup]:
+    """Everyone who has answered, ordered going -> maybe -> out and then by
+    when they answered, so the roster reads as a squad list rather than in
+    click order."""
+    order = {status: i for i, status in enumerate(SIGNUP_STATUSES)}
+    rows = list(session.execute(
+        select(EventSignup).where(EventSignup.event_id == event_id)
+    ).scalars())
+    return sorted(rows, key=lambda s: (order.get(s.status, 99), s.responded_at or datetime.min))
+
+
+def get_signup(session: Session, event_id: int, discord_user_id: int) -> EventSignup | None:
+    return session.execute(
+        select(EventSignup).where(
+            EventSignup.event_id == event_id,
+            EventSignup.discord_user_id == discord_user_id,
+        )
+    ).scalars().first()
+
+
+def signup_counts(session: Session, event_id: int) -> dict[str, int]:
+    counts = {status: 0 for status in SIGNUP_STATUSES}
+    for status, total in session.execute(
+        select(EventSignup.status, func.count(EventSignup.id))
+        .where(EventSignup.event_id == event_id).group_by(EventSignup.status)
+    ).all():
+        if status in counts:
+            counts[status] = total
+    return counts
+
+
+def set_signup(session: Session, event: Event, *, discord_user_id: int, discord_name: str,
+               discord_avatar: str | None, status: str, source: str = "site") -> EventSignup:
+    """Records (or changes) one player's answer. Idempotent per player --
+    answering again updates the existing row rather than stacking, which is
+    what makes the two surfaces safe to use interchangeably."""
+    if status not in SIGNUP_STATUSES:
+        raise ServiceError(f"Unknown sign-up status {status!r}.")
+    if not event.signups_open:
+        raise ServiceError("Sign-ups for this event are closed.")
+
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is None:
+        signup = EventSignup(
+            event_id=event.id, discord_user_id=discord_user_id, discord_name=discord_name,
+            discord_avatar=discord_avatar, status=status, source=source,
+        )
+        session.add(signup)
+    else:
+        signup.status = status
+        signup.source = source
+        # Refresh the display name -- people rename themselves, and a stale
+        # name on a live roster is worse than no name.
+        signup.discord_name = discord_name
+        signup.discord_avatar = discord_avatar
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+def mark_attendance(session: Session, signup: EventSignup, *, attendance: str | None,
+                    staff_name: str) -> EventSignup:
+    """Records what actually happened. Passing None clears the mark, which
+    returns the event to "not evidence" rather than counting as absent."""
+    if attendance is not None and attendance not in ATTENDANCE_STATUSES:
+        raise ServiceError(f"Unknown attendance status {attendance!r}.")
+    signup.attendance = attendance
+    signup.attendance_marked_by = staff_name if attendance else None
+    signup.attendance_marked_at = datetime.utcnow() if attendance else None
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+# --- Attendance reliability ------------------------------------------------- #
+def attendance_record(session: Session, discord_user_id: int) -> dict:
+    """How often this player actually turned up, across every event where
+    staff marked them.
+
+    Only marked events count. "excused" is deliberately excluded from both
+    halves of the ratio rather than counted as a miss -- an approved
+    absence says nothing about reliability, and counting it as a no-show
+    would punish people for telling staff in advance, which is the exact
+    behaviour we want to encourage.
+    """
+    rows = list(session.execute(
+        select(EventSignup.attendance).where(
+            EventSignup.discord_user_id == discord_user_id,
+            EventSignup.attendance.isnot(None),
+        )
+    ).scalars())
+    present = sum(1 for a in rows if a == "present")
+    absent = sum(1 for a in rows if a == "absent")
+    excused = sum(1 for a in rows if a == "excused")
+    counted = present + absent
+    rate = round(100 * present / counted) if counted else None
+    return {
+        "present": present, "absent": absent, "excused": excused,
+        "counted": counted,
+        # None means "not enough history to say" -- render the raw record
+        # instead of a number the sample can't support.
+        "rate": rate if counted >= MIN_EVENTS_FOR_RELIABILITY else None,
+        "has_history": counted > 0,
+    }
+
+
+def attendance_records_for(session: Session, discord_user_ids: list[int]) -> dict[int, dict]:
+    """attendance_record() for a whole roster in one query, so an event
+    page with 20 sign-ups doesn't fire 20 round trips."""
+    if not discord_user_ids:
+        return {}
+    tally: dict[int, dict[str, int]] = {
+        uid: {"present": 0, "absent": 0, "excused": 0} for uid in discord_user_ids
+    }
+    for user_id, attendance, total in session.execute(
+        select(EventSignup.discord_user_id, EventSignup.attendance, func.count(EventSignup.id))
+        .where(EventSignup.discord_user_id.in_(discord_user_ids),
+               EventSignup.attendance.isnot(None))
+        .group_by(EventSignup.discord_user_id, EventSignup.attendance)
+    ).all():
+        if user_id in tally and attendance in tally[user_id]:
+            tally[user_id][attendance] = total
+
+    out = {}
+    for user_id, counts in tally.items():
+        counted = counts["present"] + counts["absent"]
+        rate = round(100 * counts["present"] / counted) if counted else None
+        out[user_id] = {
+            **counts, "counted": counted,
+            "rate": rate if counted >= MIN_EVENTS_FOR_RELIABILITY else None,
+            "has_history": counted > 0,
+        }
+    return out
+
+
+# --- Gamertag links and Tactics roles --------------------------------------- #
+def get_player_link(session: Session, discord_user_id: int) -> PlayerLink | None:
+    return session.get(PlayerLink, discord_user_id)
+
+
+def set_player_link(session: Session, *, discord_user_id: int, player_name: str) -> PlayerLink:
+    player_name = (player_name or "").strip()
+    if not player_name:
+        raise ServiceError("Pick the gamertag you play under.")
+    taken = session.execute(
+        select(PlayerLink).where(
+            func.lower(PlayerLink.player_name) == player_name.lower(),
+            PlayerLink.discord_user_id != discord_user_id,
+        )
+    ).scalars().first()
+    if taken is not None:
+        raise ServiceError(f"{player_name} is already claimed by another member.")
+
+    link = session.get(PlayerLink, discord_user_id)
+    if link is None:
+        link = PlayerLink(discord_user_id=discord_user_id, player_name=player_name)
+        session.add(link)
+    else:
+        link.player_name = player_name
+    session.commit()
+    session.refresh(link)
+    return link
+
+
+def clear_player_link(session: Session, discord_user_id: int) -> None:
+    link = session.get(PlayerLink, discord_user_id)
+    if link is not None:
+        session.delete(link)
+        session.commit()
+
+
+def player_links_for(session: Session, discord_user_ids: list[int]) -> dict[int, str]:
+    if not discord_user_ids:
+        return {}
+    return {
+        row.discord_user_id: row.player_name
+        for row in session.execute(
+            select(PlayerLink).where(PlayerLink.discord_user_id.in_(discord_user_ids))
+        ).scalars()
+    }
+
+
+def tactics_roles_for(session: Session, discord_user_ids: list[int],
+                      slot_labels: dict[str, str]) -> dict[int, str]:
+    """discord_user_id -> the position they hold on the current team sheet.
+
+    Two hops: Discord user -> gamertag (PlayerLink) -> slot on the active
+    formation (TacticsSlot). Anyone missing either hop simply has no role,
+    which is a normal state (a new member, or a squad player not in the
+    current XI) rather than an error. `slot_labels` maps a slot key to its
+    display position ("CM1" -> "CM") and comes from app.py's FORMATIONS,
+    which is the authority on what a formation's slots are called.
+    """
+    links = player_links_for(session, discord_user_ids)
+    if not links:
+        return {}
+    slots = get_tactics_slots(session, get_active_formation(session))
+    by_player = {name.lower(): slot_key for slot_key, name in slots.items()}
+    roles = {}
+    for user_id, player_name in links.items():
+        slot_key = by_player.get(player_name.lower())
+        if slot_key:
+            roles[user_id] = slot_labels.get(slot_key, slot_key)
+    return roles
 
 
 def _parse_discord_time(value: str) -> datetime:

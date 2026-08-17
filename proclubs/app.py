@@ -22,11 +22,12 @@ import auth
 import config
 import db
 import discord_announce
+import discord_rsvp
 import ea_client
 import services
 import twitch_client
 from database import get_session, init_db
-from models import ARTICLE_CATEGORIES
+from models import ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_LABELS, SIGNUP_STATUSES, EventSignup
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -414,9 +415,334 @@ def events_list(request: Request):
     with get_session() as session:
         upcoming = services.list_events(session, upcoming_only=True)
         past = [e for e in services.list_events(session) if e.scheduled_at < datetime.utcnow()]
+        counts = {e.id: services.signup_counts(session, e.id) for e in upcoming}
         return templates.TemplateResponse(
-            request, "events_list.html", _ctx(request, upcoming=upcoming, past=past),
+            request, "events_list.html",
+            _ctx(request, upcoming=upcoming, past=past, signup_counts=counts),
         )
+
+
+def _slot_labels() -> dict[str, str]:
+    """slot_key -> display position across every formation and the bench.
+
+    Merged rather than per-formation because a slot key means the same
+    position wherever it appears ("CM1" is a CM in all of them), and
+    services.tactics_roles_for only ever looks up keys from the formation
+    that's actually active."""
+    labels = {key: meta["label"] for key, meta in BENCH_SLOTS.items()}
+    for formation in FORMATIONS.values():
+        labels.update({key: meta["label"] for key, meta in formation.items()})
+    return labels
+
+
+def _parse_scheduled_at(value: str) -> datetime | None:
+    """Parses the <input type="datetime-local"> value. That control submits
+    the wall-clock time the user typed with no zone, and this site treats
+    every stored time as UTC -- stated plainly next to the field, since
+    silently reinterpreting it is how a fixture ends up an hour out."""
+    try:
+        return datetime.fromisoformat((value or "").strip())
+    except ValueError:
+        return None
+
+
+def _event_view(session, event, user):
+    """Everything the event page and the Discord embed both need: the
+    roster, each player's Tactics position, and how often they've actually
+    turned up."""
+    signups = services.list_signups(session, event.id)
+    user_ids = [s.discord_user_id for s in signups]
+    return {
+        "signups": signups,
+        "roles": services.tactics_roles_for(session, user_ids, _slot_labels()),
+        "records": services.attendance_records_for(session, user_ids),
+        "counts": services.signup_counts(session, event.id),
+        "my_signup": (
+            services.get_signup(session, event.id, int(user["id"])) if user else None
+        ),
+    }
+
+
+def _event_url(request: Request, event) -> str:
+    base = (config.SITE_BASE_URL or str(request.base_url)).rstrip("/")
+    return f"{base}/events/{event.id}"
+
+
+def _refresh_announcement(request: Request, session, event) -> None:
+    """Pushes the current roster back to the Discord announcement. Never
+    lets a Discord failure break the site action that triggered it -- the
+    sign-up is already saved, and the announcement catches up on the next
+    change; surfacing it as a flash is enough."""
+    if not (event.discord_message_id and config.EVENT_RSVP_ENABLED):
+        return
+    signups = services.list_signups(session, event.id)
+    roles = services.tactics_roles_for(
+        session, [s.discord_user_id for s in signups], _slot_labels())
+    try:
+        discord_rsvp.refresh(event, signups, roles, _event_url(request, event))
+    except discord_rsvp.DiscordApiError as exc:
+        _flash(request, f"Saved, but couldn't update the Discord post: {exc}", "warn")
+
+
+@app.get("/events/new", response_class=HTMLResponse)
+def event_new_form(request: Request, _staff=Depends(auth.require_staff)):
+    return templates.TemplateResponse(request, "event_form.html", _ctx(
+        request, event=None, event_types=services.EVENT_TYPES))
+
+
+@app.post("/events/new")
+async def event_new(
+    request: Request, title: str = Form(...), event_type: str = Form("Match"),
+    scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
+    announce: str = Form(""), csrf_token: str = Form(...),
+    image: UploadFile | None = None, staff=Depends(auth.require_staff),
+):
+    _check_csrf(request, csrf_token)
+    image_uri = await services.image_to_data_uri(image)
+    with get_session() as session:
+        event = services.create_event(
+            session, title=title, event_type=event_type,
+            scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
+            description=description, image=image_uri, staff_name=staff["name"],
+        )
+        _flash(request, "Event created.")
+        if announce:
+            _announce_event(request, session, event)
+        return RedirectResponse(f"/events/{event.id}", status_code=303)
+
+
+@app.get("/events/{event_id}", response_class=HTMLResponse)
+def event_detail(request: Request, event_id: int):
+    user = auth.current_user(request)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        view = _event_view(session, event, user)
+        my_link = services.get_player_link(session, int(user["id"])) if user else None
+        return templates.TemplateResponse(request, "event_detail.html", _ctx(
+            request, event=event, event_types=services.EVENT_TYPES,
+            signup_labels=SIGNUP_LABELS, signup_statuses=SIGNUP_STATUSES,
+            attendance_statuses=ATTENDANCE_STATUSES,
+            my_link=my_link, is_past=event.scheduled_at < datetime.utcnow(),
+            rsvp_enabled=config.EVENT_RSVP_ENABLED, **view,
+        ))
+
+
+@app.get("/events/{event_id}/edit", response_class=HTMLResponse)
+def event_edit_form(request: Request, event_id: int, _staff=Depends(auth.require_staff)):
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        return templates.TemplateResponse(request, "event_form.html", _ctx(
+            request, event=event, event_types=services.EVENT_TYPES))
+
+
+@app.post("/events/{event_id}/edit")
+async def event_edit(
+    request: Request, event_id: int, title: str = Form(...), event_type: str = Form("Match"),
+    scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
+    result: str = Form(""), csrf_token: str = Form(...),
+    image: UploadFile | None = None, _staff=Depends(auth.require_staff),
+):
+    _check_csrf(request, csrf_token)
+    image_uri = await services.image_to_data_uri(image)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        services.update_event(
+            session, event, title=title, event_type=event_type,
+            scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
+            description=description, image=image_uri, result=result,
+        )
+        _flash(request, "Event updated.")
+        _refresh_announcement(request, session, event)
+        return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/delete")
+def event_delete(request: Request, event_id: int, csrf_token: str = Form(...),
+                 _staff=Depends(auth.require_staff)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        services.delete_event(session, event)
+    _flash(request, "Event deleted.")
+    return RedirectResponse("/events", status_code=303)
+
+
+@app.post("/events/{event_id}/signup")
+def event_signup(request: Request, event_id: int, status: str = Form(...),
+                 csrf_token: str = Form(...), user=Depends(auth.require_member)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        services.set_signup(
+            session, event, discord_user_id=int(user["id"]), discord_name=user["name"],
+            discord_avatar=user.get("avatar"), status=status, source="site",
+        )
+        _flash(request, f"You're down as {SIGNUP_LABELS[status].lower()}.")
+        _refresh_announcement(request, session, event)
+    return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/signups-open")
+def event_signups_open(request: Request, event_id: int, open_: str = Form(""),
+                       csrf_token: str = Form(...), _staff=Depends(auth.require_staff)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        services.set_signups_open(session, event, open_=bool(open_))
+        _flash(request, "Sign-ups reopened." if open_ else "Sign-ups closed.")
+        _refresh_announcement(request, session, event)
+    return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/attendance")
+def event_attendance(request: Request, event_id: int, signup_id: int = Form(...),
+                     attendance: str = Form(""), csrf_token: str = Form(...),
+                     staff=Depends(auth.require_staff)):
+    """Marks what actually happened for one player. This is what feeds the
+    reliability figure -- without it every player shows "no history"."""
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        signup = session.get(EventSignup, signup_id)
+        if signup is None or signup.event_id != event_id:
+            raise HTTPException(status_code=404)
+        try:
+            services.mark_attendance(
+                session, signup, attendance=attendance or None, staff_name=staff["name"])
+        except services.ServiceError as exc:
+            _flash(request, str(exc), "warn")
+    return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+@app.post("/events/{event_id}/announce")
+def event_announce(request: Request, event_id: int, csrf_token: str = Form(...),
+                   _staff=Depends(auth.require_staff)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            raise HTTPException(status_code=404)
+        _announce_event(request, session, event)
+    return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+def _announce_event(request: Request, session, event) -> None:
+    if not config.EVENT_RSVP_ENABLED:
+        _flash(request, "Discord sign-ups aren't configured -- see EVENTS_ANNOUNCE_CHANNEL_ID "
+                        "and DISCORD_PUBLIC_KEY in .env.", "warn")
+        return
+    if event.discord_message_id:
+        _flash(request, "That event is already posted in Discord.", "warn")
+        return
+    signups = services.list_signups(session, event.id)
+    roles = services.tactics_roles_for(
+        session, [s.discord_user_id for s in signups], _slot_labels())
+    try:
+        channel_id, message_id = discord_rsvp.announce(
+            event, signups, roles, _event_url(request, event))
+    except discord_rsvp.DiscordApiError as exc:
+        _flash(request, f"Couldn't post to Discord: {exc}", "warn")
+        return
+    services.set_event_announcement(session, event, channel_id=channel_id, message_id=message_id)
+    _flash(request, "Posted to Discord with sign-up buttons.")
+
+
+# --------------------------------------------------------------------------- #
+# Discord interactions (button presses on an event announcement)
+# --------------------------------------------------------------------------- #
+@app.post("/discord/interactions")
+async def discord_interactions(request: Request):
+    """Discord's webhook for button presses. Public by necessity -- Discord
+    calls it, not a signed-in user -- so the Ed25519 signature is the only
+    thing standing between this and forged sign-ups. Reject first, parse
+    second: an unverified body is never even JSON-decoded."""
+    body = await request.body()
+    if not discord_rsvp.verify_signature(
+        signature=request.headers.get("X-Signature-Ed25519", ""),
+        timestamp=request.headers.get("X-Signature-Timestamp", ""),
+        body=body,
+    ):
+        # Discord requires a 401 here; it probes with bad signatures on setup
+        # and won't accept the endpoint unless they're refused.
+        raise HTTPException(status_code=401, detail="invalid request signature")
+
+    interaction = json.loads(body)
+    if interaction.get("type") == discord_rsvp.INTERACTION_PING:
+        return {"type": discord_rsvp.RESPONSE_PONG}
+    if interaction.get("type") != discord_rsvp.INTERACTION_MESSAGE_COMPONENT:
+        raise HTTPException(status_code=400, detail="unsupported interaction type")
+
+    try:
+        event_id, status = discord_rsvp.parse_custom_id(
+            (interaction.get("data") or {}).get("custom_id", ""))
+        presser = discord_rsvp.interaction_user(interaction)
+    except discord_rsvp.InteractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    with get_session() as session:
+        event = services.get_event(session, event_id)
+        if event is None:
+            return _interaction_note("That event no longer exists.")
+        try:
+            services.set_signup(
+                session, event, discord_user_id=presser["id"], discord_name=presser["name"],
+                discord_avatar=presser["avatar"], status=status, source="discord",
+            )
+        except services.ServiceError as exc:
+            return _interaction_note(str(exc))
+
+        signups = services.list_signups(session, event.id)
+        roles = services.tactics_roles_for(
+            session, [s.discord_user_id for s in signups], _slot_labels())
+        # Responding with UPDATE_MESSAGE re-renders the announcement in the
+        # same round trip -- no follow-up PATCH, and no rate-limit cost.
+        return {
+            "type": discord_rsvp.RESPONSE_UPDATE_MESSAGE,
+            "data": {
+                "embeds": [discord_rsvp.build_embed(
+                    event, signups, roles, _event_url(request, event))],
+                "components": discord_rsvp.build_components(event),
+            },
+        }
+
+
+def _interaction_note(text: str) -> dict:
+    """An ephemeral reply, visible only to whoever pressed the button --
+    for the cases where the press can't be honoured."""
+    return {"type": 4, "data": {"content": text, "flags": 64}}
+
+
+# --------------------------------------------------------------------------- #
+# Gamertag link (how a Discord account maps to a Tactics position)
+# --------------------------------------------------------------------------- #
+@app.post("/me/gamertag")
+def set_gamertag(request: Request, player_name: str = Form(""), csrf_token: str = Form(...),
+                 redirect_to: str = Form("/events"), user=Depends(auth.require_member)):
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        try:
+            if player_name.strip():
+                services.set_player_link(
+                    session, discord_user_id=int(user["id"]), player_name=player_name)
+                _flash(request, f"Linked to {player_name.strip()}.")
+            else:
+                services.clear_player_link(session, int(user["id"]))
+                _flash(request, "Gamertag unlinked.")
+        except services.ServiceError as exc:
+            _flash(request, str(exc), "warn")
+    return RedirectResponse(redirect_to if redirect_to.startswith("/") else "/events",
+                            status_code=303)
 
 
 # --------------------------------------------------------------------------- #

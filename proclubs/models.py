@@ -83,6 +83,78 @@ class Event(Base):
     # events created directly on the site.
     discord_event_id = Column(String, nullable=True, index=True)
 
+    # The RSVP announcement this event posted to Discord, if any. Signing up
+    # on the site has to edit that message so both surfaces show the same
+    # roster, so we keep the coordinates needed to PATCH it. Null until the
+    # event is announced (see discord_rsvp.announce).
+    discord_channel_id = Column(String, nullable=True)
+    discord_message_id = Column(String, nullable=True)
+    # Staff can close sign-ups without deleting the event (e.g. once the
+    # squad is picked). Closed events still show their roster, read-only.
+    signups_open = Column(Boolean, nullable=False, default=True, server_default="1")
+
+
+# How a player answers the sign-up question. Deliberately three states, not
+# a yes/no: "maybe" is the honest answer often enough that forcing it into
+# yes or no is what makes a roster untrustworthy.
+SIGNUP_STATUSES = ["going", "maybe", "out"]
+SIGNUP_LABELS = {"going": "Going", "maybe": "Maybe", "out": "Can't make it"}
+
+# What actually happened, recorded by staff after the event. Only these
+# feed the reliability figure -- an unmarked event is not evidence.
+ATTENDANCE_STATUSES = ["present", "absent", "excused"]
+
+
+class EventSignup(Base):
+    """One player's answer for one event, from either surface.
+
+    Keyed by Discord user ID because that's the one identity both surfaces
+    share: the site knows it from OAuth, Discord knows it from the button
+    press. ``source`` records which surface the answer came from -- purely
+    informational, since an answer means the same thing either way, but it
+    makes "the Discord buttons stopped working" diagnosable.
+    """
+
+    __tablename__ = "event_signups"
+    __table_args__ = (UniqueConstraint("event_id", "discord_user_id", name="uq_signup_event_user"),)
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, nullable=False, index=True)
+    discord_user_id = Column(BigInteger, nullable=False, index=True)
+    # Denormalized on purpose: this site has no user table, and a roster
+    # from six months ago should still render the name it was signed with
+    # even if that person has since left the guild.
+    discord_name = Column(String, nullable=False)
+    discord_avatar = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="going")   # see SIGNUP_STATUSES
+    source = Column(String, nullable=False, default="site")     # site|discord
+    responded_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    # Filled in by staff afterwards -- NULL means "not marked", which is
+    # different from absent and is excluded from the reliability figure.
+    attendance = Column(String, nullable=True)                  # see ATTENDANCE_STATUSES
+    attendance_marked_by = Column(String, nullable=True)
+    attendance_marked_at = Column(DateTime, nullable=True)
+
+
+class PlayerLink(Base):
+    """Ties a Discord account to the EA gamertag it plays under.
+
+    The Tactics board stores plain gamertags (they come from EA's club
+    roster, which knows nothing about Discord), while a sign-up knows only
+    a Discord user. Without this table there is no way to answer "what
+    position is this person on the team sheet". Self-service and one-time:
+    a member picks their own gamertag from the club roster once.
+    """
+
+    __tablename__ = "player_links"
+
+    discord_user_id = Column(BigInteger, primary_key=True)
+    player_name = Column(String, nullable=False, index=True)
+    linked_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
 
 class Comment(Base):
     """A comment on a news article, left by a signed-in Discord user who's a

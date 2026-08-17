@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit event' if event else 'New event' }}{% endblock %}
+{% block content %}
+<div class="page narrow">
+  <div class="page-head"><h1>{{ 'Edit event' if event else 'New event' }}</h1></div>
+
+  <form class="card" method="post" enctype="multipart/form-data"
+        action="{{ '/events/' ~ event.id ~ '/edit' if event else '/events/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <div class="field">
+      <label for="title">Title</label>
+      <input id="title" name="title" required maxlength="200" placeholder="Derby Day"
+             value="{{ event.title if event else '' }}" />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="event_type">Type</label>
+        <select id="event_type" name="event_type">
+          {% for t in event_types %}
+            <option value="{{ t }}" {% if event and event.event_type == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="opponent">Opponent</label>
+        <input id="opponent" name="opponent" maxlength="120" placeholder="Rivals FC"
+               value="{{ (event.opponent if event else '') or '' }}" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="scheduled_at">Kick-off (UTC)</label>
+      <input id="scheduled_at" type="datetime-local" name="scheduled_at" required
+             value="{{ event.scheduled_at.strftime('%Y-%m-%dT%H:%M') if event else '' }}" />
+      <p class="field-hint">
+        Entered and stored as UTC, not your local time. The Discord post renders
+        it in each member's own timezone automatically.
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="description">Details</label>
+      <textarea id="description" name="description" rows="4"
+                placeholder="In voice 15 minutes before kick-off.">{{ (event.description if event else '') or '' }}</textarea>
+    </div>
+
+    {% if event %}
+      <div class="field">
+        <label for="result">Result</label>
+        <input id="result" name="result" maxlength="20" placeholder="W 4-1"
+               value="{{ event.result or '' }}" />
+        <p class="field-hint">Filled in after the match. Leave blank until then.</p>
+      </div>
+    {% endif %}
+
+    <div class="field">
+      <label for="image">Image</label>
+      <input id="image" type="file" name="image" accept="image/*" />
+      {% if event and event.image %}<img class="form-preview" src="{{ event.image }}" alt="" />{% endif %}
+    </div>
+
+    {% if not event %}
+      <div class="field checkbox-field">
+        <input id="announce" type="checkbox" name="announce" value="1" checked />
+        <label for="announce">Post to Discord with sign-up buttons</label>
+      </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit">{{ 'Save changes' if event else 'Create event' }}</button>
+      <a class="btn-ghost" href="{{ '/events/' ~ event.id if event else '/events' }}">Cancel</a>
+    </div>
+  </form>
+
+  {% if event %}
+    <form class="card danger-zone" method="post" action="/events/{{ event.id }}/delete"
+          onsubmit="return confirm('Delete this event and every sign-up for it?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div>
+        <strong>Delete this event</strong>
+        <p class="field-hint">Removes the event and every sign-up for it. The Discord post is left in place.</p>
+      </div>
+      <button type="submit" class="btn-danger">Delete</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

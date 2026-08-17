@@ -1013,16 +1013,20 @@ def test_csrf_token_is_required_on_writes(client):
     assert r.status_code == 400
 
 
-def test_events_page_shows_events_but_has_no_editing_ui_even_for_staff(client):
-    _login_staff(client)
+def test_events_page_offers_editing_to_staff_only(client):
+    """Events are staff-editable on the site now -- the old Discord-only
+    rule is gone (see README's Events section). Everyone else still just
+    reads the schedule."""
     _seed_event(title="League Match", opponent="Rivals FC")
 
+    _login_fan(client)
     listing = client.get("/events")
     assert "Rivals FC" in listing.text
-    assert "New event" not in listing.text
-    assert ">Edit<" not in listing.text
     assert "/events/new" not in listing.text
-    assert "/edit" not in listing.text
+
+    _login_staff(client)
+    listing = client.get("/events")
+    assert "/events/new" in listing.text
 
 
 def test_events_page_shows_the_event_cover_image_when_present(client):
@@ -1034,15 +1038,45 @@ def test_events_page_shows_the_event_cover_image_when_present(client):
     assert listing.text.count('class="event-thumb"') == 1
 
 
-def test_event_editing_routes_no_longer_exist(client):
-    _login_staff(client)
+def test_event_editing_routes_are_staff_gated(client):
+    """The routes exist again, but a signed-in non-staff member must not
+    reach any of the writing ones."""
     event_id = _seed_event()
+    _login_fan(client)
 
-    assert client.get("/events/new").status_code == 404
-    assert client.post("/events/new", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
-    assert client.get(f"/events/{event_id}/edit").status_code == 404
-    assert client.post(f"/events/{event_id}/edit", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
-    assert client.post(f"/events/{event_id}/delete", data={"csrf_token": "x"}).status_code == 404
+    assert client.get("/events/new", follow_redirects=False).status_code in (302, 303, 401, 403)
+    assert client.get(f"/events/{event_id}/edit", follow_redirects=False).status_code in (302, 303, 401, 403)
+    for path in (f"/events/{event_id}/edit", f"/events/{event_id}/delete",
+                 f"/events/{event_id}/announce", f"/events/{event_id}/signups-open"):
+        r = client.post(path, data={"title": "x", "scheduled_at": "2027-01-01T18:00",
+                                    "csrf_token": "x"}, follow_redirects=False)
+        assert r.status_code in (302, 303, 401, 403), path
+
+
+def test_staff_can_create_and_edit_an_event(client):
+    _login_staff(client)
+    token = _csrf(client, "/events/new")
+    r = client.post("/events/new", data={
+        "title": "Cup Final", "event_type": "Match", "scheduled_at": "2030-05-01T19:00",
+        "opponent": "Rivals FC", "description": "Bring your boots.", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    with database.get_session() as session:
+        event = services.list_events(session)[0]
+        assert event.title == "Cup Final" and event.opponent == "Rivals FC"
+        event_id = event.id
+
+    detail = client.get(f"/events/{event_id}")
+    assert "Cup Final" in detail.text and "Bring your boots." in detail.text
+
+    token = _csrf(client, f"/events/{event_id}/edit")
+    client.post(f"/events/{event_id}/edit", data={
+        "title": "Cup Final", "event_type": "Match", "scheduled_at": "2030-05-01T19:00",
+        "opponent": "Rivals FC", "description": "", "result": "W 3-0", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.get_event(session, event_id).result == "W 3-0"
 
 
 def _seed_clip(*, discord_message_id="m1", title="Nice goal",

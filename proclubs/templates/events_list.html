@@ -5,8 +5,9 @@
   <div class="page-head">
     <div>
       <h1>Events</h1>
-      <p class="page-lede">Upcoming fixtures, scrims, and community events -- scheduled in Discord.</p>
+      <p class="page-lede">Upcoming fixtures, scrims, and community events. Sign up here or in Discord.</p>
     </div>
+    {% if is_staff %}<a class="btn" href="/events/new">New event</a>{% endif %}
   </div>
 
   <div class="section-head"><h2>Upcoming</h2></div>
@@ -21,13 +22,20 @@
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
           {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
-          <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
+          <h3><a href="/events/{{ e.id }}">{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</a></h3>
           <p>{{ e.scheduled_at.strftime('%A, %b %-d at %H:%M UTC') }}{% if e.description %} &middot; {{ e.description }}{% endif %}</p>
         </div>
+        {% set c = signup_counts.get(e.id) %}
+        {% if c %}
+          <div class="event-signup-count">
+            <strong>{{ c.going }}</strong><span>going</span>
+            {% if c.maybe %}<em>{{ c.maybe }} maybe</em>{% endif %}
+          </div>
+        {% endif %}
       </div>
     {% endfor %}
   {% else %}
-    <div class="card empty-state">Nothing scheduled yet -- create an event in Discord and it'll show up here.</div>
+    <div class="card empty-state">Nothing scheduled yet.{% if is_staff %} <a href="/events/new">Create one</a>.{% endif %}</div>
   {% endif %}
 
   {% if past %}
@@ -42,7 +50,7 @@
         <div class="event-info">
           <span class="event-type-badge">{{ e.event_type }}</span>
           {% if e.discord_event_id %}<span class="discord-sync-badge" title="Synced from a Discord Scheduled Event">Discord</span>{% endif %}
-          <h3>{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</h3>
+          <h3><a href="/events/{{ e.id }}">{{ e.title }}{% if e.opponent %} vs {{ e.opponent }}{% endif %}</a></h3>
           <p>{{ e.scheduled_at.strftime('%A, %b %-d, %Y') }}</p>
         </div>
         {% if e.result %}
