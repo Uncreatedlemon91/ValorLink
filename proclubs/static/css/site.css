@@ -945,7 +945,10 @@ pre {
   white-space: pre-wrap;
 }
 
-.chart-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+/* align-items:start so a short card sizes to its content instead of
+   stretching to match a taller neighbour and padding itself with dead
+   space -- the two chart cards beside a long table were mostly air. */
+.chart-row { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: start; margin-bottom: 1.5rem; }
 
 .chart-card {
   background: var(--panel);
@@ -1370,3 +1373,73 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 /* An empty card shouldn't stretch to match a tall neighbour and reserve a
    screenful of nothing -- size it to its message. */
 .chart-row .chart-card:has(.chart-empty) { align-self: start; }
+
+/* --- Player detail drawer: hero, meters, season/career comparison --------- */
+.player-hero {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1.5rem; flex-wrap: wrap;
+  padding: 0.9rem 1.1rem; margin-bottom: 0.9rem;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.10), transparent 60%), var(--panel);
+}
+.player-identity h3 { margin: 0; font-family: var(--font-display); font-size: 1.6rem; font-weight: 800; }
+.player-meta { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.15rem; color: var(--muted); font-size: 0.82rem; }
+.player-pos {
+  padding: 0.05rem 0.45rem; border-radius: 999px; text-transform: uppercase;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  background: var(--panel-2); color: var(--text);
+}
+.player-figures { display: flex; gap: 1.75rem; }
+/* Proportional figures: at this size tabular-nums gives every digit a
+   zero's width and the number reads loose. */
+.player-figure { text-align: right; font-variant-numeric: proportional-nums; }
+.player-figure .value { font-family: var(--font-display); font-size: 1.7rem; font-weight: 800; line-height: 1; }
+.player-figure.primary .value { font-size: 2.6rem; color: var(--accent-text); }
+.player-figure .label {
+  margin-top: 0.15rem; color: var(--muted);
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.meter-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.9rem; margin-bottom: 1rem;
+}
+.meter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.meter-label { color: var(--muted); font-size: 0.76rem; }
+.meter-value { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+/* Track is a low-opacity step of the fill's own hue, so the unfilled part
+   still reads as part of the same measure rather than as empty chrome. */
+.meter-track {
+  margin-top: 0.3rem; height: 5px; border-radius: 3px;
+  background: rgba(57, 135, 229, 0.22); overflow: hidden;
+}
+.meter-fill { display: block; height: 100%; border-radius: 3px; background: var(--series-1); }
+.meter-stat.is-empty { opacity: 0.45; }
+
+.compare-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.compare-table th {
+  text-align: left; padding: 0.4rem 0.6rem; font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border);
+}
+.compare-table th.num, .compare-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.compare-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); }
+.compare-table tr:last-child td { border-bottom: none; }
+.compare-table td.num { font-weight: 700; }
+/* Career is context for the season figure, not a peer of it. */
+.compare-table td.career { font-weight: 500; color: var(--muted); }
+
+/* The drawer lives in a td spanning a table that scrolls horizontally, so
+   its own contents must not add to that width. */
+.player-detail { max-width: 100%; }
+.player-extras { margin-top: 0.6rem; }
+
+/* Inside the player drawer the accent stripe stops meaning anything: a
+   dozen stripes on a dozen tiles is texture, not emphasis, and it fights
+   the hero and the comparison table for attention. The tiles here are a
+   reference block, so they recede. */
+.player-detail .stat-grid.compact .stat-card {
+  border-left-width: 1px;
+  border-left-color: var(--border);
+  background: var(--panel-2);
+}
+.player-detail .stat-grid.compact .stat-card .value { font-size: 1.05rem; }

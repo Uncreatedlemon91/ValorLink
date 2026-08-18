@@ -104,6 +104,33 @@ function statCard(label, value, hint) {
   </div>`;
 }
 
+// A percentage as a labelled meter. Four rates that all live on 0-100 are
+// only comparable at a glance if they're drawn on the same scale -- as bare
+// numbers the reader has to rescale each one mentally.
+function meterStat(label, pct) {
+  const known = pct != null && Number.isFinite(Number(pct));
+  const value = known ? Math.max(0, Math.min(100, Number(pct))) : 0;
+  return `<div class="meter-stat${known ? '' : ' is-empty'}">
+    <div class="meter-head">
+      <span class="meter-label">${esc(label)}</span>
+      <span class="meter-value">${known ? `${pct}%` : '-'}</span>
+    </div>
+    <div class="meter-track"><span class="meter-fill" style="width:${value}%"></span></div>
+  </div>`;
+}
+
+// One row of the season/career comparison. The pairing is the point, so the
+// two numbers sit on one line under aligned column headers rather than in
+// two separate cards the reader has to match up themselves.
+function compareRow(label, season, career) {
+  const fmt = (v) => (v == null || v === '' ? '-' : esc(v));
+  return `<tr>
+    <td>${esc(label)}</td>
+    <td class="num">${fmt(season)}</td>
+    <td class="num career">${fmt(career)}</td>
+  </tr>`;
+}
+
 // The one number the page leads with. Exactly one per view: if everything is
 // emphasised, nothing is. Carries its own sparkline when we have history, so
 // the headline figure shows its direction rather than just its level.
@@ -675,67 +702,97 @@ function togglePlayerDetail(row, member) {
   const proName = esc(member.proName ?? member.name ?? 'Unknown');
   const gamertag = esc(member.name ?? '');
   const position = esc(member.favoritePosition ?? member.proPos ?? '-');
+  // Clean sheets only mean something for the players who keep them. The
+  // goalkeeper section below already owns the GK figures, so the summary
+  // never carries them.
+  const isKeeper = member.favoritePosition === 'goalkeeper';
+  const defensive = isKeeper || ['defender', 'defensive midfielder'].includes(
+    (member.favoritePosition || '').toLowerCase());
 
   td.innerHTML = `
     <div class="player-detail">
-      <div class="player-detail-head">
-        <strong>${proName}</strong>
-        ${gamertag && gamertag !== proName ? `<span class="muted">(${gamertag})</span>` : ''}
-        <span class="muted">${position}</span>
-        ${member.proOverall ? `<span class="muted">OVR ${esc(member.proOverall)}</span>` : ''}
-      </div>
-      <div class="stat-grid compact">
-        ${statCard('Win Rate', member.winRate != null ? `${member.winRate}%` : '-')}
-        ${statCard('Shot Success', member.shotSuccessRate != null ? `${member.shotSuccessRate}%` : '-')}
-        ${statCard('Passes Made', member.passesMade)}
-        ${statCard('Pass Success', member.passSuccessRate != null ? `${member.passSuccessRate}%` : '-')}
-        ${statCard('Tackles Made', member.tacklesMade)}
-        ${statCard('Tackle Success', member.tackleSuccessRate != null ? `${member.tackleSuccessRate}%` : '-')}
-        ${statCard('Clean Sheets (Def)', member.cleanSheetsDef)}
-        ${statCard('Clean Sheets (GK)', member.cleanSheetsGK)}
-        ${statCard('Red Cards', member.redCards)}
-        ${statCard('Height (cm)', member.proHeight)}
-      </div>
-      <div class="chart-row">
-        <div class="chart-card">
-          <h3>Season vs Career</h3>
-          <div class="stat-grid compact">
-            ${statCard('Season Goals', member.goals)}
-            ${statCard('Career Goals', member.careerGoals)}
-            ${statCard('Season Assists', member.assists)}
-            ${statCard('Career Assists', member.careerAssists)}
-            ${statCard('Season GP', member.gamesPlayed)}
-            ${statCard('Career GP', member.careerGamesPlayed)}
-            ${statCard('Season Avg Rating', member.ratingAve)}
-            ${statCard('Career Avg Rating', member.careerRatingAve)}
+      <div class="player-hero">
+        <div class="player-identity">
+          <h3>${proName}</h3>
+          <div class="player-meta">
+            ${gamertag && gamertag !== proName ? `<span>${gamertag}</span>` : ''}
+            <span class="player-pos">${position}</span>
           </div>
         </div>
+        <div class="player-figures">
+          ${member.proOverall ? `
+            <div class="player-figure primary">
+              <div class="value">${esc(member.proOverall)}</div>
+              <div class="label">Overall</div>
+            </div>` : ''}
+          ${member.ratingAve != null ? `
+            <div class="player-figure">
+              <div class="value">${esc(member.ratingAve)}</div>
+              <div class="label">Avg rating</div>
+            </div>` : ''}
+        </div>
+      </div>
+
+      <div class="meter-row">
+        ${meterStat('Win rate', member.winRate)}
+        ${meterStat('Shot success', member.shotSuccessRate)}
+        ${meterStat('Pass success', member.passSuccessRate)}
+        ${meterStat('Tackle success', member.tackleSuccessRate)}
+      </div>
+
+      <div class="chart-row">
         <div class="chart-card">
-          <h3>Recent Form (Goals)</h3>
+          <h3>Season vs career</h3>
+          <div class="table-wrap">
+            <table class="compare-table">
+              <thead>
+                <tr><th>Stat</th><th class="num">Season</th><th class="num">Career</th></tr>
+              </thead>
+              <tbody>
+                ${compareRow('Games', member.gamesPlayed, member.careerGamesPlayed)}
+                ${compareRow('Goals', member.goals, member.careerGoals)}
+                ${compareRow('Assists', member.assists, member.careerAssists)}
+                ${compareRow('MOTM', member.manOfTheMatch, member.careerManOfTheMatch)}
+                ${compareRow('Avg rating', member.ratingAve, member.careerRatingAve)}
+              </tbody>
+            </table>
+          </div>
+          <p class="chart-caption player-extras">
+            ${member.passesMade != null ? `${num(member.passesMade).toLocaleString()} passes` : ''}
+            ${member.tacklesMade != null ? ` &middot; ${num(member.tacklesMade).toLocaleString()} tackles` : ''}
+            ${member.redCards != null ? ` &middot; ${member.redCards} red` : ''}
+            ${defensive && member.cleanSheetsDef != null ? ` &middot; ${member.cleanSheetsDef} clean sheets` : ''}
+            ${member.proHeight ? ` &middot; ${member.proHeight}cm` : ''}
+          </p>
+        </div>
+        <div class="chart-card">
+          <h3>Goals per match &mdash; recent form</h3>
           <div id="spark-${idx}"></div>
           <p class="chart-caption">Oldest &rarr; most recent match.</p>
         </div>
       </div>
+
       <div class="chart-row">
         <div class="chart-card">
-          <h3>Recent Match Performance</h3>
+          <h3>Last 10 matches</h3>
           <p class="chart-caption">
             From the matches currently loaded on the Matches tab, not
             full-season -- this per-appearance detail (shots, pass/tackle
-            attempts, minutes, personal W/L) isn't in the season-aggregate
+            attempts, minutes, personal W-D-L) isn't in the season-aggregate
             endpoint at all.
           </p>
           <div id="perf-summary-${idx}"></div>
         </div>
         <div class="chart-card">
-          <h3>Rating Trend</h3>
+          <h3>Match rating &mdash; last 10</h3>
           <div id="rating-spark-${idx}"></div>
           <p class="chart-caption">Oldest &rarr; most recent match.</p>
         </div>
       </div>
+
       <div class="chart-row">
         <div class="chart-card">
-          <h3>Rating &mdash; Full Tracked History</h3>
+          <h3>Rating &mdash; full tracked history</h3>
           <div id="history-rating-${idx}"></div>
           <p class="chart-caption" id="history-rating-caption-${idx}">
             Everything we've captured for this player since tracking began (see Competition),
@@ -743,7 +800,7 @@ function togglePlayerDetail(row, member) {
           </p>
         </div>
       </div>
-      ${member.favoritePosition === 'goalkeeper' ? goalkeeperSectionHtml(idx) : ''}
+      ${isKeeper ? goalkeeperSectionHtml(idx) : ''}
     </div>
   `;
 
@@ -779,13 +836,18 @@ function togglePlayerDetail(row, member) {
         ${statCard('Minutes Played', minutes)}
         ${statCard('MOTM', agg.mom)}
         ${statCard('Red Cards', agg.redCards)}
-        ${statCard('Personal Record', `${agg.wins}-${agg.losses}-${agg.ties}`)}
+        ${statCard('W-D-L', `${agg.wins}-${agg.ties}-${agg.losses}`)}
       </div>
     `;
-    Charts.sparkline(ratingSpark, {
-      values: [...agg.ratings].reverse(),
-      color: 'var(--series-3)',
-      formatValue: (v) => v.toFixed(1),
+    // Ratings live in a narrow band around 6-9, so bars from a zero
+    // baseline come out nearly uniform and say almost nothing. An
+    // autoscaled area shows the actual movement. --series-3 was also the
+    // wrong colour: green is reserved here for win/good status, and a
+    // match rating isn't a state.
+    const ratings = [...agg.ratings].reverse();
+    Charts.areaChart(ratingSpark, {
+      data: ratings.map((v, i) => ({ label: `Match ${i + 1}`, value: Number(v.toFixed(1)) })),
+      color: 'var(--series-1)',
     });
   }
 
