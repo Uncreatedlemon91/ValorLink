@@ -1050,7 +1050,7 @@ pre {
 }
 .league-table tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
 .league-table .lt-num { text-align: center; white-space: nowrap; }
-.league-table .lt-points { font-weight: 700; color: var(--text); }
+.league-table .lt-rating { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .league-table .lt-club { display: flex; align-items: center; gap: 0.65rem; }
 .lt-crest { width: 30px; height: 30px; font-size: 0.68rem; }
 .lt-name { font-weight: 600; }

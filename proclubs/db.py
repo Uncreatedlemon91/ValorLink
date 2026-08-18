@@ -344,8 +344,10 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
     known_opponents), capped at max_teams -- no manual roster to maintain.
     Our own club is always present and pinned (protected from eviction).
     Once full, a newly-discovered opponent replaces whichever non-pinned
-    member currently has the fewest points in their latest snapshot, ties
-    broken by whichever has been sitting in the table longest. A club with
+    member currently has the lowest skill rating in their latest snapshot
+    (the same ranking league_table() displays by, so the club dropped is
+    the one shown at the bottom), ties broken by whichever has been sitting
+    in the table longest. A club with
     no snapshot yet counts as the lowest possible, so an unpolled/unproven
     member is the first to go if nothing else ranks lower -- except one
     just added in this same call, which won't have had a chance to be
@@ -378,17 +380,20 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
 
         def _latest_snapshot(club_id):
             return conn.execute(
-                """SELECT division, points FROM club_snapshots WHERE platform=? AND club_id=?
+                """SELECT division, points, skill_rating FROM club_snapshots WHERE platform=? AND club_id=?
                    ORDER BY captured_at DESC, id DESC LIMIT 1""",
                 (platform, club_id),
             ).fetchone()
 
-        def _points_for(club_id):
+        def _rating_for(club_id):
+            """Ranks a member for eviction the same way league_table() ranks
+            it for display -- otherwise the club we drop when the table is
+            full isn't the one the table shows at the bottom."""
             row = _latest_snapshot(club_id)
-            if not row or row["points"] is None:
+            if not row or row["skill_rating"] is None:
                 return -1
             try:
-                return int(float(row["points"]))
+                return int(float(row["skill_rating"]))
             except (TypeError, ValueError):
                 return -1
 
@@ -439,7 +444,7 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
                 ).fetchall()
                 if not candidates:
                     continue  # everyone left is pinned -- no room to make
-                evict = min(candidates, key=lambda r: (_points_for(r["club_id"]), r["added_at"]))
+                evict = min(candidates, key=lambda r: (_rating_for(r["club_id"]), r["added_at"]))
                 conn.execute(
                     "DELETE FROM league_clubs WHERE platform=? AND club_id=?",
                     (platform, evict["club_id"]),
@@ -464,13 +469,22 @@ def recent_form(platform, club_id, limit=5):
 
 def league_table(platform, our_club_id):
     """The auto-built league table: every club in league_clubs with its
-    current division/points/record from its latest snapshot, filtered to
+    current division/rating/record from its latest snapshot, filtered to
     clubs currently in the SAME division as us. Division numbers are a
     skill tier that moves independently per club (see ea_client.py) --
     not a real league/region grouping, EA doesn't expose one -- so "same
     division right now" is the closest available proxy for "who's
-    actually in our bracket." Sorted by points, highest first. A club
-    that's never been polled sorts last (unknown standing, not zero)."""
+    actually in our bracket."
+
+    Ranked by skill rating, highest first. Points measure how much a club
+    has played as much as how well -- they only accumulate, so a club that
+    grinds twice as many matches outranks a better one that played fewer.
+    Skill rating is EA's own strength number and moves both ways, which
+    makes it the fairer sort for a table whose members have wildly
+    different match counts. Points are still recorded and still decide
+    ties. A club that's never been polled sorts last (unknown strength,
+    not zero).
+    """
     our_club_id = str(our_club_id)
     rows = []
     our_division = None
@@ -485,6 +499,7 @@ def league_table(platform, our_club_id):
             "label": entry["label"] or entry["club_id"],
             "is_us": is_us,
             "division": snap.get("division"),
+            "skill_rating": _num(snap.get("skill_rating")),
             "points": _num(snap.get("points")),
             "played": wins + losses + ties,
             "team_size": _num(snap.get("team_size")),
@@ -498,7 +513,13 @@ def league_table(platform, our_club_id):
     if our_division is not None:
         rows = [r for r in rows if r["division"] == our_division]
 
-    rows.sort(key=lambda r: r["points"] if r["points"] is not None else -1, reverse=True)
+    rows.sort(
+        key=lambda r: (
+            r["skill_rating"] if r["skill_rating"] is not None else -1,
+            r["points"] if r["points"] is not None else -1,
+        ),
+        reverse=True,
+    )
     return rows
 
 

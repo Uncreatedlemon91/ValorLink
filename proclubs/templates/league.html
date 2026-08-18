@@ -19,8 +19,10 @@
           {% else %}
             Every club we've faced --
           {% endif %}
-          not a manually curated list, and not EA's own leaderboard (it doesn't expose one). Up to
-          {{ max_teams }} teams; the lowest-ranked drops off to make room for a newly-played opponent once full.
+          not a manually curated list, and not EA's own leaderboard (it doesn't expose one). Ranked by
+          <strong>skill rating</strong> rather than points: points only ever go up, so they reward playing a
+          lot as much as playing well, and clubs here have wildly different match counts. Up to
+          {{ max_teams }} teams; the lowest-rated drops off to make room for a newly-played opponent once full.
         </p>
       </div>
     </div>
@@ -37,7 +39,7 @@
             <tr>
               <th class="lt-club">Club</th>
               <th class="lt-num">P</th>
-              <th class="lt-num">Pts</th>
+              <th class="lt-num" title="EA's own club strength rating">SR</th>
               <th class="lt-num">Squad</th>
               <th class="lt-form">Last 5</th>
             </tr>
@@ -50,7 +52,7 @@
                   <span class="lt-name">{{ row.label }}{% if row.is_us %} <span class="lt-us-pill">Us</span>{% endif %}</span>
                 </td>
                 <td class="lt-num">{{ row.played if row.has_data else '—' }}</td>
-                <td class="lt-num lt-points">{{ row.points if row.points is not none else '—' }}</td>
+                <td class="lt-num lt-rating">{{ row.skill_rating if row.skill_rating is not none else '—' }}</td>
                 <td class="lt-num">{{ row.team_size if row.team_size is not none else '—' }}</td>
                 <td class="lt-form">
                   {% if row.form %}

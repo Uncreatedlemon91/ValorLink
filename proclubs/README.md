@@ -402,9 +402,19 @@ against every club we've played).
 ## The league table (auto-built, not manually curated)
 
 `/league` shows every club we've actually played that's currently in the
-same division as us, sorted by points -- games played, points, squad size,
-and a last-5-results form strip per row. See `db.py`'s `league_table()`,
-`sync_league_roster()`, and `known_opponents()`.
+same division as us, ranked by **skill rating** -- games played, skill
+rating, squad size, and a last-5-results form strip per row. See `db.py`'s
+`league_table()`, `sync_league_roster()`, and `known_opponents()`.
+
+- **Why rating and not points.** Points only ever accumulate, so they
+  measure how much a club has played as much as how well: a club grinding
+  twice as many matches outranks a better one that played fewer. This
+  table's members have wildly different match counts by construction (they
+  join it whenever we happen to face them), which makes points a
+  particularly bad sort here. Skill rating is EA's own strength number and
+  moves both ways. Points are still recorded and still break rating ties;
+  a club whose snapshot has no rating sorts last, since unknown strength
+  isn't zero strength.
 
 - **There's no roster to maintain.** EA's API has no region/league concept
   to query (see the caveats above -- it can't even list every club in a
@@ -418,14 +428,15 @@ and a last-5-results form strip per row. See `db.py`'s `league_table()`,
   so poll runtime and EA API load stay bounded no matter how many
   different clubs get faced over a season. Our own club is pinned and
   never evicted; once full, a newly-discovered opponent replaces whichever
-  non-pinned member currently has the fewest points in its own latest
-  snapshot -- see `sync_league_roster()`'s docstring for the exact tie-break
-  rules.
+  non-pinned member currently has the lowest skill rating in its own latest
+  snapshot -- the same ranking the table displays by, so the club dropped is
+  the one shown at the bottom. See `sync_league_roster()`'s docstring for
+  the exact tie-break rules.
 - **Every club in the table gets polled like our own club does** --
   `poll.py`'s `sync_and_poll_league_table()` runs `poll_club()` (division,
-  points, matches, and now squad size via `members/stats`) against each
+  rating, points, matches, and squad size via `members/stats`) against each
   league-table member after syncing membership, so its own "last 5" form
-  and points are real, current data, not just our record against them
+  and rating are real, current data, not just our record against them
   (that's still `rival_records()`, a different report on the Competition
   tab). This roughly triples-plus the number of EA API calls a poll run
   makes once the table has real members -- accepted cost of the 25-team
