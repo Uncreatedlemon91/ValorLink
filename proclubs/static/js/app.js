@@ -91,8 +91,34 @@ function panelError(panel, result) {
   panel.innerHTML = `<p style="color:#e05a5a">${result.reason.message}</p>`;
 }
 
-function statCard(label, value) {
-  return `<div class="stat-card"><div class="label">${label}</div><div class="value">${value ?? '-'}</div></div>`;
+// A stat tile is: label, value, and optionally a line of context under it.
+// Tiles with nothing to show are marked so they recede instead of sitting at
+// full strength shouting a dash -- EA simply doesn't report some of these
+// until a club has played enough, and a wall of confident "-" reads as broken.
+function statCard(label, value, hint) {
+  const empty = value == null || value === '-' || value === '';
+  return `<div class="stat-card${empty ? ' is-empty' : ''}">
+    <div class="label">${label}</div>
+    <div class="value">${empty ? '-' : value}</div>
+    ${hint ? `<div class="stat-hint">${esc(hint)}</div>` : ''}
+  </div>`;
+}
+
+// The one number the page leads with. Exactly one per view: if everything is
+// emphasised, nothing is. Carries its own sparkline when we have history, so
+// the headline figure shows its direction rather than just its level.
+function heroStat(label, value, hint, delta) {
+  const dir = delta == null || delta === 0 ? '' : (delta > 0 ? ' up' : ' down');
+  return `<div class="stat-card stat-hero">
+    <div class="label">${label}</div>
+    <div class="value">${value ?? '-'}</div>
+    <div class="stat-meta">
+      ${hint ? `<span class="stat-hint">${esc(hint)}</span>` : ''}
+      ${delta != null && delta !== 0
+        ? `<span class="stat-delta${dir}">${delta > 0 ? '+' : ''}${delta} since tracking began</span>`
+        : ''}
+    </div>
+  </div>`;
 }
 
 function num(v) {
@@ -204,16 +230,29 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
     clubHeader.append(strip);
   }
 
+  // Skill-rating movement across everything we've tracked. Deliberately not
+  // shown when there's only one snapshot: a delta needs two readings, and
+  // "+0" would read as "flat" rather than "we don't know yet".
+  const ratingSnapshots = historyResult.status === 'fulfilled' ? (historyResult.value.snapshots || []) : [];
+  const ratingSeries = dailyPeak(ratingSnapshots, 'skill_rating');
+  const ratingDelta = ratingSeries.length > 1
+    ? ratingSeries[ratingSeries.length - 1].value - ratingSeries[0].value
+    : null;
+
   const played = num(stats.wins) + num(stats.losses) + num(stats.ties);
   const winRate = played > 0 ? Math.round((num(stats.wins) / played) * 100) : null;
   const goalDiff = stats.goals != null && stats.goalsAgainst != null ? num(stats.goals) - num(stats.goalsAgainst) : null;
 
   panel.innerHTML = `
+    ${heroStat('Skill Rating', stats.skillRating,
+               standings.currentDivision != null ? `Division ${standings.currentDivision}` : null,
+               ratingDelta)}
     <div class="stat-grid">
-      ${statCard('Points', standings.points)}
-      ${statCard('Skill Rating', stats.skillRating)}
-      ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-')}
-      ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-')}
+      ${statCard('Points', standings.points, played ? `${played} played` : null)}
+      ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-',
+                 played ? `${num(stats.wins)}W ${num(stats.ties)}D ${num(stats.losses)}L` : null)}
+      ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-',
+                 stats.goals != null ? `${num(stats.goals)} for, ${num(stats.goalsAgainst)} against` : null)}
       ${statCard('Win Streak', stats.wstreak)}
       ${statCard('Unbeaten Streak', standings.unbeatenstreak)}
     </div>
@@ -287,17 +326,20 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
 
   const members = membersResult.status === 'fulfilled' ? (membersResult.value.members || []) : [];
   const nameOf = (m) => m.proName || m.name || 'Unknown';
+  // One hue across all three: each is a single series, and the titles say
+  // what's plotted. Three different hues would imply the color meant
+  // something it doesn't.
   Charts.hBarChart(document.getElementById('chart-spotlight-scorers'), {
     data: [...members].sort((a, b) => num(b.goals) - num(a.goals)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.goals) })),
     color: 'var(--series-1)',
   });
   Charts.hBarChart(document.getElementById('chart-spotlight-assists'), {
     data: [...members].sort((a, b) => num(b.assists) - num(a.assists)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.assists) })),
-    color: 'var(--series-2)',
+    color: 'var(--series-1)',
   });
   Charts.hBarChart(document.getElementById('chart-spotlight-motm'), {
     data: [...members].sort((a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.manOfTheMatch) })),
-    color: 'var(--series-4)',
+    color: 'var(--series-1)',
   });
 }
 
@@ -306,13 +348,31 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
 // search by name, sort by any column, click a row for the full breakdown.
 // --------------------------------------------------------------------------
 
-const PLAYER_SORTERS = {
-  goals: (a, b) => num(b.goals) - num(a.goals),
-  assists: (a, b) => num(b.assists) - num(a.assists),
-  rating: (a, b) => num(b.ratingAve) - num(a.ratingAve),
-  motm: (a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch),
-  name: (a, b) => (a.proName || a.name || '').localeCompare(b.proName || b.name || ''),
-};
+// One entry per sortable column. `key` pulls the comparable value; `text`
+// marks the columns that sort alphabetically (and so default to ascending --
+// A-Z is the useful direction for a name, while 20 goals is the useful
+// direction for goals).
+const PLAYER_COLUMNS = [
+  { id: 'name', label: 'Name', text: true, key: (m) => (m.proName || m.name || '') },
+  { id: 'position', label: 'Position', text: true, key: (m) => (m.favoritePosition || m.proPos || '') },
+  { id: 'gp', label: 'GP', key: (m) => num(m.gamesPlayed) },
+  { id: 'goals', label: 'Goals', key: (m) => num(m.goals) },
+  { id: 'assists', label: 'Assists', key: (m) => num(m.assists) },
+  { id: 'rating', label: 'Avg Rating', key: (m) => num(m.ratingAve) },
+  { id: 'motm', label: 'MOTM', key: (m) => num(m.manOfTheMatch) },
+  { id: 'careerGoals', label: 'Career Goals', key: (m) => num(m.careerGoals) },
+];
+
+function playerSorter(sortId, dir) {
+  const col = PLAYER_COLUMNS.find((c) => c.id === sortId) || PLAYER_COLUMNS[3];
+  const sign = dir === 'asc' ? 1 : -1;
+  return (a, b) => {
+    const av = col.key(a);
+    const bv = col.key(b);
+    if (col.text) return sign * String(av).localeCompare(String(bv));
+    return sign * (av - bv);
+  };
+}
 
 function renderPlayers(result) {
   const panel = document.getElementById('tab-players');
@@ -324,13 +384,13 @@ function renderPlayers(result) {
     return;
   }
 
-  playerFilterState = { pos: 'ALL', sort: 'goals', q: '' };
+  playerFilterState = { pos: 'ALL', sort: 'goals', dir: 'desc', q: '' };
 
   panel.innerHTML = `
     <div class="chart-row">
       <div class="chart-card">
         <h3>Position Mix</h3>
-        <div id="chart-positions"></div>
+        <div id="chart-positions" class="chart-compact"></div>
       </div>
     </div>
     <div class="filter-row">
@@ -342,13 +402,6 @@ function renderPlayers(result) {
         <button class="chip" data-pos="forward" type="button">FWD</button>
       </div>
       <input id="member-filter" type="text" placeholder="Filter roster by name..." style="min-width:200px" />
-      <select id="player-sort" class="sort-select">
-        <option value="goals">Sort: Goals</option>
-        <option value="assists">Sort: Assists</option>
-        <option value="rating">Sort: Avg rating</option>
-        <option value="motm">Sort: MOTM</option>
-        <option value="name">Sort: Name</option>
-      </select>
     </div>
     <p class="chart-caption">
       The name filter searches this club's roster only -- EA's API has no way to look up a player
@@ -356,9 +409,12 @@ function renderPlayers(result) {
     </p>
     <table>
       <thead>
-        <tr>
-          <th>Name</th><th>Position</th><th>GP</th><th>Goals</th>
-          <th>Assists</th><th>Avg Rating</th><th>MOTM</th><th>Career Goals</th>
+        <tr id="players-head">
+          ${PLAYER_COLUMNS.map((c) => `
+            <th class="sortable" data-sort="${c.id}" tabindex="0" role="columnheader"
+                aria-sort="none" title="Sort by ${c.label}">
+              <span>${c.label}</span><span class="sort-caret" aria-hidden="true"></span>
+            </th>`).join('')}
         </tr>
       </thead>
       <tbody id="players-body"></tbody>
@@ -377,26 +433,57 @@ function renderPlayers(result) {
     playerFilterState.q = e.target.value.trim().toLowerCase();
     renderPlayersTable(members);
   });
-  document.getElementById('player-sort').addEventListener('change', (e) => {
-    playerFilterState.sort = e.target.value;
+  const sortBy = (id) => {
+    if (playerFilterState.sort === id) {
+      playerFilterState.dir = playerFilterState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      const col = PLAYER_COLUMNS.find((c) => c.id === id);
+      playerFilterState.sort = id;
+      // Start each column in its useful direction rather than always
+      // descending: names read A-Z, counts read biggest-first.
+      playerFilterState.dir = col && col.text ? 'asc' : 'desc';
+    }
     renderPlayersTable(members);
+  };
+  document.getElementById('players-head').addEventListener('click', (e) => {
+    const th = e.target.closest('th.sortable');
+    if (th) sortBy(th.dataset.sort);
+  });
+  document.getElementById('players-head').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const th = e.target.closest('th.sortable');
+    if (th) { e.preventDefault(); sortBy(th.dataset.sort); }
   });
 
   renderPlayersTable(members);
 
-  Charts.donutChart(document.getElementById('chart-positions'), {
+  // Bars, not a donut: these values sit close together (four defenders and
+  // four midfielders are indistinguishable as two arcs) and a donut can only
+  // show part-to-whole at a glance. One hue -- the labels carry identity, so
+  // a colour per position would encode nothing.
+  Charts.hBarChart(document.getElementById('chart-positions'), {
     data: [
-      { label: 'Goalkeeper', value: num(positionCount.goalkeeper), color: 'var(--series-1)' },
-      { label: 'Defender', value: num(positionCount.defender), color: 'var(--series-2)' },
-      { label: 'Midfielder', value: num(positionCount.midfielder), color: 'var(--series-3)' },
-      { label: 'Forward', value: num(positionCount.forward), color: 'var(--series-4)' },
+      { label: 'Goalkeeper', value: num(positionCount.goalkeeper) },
+      { label: 'Defender', value: num(positionCount.defender) },
+      { label: 'Midfielder', value: num(positionCount.midfielder) },
+      { label: 'Forward', value: num(positionCount.forward) },
     ],
+    color: 'var(--series-1)',
   });
 }
 
 function renderPlayersTable(members) {
   const body = document.getElementById('players-body');
-  const { pos, q, sort } = playerFilterState;
+  const { pos, q, sort, dir } = playerFilterState;
+
+  // Reflect the sort in the header: the caret shows direction, aria-sort
+  // says the same thing to a screen reader.
+  document.querySelectorAll('#players-head th.sortable').forEach((th) => {
+    const active = th.dataset.sort === sort;
+    th.classList.toggle('is-sorted', active);
+    th.classList.toggle('asc', active && dir === 'asc');
+    th.setAttribute('aria-sort', active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
 
   const filtered = members
     .filter((m) => {
@@ -408,12 +495,23 @@ function renderPlayersTable(members) {
       }
       return true;
     })
-    .sort(PLAYER_SORTERS[sort]);
+    .sort(playerSorter(sort, dir));
 
   if (!filtered.length) {
     body.innerHTML = `<tr><td colspan="8" class="chart-empty" style="padding:1rem 0.75rem">No players match this filter.</td></tr>`;
     return;
   }
+
+  const maxGoals = Math.max(...filtered.map((m) => num(m.goals)), 1);
+  const maxAssists = Math.max(...filtered.map((m) => num(m.assists)), 1);
+  const barCell = (value, max) => {
+    if (value == null) return '<td>-</td>';
+    const pct = Math.round((num(value) / max) * 100);
+    return `<td class="bar-cell">
+      <span class="bar-fill" style="width:${pct}%"></span>
+      <span class="bar-value">${num(value)}</span>
+    </td>`;
+  };
 
   body.innerHTML = filtered
     .map((m) => {
@@ -423,8 +521,8 @@ function renderPlayersTable(members) {
         <td>${esc(m.proName ?? m.name ?? '-')}</td>
         <td>${esc(m.favoritePosition ?? m.proPos ?? '-')}</td>
         <td>${m.gamesPlayed ?? '-'}</td>
-        <td>${m.goals ?? '-'}</td>
-        <td>${m.assists ?? '-'}</td>
+        ${barCell(m.goals, maxGoals)}
+        ${barCell(m.assists, maxAssists)}
         <td>${m.ratingAve ?? '-'}</td>
         <td>${m.manOfTheMatch ?? '-'}</td>
         <td>${m.careerGoals ?? '-'}</td>
@@ -1126,15 +1224,9 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
       EA's Pro Clubs API does not expose a full league table -- only your club's own divisional
       progress, and, below, your own head-to-head record against clubs you've actually played.
     </p>
-    <div class="chart-row">
-      <div class="chart-card">
-        <h3>Division Ladder</h3>
-        <div id="chart-ladder"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Promotions vs Relegations</h3>
-        <div id="chart-promo"></div>
-      </div>
+    <div class="chart-card">
+      <h3>Division Ladder</h3>
+      <div id="chart-ladder"></div>
     </div>
     <div class="stat-grid">
       ${statCard('Current Division', s.currentDivision)}
@@ -1161,12 +1253,6 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
 
   renderDivisionLadder(document.getElementById('chart-ladder'), s.currentDivision, s.bestDivision);
 
-  Charts.vBarChart(document.getElementById('chart-promo'), {
-    data: [
-      { label: 'Promotions', value: num(s.promotions), color: 'var(--status-good)' },
-      { label: 'Relegations', value: num(s.relegations), color: 'var(--status-critical)' },
-    ],
-  });
 
   const historyRow = document.getElementById('competition-history-row');
   const trackedSince = historyDivisionResult.status === 'fulfilled' ? historyDivisionResult.value.trackedSince : null;

@@ -1312,3 +1312,61 @@ pre {
   margin-left: 0.5rem; padding: 0.1rem 0.45rem; border-radius: 999px;
   font-size: 0.7rem; font-weight: 700; background: var(--panel-2); color: var(--muted);
 }
+
+/* --- Stats page: hero figure, tile contract, sortable table --------------- */
+/* Exactly one hero per view. Proportional figures, not tabular: at display
+   size tabular-nums gives every digit a zero's width and the number reads
+   loose. tabular-nums stays where it belongs, in table columns. */
+.stat-hero {
+  grid-column: 1 / -1;
+  margin-bottom: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  font-variant-numeric: proportional-nums;
+}
+.stat-hero .value { font-size: 3rem; line-height: 1; font-weight: 800; letter-spacing: -0.02em; }
+.stat-meta { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; margin-top: 0.35rem; }
+.stat-hint { color: var(--muted); font-size: 0.78rem; }
+.stat-card .stat-hint { margin-top: 0.2rem; display: block; }
+/* Direction, not decoration: up is good for skill rating, so up is the
+   good status color and down the critical one. */
+.stat-delta { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+.stat-delta.up { color: var(--status-good); }
+.stat-delta.down { color: var(--status-critical); }
+/* A stat EA hasn't reported yet recedes rather than shouting a confident
+   dash at full strength. */
+.stat-card.is-empty { opacity: 0.5; }
+.stat-card.is-empty .value { font-weight: 600; }
+
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); }
+th.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sort-caret { display: inline-block; width: 0.6rem; margin-left: 0.25rem; opacity: 0; }
+.sort-caret::before { content: "▾"; font-size: 0.7em; }
+th.is-sorted { color: var(--accent-text); }
+th.is-sorted .sort-caret { opacity: 1; }
+th.is-sorted.asc .sort-caret::before { content: "▴"; }
+
+/* A magnitude bar behind the number: the value still reads exactly, and the
+   column's shape reads without going row by row. Scaled to the column's own
+   max, so it compares within a column and never across. */
+/* A thin rule under the number, not a block behind it. A full-height fill
+   reads as a selected cell and competes with the digits it's meant to
+   support; 4px at the baseline still reads as a length while the number
+   stays the first thing seen. */
+.bar-cell { position: relative; }
+.bar-fill {
+  position: absolute; left: 0.6rem; bottom: 0.45rem;
+  height: 4px; border-radius: 0 2px 2px 0;
+  background: var(--series-1); opacity: 0.75;
+  pointer-events: none;
+}
+.bar-value { position: relative; font-variant-numeric: tabular-nums; }
+
+/* hBarChart reserves a label gutter proportional to its width, so one small
+   chart stretched across a full-width card ends up mostly gutter. Cap it at
+   a readable measure instead. */
+.chart-card .chart-compact { max-width: 520px; }
+
+/* An empty card shouldn't stretch to match a tall neighbour and reserve a
+   screenful of nothing -- size it to its message. */
+.chart-row .chart-card:has(.chart-empty) { align-self: start; }
