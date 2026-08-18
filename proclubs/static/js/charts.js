@@ -376,7 +376,13 @@ const Charts = (() => {
     const chartH = 110;
     const padTop = 10;
     const usableH = chartH - padTop;
-    const chartW = Math.max(data.length * 40, 200);
+    // Match the viewBox to the container's real width so the plot fills the
+    // card. The SVG is width:100% with a fixed height, so a viewBox narrower
+    // than the container gets letterboxed -- scaled to fit the height and
+    // centered, leaving dead space either side. clientWidth is 0 for a
+    // container inside a hidden tab panel, so fall back to the old
+    // point-count width in that case rather than collapsing to nothing.
+    const chartW = Math.max(container.clientWidth || 0, data.length * 40, 200);
 
     const xFor = (i) => (data.length === 1 ? chartW / 2 : (i / (data.length - 1)) * chartW);
     const yFor = (v) => padTop + usableH - ((v - min) / range) * usableH;
@@ -414,7 +420,15 @@ const Charts = (() => {
       // A wide, invisible hit target -- the visible dot is too small to
       // hover precisely, same reasoning as the bar/donut hover targets.
       const hit = svgEl('circle', { cx: x, cy: y, r: 9, class: 'chart-area-hit' });
-      attachHover(hit, () => [{ label: data[i].label, value: `${data[i].value}${unit}`, color }]);
+      attachHover(hit, () => {
+        const rows = [{ label: data[i].label, value: `${data[i].value}${unit}`, color }];
+        // An optional second line for what the point is made of (e.g. how
+        // many matches a daily average covers) -- a point averaging four
+        // readings and one averaging a single reading shouldn't look
+        // equally solid without saying so.
+        if (data[i].hint) rows.push({ label: data[i].hint, value: '' });
+        return rows;
+      });
       svg.appendChild(hit);
 
       const dot = svgEl('circle', { cx: x, cy: y, r: 2.5, class: 'chart-area-point' });

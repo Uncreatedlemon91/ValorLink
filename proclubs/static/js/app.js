@@ -134,30 +134,61 @@ function esc(v) {
   }[c]));
 }
 
-// One point per local calendar day (the highest reading that day) --
-// snapshots come from hourly polls (see poll.py), so raw points are
-// closer to "per match" resolution than a real day-over-day trend, and
-// the polled history for a busy club can get noisy. Skips a reading with
-// no usable numeric value for the field rather than treating it as 0.
-function dailyPeak(snapshots, field) {
+// --- Grouping by day -------------------------------------------------------
+// EA gives us readings at whatever cadence we happened to poll or play at,
+// so raw per-reading charts are noisy and unevenly spaced. Every trend chart
+// here collapses to one point per local calendar day first; they differ only
+// in how a day's readings get combined.
+function _dayKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// rows -> [{ label, value, count }], one per day with at least one usable
+// reading, oldest first. A reading with no usable numeric value is skipped
+// rather than counted as 0 -- a missing rating is not a rating of zero, and
+// averaging one in would drag the day down.
+function groupByDay(rows, { time, value, combine }) {
   const byDay = new Map();
-  snapshots.forEach((s) => {
-    const raw = s[field];
-    if (raw == null || raw === '') return;
-    const value = num(raw);
-    const d = new Date(s.captured_at * 1000);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const existing = byDay.get(key);
-    if (!existing || value > existing.value) {
-      byDay.set(key, { date: d, value });
-    }
+  (rows || []).forEach((row) => {
+    const seconds = Number(time(row));
+    const raw = value(row);
+    if (!Number.isFinite(seconds) || !seconds || raw == null || raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    const date = new Date(seconds * 1000);
+    const key = _dayKey(date);
+    const bucket = byDay.get(key);
+    if (bucket) bucket.values.push(n);
+    else byDay.set(key, { date, values: [n] });
   });
   return [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, { date, value }]) => ({
+    .map(([, { date, values }]) => ({
       label: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      value,
+      value: combine(values),
+      count: values.length,
     }));
+}
+
+// The highest reading that day. Club snapshots come from hourly polls (see
+// poll.py), so a day holds several readings of the same drifting number and
+// the peak is the meaningful daily figure.
+function dailyPeak(snapshots, field) {
+  return groupByDay(snapshots, {
+    time: (s) => s.captured_at,
+    value: (s) => s[field],
+    combine: (values) => Math.max(...values),
+  });
+}
+
+// The mean of that day's readings. For per-match player stats the mean is
+// the honest daily figure -- a session of four matches is one day's
+// performance, and taking the best of them would flatter it.
+function dailyAverage(rows, { time, value, decimals = 2 }) {
+  return groupByDay(rows, {
+    time, value,
+    combine: (values) => Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(decimals)),
+  });
 }
 
 // --------------------------------------------------------------------------
@@ -705,11 +736,11 @@ function togglePlayerDetail(row, member) {
       <div class="chart-row">
         <div class="chart-card">
           <h3>Rating &mdash; Full Tracked History</h3>
-          <p class="chart-caption">
-            Every match we've captured for this player since tracking began (see Competition),
+          <div id="history-rating-${idx}"></div>
+          <p class="chart-caption" id="history-rating-caption-${idx}">
+            Everything we've captured for this player since tracking began (see Competition),
             not just the recent sample above.
           </p>
-          <div id="history-rating-${idx}"></div>
         </div>
       </div>
       ${member.favoritePosition === 'goalkeeper' ? goalkeeperSectionHtml(idx) : ''}
@@ -808,19 +839,46 @@ function goalkeeperSectionHtml(idx) {
 // render, since most players won't have this drawer opened.
 async function loadPlayerHistoryTrend(playerName, idx) {
   const container = document.getElementById(`history-rating-${idx}`);
+  const captionEl = document.getElementById(`history-rating-caption-${idx}`);
   if (!container) return;
   try {
     const data = await api(`/api/history/players?name=${encodeURIComponent(playerName)}`);
     const rows = data.matches || [];
-    if (!rows.length) {
-      Charts.emptyState(container, 'No tracked history for this player yet.');
+    // One point per day rather than per match: people play in sessions, so
+    // per-match points bunch up on match nights and leave gaps elsewhere,
+    // which reads as a trend that isn't there. The mean is the day's
+    // performance -- the peak would flatter a bad night with one good game.
+    const daily = dailyAverage(rows, {
+      time: (r) => r.played_at,
+      value: (r) => r.rating,
+      decimals: 2,
+    });
+    if (!daily.length) {
+      // Distinguish "nothing captured" from "captured, but nothing we can
+      // place on a day" -- grouping by date drops any reading with no usable
+      // timestamp, and silently showing the empty-history message for those
+      // would misreport why the chart is blank.
+      Charts.emptyState(container, rows.length
+        ? 'Tracked matches for this player have no usable dates, so they cannot be plotted by day.'
+        : 'No tracked history for this player yet.');
+      if (captionEl) captionEl.textContent = '';
       return;
     }
-    Charts.sparkline(container, {
-      values: rows.map((r) => num(r.rating)),
-      color: 'var(--series-3)',
-      formatValue: (v) => v.toFixed(1),
+    Charts.areaChart(container, {
+      data: daily.map((d) => ({
+        ...d,
+        // Say what each point is made of -- a day averaging four matches and
+        // a day with one shouldn't look equally solid without saying so.
+        hint: `${d.count} ${d.count === 1 ? 'match' : 'matches'}`,
+      })),
+      color: 'var(--series-1)',
     });
+    if (captionEl) {
+      const matches = daily.reduce((sum, d) => sum + d.count, 0);
+      captionEl.textContent =
+        `Average match rating per day, oldest → most recent — `
+        + `${matches} match${matches === 1 ? '' : 'es'} across ${daily.length} day${daily.length === 1 ? '' : 's'}.`;
+    }
   } catch (err) {
     Charts.emptyState(container, err.message);
   }
