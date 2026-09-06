@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #05070E; }
+    a { color: #00E27A; } a:hover { color: #00B863; }
+    .kick { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; }
+    .anton { font-family: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif; font-weight: 400; letter-spacing: 0.005em; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; min-height: 1240px; background: #05070E; color: #F2F5FA; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; padding: 56px 64px 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 52px;">
+
+  <!-- Board header -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; border-bottom: 1px solid #22304C; padding-bottom: 28px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span class="kick" style="font-size: 13px; color: #00E27A;">Design System &middot; 01</span>
+      <div class="anton" style="font-size: 60px; line-height: 0.92; color: #F2F5FA; text-transform: uppercase;">Broadcast Identity</div>
+      <div style="font-size: 15px; color: #93A0B8; max-width: 560px; line-height: 1.5;">The matchday language for YeeHaw FC across FC 27 &mdash; hard cuts, tabular numerals, and a two-accent system that lets live state shout without the rest of the page shouting back.</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px; flex: none;">
+      <svg width="72" height="84" viewBox="0 0 72 84" fill="none" aria-hidden="true">
+        <path d="M4 6h64v42c0 18-14 27-32 32C18 75 4 66 4 48V6Z" fill="#0B1120" stroke="#00E27A" stroke-width="3"/>
+        <path d="M4 6h64v14H4z" fill="#00E27A"/>
+        <path d="M36 32v34" stroke="#22304C" stroke-width="2"/>
+      </svg>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div class="anton" style="font-size: 30px; line-height: 1; text-transform: uppercase;">YeeHaw FC</div>
+        <div class="kick" style="font-size: 12px; color: #667595;">Pro Clubs &middot; Est. Division 3</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Colour -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">01 &mdash;</span>
+      <span class="anton" style="font-size: 26px; text-transform: uppercase;">Colour</span>
+      <span style="font-size: 13px; color: #667595;">Ground stays cold and near-black so accents read as signal, not decoration.</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #05070E; border: 1px solid #22304C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Ground</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#05070E</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #0B1120; border: 1px solid #22304C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Surface</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#0B1120</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #101A2E; border: 1px solid #22304C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Panel</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#101A2E</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #16233C; border: 1px solid #22304C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Panel Lift</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#16233C</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #22304C;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Line</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#22304C</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #93A0B8;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Text Dim</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#93A0B8</span></div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #00E27A;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600; color: #00E27A;">Pitch Green</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#00E27A &middot; primary</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #FFB020;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600; color: #FFB020;">Broadcast Amber</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#FFB020 &middot; standings</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #FF3355;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600; color: #FF3355;">Live</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#FF3355 &middot; on air only</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #00E27A;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Win</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#00E27A</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #8494AE;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Draw</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#8494AE</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="height: 92px; background: #FF4D5E;"></div>
+        <div style="display: flex; flex-direction: column; gap: 1px;"><span style="font-size: 12px; font-weight: 600;">Loss</span><span style="font-size: 11px; color: #667595; font-variant-numeric: tabular-nums;">#FF4D5E</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Typography -->
+  <div style="display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">02 &mdash;</span>
+      <span class="anton" style="font-size: 26px; text-transform: uppercase;">Typography</span>
+      <span style="font-size: 13px; color: #667595;">Three faces. Anton carries the noise, Archivo carries the reading, Barlow Condensed labels everything.</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px;">
+      <div style="display: flex; flex-direction: column; gap: 12px; border-left: 3px solid #00E27A; padding-left: 20px;">
+        <span class="kick" style="font-size: 11px; color: #00E27A;">Display &mdash; Anton</span>
+        <div class="anton" style="font-size: 54px; line-height: 0.9; text-transform: uppercase;">4&ndash;2</div>
+        <div class="anton" style="font-size: 26px; line-height: 1; text-transform: uppercase;">Full Time</div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Scorelines, OVR, division numbers, hero headlines. Never below 22px &mdash; it stops being a broadcast graphic and starts being a shout.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; border-left: 3px solid #FFB020; padding-left: 20px;">
+        <span class="kick" style="font-size: 11px; color: #FFB020;">Label &mdash; Barlow Condensed</span>
+        <div class="kick" style="font-size: 28px; letter-spacing: 0.1em;">MATCHDAY 14</div>
+        <div class="kick" style="font-size: 15px; color: #93A0B8;">NEXT FIXTURE &middot; DIVISION 3</div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Kickers, nav, table headers, badge text. Always uppercase, always tracked out at 0.12&ndash;0.14em.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; border-left: 3px solid #22304C; padding-left: 20px;">
+        <span class="kick" style="font-size: 11px; color: #93A0B8;">Body &mdash; Archivo</span>
+        <div style="font-size: 20px; font-weight: 600; line-height: 1.3;">Two goals in eight minutes turned it.</div>
+        <div style="font-size: 14px; color: #93A0B8; line-height: 1.65;">Article copy, descriptions, table cells. Tabular numerals switched on everywhere a number sits in a column.</div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6; font-variant-numeric: tabular-nums;">0123456789 &middot; tabular</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Motifs + components -->
+  <div style="display: flex; flex-direction: column; gap: 22px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">03 &mdash;</span>
+      <span class="anton" style="font-size: 26px; text-transform: uppercase;">Motifs &amp; Components</span>
+      <span style="font-size: 13px; color: #667595;">The 12&deg; skew is the signature. It appears on bars, chips and crests &mdash; nowhere else.</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+
+      <!-- Lower third -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Lower third</span>
+        <div style="display: flex; align-items: stretch; height: 56px;">
+          <div style="background: #00E27A; width: 10px; transform: skewX(-12deg);"></div>
+          <div style="background: #101A2E; flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 18px; gap: 2px;">
+            <span class="anton" style="font-size: 19px; text-transform: uppercase; line-height: 1;">Reece Mbala</span>
+            <span class="kick" style="font-size: 11px; color: #00E27A;">Goal &middot; 63'</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Used for goal events, player-of-the-match, and article bylines over imagery.</span>
+      </div>
+
+      <!-- Buttons -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Actions</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+          <span class="kick" style="background: #00E27A; color: #05070E; font-size: 13px; padding: 13px 22px; display: inline-block;">Full schedule</span>
+          <span class="kick" style="background: transparent; color: #F2F5FA; border: 1px solid #22304C; font-size: 13px; padding: 12px 21px; display: inline-block;">Squad</span>
+          <span class="kick" style="background: #5865F2; color: #fff; font-size: 13px; padding: 13px 22px; display: inline-block;">Join Discord</span>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Square corners, 44px minimum height, one primary action per view.</span>
+      </div>
+
+      <!-- Form strip -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Form strip &mdash; last 5</span>
+        <div style="display: flex; gap: 5px;">
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #FF4D5E; color: #05070E; font-size: 13px;">L</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #8494AE; color: #05070E; font-size: 13px;">D</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Oldest to newest, left to right. Colour and letter both carry the result &mdash; never colour alone.</span>
+      </div>
+
+      <!-- Stat tile -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Stat tile</span>
+        <div style="display: flex; gap: 12px;">
+          <div style="flex: 1; background: #101A2E; border-top: 3px solid #00E27A; padding: 16px 14px; display: flex; flex-direction: column; gap: 4px;">
+            <span class="anton" style="font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums;">68%</span>
+            <span class="kick" style="font-size: 10px; color: #93A0B8;">Win rate</span>
+          </div>
+          <div style="flex: 1; background: #101A2E; border-top: 3px solid #FFB020; padding: 16px 14px; display: flex; flex-direction: column; gap: 4px;">
+            <span class="anton" style="font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums;">7.4</span>
+            <span class="kick" style="font-size: 10px; color: #93A0B8;">Avg rating</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Top rule carries the accent, never the whole fill. Amber marks standing, green marks performance.</span>
+      </div>
+
+      <!-- Badges -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Badges &amp; state</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <span class="kick" style="font-size: 11px; background: #FF3355; color: #fff; padding: 6px 11px;">&#9679; Live</span>
+          <span class="kick" style="font-size: 11px; background: #16233C; color: #93A0B8; padding: 6px 11px;">Transfer</span>
+          <span class="kick" style="font-size: 11px; background: #16233C; color: #93A0B8; padding: 6px 11px;">Match report</span>
+          <span class="kick" style="font-size: 11px; border: 1px solid #00E27A; color: #00E27A; padding: 5px 10px;">Staff</span>
+          <span class="kick" style="font-size: 11px; background: #FFB020; color: #05070E; padding: 6px 11px;">MOTM</span>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Red is reserved for genuinely-live streams. Nothing else may use it.</span>
+      </div>
+
+      <!-- Texture -->
+      <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Pitch rule &amp; texture</span>
+        <div style="height: 72px; background: repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 26px), linear-gradient(180deg, #16233C, #0B1120); border-bottom: 3px solid #00E27A; display: flex; align-items: flex-end; padding: 10px 14px;">
+          <span class="kick" style="font-size: 11px; color: #93A0B8;">Section ground</span>
+        </div>
+        <span style="font-size: 12px; color: #667595; line-height: 1.6;">Angled hairlines at 102&deg; stand in for floodlit turf. Kept under 4% opacity so text never fights it.</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

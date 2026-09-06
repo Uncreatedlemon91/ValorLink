@@ -1,0 +1,286 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #05070E; }
+    a { color: #00E27A; } a:hover { color: #00B863; }
+    .kick { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; }
+    .anton { font-family: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif; font-weight: 400; text-transform: uppercase; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; background: #05070E; color: #F2F5FA; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;">
+
+  <!-- ============ HEADER ============ -->
+  <div style="display: flex; align-items: center; gap: 28px; padding: 0 48px; height: 74px; background: rgba(5,7,14,0.92); border-bottom: 1px solid #22304C;">
+    <div style="display: flex; align-items: center; gap: 12px; margin-right: auto;">
+      <svg width="26" height="31" viewBox="0 0 72 84" fill="none" aria-hidden="true">
+        <path d="M4 6h64v42c0 18-14 27-32 32C18 75 4 66 4 48V6Z" fill="#0B1120" stroke="#00E27A" stroke-width="4"/>
+        <path d="M4 6h64v14H4z" fill="#00E27A"/>
+      </svg>
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span class="anton" style="font-size: 22px; letter-spacing: 0.01em;">YeeHaw FC</span>
+        <span class="kick" style="font-size: 10px; color: #667595;">Pro Clubs</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 4px;">
+      <span class="kick" style="font-size: 12px; color: #05070E; background: #00E27A; padding: 8px 14px;">Home</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">News</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">Fixtures</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">Clips</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">Live</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">Squad</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">League</span>
+      <span class="kick" style="font-size: 12px; color: #93A0B8; padding: 8px 14px;">Tactics</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; flex: none;">
+      <div style="width: 26px; height: 26px; background: #16233C; border: 1px solid #22304C;"></div>
+      <span style="font-size: 13px; color: #93A0B8;">rowdy_ren</span>
+      <span class="kick" style="font-size: 10px; border: 1px solid #00E27A; color: #00E27A; padding: 4px 8px;">Staff</span>
+    </div>
+  </div>
+
+  <!-- ============ HERO ============ -->
+  <div style="position: relative; height: 604px; overflow: hidden; background:
+        radial-gradient(ellipse 900px 420px at 18% -8%, rgba(0,226,122,0.22), transparent 62%),
+        radial-gradient(ellipse 760px 500px at 88% 12%, rgba(88,101,242,0.20), transparent 60%),
+        repeating-linear-gradient(102deg, rgba(255,255,255,0.030) 0 2px, transparent 2px 30px),
+        linear-gradient(168deg, #0F2136 0%, #070B14 72%);">
+
+    <!-- floodlight rake -->
+    <div style="position: absolute; inset: 0; background: linear-gradient(72deg, transparent 0 46%, rgba(255,255,255,0.045) 47% 49%, transparent 50%), linear-gradient(72deg, transparent 0 66%, rgba(255,255,255,0.030) 67% 68%, transparent 69%);"></div>
+    <!-- scrim -->
+    <div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,7,14,0.10) 0%, rgba(5,7,14,0.55) 52%, rgba(5,7,14,0.97) 100%);"></div>
+
+    <div style="position: relative; height: 100%; max-width: 1344px; margin: 0 auto; padding: 0 48px 56px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 20px;">
+
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: stretch; height: 28px;">
+          <div style="background: #00E27A; width: 7px; transform: skewX(-12deg);"></div>
+          <span class="kick" style="background: #00E27A; color: #05070E; font-size: 12px; display: inline-flex; align-items: center; padding: 0 12px;">Lead Story</span>
+        </div>
+        <span class="kick" style="font-size: 11px; background: #16233C; color: #93A0B8; padding: 7px 12px;">Match Report</span>
+      </div>
+
+      <div class="anton" style="font-size: 86px; line-height: 0.9; max-width: 1080px; letter-spacing: -0.005em;">Eight minutes that flipped the division</div>
+
+      <div style="font-size: 17px; color: #C3CBD9; max-width: 660px; line-height: 1.55;">Two down at the break against Northgate, then Mbala and Okoye between the 58th and the 66th. The clearest 90 minutes this squad has played all season.</div>
+
+      <div style="display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding-top: 6px;">
+        <span class="kick" style="background: #00E27A; color: #05070E; font-size: 13px; padding: 14px 24px;">Read the full report</span>
+        <span style="font-size: 13px; color: #8494AE;">Ren Whitlock &middot; 4 September 2026</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MATCH CENTRE ============ -->
+  <div style="background: linear-gradient(96deg, #0D2B1F 0%, #0B1120 46%, #101A2E 100%); border-bottom: 1px solid #22304C; position: relative;">
+    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #00E27A;"></div>
+    <div style="max-width: 1344px; margin: 0 auto; padding: 26px 48px; display: flex; align-items: center; gap: 40px;">
+
+      <div style="display: flex; flex-direction: column; gap: 5px; flex: none;">
+        <span class="kick" style="font-size: 11px; color: #00E27A;">Next Fixture</span>
+        <span class="kick" style="font-size: 13px; color: #667595;">League &middot; Division 3</span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 26px; flex: 1 1 auto;">
+        <div style="display: flex; align-items: center; gap: 13px; flex: 1; justify-content: flex-end;">
+          <span class="anton" style="font-size: 21px;">YeeHaw FC</span>
+          <div style="width: 46px; height: 46px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg);">
+            <span class="anton" style="font-size: 17px; color: #05070E; transform: skewX(12deg);">YF</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; padding: 0 4px;">
+          <span class="kick" style="font-size: 10px; color: #667595;">Sat 12 Sep</span>
+          <span class="anton" style="font-size: 26px; color: #F2F5FA; line-height: 1;">VS</span>
+          <span class="kick" style="font-size: 10px; color: #667595;">20:00 UTC</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 13px; flex: 1;">
+          <div style="width: 46px; height: 46px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg);">
+            <span class="anton" style="font-size: 17px; color: #93A0B8; transform: skewX(12deg);">NG</span>
+          </div>
+          <span class="anton" style="font-size: 21px;">Northgate United</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; flex: none;">
+        <div style="background: #05070E; border-top: 2px solid #00E27A; padding: 9px 13px; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px;">
+          <span class="anton tnum" style="font-size: 25px; line-height: 1;">05</span><span class="kick" style="font-size: 9px; color: #667595;">Days</span>
+        </div>
+        <div style="background: #05070E; border-top: 2px solid #00E27A; padding: 9px 13px; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px;">
+          <span class="anton tnum" style="font-size: 25px; line-height: 1;">14</span><span class="kick" style="font-size: 9px; color: #667595;">Hrs</span>
+        </div>
+        <div style="background: #05070E; border-top: 2px solid #00E27A; padding: 9px 13px; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px;">
+          <span class="anton tnum" style="font-size: 25px; line-height: 1;">32</span><span class="kick" style="font-size: 9px; color: #667595;">Min</span>
+        </div>
+        <div style="background: #05070E; border-top: 2px solid #00E27A; padding: 9px 13px; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px;">
+          <span class="anton tnum" style="font-size: 25px; line-height: 1;">08</span><span class="kick" style="font-size: 9px; color: #667595;">Sec</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ BODY ============ -->
+  <div style="max-width: 1344px; margin: 0 auto; padding: 56px 48px 72px; display: flex; flex-direction: column; gap: 56px;">
+
+    <!-- Latest news -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #22304C; padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 5px; height: 26px; background: #00E27A; transform: skewX(-12deg);"></div>
+          <span class="anton" style="font-size: 28px;">Latest News</span>
+        </div>
+        <span class="kick" style="font-size: 12px; color: #00E27A;">All news &rarr;</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px;">
+
+        <div style="background: #0B1120; border: 1px solid #22304C; display: flex; flex-direction: column;">
+          <div style="height: 178px; background: radial-gradient(ellipse 340px 200px at 30% 10%, rgba(0,226,122,0.24), transparent 65%), repeating-linear-gradient(102deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 26px), linear-gradient(160deg, #16233C, #0B1120); position: relative;">
+            <span class="kick" style="position: absolute; left: 14px; bottom: 14px; font-size: 10px; background: #05070E; color: #00E27A; padding: 5px 10px;">Match Report</span>
+          </div>
+          <div style="padding: 18px; display: flex; flex-direction: column; gap: 9px;">
+            <div style="font-size: 17px; font-weight: 600; line-height: 1.32;">Eight minutes that flipped the division</div>
+            <span class="kick tnum" style="font-size: 11px; color: #667595;">4 Sep 2026</span>
+          </div>
+        </div>
+
+        <div style="background: #0B1120; border: 1px solid #22304C; display: flex; flex-direction: column;">
+          <div style="height: 178px; background: radial-gradient(ellipse 340px 200px at 70% 20%, rgba(255,176,32,0.20), transparent 65%), repeating-linear-gradient(102deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 26px), linear-gradient(160deg, #1A2033, #0B1120); position: relative;">
+            <span class="kick" style="position: absolute; left: 14px; bottom: 14px; font-size: 10px; background: #05070E; color: #FFB020; padding: 5px 10px;">Transfer</span>
+          </div>
+          <div style="padding: 18px; display: flex; flex-direction: column; gap: 9px;">
+            <div style="font-size: 17px; font-weight: 600; line-height: 1.32;">Okoye signs on ahead of the new season</div>
+            <span class="kick tnum" style="font-size: 11px; color: #667595;">1 Sep 2026</span>
+          </div>
+        </div>
+
+        <div style="background: #0B1120; border: 1px solid #22304C; display: flex; flex-direction: column;">
+          <div style="height: 178px; background: radial-gradient(ellipse 340px 200px at 50% 30%, rgba(88,101,242,0.22), transparent 65%), repeating-linear-gradient(102deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 26px), linear-gradient(160deg, #141C33, #0B1120); position: relative; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 46px; height: 46px; background: rgba(5,7,14,0.7); border: 1px solid #22304C; display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="16" viewBox="0 0 14 16" fill="none" aria-hidden="true"><path d="M1 1.5v13l12-6.5L1 1.5Z" fill="#F2F5FA"/></svg>
+            </div>
+            <span class="kick" style="position: absolute; left: 14px; bottom: 14px; font-size: 10px; background: #05070E; color: #93A0B8; padding: 5px 10px;">Highlight</span>
+          </div>
+          <div style="padding: 18px; display: flex; flex-direction: column; gap: 9px;">
+            <div style="font-size: 17px; font-weight: 600; line-height: 1.32;">Every goal from the September run</div>
+            <span class="kick tnum" style="font-size: 11px; color: #667595;">31 Aug 2026</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Club standing -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #22304C; padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 5px; height: 26px; background: #FFB020; transform: skewX(-12deg);"></div>
+          <span class="anton" style="font-size: 28px;">Club Standing</span>
+        </div>
+        <span class="kick" style="font-size: 12px; color: #00E27A;">Full stats &rarr;</span>
+      </div>
+
+      <div style="background: linear-gradient(100deg, #101A2E 0%, #0B1120 60%); border: 1px solid #22304C; position: relative; overflow: hidden;">
+        <div style="position: absolute; right: -80px; top: -120px; width: 460px; height: 460px; background: radial-gradient(circle, rgba(255,176,32,0.16), transparent 68%);"></div>
+        <div style="position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0;">
+
+          <div style="padding: 34px 30px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid #22304C;">
+            <span class="anton tnum" style="font-size: 62px; line-height: 0.9; color: #FFB020;">3</span>
+            <span class="kick" style="font-size: 11px; color: #93A0B8;">Current Division</span>
+          </div>
+          <div style="padding: 34px 30px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid #22304C;">
+            <span class="anton tnum" style="font-size: 62px; line-height: 0.9;">1,284</span>
+            <span class="kick" style="font-size: 11px; color: #93A0B8;">Skill Points</span>
+          </div>
+          <div style="padding: 34px 30px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid #22304C;">
+            <span class="anton tnum" style="font-size: 62px; line-height: 0.9; color: #00E27A;">68%</span>
+            <span class="kick" style="font-size: 11px; color: #93A0B8;">Win Rate &middot; Season</span>
+          </div>
+          <div style="padding: 34px 30px; display: flex; flex-direction: column; gap: 14px;">
+            <span class="kick" style="font-size: 11px; color: #93A0B8;">Last 5</span>
+            <div style="display: flex; gap: 5px;">
+              <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+              <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+              <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #FF4D5E; color: #05070E; font-size: 13px;">L</span>
+              <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #8494AE; color: #05070E; font-size: 13px;">D</span>
+              <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Live now -->
+    <div style="display: flex; flex-direction: column; gap: 22px;">
+      <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #22304C; padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 5px; height: 26px; background: #FF3355; transform: skewX(-12deg);"></div>
+          <span class="anton" style="font-size: 28px;">Live Now</span>
+          <span class="kick" style="font-size: 11px; background: #FF3355; color: #fff; padding: 6px 11px;">&#9679; 2 On Air</span>
+        </div>
+        <span class="kick" style="font-size: 12px; color: #00E27A;">All streams &rarr;</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1.9fr 1fr; gap: 22px;">
+        <div style="background: #0B1120; border: 1px solid #22304C; display: flex; flex-direction: column;">
+          <div style="height: 268px; background: radial-gradient(ellipse 500px 260px at 40% 40%, rgba(88,101,242,0.24), transparent 66%), linear-gradient(160deg, #16233C, #0B1120); position: relative; display: flex; align-items: center; justify-content: center;">
+            <span class="kick" style="position: absolute; left: 16px; top: 16px; font-size: 11px; background: #FF3355; color: #fff; padding: 6px 11px;">&#9679; Live</span>
+            <span class="kick tnum" style="position: absolute; right: 16px; top: 16px; font-size: 11px; background: rgba(5,7,14,0.75); color: #F2F5FA; padding: 6px 11px;">312 watching</span>
+            <svg width="46" height="46" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 3v18l16-9L4 3Z" fill="#F2F5FA" opacity="0.85"/></svg>
+          </div>
+          <div style="padding: 18px 20px; display: flex; align-items: center; gap: 14px;">
+            <div style="width: 40px; height: 40px; background: #16233C; border: 1px solid #22304C; flex: none;"></div>
+            <div style="display: flex; flex-direction: column; gap: 3px; margin-right: auto;">
+              <div style="display: flex; align-items: center; gap: 9px;">
+                <span style="font-size: 15px; font-weight: 600;">rowdy_ren</span>
+                <span class="kick" style="font-size: 10px; background: #FFB020; color: #05070E; padding: 4px 9px;">Featured</span>
+              </div>
+              <span style="font-size: 13px; color: #8494AE;">Div 3 push &mdash; FC 27 early access</span>
+            </div>
+            <span class="kick" style="font-size: 12px; border: 1px solid #22304C; color: #F2F5FA; padding: 11px 18px;">Open on Twitch</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 22px;">
+          <div style="background: #0B1120; border: 1px solid #22304C; flex: 1; display: flex; flex-direction: column;">
+            <div style="flex: 1; min-height: 108px; background: linear-gradient(150deg, #1B2440, #0B1120); position: relative;">
+              <span class="kick" style="position: absolute; left: 12px; top: 12px; font-size: 10px; background: #FF3355; color: #fff; padding: 5px 9px;">&#9679; Live</span>
+            </div>
+            <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 3px;">
+              <span style="font-size: 14px; font-weight: 600;">mbala_11</span>
+              <span class="kick tnum" style="font-size: 11px; color: #667595;">64 watching</span>
+            </div>
+          </div>
+          <div style="background: #0B1120; border: 1px solid #22304C; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+            <span class="anton" style="font-size: 20px; line-height: 1.1;">Join the Discord</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;">Match threads, clips, and event pings &mdash; plus commenting and likes on the site.</span>
+            <span class="kick" style="font-size: 12px; background: #5865F2; color: #fff; padding: 12px 18px; align-self: flex-start;">Connect with us</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ FOOTER ============ -->
+  <div style="border-top: 1px solid #22304C; padding: 30px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px;">
+    <span class="kick" style="font-size: 11px; color: #667595;">YeeHaw FC &middot; Unofficial fan-run site, not affiliated with EA</span>
+    <span class="kick" style="font-size: 11px; color: #667595;">Stats via the EA Pro Clubs API</span>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

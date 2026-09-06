@@ -1,0 +1,223 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #05070E; }
+    a { color: #00E27A; } a:hover { color: #00B863; }
+    .kick { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; }
+    .anton { font-family: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif; font-weight: 400; text-transform: uppercase; }
+    .tnum { font-variant-numeric: tabular-nums; }
+    .row { display: grid; grid-template-columns: 56px 1fr 78px 78px 92px 200px; align-items: center; gap: 0; border-bottom: 1px solid #16233C; }
+    .chip { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; min-height: 1080px; background: #05070E; color: #F2F5FA; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; padding: 48px 64px 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px;">
+
+  <!-- Page head -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; border-bottom: 1px solid #22304C; padding-bottom: 26px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span class="kick" style="font-size: 12px; color: #FFB020;">Division 3</span>
+      <div class="anton" style="font-size: 52px; line-height: 0.94;">League Table</div>
+      <div style="font-size: 14px; color: #8494AE; max-width: 700px; line-height: 1.6;">Built automatically from clubs we have actually faced who currently sit in our division. Not EA's leaderboard &mdash; there isn't one to read.</div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex: none;">
+      <span class="kick tnum" style="font-size: 11px; color: #667595;">10 of 25 slots filled</span>
+      <span class="kick tnum" style="font-size: 11px; color: #667595;">Last polled 14 min ago</span>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div style="background: #0B1120; border: 1px solid #22304C;">
+
+    <!-- header row -->
+    <div class="row" style="border-bottom: 1px solid #22304C; background: #080D18;">
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 0 15px 22px;">#</span>
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 0;">Club</span>
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 0; text-align: right;">Played</span>
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 0; text-align: right;">Points</span>
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 0; text-align: right;">Squad</span>
+      <span class="kick" style="font-size: 10px; color: #667595; padding: 15px 22px 15px 0; text-align: right;">Last 5</span>
+    </div>
+
+    <!-- 1 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #FFB020; padding: 17px 0 17px 22px;">1</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">RR</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Redhill Rovers</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">46</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,412</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">17</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">2</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">CA</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Castleford AFC</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">51</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,357</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">14</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span>
+      </div>
+    </div>
+
+    <!-- 3 — US -->
+    <div class="row" style="background: linear-gradient(96deg, rgba(0,226,122,0.11) 0%, rgba(0,226,122,0.02) 46%, transparent 100%); border-left: 4px solid #00E27A; border-bottom: 1px solid #22304C;">
+      <span class="anton tnum" style="font-size: 19px; color: #00E27A; padding: 19px 0 19px 18px;">3</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 19px 0;">
+        <div style="width: 34px; height: 34px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #05070E; transform: skewX(12deg);">YF</span></div>
+        <span class="anton" style="font-size: 17px;">YeeHaw FC</span>
+        <span class="kick" style="font-size: 9px; background: #00E27A; color: #05070E; padding: 4px 8px;">Us</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #C3CBD9; text-align: right;">43</span>
+      <span class="anton tnum" style="font-size: 22px; text-align: right; color: #00E27A;">1,284</span>
+      <span class="tnum" style="font-size: 14px; color: #C3CBD9; text-align: right;">16</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">4</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">NU</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Northgate United</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">39</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,241</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">12</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">5</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">AA</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Ashfield Athletic</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">44</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,229</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">15</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">6</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">BF</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Bellhaven FC</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">37</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,198</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">11</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">7</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">MW</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Marlow Wanderers</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">33</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,174</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">13</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">8</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">SD</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Selby Dynamo</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">28</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,151</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">10</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span>
+      </div>
+    </div>
+
+    <!-- 9 -->
+    <div class="row">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">9</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">HP</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Hartcliffe Park</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">31</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right;">1,133</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">9</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #00E27A; color: #05070E;">W</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span>
+      </div>
+    </div>
+
+    <!-- 10 -->
+    <div class="row" style="border-bottom: none;">
+      <span class="anton tnum" style="font-size: 19px; color: #93A0B8; padding: 17px 0 17px 22px;">10</span>
+      <div style="display: flex; align-items: center; gap: 13px; padding: 17px 0;">
+        <div style="width: 34px; height: 34px; background: #16233C; border: 1px solid #22304C; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton" style="font-size: 12px; color: #93A0B8; transform: skewX(12deg);">TC</span></div>
+        <span style="font-size: 15px; font-weight: 600;">Thornbury City</span>
+      </div>
+      <span class="tnum" style="font-size: 14px; color: #667595; text-align: right;">6</span>
+      <span class="anton tnum" style="font-size: 20px; text-align: right; color: #93A0B8;">1,102</span>
+      <span class="tnum" style="font-size: 14px; color: #93A0B8; text-align: right;">8</span>
+      <div style="display: flex; gap: 4px; justify-content: flex-end; padding-right: 22px;">
+        <span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #FF4D5E; color: #05070E;">L</span><span class="kick chip" style="background: #8494AE; color: #05070E;">D</span>
+        <span class="kick chip" style="background: #101A2E; color: #3D4A63;">&ndash;</span><span class="kick chip" style="background: #101A2E; color: #3D4A63;">&ndash;</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footnote -->
+  <div style="display: flex; gap: 34px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+      <span class="kick" style="font-size: 11px; color: #667595;">Why these clubs</span>
+      <span style="font-size: 13px; color: #8494AE; line-height: 1.6;">A club joins the table the first time we play it, and is polled from then on like our own. Once 25 slots are full, the lowest-pointed non-pinned club drops off to make room.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+      <span class="kick" style="font-size: 11px; color: #667595;">Incomplete form</span>
+      <span style="font-size: 13px; color: #8494AE; line-height: 1.6;">Empty chips mean fewer than five recorded matches since that club entered the table, not a bye. Thornbury joined most recently.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+      <span class="kick" style="font-size: 11px; color: #667595;">Division is a tier, not a bracket</span>
+      <span style="font-size: 13px; color: #8494AE; line-height: 1.6;">EA's division number moves per club independently. "Same division as us" is the closest available proxy for a real league, not a guarantee.</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
