@@ -117,7 +117,14 @@ TWITCH_ENABLED = bool(TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET)
 # the old behavior). Twitch's exact category name changes with each yearly
 # title; verify it at twitch.tv/directory/category/<slug> if this ever looks
 # wrong (a mismatched string just makes everyone look offline, not an error).
-TWITCH_GAME_FILTER = os.getenv("TWITCH_GAME_FILTER", "EA Sports FC 26")
+# Defaulted to FC 27 ahead of its 25 Sep 2026 release. Twitch's category
+# name for a new title is not published in advance and this one has NOT been
+# verified against a live category page -- check the slug on launch day and
+# override here if it differs. Until FC 27 streams actually exist, a roster
+# that streams FC 26 will read as offline: set TWITCH_GAME_FILTER back to
+# "EA Sports FC 26" (or blank, to drop the filter) if that matters before
+# the changeover.
+TWITCH_GAME_FILTER = os.getenv("TWITCH_GAME_FILTER", "EA Sports FC 27")
 
 # --- Sessions --------------------------------------------------------------- #
 # Opt-in, not opt-out -- matching ValorLink's own WEB_HTTPS_ONLY default.

@@ -17,6 +17,83 @@ actual token,
 not a separately-registered credential. Everything else -- database,
 session, OAuth client -- stays as described above.
 
+## The design system
+
+The site is styled as a **broadcast matchday graphic**. The whole system
+lives in `static/css/site.css`'s `:root` block; the rules worth knowing
+before adding anything:
+
+- **Two accents, one job each.** `--accent` (pitch green) reports
+  *performance* -- form, win rate, anything the squad did. `--amber`
+  reports *standing* -- division, league position, rank. Don't mix them:
+  an amber win-rate or a green division number breaks the only convention
+  that makes the palette readable at a glance.
+- **`--live` (red) is reserved** for a stream that is genuinely on air
+  right now. If red shows up anywhere else it stops meaning "live."
+- **`--danger-strong` is Republic Red**, kept from the previous FC Dallas
+  theme where it was the brand colour. It is no longer an accent -- it is
+  the destructive/decline colour (delete buttons, an "out" RSVP), which is
+  the one job it can still do here. Filling those with the accent would
+  make "delete" read as the encouraged action. Its documented 5.88:1
+  against white is why this exact value survived the retheme.
+- **Square corners.** There are no rounded rectangles; `border-radius`
+  appears only at `50%`, for avatars and dots.
+- **The 12° skew (`--skew`) is the signature**, and it earns that by being
+  rare: accent rules, section blades, the OVR block on a player card, the
+  match-centre rail. It is not a texture -- don't spread it.
+- **Three faces.** `--font-headline` (Anton) shouts: scorelines, big
+  numbers, page and section headings. `--font-display` (Barlow Condensed)
+  labels everything: kickers, nav, table headers, badges -- always
+  uppercase, tracked to `0.13em`. `--font-body` (Archivo) is what gets
+  read. Anything in a numeric column gets `font-variant-numeric:
+  tabular-nums`.
+- **The accent is light, so text on it is dark** (`--on-accent`). This is
+  the opposite of the red theme it replaced, where accent fills took white
+  text. `--accent-strong` and `--accent-text` are kept as names because the
+  stylesheet and templates reference them, but they no longer need to be
+  three different values: dark-on-accent is 12.6:1, and the accent as small
+  text on `--bg` is 9.9:1.
+- **`--series-*` is untouched.** It's the validated categorical chart
+  palette, read directly by `charts.js`. The status colours were retuned to
+  the broadcast accents so a form chip and a chart legend agree on what a
+  win looks like.
+
+Fonts come from Google Fonts (declared in `base.html`) -- this site's one
+third-party origin, the same exception the previous design took.
+
+## Player cards
+
+The Players tab renders the roster as cards rather than a table
+(`playerCardHtml` in `static/js/app.js`, `.player-card` in `site.css`).
+
+- **Not an EA Ultimate Team card.** That layout is EA's own branded design;
+  this is the same job -- identity, rating, a few numbers -- done in this
+  site's broadcast language: a skewed OVR block, a lower-third name bar,
+  three stat cells.
+- **Every value is a real API field**: `proOverall`, `favoritePosition`,
+  `ratingAve`, `winRate`, `manOfTheMatch`, `cleanSheetsGK`, `gamesPlayed`,
+  `goals`, `assists`. There is deliberately no pace/dribbling attribute
+  row -- EA's Pro Clubs API exposes no per-attribute ratings, and inventing
+  or modelling them would make the card lie. A missing `proOverall` shows
+  `--`, not a zero.
+- **Tier colour is derived, not assigned.** `playerTier()` maps
+  `proOverall` to elite (amber, `>= TIER_ELITE`), squad (green,
+  `>= TIER_SQUAD`) or rotation (steel), so it stays current as ratings
+  move. If most of the roster comes out amber, raise `TIER_ELITE`. Rotation
+  is deliberately unglamorous but never punitive: no red, no arrows.
+- **Keepers swap the win rate for clean sheets**, which is the number that
+  actually says something about them.
+- **Sorting moved from column headers to a control.** Cards have no headers
+  to click, so `.player-sort` drives the same `sortBy()`/`PLAYER_COLUMNS`
+  comparator the sortable `<th>`s used to. Every column that was sortable
+  still is; picking one still starts it in its useful direction (names
+  A-Z, counts biggest-first) and the toggle flips that.
+- The card is a `<button>`, so Enter/Space activation and focus come for
+  free -- unlike the table rows it replaced, which needed an explicit
+  `tabindex` and keydown handler. Clicking one opens the same dashboard
+  drawer as before, now a full-width panel spanning the grid
+  (`.member-detail-row`).
+
 ## Permissions
 
 Three tiers, all derived live from Discord at sign-in time (never stored):
