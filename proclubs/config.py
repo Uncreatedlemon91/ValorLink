@@ -23,6 +23,25 @@ SITE_TAGLINE = os.getenv("SITE_TAGLINE", "Pro Clubs")
 CLUB_PLATFORM = os.getenv("CLUB_PLATFORM", "common-gen5")
 CLUB_ID = os.getenv("CLUB_ID", "")
 
+# --- Our current division (set by hand -- EA can't tell us) ---------------- #
+# EA's API exposes NO live division field. `clubs/overallStats` has no
+# division at all, and the `currentDivision` on `allTimeLeaderboard/search`
+# is a frozen all-time snapshot: for this club it still reported 74 games
+# played and Division 10 while overallStats reported 185 games -- 111
+# matches out of date. Its `bestDivision`, and overallStats' own
+# `bestDivision`/`finishesInDivision*` fields, are stale legacy values too.
+#
+# Skill rating is the one standing number in that API that is live, and it
+# does NOT determine the division: promotion and relegation do, and EA
+# publishes no skill-rating-to-division thresholds. So there is nothing to
+# derive this from -- it's typed in here, and only changes when the club is
+# actually promoted or relegated (a few times a season).
+#
+# Leave blank and the site simply doesn't show a division, which is the
+# honest default -- far better than presenting a stale number as current.
+CLUB_DIVISION = os.getenv("CLUB_DIVISION", "")
+CLUB_BEST_DIVISION = os.getenv("CLUB_BEST_DIVISION", "")
+
 # --- League table (auto-built from clubs we actually play) ----------------- #
 # EA's API has no real league/region grouping to query (see ea_client.py), so
 # there's no way to ask it for "every team in NA East 2" -- instead, poll.py

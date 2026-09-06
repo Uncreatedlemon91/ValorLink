@@ -209,8 +209,23 @@ def home(request: Request):
         stats_teaser = None
         crest_colors = None
         if config.CLUB_ID:
+            # Two independent calls, so one failing doesn't blank the
+            # other -- the crest is club identity and shouldn't disappear
+            # because a stats endpoint had a bad minute.
             try:
-                stats_teaser = ea_client.division_stats(config.CLUB_PLATFORM, config.CLUB_ID)
+                # overallStats, not division_stats: the latter is an
+                # all-time leaderboard snapshot whose division and points
+                # can be a hundred matches out of date (see
+                # config.CLUB_DIVISION). Skill rating here is live.
+                overall = ea_client.overall_stats(config.CLUB_PLATFORM, config.CLUB_ID) or {}
+                stats_teaser = {
+                    "currentDivision": config.CLUB_DIVISION or None,
+                    "bestDivision": config.CLUB_BEST_DIVISION or None,
+                    "skillRating": overall.get("skillRating"),
+                }
+            except ea_client.EAApiError:
+                pass
+            try:
                 crest_colors = ea_client.crest_colors(config.CLUB_PLATFORM, config.CLUB_ID)
             except ea_client.EAApiError:
                 pass
@@ -1019,9 +1034,14 @@ def api_standings():
     division = division or {}
     stats = stats or {}
     return {
-        "currentDivision": division.get("currentDivision"),
-        "bestDivision": division.get("bestDivision") or stats.get("bestDivision"),
-        "points": division.get("points"),
+        # Division comes from config, never from EA: see config.CLUB_DIVISION
+        # for why (every division field in this API is a stale snapshot).
+        "currentDivision": config.CLUB_DIVISION or None,
+        "bestDivision": config.CLUB_BEST_DIVISION or None,
+        # `points` deliberately dropped: the only source was the all-time
+        # leaderboard record, which is frozen at whatever the club's tally
+        # was when that snapshot was taken. Skill rating below is live and
+        # is what the site ranks on anyway.
         "bestFinishGroup": stats.get("bestFinishGroup"),
         "skillRating": stats.get("skillRating"),
         "promotions": stats.get("promotions") or division.get("promotions"),

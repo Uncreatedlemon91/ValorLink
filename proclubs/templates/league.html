@@ -15,14 +15,21 @@
         <h1>League table</h1>
         <p class="page-lede">
           {% if our_division %}
-            Every club we've faced currently in Division {{ our_division }}, built automatically from real matches --
+            Every club we've faced that EA's leaderboard currently groups in the same tier as us, built
+            automatically from real matches --
           {% else %}
             Every club we've faced --
           {% endif %}
-          not a manually curated list, and not EA's own leaderboard (it doesn't expose one). Ranked by
+          not a manually curated list, and not EA's own league table (it doesn't expose one). Ranked by
           <strong>skill rating</strong> rather than points: points only ever go up, so they reward playing a
           lot as much as playing well, and clubs here have wildly different match counts. Up to
           {{ max_teams }} teams; the lowest-rated drops off to make room for a newly-played opponent once full.
+        </p>
+        <p class="page-lede">
+          The tier used for that grouping comes from EA's all-time leaderboard, which lags a long way behind
+          live play &mdash; it is not the division any of these clubs is actually sitting in right now. It's
+          used only to keep the table to a comparable set of opponents; every number in the table itself is
+          current.
         </p>
       </div>
     </div>

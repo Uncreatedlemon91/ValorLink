@@ -476,6 +476,35 @@ against every club we've played).
   beyond that rolling window; history only accumulates from whenever polling
   started, never backfilled.
 
+## Our division is configuration, not API data
+
+`CLUB_DIVISION` / `CLUB_BEST_DIVISION` in `.env` are typed in by hand, and
+that is deliberate: **EA's API cannot tell us what division we're in.**
+
+- `clubs/overallStats` has **no division field at all**. Its `bestDivision`
+  and `finishesInDivision*` fields are legacy values that no longer track
+  reality.
+- `allTimeLeaderboard/search` does return `currentDivision`, and it is a
+  frozen all-time snapshot. Measured against `overallStats` for our own
+  club, that record reported **74 games played and Division 10** while
+  `overallStats` reported **185 games** -- 111 matches out of date, and a
+  division the club had long since climbed out of. Its `points`, `wins`,
+  `promotions` and `bestDivision` are stale by the same margin.
+- **Skill rating is the one live standing number** in that API, and it does
+  *not* determine the division: promotion and relegation do, and EA
+  publishes no rating-to-division thresholds. So there is nothing to derive
+  the division from either.
+
+So the site shows skill rating (live, from `overallStats`) as the club's
+standing figure, and takes the division from config. Update it when the
+club is actually promoted or relegated -- a few times a season. Leave it
+blank and no division renders anywhere, which is the honest default:
+better than presenting a stale number as current.
+
+`ea_client.division_stats()` still exists, with a docstring saying all of
+the above, because `poll.py` uses it to bucket the league table (see
+below). Don't reach for it for anything the site presents as "now."
+
 ## The league table (auto-built, not manually curated)
 
 `/league` shows every club we've actually played that's currently in the
@@ -518,6 +547,13 @@ rating, squad size, and a last-5-results form strip per row. See `db.py`'s
   tab). This roughly triples-plus the number of EA API calls a poll run
   makes once the table has real members -- accepted cost of the 25-team
   cap, tune `LEAGUE_TABLE_MAX_TEAMS` down if that's too much load.
+- **The tier used to group the table is stale, and that's tolerable.**
+  Every club's division here comes from the same all-time leaderboard
+  snapshot described above, so it lags live play badly. It's compared
+  stale-against-stale, which is self-consistent enough to bucket a
+  comparable set of opponents, and every number actually shown in the table
+  (rating, record, form) is current. The page says so rather than implying
+  the tier is where anyone sits right now.
 - **"Same division" is the closest available proxy for a real bracket.**
   EA's division number is a skill tier that moves independently per club
   (see above), not a fixed league assignment -- filtering the table to

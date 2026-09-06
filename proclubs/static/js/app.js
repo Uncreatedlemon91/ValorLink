@@ -306,7 +306,8 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
                standings.currentDivision != null ? `Division ${standings.currentDivision}` : null,
                ratingDelta)}
     <div class="stat-grid">
-      ${statCard('Points', standings.points, played ? `${played} played` : null)}
+      ${statCard('Games Played', played || '-',
+                 played ? `${num(stats.wins)} of them won` : null)}
       ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-',
                  played ? `${num(stats.wins)}W ${num(stats.ties)}D ${num(stats.losses)}L` : null)}
       ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-',
@@ -1402,9 +1403,9 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
       <div id="chart-ladder"></div>
     </div>
     <div class="stat-grid">
-      ${statCard('Current Division', s.currentDivision)}
-      ${statCard('Points', s.points)}
-      ${statCard('Best Division', s.bestDivision)}
+      ${statCard('Current Division', s.currentDivision ?? '-')}
+      ${statCard('Skill Rating', s.skillRating)}
+      ${statCard('Best Division', s.bestDivision ?? '-')}
       ${statCard('Best Finish', s.bestFinishGroup)}
       ${statCard('Promotions', s.promotions)}
       ${statCard('Relegations', s.relegations)}

@@ -157,10 +157,29 @@ def overall_stats(platform, club_id):
 
 
 def division_stats(platform, club_id):
-    """currentDivision / bestDivision / points / cleanSheets only come back
-    from the search endpoint, not clubs/overallStats -- so look the club back
-    up by its own name to get them, regardless of how we arrived at club_id
-    (search click, reload, deep link)."""
+    """The club's record from EA's ALL-TIME LEADERBOARD -- a frozen
+    snapshot, NOT current standing.
+
+    Do not use this for anything the site presents as "now". Measured
+    against clubs/overallStats for our own club, this record reported 74
+    games played and currentDivision 10 while overallStats reported 185
+    games -- 111 matches out of date, and a division the club had long
+    since climbed out of. Its points, wins/losses and promotions are stale
+    by the same margin, and its bestDivision (like overallStats' own
+    bestDivision and finishesInDivision* fields) is a legacy value that no
+    longer tracks reality either.
+
+    EA exposes no live division anywhere: overallStats has no division
+    field at all, and skill rating -- which IS live -- doesn't determine
+    the division, since promotion and relegation do and EA publishes no
+    rating thresholds. That's why the current division is configuration
+    (see config.CLUB_DIVISION), not something read from here.
+
+    Still used by poll.py to group the league table, where a stale tier
+    compared against other clubs' equally stale tiers is self-consistent
+    enough to bucket opponents -- see db.league_table. Looks the club up by
+    name because that's the only way into this endpoint, then filters on
+    clubId, so a name collision returns the right club or nothing."""
     info = club_info(platform, club_id)
     if not info or not info.get("name"):
         return None
