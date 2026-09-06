@@ -1,13 +1,18 @@
 {# Like/comment count overlay for an article thumbnail -- expects `a` (the
    article) plus `like_counts`/`comment_counts` (article_id -> count dicts)
    in scope. Renders nothing if there's no cover image or no counts to show,
-   so a fresh article's thumbnail isn't cluttered with zeroes. #}
-{% if a.cover_image and (like_counts.get(a.id) or comment_counts.get(a.id)) %}
+   so a fresh article's thumbnail isn't cluttered with zeroes.
+
+   The like figure sums site likes and Discord reactions, matching what the
+   article page shows (services.combined_like_count) -- a card and its page
+   disagreeing on the same number reads as a bug. #}
+{% set thumb_likes = (like_counts.get(a.id) or 0) + (a.discord_reaction_count or 0) %}
+{% if a.cover_image and (thumb_likes or comment_counts.get(a.id)) %}
   <div class="engagement-badge">
-    {% if like_counts.get(a.id) %}
+    {% if thumb_likes %}
       <span class="eng-item">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        {{ like_counts[a.id] }}
+        {{ thumb_likes }}
       </span>
     {% endif %}
     {% if comment_counts.get(a.id) %}

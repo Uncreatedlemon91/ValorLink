@@ -280,6 +280,26 @@ def comment_counts_for(session: Session, article_ids: list[int]) -> dict[int, in
 
 
 # --- Likes ------------------------------------------------------------------ #
+def combined_like_count(article: Article, site_likes: int) -> int:
+    """One reaction figure for an article: likes given on the site plus
+    reactions on its Discord announcement.
+
+    These used to be shown as two separate badges, on the reasoning that
+    they measure different things -- the site's is a per-member toggle we
+    know the identity behind, Discord's is an anonymous aggregate of any
+    emoji. That's still true, and it's why the button's filled/empty state
+    is driven by the viewer's own like alone (see has_liked) rather than by
+    this total. But two numbers side by side read as a puzzle rather than a
+    signal, so the count itself is the sum.
+
+    A caveat worth knowing when the number looks high: Discord's side counts
+    every emoji on the announcement, not just hearts, and one person
+    reacting three times counts three times -- see
+    discord_announce.fetch_reaction_count. It also lags by up to the
+    reactions poll interval."""
+    return site_likes + (article.discord_reaction_count or 0)
+
+
 def count_likes(session: Session, article: Article) -> int:
     return len(list(session.execute(select(Like.id).where(Like.article_id == article.id)).scalars()))
 

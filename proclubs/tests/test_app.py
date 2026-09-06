@@ -507,7 +507,9 @@ def test_failed_announcement_does_not_save_a_message_id(client, monkeypatch):
         assert article.discord_message_id is None
 
 
-def test_article_page_shows_discord_reaction_count(client):
+def test_article_page_folds_discord_reactions_into_the_like_count(client):
+    """One figure, not two: the Discord announcement's reactions are added
+    to the site's own likes rather than shown as a separate badge."""
     slug = _seed_article(title="Popular Post")
     with database.get_session() as session:
         article = services.get_article(session, slug)
@@ -516,12 +518,21 @@ def test_article_page_shows_discord_reaction_count(client):
         session.commit()
 
     detail = client.get(f"/news/{slug}")
-    assert "12 on Discord" in detail.text
+    assert "12 Likes" in detail.text
+    assert "on Discord" not in detail.text
+
+    # A site like adds to the same total rather than starting a second one.
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/like", data={"csrf_token": token})
+    detail = client.get(f"/news/{slug}")
+    assert "13 Likes" in detail.text
 
 
-def test_article_page_hides_discord_reaction_badge_when_zero_or_unset(client):
+def test_article_like_count_is_site_only_when_no_discord_reactions(client):
     slug = _seed_article(title="Quiet Post")
     detail = client.get(f"/news/{slug}")
+    assert "0 Likes" in detail.text
     assert "on Discord" not in detail.text
 
     with database.get_session() as session:
@@ -531,6 +542,7 @@ def test_article_page_hides_discord_reaction_badge_when_zero_or_unset(client):
         session.commit()
 
     detail = client.get(f"/news/{slug}")
+    assert "0 Likes" in detail.text
     assert "on Discord" not in detail.text
 
 

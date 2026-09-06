@@ -404,14 +404,9 @@ not just ❤️, all counted together (`discord_announce.fetch_reaction_count`)
 -- into `Article.discord_reaction_count`, capped to the
 `DISCORD_REACTIONS_POLL_LIMIT` most-recently-announced articles per run
 (default 20; reactions settle quickly after posting, so checking an old
-announcement forever isn't useful). Shown on the article page next to the
-site's own Like button, but kept visually and functionally separate from
-it -- the site's Like button tracks a signed-in member's own toggle state,
-while the Discord count is just a read-only aggregate with no identity
-behind it, so merging them into one number would misrepresent both. An
-article with no reactions (or that was never announced) shows no badge at
-all, same "don't show a zero" pattern as the engagement badges on article
-thumbnails.
+announcement forever isn't useful). **Added into the article's like
+count**, not shown as a separate badge -- see `services.combined_like_count`
+and "Comments and likes" below for what that total does and doesn't mean.
 
 ## Comments and likes
 
@@ -428,6 +423,21 @@ unlike everything else that writes to this site.
 - **Likes are a simple toggle**, one per (article, Discord user) enforced
   by a database unique constraint -- clicking again un-likes. No "who
   liked this" list, just a count.
+- **The count shown is site likes plus Discord reactions**, summed by
+  `services.combined_like_count` and used identically on the article page
+  and on article thumbnails, so a card and its page never disagree. These
+  were once two separate badges, because they do measure different things:
+  the site's is a per-member toggle whose identity we know, Discord's is an
+  anonymous aggregate. That difference is still honoured where it matters
+  -- **the heart's filled/empty state reflects only the viewer's own like**,
+  since there's nothing on the Discord side to toggle -- but two numbers
+  side by side read as a puzzle rather than a signal, so the figure itself
+  is the sum.
+- **What inflates that total**: Discord's half counts *every* emoji on the
+  announcement, not just hearts, and one person adding three reactions
+  counts three times (see `discord_announce.fetch_reaction_count`). It also
+  lags by up to the reactions-poll interval. So the number is a reasonable
+  measure of engagement, not a headcount.
 - **Signed in but not a member** (someone who authorized the site's
   Discord login without being in our server) can still read everything,
   they just see a prompt instead of the comment box, and the like button

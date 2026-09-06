@@ -347,7 +347,8 @@ def news_detail(request: Request, slug: str):
             request, article=article,
             body_html=services.render_clip_embeds(session, article.body_html),
             comments=services.list_comments(session, article),
-            like_count=services.count_likes(session, article),
+            like_count=services.combined_like_count(
+                article, services.count_likes(session, article)),
             user_has_liked=bool(user) and services.has_liked(session, article, user["id"]),
         ))
 

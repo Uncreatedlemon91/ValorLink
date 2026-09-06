@@ -22,21 +22,21 @@
   {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" style="object-position: {{ focal_position(article) }};" />{% endif %}
   <div class="article-body">{{ body_html | safe }}</div>
 
+  {# One figure, not two: site likes and Discord reactions are summed by
+     services.combined_like_count. The heart's filled/empty state still
+     reflects only the viewer's own like -- the Discord half has no
+     identity behind it to toggle. #}
+  {% set like_title = 'Likes here plus reactions on the Discord announcement' if article.discord_reaction_count else 'Likes on this article' %}
   <div class="article-reactions">
     {% if is_member %}
       <form method="post" action="/news/{{ article.slug }}/like">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <button type="submit" class="like-btn {{ 'liked' if user_has_liked else '' }}">
+        <button type="submit" class="like-btn {{ 'liked' if user_has_liked else '' }}" title="{{ like_title }}">
           {{ '♥' if user_has_liked else '♡' }} {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}
         </button>
       </form>
     {% else %}
-      <span class="like-btn static">♡ {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}</span>
-    {% endif %}
-    {% if article.discord_reaction_count %}
-      <span class="like-btn static discord-reactions" title="Reactions on the Discord announcement for this article">
-        ♥ {{ article.discord_reaction_count }} on Discord
-      </span>
+      <span class="like-btn static" title="{{ like_title }}">♡ {{ like_count }} {{ 'Like' if like_count == 1 else 'Likes' }}</span>
     {% endif %}
   </div>
 
