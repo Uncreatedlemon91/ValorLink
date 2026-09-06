@@ -683,6 +683,18 @@ button:active, .btn:active { transform: translateY(0); }
 .division-ring--muted { background: transparent; border: 2px solid var(--border); }
 .division-ring--muted span { color: var(--muted); }
 
+/* The two figures flanking the hero: same face, stepped down, so the band
+   reads as one scoreboard rather than three unrelated numbers. */
+.standing-value {
+  font-family: var(--font-headline);
+  font-weight: 400;
+  font-size: clamp(1.75rem, 3.5vw, 2.4rem);
+  line-height: 0.95;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .standing-value--hero {
   font-family: var(--font-headline);
   font-weight: 400;
@@ -1397,18 +1409,6 @@ pre {
 .compare-bar span:first-child { background: var(--series-1); border-radius: 0; }
 .compare-bar span:last-child { background: var(--series-2); border-radius: 0; }
 
-/* --- Competition: division ladder ----------------------------------------- */
-.ladder { display: flex; flex-direction: column-reverse; gap: 0.3rem; }
-.ladder.compact { gap: 0.22rem; }
-.rung { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.6rem; border-radius: 0; border: 1px solid transparent; }
-.rung .rn { width: 2rem; font-family: var(--font-display); font-weight: 800; font-size: 0.82rem; color: var(--muted); flex: none; }
-.rung .bar { flex: 1; height: 6px; border-radius: 0; background: var(--panel-2); overflow: hidden; }
-.rung .bar > span { display: block; height: 100%; background: var(--border); }
-.rung .rung-note { font-size: 0.7rem; color: var(--muted); min-width: 5.5rem; text-align: right; flex: none; }
-.rung.current { border-color: rgba(var(--accent-rgb), 0.5); background: rgba(var(--accent-rgb), 0.08); }
-.rung.current .rn, .rung.current .rung-note { color: var(--accent-text); }
-.rung.current .bar > span { background: var(--accent); }
-.rung.best .rn::after { content: " \2605"; color: var(--status-warning); font-size: 0.7em; }
 
 /* --- Competition: head-to-head (rivals) table ------------------------------ */
 .rival-bar { display: flex; height: 8px; border-radius: 0; overflow: hidden; width: 96px; background: var(--panel-2); }

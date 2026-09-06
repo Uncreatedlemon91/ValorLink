@@ -84,11 +84,11 @@
       <div class="league-excluded">
         <p class="league-excluded-head">
           {{ excluded | length }} more tracked club{{ 's' if excluded | length != 1 else '' }}
-          not shown above (different division, or not polled yet):
+          not shown above (grouped into a different tier, or not polled yet):
         </p>
         <ul class="league-excluded-list">
           {% for e in excluded %}
-            <li>{{ e.label }} &middot; {% if e.division %}Division {{ e.division }}{% else %}not polled yet{% endif %}</li>
+            <li>{{ e.label }} &middot; {% if e.division %}different tier{% else %}not polled yet{% endif %}</li>
           {% endfor %}
         </ul>
       </div>

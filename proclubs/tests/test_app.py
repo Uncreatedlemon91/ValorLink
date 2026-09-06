@@ -294,7 +294,10 @@ def test_league_page_explains_roster_members_hidden_by_division(client, monkeypa
     assert "1 more tracked club" in r.text
     assert "not shown above" in r.text
     assert "Rivals FC" in r.text
-    assert "Division 5" in r.text
+    # Named as a tier, not a division number: the value behind it is EA's
+    # stale leaderboard tier, and no division is shown anywhere on the site.
+    assert "different tier" in r.text
+    assert "Division 5" not in r.text
 
 
 def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch):
@@ -721,12 +724,11 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     assert "crest-branded" in home.text
 
 
-def test_home_standing_band_shows_countup_rating_and_configured_division(client, monkeypatch):
+def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.config, "CLUB_DIVISION", "2")
-    monkeypatch.setattr(appmod.config, "CLUB_BEST_DIVISION", "1")
     monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {
-        "skillRating": "1450", "bestDivision": "9",
+        "skillRating": "1450", "wins": "111", "ties": "16", "losses": "58",
+        "bestDivision": "9",
     })
     monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
@@ -734,25 +736,22 @@ def test_home_standing_band_shows_countup_rating_and_configured_division(client,
     })
     home = client.get("/")
     assert 'class="standing-band"' in home.text
-    # Skill rating is the live number; the division comes from config.
+    # Every figure in the band comes from live overallStats.
     assert 'data-countup="1450"' in home.text
-    assert ">2<" in home.text
-    # EA's own bestDivision is a stale legacy field and must never be shown
-    # in preference to the configured one.
+    assert "111W 16D 58L" in home.text
+    assert 'data-countup="60"' in home.text  # 111 of 185 won
+    # EA's bestDivision is a stale legacy field; no division is shown at all.
+    assert "Division" not in home.text
     assert ">9<" not in home.text
-    # Uses the third-kit accent duo (blue + white), not the crest red. The
-    # accent tints the band's glow and the trim outlines the best-division
-    # marker; current division is deliberately not club-colored -- standing
-    # is the amber accent's job, and a club color there could collide with
-    # the win/draw/loss colors sitting next to it.
+    # The band's glow is tinted with the third-kit accent, not the crest
+    # red. The trim half of that duo went with the best-division marker it
+    # used to outline -- there's no division on the page any more.
     assert '#6CACDE' in home.text
-    assert 'border-color: #F2F2F2;' in home.text
     assert '#C91B1B' not in home.text
 
 
 def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.config, "CLUB_DIVISION", "")
     monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {})
     monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
     home = client.get("/")
@@ -760,24 +759,29 @@ def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatc
     assert 'class="standing-band"' in home.text
 
 
-def test_home_never_shows_a_division_from_eas_stale_leaderboard(client, monkeypatch):
-    """EA's allTimeLeaderboard record carries a currentDivision that can be
-    a hundred matches out of date (10 while the club was really in 2). With
-    CLUB_DIVISION unset the band shows no division at all rather than that
-    number -- see config.CLUB_DIVISION."""
+def test_site_never_shows_a_division_anywhere(client, monkeypatch):
+    """EA's allTimeLeaderboard record carries a currentDivision that ran a
+    hundred matches behind (10 while the club was really in 2), EA exposes
+    no live one, and it can't be derived from skill rating. So the site
+    reports no division at all rather than a wrong or hand-maintained one
+    -- see ea_client.division_stats and app._standing_teaser."""
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.config, "CLUB_DIVISION", "")
-    monkeypatch.setattr(appmod.config, "CLUB_BEST_DIVISION", "")
     monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
         "currentDivision": "10", "bestDivision": "4", "points": "54",
     })
     monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {
-        "skillRating": "2054",
+        "skillRating": "2054", "wins": "111", "ties": "16", "losses": "58",
     })
     monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
     home = client.get("/")
     assert 'data-countup="2054"' in home.text
+    assert "Division" not in home.text
     assert ">10<" not in home.text
+
+    standings = client.get("/api/standings").json()
+    assert "currentDivision" not in standings
+    assert "bestDivision" not in standings
+    assert "points" not in standings  # same stale record
 
 
 def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):

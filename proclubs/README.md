@@ -476,33 +476,36 @@ against every club we've played).
   beyond that rolling window; history only accumulates from whenever polling
   started, never backfilled.
 
-## Our division is configuration, not API data
+## The site doesn't show a division, on purpose
 
-`CLUB_DIVISION` / `CLUB_BEST_DIVISION` in `.env` are typed in by hand, and
-that is deliberate: **EA's API cannot tell us what division we're in.**
+There is no division anywhere on this site -- not on the home standing
+band, not on the stats dashboard, not in `/api/standings`. That's a
+deliberate removal, not an oversight:
 
 - `clubs/overallStats` has **no division field at all**. Its `bestDivision`
-  and `finishesInDivision*` fields are legacy values that no longer track
-  reality.
-- `allTimeLeaderboard/search` does return `currentDivision`, and it is a
+  and `finishesInDivision*` fields are legacy values that stopped tracking
+  reality (a club with 7 promotions reported zero finishes).
+- `allTimeLeaderboard/search` does return `currentDivision`, and it's a
   frozen all-time snapshot. Measured against `overallStats` for our own
-  club, that record reported **74 games played and Division 10** while
-  `overallStats` reported **185 games** -- 111 matches out of date, and a
-  division the club had long since climbed out of. Its `points`, `wins`,
-  `promotions` and `bestDivision` are stale by the same margin.
-- **Skill rating is the one live standing number** in that API, and it does
-  *not* determine the division: promotion and relegation do, and EA
-  publishes no rating-to-division thresholds. So there is nothing to derive
-  the division from either.
+  club it reported **74 games played and Division 10** while `overallStats`
+  reported **185 games** -- 111 matches out of date, and a division the
+  club had long since climbed out of. Its `points`, `wins` and
+  `promotions` are stale by the same margin. This is what used to be shown,
+  and it's why the site claimed Division 10 while the club was in Division 2.
+- **Skill rating is the one live standing number**, and it does *not*
+  determine the division: promotion and relegation do, and EA publishes no
+  rating-to-division thresholds. So there's nothing to derive it from.
 
-So the site shows skill rating (live, from `overallStats`) as the club's
-standing figure, and takes the division from config. Update it when the
-club is actually promoted or relegated -- a few times a season. Leave it
-blank and no division renders anywhere, which is the honest default:
-better than presenting a stale number as current.
+That leaves three options -- show a stale number, have someone retype the
+real one after every promotion, or show none. The site shows none. Skill
+rating leads instead (live, moves with results, and what the league table
+already ranks on), backed by the season record and win rate.
 
-`ea_client.division_stats()` still exists, with a docstring saying all of
-the above, because `poll.py` uses it to bucket the league table (see
+If EA ever exposes a real one, `app._standing_teaser` and `/api/standings`
+are the two places to put it back.
+
+`ea_client.division_stats()` still exists, with a docstring carrying all of
+the above, because `poll.py` uses its tier to bucket the league table (see
 below). Don't reach for it for anything the site presents as "now."
 
 ## The league table (auto-built, not manually curated)

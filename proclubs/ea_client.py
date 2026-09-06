@@ -172,8 +172,8 @@ def division_stats(platform, club_id):
     EA exposes no live division anywhere: overallStats has no division
     field at all, and skill rating -- which IS live -- doesn't determine
     the division, since promotion and relegation do and EA publishes no
-    rating thresholds. That's why the current division is configuration
-    (see config.CLUB_DIVISION), not something read from here.
+    rating thresholds. That's why the site reports no division at all --
+    see the README's "The site doesn't show a division, on purpose".
 
     Still used by poll.py to group the league table, where a stale tier
     compared against other clubs' equally stale tiers is self-consistent

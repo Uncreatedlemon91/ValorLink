@@ -178,6 +178,31 @@ def _announce_article(request: Request, session, article) -> None:
     session.commit()
 
 
+def _int(value) -> int:
+    """EA returns every stat as a string, and missing ones as absent."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _standing_teaser(overall: dict) -> dict:
+    """The home page's standing band, from live clubs/overallStats only.
+
+    No division: EA exposes none that is current (see
+    ea_client.division_stats), so the band leads on skill rating -- the one
+    standing number in that API that actually moves with results -- and
+    backs it with the season record, which is live for the same reason."""
+    wins, ties, losses = _int(overall.get("wins")), _int(overall.get("ties")), _int(overall.get("losses"))
+    played = wins + ties + losses
+    return {
+        "skillRating": overall.get("skillRating"),
+        "record": f"{wins}W {ties}D {losses}L" if played else None,
+        "winRate": round(wins / played * 100) if played else None,
+        "played": played or None,
+    }
+
+
 def _check_csrf(request: Request, token: str):
     if not auth.verify_csrf(request, token):
         raise services.ServiceError("Your session expired before that finished submitting. Please try again.")
@@ -215,14 +240,10 @@ def home(request: Request):
             try:
                 # overallStats, not division_stats: the latter is an
                 # all-time leaderboard snapshot whose division and points
-                # can be a hundred matches out of date (see
-                # config.CLUB_DIVISION). Skill rating here is live.
+                # can be a hundred matches out of date. Skill rating here
+                # is live -- see _standing_teaser.
                 overall = ea_client.overall_stats(config.CLUB_PLATFORM, config.CLUB_ID) or {}
-                stats_teaser = {
-                    "currentDivision": config.CLUB_DIVISION or None,
-                    "bestDivision": config.CLUB_BEST_DIVISION or None,
-                    "skillRating": overall.get("skillRating"),
-                }
+                stats_teaser = _standing_teaser(overall)
             except ea_client.EAApiError:
                 pass
             try:
@@ -1033,15 +1054,15 @@ def api_standings():
         return JSONResponse({"error": "club not found"}, status_code=404)
     division = division or {}
     stats = stats or {}
+    # No division is returned, deliberately -- see the module docstring on
+    # ea_client.division_stats. EA has no live division field, the one it
+    # does return is a snapshot that can be a hundred matches stale, and it
+    # can't be derived from skill rating either (promotion/relegation set
+    # it, and EA publishes no rating thresholds). Rather than show a wrong
+    # number or ask someone to retype the right one every promotion, the
+    # site doesn't report a division. `points` is dropped for the same
+    # reason: its only source was that same stale record.
     return {
-        # Division comes from config, never from EA: see config.CLUB_DIVISION
-        # for why (every division field in this API is a stale snapshot).
-        "currentDivision": config.CLUB_DIVISION or None,
-        "bestDivision": config.CLUB_BEST_DIVISION or None,
-        # `points` deliberately dropped: the only source was the all-time
-        # leaderboard record, which is frozen at whatever the club's tally
-        # was when that snapshot was taken. Skill rating below is live and
-        # is what the site ranks on anyway.
         "bestFinishGroup": stats.get("bestFinishGroup"),
         "skillRating": stats.get("skillRating"),
         "promotions": stats.get("promotions") or division.get("promotions"),

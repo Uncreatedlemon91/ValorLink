@@ -262,12 +262,6 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
   ratingBadge.className = 'hero-badge accent';
   ratingBadge.textContent = `${stats.skillRating ?? '-'} SR`;
   badges.append(recordBadge, ratingBadge);
-  if (standings.currentDivision != null) {
-    const divBadge = document.createElement('span');
-    divBadge.className = 'hero-badge';
-    divBadge.textContent = `Division ${standings.currentDivision}`;
-    badges.append(divBadge);
-  }
   clubHeader.append(badges);
 
   const recentMatches = matchesResult.status === 'fulfilled' ? (matchesResult.value || []) : [];
@@ -303,7 +297,7 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
 
   panel.innerHTML = `
     ${heroStat('Skill Rating', stats.skillRating,
-               standings.currentDivision != null ? `Division ${standings.currentDivision}` : null,
+               played ? `${played} league matches` : null,
                ratingDelta)}
     <div class="stat-grid">
       ${statCard('Games Played', played || '-',
@@ -354,7 +348,7 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
       </button>
       <button class="explore-card" data-goto="competition" type="button">
         <h4>Competition</h4>
-        <p>Division standing and promotion history, plus a full head-to-head record against every club we've faced.</p>
+        <p>Promotion and relegation history, plus a full head-to-head record against every club we've faced.</p>
         <span class="explore-cta">Open report &rarr;</span>
       </button>
     </div>
@@ -1359,34 +1353,10 @@ function toggleMatchDetail(row, rawMatch) {
 }
 
 // --------------------------------------------------------------------------
-// Competition -- our own divisional progress (EA has no full league table
+// Competition -- our own standing over time (EA has no full league table
 // to show), plus a head-to-head record against every club we've actually
 // played, built from tracked match history (see db.py's rival_records).
 // --------------------------------------------------------------------------
-
-// EA Sports FC Pro Clubs has 10 divisions as of this writing -- undocumented
-// by EA (see ea_client.py), so this is a reasonable default rather than a
-// hard fact; the ladder extends past it automatically if a club's current
-// or best division ever reports higher, rather than silently truncating.
-const DIVISION_COUNT_DEFAULT = 10;
-
-function renderDivisionLadder(container, current, best) {
-  const cur = num(current);
-  const bestNum = num(best);
-  const top = Math.max(DIVISION_COUNT_DEFAULT, cur, bestNum, 1);
-  const rows = [];
-  for (let d = 1; d <= top; d++) {
-    const isCurrent = cur > 0 && d === cur;
-    const isBest = bestNum > 0 && d === bestNum;
-    rows.push(`
-      <div class="rung ${isCurrent ? 'current' : ''} ${isBest ? 'best' : ''}">
-        <span class="rn">D${d}</span>
-        <div class="bar"><span style="width:${isCurrent ? 100 : isBest ? 45 : 8}%"></span></div>
-        <span class="rung-note">${isCurrent ? 'Current' : isBest ? 'Best finish' : ''}</span>
-      </div>`);
-  }
-  container.innerHTML = `<div class="ladder">${rows.reverse().join('')}</div>`;
-}
 
 function renderCompetition(standingsResult, historyDivisionResult, historyMatchesResult, rivalsResult) {
   const panel = document.getElementById('tab-competition');
@@ -1395,17 +1365,13 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
 
   panel.innerHTML = `
     <p style="color:var(--muted)">
-      EA's Pro Clubs API does not expose a full league table -- only your club's own divisional
-      progress, and, below, your own head-to-head record against clubs you've actually played.
+      EA's Pro Clubs API does not expose a full league table, and it reports no division we can
+      trust -- the only one it returns is an all-time snapshot that runs many matches behind, and
+      nothing in the API derives the real one. So this report leads on skill rating, which is live,
+      plus your own head-to-head record against clubs you've actually played.
     </p>
-    <div class="chart-card">
-      <h3>Division Ladder</h3>
-      <div id="chart-ladder"></div>
-    </div>
     <div class="stat-grid">
-      ${statCard('Current Division', s.currentDivision ?? '-')}
       ${statCard('Skill Rating', s.skillRating)}
-      ${statCard('Best Division', s.bestDivision ?? '-')}
       ${statCard('Best Finish', s.bestFinishGroup)}
       ${statCard('Promotions', s.promotions)}
       ${statCard('Relegations', s.relegations)}
@@ -1424,8 +1390,6 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
       </div>
     </div>
   `;
-
-  renderDivisionLadder(document.getElementById('chart-ladder'), s.currentDivision, s.bestDivision);
 
 
   const historyRow = document.getElementById('competition-history-row');
