@@ -1,0 +1,339 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #05070E; }
+    a { color: #00E27A; } a:hover { color: #00B863; }
+    .kick { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; }
+    .anton { font-family: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif; font-weight: 400; text-transform: uppercase; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; min-height: 1620px; background: #05070E; color: #F2F5FA; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; padding: 56px 64px 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 54px;">
+
+  <!-- Header -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; border-bottom: 1px solid #22304C; padding-bottom: 28px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span class="kick" style="font-size: 13px; color: #00E27A;">Design System &middot; 03</span>
+      <div class="anton" style="font-size: 60px; line-height: 0.92;">Player Cards</div>
+      <div style="font-size: 15px; color: #93A0B8; max-width: 700px; line-height: 1.55;">Every value on the card is a field EA's Pro Clubs API actually returns &mdash; no invented pace or dribbling attributes. Tier colour is derived from <span class="tnum" style="color: #C3CBD9;">proOverall</span>, not assigned by hand.</div>
+    </div>
+  </div>
+
+  <!-- ============ ANATOMY ============ -->
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">01 &mdash;</span>
+      <span class="anton" style="font-size: 26px;">Anatomy</span>
+    </div>
+
+    <div style="display: flex; gap: 56px; align-items: flex-start;">
+
+      <!-- THE CARD (large) -->
+      <div style="width: 312px; flex: none; background: #0B1120; border: 1px solid #2C4A3A; position: relative; box-shadow: 0 18px 44px rgba(0,0,0,0.5);">
+        <!-- portrait zone -->
+        <div style="height: 186px; position: relative; overflow: hidden; background: radial-gradient(ellipse 300px 200px at 62% 22%, rgba(0,226,122,0.30), transparent 66%), repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 24px), linear-gradient(158deg, #14322A, #0A1018);">
+          <span class="anton" style="position: absolute; right: -14px; bottom: -34px; font-size: 128px; color: rgba(255,255,255,0.055); line-height: 1;">CM</span>
+          <!-- OVR block -->
+          <div style="position: absolute; left: 0; top: 0; display: flex; align-items: stretch;">
+            <div style="background: #00E27A; padding: 12px 18px 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 0; transform: skewX(-12deg); transform-origin: top left;">
+              <span class="anton tnum" style="font-size: 40px; line-height: 0.92; color: #05070E; transform: skewX(12deg);">87</span>
+              <span class="kick" style="font-size: 10px; color: rgba(5,7,14,0.72); transform: skewX(12deg);">OVR</span>
+            </div>
+          </div>
+          <!-- position -->
+          <span class="kick" style="position: absolute; right: 14px; top: 14px; font-size: 12px; background: rgba(5,7,14,0.78); color: #00E27A; padding: 7px 12px;">CM</span>
+          <!-- form -->
+          <div style="position: absolute; left: 14px; bottom: 14px; display: flex; gap: 3px;">
+            <span class="kick" style="width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 10px;">W</span>
+            <span class="kick" style="width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 10px;">W</span>
+            <span class="kick" style="width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; background: #FF4D5E; color: #05070E; font-size: 10px;">L</span>
+            <span class="kick" style="width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; background: #8494AE; color: #05070E; font-size: 10px;">D</span>
+            <span class="kick" style="width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 10px;">W</span>
+          </div>
+        </div>
+
+        <!-- name lower-third -->
+        <div style="display: flex; align-items: stretch; height: 62px; border-top: 2px solid #00E27A;">
+          <div style="background: #00E27A; width: 8px; transform: skewX(-12deg); margin-left: -2px;"></div>
+          <div style="flex: 1; background: #101A2E; display: flex; flex-direction: column; justify-content: center; padding: 0 16px; gap: 2px;">
+            <span class="anton" style="font-size: 22px; line-height: 1;">Reece Mbala</span>
+            <span class="kick" style="font-size: 10px; color: #667595;">mbala_11</span>
+          </div>
+        </div>
+
+        <!-- stat grid -->
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #22304C; border-top: 1px solid #22304C;">
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">7.4</span><span class="kick" style="font-size: 9px; color: #667595;">Rating</span>
+          </div>
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">68%</span><span class="kick" style="font-size: 9px; color: #667595;">Win</span>
+          </div>
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">12</span><span class="kick" style="font-size: 9px; color: #667595;">MOTM</span>
+          </div>
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">91%</span><span class="kick" style="font-size: 9px; color: #667595;">Pass</span>
+          </div>
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">44%</span><span class="kick" style="font-size: 9px; color: #667595;">Shot</span>
+          </div>
+          <div style="background: #0B1120; padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+            <span class="anton tnum" style="font-size: 25px; line-height: 1;">73%</span><span class="kick" style="font-size: 9px; color: #667595;">Tackle</span>
+          </div>
+        </div>
+
+        <!-- footer strip -->
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-top: 1px solid #22304C; background: #080D18;">
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">42 apps &middot; 19 g &middot; 24 a</span>
+          <span class="kick" style="font-size: 10px; color: #00E27A;">Season</span>
+        </div>
+      </div>
+
+      <!-- callouts -->
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 0; padding-top: 6px;">
+        <div style="display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid #16233C;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">01</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">OVR block, skewed 12&deg;</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;">Reads <span class="tnum" style="color: #C3CBD9;">proOverall</span>. Its fill is the tier colour, so the card's identity is legible at thumbnail size before any text is.</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid #16233C;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">02</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">Position watermark</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;"><span class="tnum" style="color: #C3CBD9;">favoritePosition</span> set oversized at 5.5% white. Gives every card a distinct silhouette without needing a player photo &mdash; which Pro Clubs has no source for.</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid #16233C;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">03</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">Personal form, last 5</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;">That player's own W/D/L from the matches they actually appeared in &mdash; not the club's. Comes from the per-match rosters already loaded on the Matches tab.</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid #16233C;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">04</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">Name in a lower third</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;">Pro name over gamertag, in the same broadcast bar used for goal events elsewhere on the site. One motif, reused.</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 18px; padding: 16px 0; border-bottom: 1px solid #16233C;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">05</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">Six stats, all real</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;"><span class="tnum" style="color: #C3CBD9;">ratingAve</span>, <span class="tnum" style="color: #C3CBD9;">winRate</span>, <span class="tnum" style="color: #C3CBD9;">manOfTheMatch</span>, <span class="tnum" style="color: #C3CBD9;">passSuccessRate</span>, <span class="tnum" style="color: #C3CBD9;">shotSuccessRate</span>, <span class="tnum" style="color: #C3CBD9;">tackleSuccessRate</span>. Goalkeepers swap Shot and Tackle for clean sheets and saves.</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 18px; padding: 16px 0;">
+          <span class="anton tnum" style="font-size: 18px; color: #00E27A; width: 30px; flex: none;">06</span>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 15px; font-weight: 600;">Season / Career toggle</span>
+            <span style="font-size: 13px; color: #8494AE; line-height: 1.55;">The whole card flips to <span class="tnum" style="color: #C3CBD9;">career*</span> values. Career is the one that survives an FC 27 season reset &mdash; worth having on the card the day the new title lands.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ TIERS ============ -->
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">02 &mdash;</span>
+      <span class="anton" style="font-size: 26px;">Tiers &amp; Variants</span>
+      <span style="font-size: 13px; color: #667595;">Colour is a function of OVR, so it updates itself. No manual promotion.</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px;">
+
+      <!-- Elite -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background: #0B1120; border: 1px solid #4A3C1E;">
+          <div style="height: 128px; position: relative; overflow: hidden; background: radial-gradient(ellipse 240px 160px at 62% 22%, rgba(255,176,32,0.30), transparent 66%), repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 24px), linear-gradient(158deg, #2E2413, #0A1018);">
+            <span class="anton" style="position: absolute; right: -10px; bottom: -24px; font-size: 92px; color: rgba(255,255,255,0.055); line-height: 1;">ST</span>
+            <div style="position: absolute; left: 0; top: 0; background: #FFB020; padding: 9px 15px 9px 12px; display: flex; flex-direction: column; align-items: center; transform: skewX(-12deg); transform-origin: top left;">
+              <span class="anton tnum" style="font-size: 29px; line-height: 0.92; color: #05070E; transform: skewX(12deg);">93</span>
+              <span class="kick" style="font-size: 8px; color: rgba(5,7,14,0.72); transform: skewX(12deg);">OVR</span>
+            </div>
+            <span class="kick" style="position: absolute; right: 11px; top: 11px; font-size: 10px; background: rgba(5,7,14,0.78); color: #FFB020; padding: 5px 9px;">ST</span>
+          </div>
+          <div style="display: flex; align-items: stretch; height: 48px; border-top: 2px solid #FFB020;">
+            <div style="background: #FFB020; width: 7px; transform: skewX(-12deg); margin-left: -2px;"></div>
+            <div style="flex: 1; background: #101A2E; display: flex; flex-direction: column; justify-content: center; padding: 0 13px; gap: 1px;">
+              <span class="anton" style="font-size: 17px; line-height: 1;">Danny Okoye</span>
+              <span class="kick" style="font-size: 9px; color: #667595;">okoye_9</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #22304C; border-top: 1px solid #22304C;">
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">8.1</span><span class="kick" style="font-size: 8px; color: #667595;">Rating</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">74%</span><span class="kick" style="font-size: 8px; color: #667595;">Win</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">21</span><span class="kick" style="font-size: 8px; color: #667595;">MOTM</span></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span class="kick" style="font-size: 11px; color: #FFB020;">Elite &middot; OVR 88+</span>
+          <span style="font-size: 12px; color: #667595; line-height: 1.55;">Amber. Rare by design &mdash; if half the squad is amber, raise the threshold.</span>
+        </div>
+      </div>
+
+      <!-- Standard -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background: #0B1120; border: 1px solid #2C4A3A;">
+          <div style="height: 128px; position: relative; overflow: hidden; background: radial-gradient(ellipse 240px 160px at 62% 22%, rgba(0,226,122,0.28), transparent 66%), repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 24px), linear-gradient(158deg, #14322A, #0A1018);">
+            <span class="anton" style="position: absolute; right: -10px; bottom: -24px; font-size: 92px; color: rgba(255,255,255,0.055); line-height: 1;">CB</span>
+            <div style="position: absolute; left: 0; top: 0; background: #00E27A; padding: 9px 15px 9px 12px; display: flex; flex-direction: column; align-items: center; transform: skewX(-12deg); transform-origin: top left;">
+              <span class="anton tnum" style="font-size: 29px; line-height: 0.92; color: #05070E; transform: skewX(12deg);">81</span>
+              <span class="kick" style="font-size: 8px; color: rgba(5,7,14,0.72); transform: skewX(12deg);">OVR</span>
+            </div>
+            <span class="kick" style="position: absolute; right: 11px; top: 11px; font-size: 10px; background: rgba(5,7,14,0.78); color: #00E27A; padding: 5px 9px;">CB</span>
+          </div>
+          <div style="display: flex; align-items: stretch; height: 48px; border-top: 2px solid #00E27A;">
+            <div style="background: #00E27A; width: 7px; transform: skewX(-12deg); margin-left: -2px;"></div>
+            <div style="flex: 1; background: #101A2E; display: flex; flex-direction: column; justify-content: center; padding: 0 13px; gap: 1px;">
+              <span class="anton" style="font-size: 17px; line-height: 1;">Sam Hollis</span>
+              <span class="kick" style="font-size: 9px; color: #667595;">hollis_gg</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #22304C; border-top: 1px solid #22304C;">
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">7.2</span><span class="kick" style="font-size: 8px; color: #667595;">Rating</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">66%</span><span class="kick" style="font-size: 8px; color: #667595;">Win</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">84%</span><span class="kick" style="font-size: 8px; color: #667595;">Tackle</span></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span class="kick" style="font-size: 11px; color: #00E27A;">Squad &middot; OVR 75&ndash;87</span>
+          <span style="font-size: 12px; color: #667595; line-height: 1.55;">Club green. The default state and the bulk of any roster.</span>
+        </div>
+      </div>
+
+      <!-- Rotation -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background: #0B1120; border: 1px solid #22304C;">
+          <div style="height: 128px; position: relative; overflow: hidden; background: radial-gradient(ellipse 240px 160px at 62% 22%, rgba(147,160,184,0.20), transparent 66%), repeating-linear-gradient(102deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 24px), linear-gradient(158deg, #1B2334, #0A1018);">
+            <span class="anton" style="position: absolute; right: -10px; bottom: -24px; font-size: 92px; color: rgba(255,255,255,0.05); line-height: 1;">RW</span>
+            <div style="position: absolute; left: 0; top: 0; background: #8494AE; padding: 9px 15px 9px 12px; display: flex; flex-direction: column; align-items: center; transform: skewX(-12deg); transform-origin: top left;">
+              <span class="anton tnum" style="font-size: 29px; line-height: 0.92; color: #05070E; transform: skewX(12deg);">68</span>
+              <span class="kick" style="font-size: 8px; color: rgba(5,7,14,0.72); transform: skewX(12deg);">OVR</span>
+            </div>
+            <span class="kick" style="position: absolute; right: 11px; top: 11px; font-size: 10px; background: rgba(5,7,14,0.78); color: #93A0B8; padding: 5px 9px;">RW</span>
+          </div>
+          <div style="display: flex; align-items: stretch; height: 48px; border-top: 2px solid #22304C;">
+            <div style="background: #8494AE; width: 7px; transform: skewX(-12deg); margin-left: -2px;"></div>
+            <div style="flex: 1; background: #101A2E; display: flex; flex-direction: column; justify-content: center; padding: 0 13px; gap: 1px;">
+              <span class="anton" style="font-size: 17px; line-height: 1;">Tobi Aranda</span>
+              <span class="kick" style="font-size: 9px; color: #667595;">tobi_arnd</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #22304C; border-top: 1px solid #22304C;">
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">6.6</span><span class="kick" style="font-size: 8px; color: #667595;">Rating</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">51%</span><span class="kick" style="font-size: 8px; color: #667595;">Win</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">3</span><span class="kick" style="font-size: 8px; color: #667595;">MOTM</span></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span class="kick" style="font-size: 11px; color: #93A0B8;">Rotation &middot; OVR &lt; 75</span>
+          <span style="font-size: 12px; color: #667595; line-height: 1.55;">Steel. Deliberately unglamorous, never insulting &mdash; no red, no downward arrows.</span>
+        </div>
+      </div>
+
+      <!-- GK -->
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="background: #0B1120; border: 1px solid #2A3A55;">
+          <div style="height: 128px; position: relative; overflow: hidden; background: radial-gradient(ellipse 240px 160px at 62% 22%, rgba(88,101,242,0.28), transparent 66%), repeating-linear-gradient(102deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 24px), linear-gradient(158deg, #161C3C, #0A1018);">
+            <span class="anton" style="position: absolute; right: -10px; bottom: -24px; font-size: 92px; color: rgba(255,255,255,0.055); line-height: 1;">GK</span>
+            <div style="position: absolute; left: 0; top: 0; background: #00E27A; padding: 9px 15px 9px 12px; display: flex; flex-direction: column; align-items: center; transform: skewX(-12deg); transform-origin: top left;">
+              <span class="anton tnum" style="font-size: 29px; line-height: 0.92; color: #05070E; transform: skewX(12deg);">84</span>
+              <span class="kick" style="font-size: 8px; color: rgba(5,7,14,0.72); transform: skewX(12deg);">OVR</span>
+            </div>
+            <span class="kick" style="position: absolute; right: 11px; top: 11px; font-size: 10px; background: rgba(5,7,14,0.78); color: #8FA0FF; padding: 5px 9px;">GK</span>
+          </div>
+          <div style="display: flex; align-items: stretch; height: 48px; border-top: 2px solid #00E27A;">
+            <div style="background: #00E27A; width: 7px; transform: skewX(-12deg); margin-left: -2px;"></div>
+            <div style="flex: 1; background: #101A2E; display: flex; flex-direction: column; justify-content: center; padding: 0 13px; gap: 1px;">
+              <span class="anton" style="font-size: 17px; line-height: 1;">Kez Duarte</span>
+              <span class="kick" style="font-size: 9px; color: #667595;">kez_dua</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #22304C; border-top: 1px solid #22304C;">
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">7.6</span><span class="kick" style="font-size: 8px; color: #667595;">Rating</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">14</span><span class="kick" style="font-size: 8px; color: #667595;">Clean&nbsp;S.</span></div>
+            <div style="background: #0B1120; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;"><span class="anton tnum" style="font-size: 19px; line-height: 1;">9</span><span class="kick" style="font-size: 8px; color: #667595;">MOTM</span></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <span class="kick" style="font-size: 11px; color: #8FA0FF;">Goalkeeper variant</span>
+          <span style="font-size: 12px; color: #667595; line-height: 1.55;">Same tier colour, blue position accent. Shot and Tackle swap for clean sheets and saves.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ SQUAD GRID ============ -->
+  <div style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span class="kick" style="font-size: 12px; color: #667595;">03 &mdash;</span>
+      <span class="anton" style="font-size: 26px;">Squad Grid</span>
+      <span style="font-size: 13px; color: #667595;">Replaces the Players tab's eight-column table. Same filters, same sort, same drill-in.</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 4px;">
+      <span class="kick" style="font-size: 11px; background: #00E27A; color: #05070E; padding: 9px 15px;">All</span>
+      <span class="kick" style="font-size: 11px; background: #101A2E; color: #93A0B8; padding: 9px 15px;">Forwards</span>
+      <span class="kick" style="font-size: 11px; background: #101A2E; color: #93A0B8; padding: 9px 15px;">Midfield</span>
+      <span class="kick" style="font-size: 11px; background: #101A2E; color: #93A0B8; padding: 9px 15px;">Defence</span>
+      <span class="kick" style="font-size: 11px; background: #101A2E; color: #93A0B8; padding: 9px 15px;">Keepers</span>
+      <div style="width: 1px; height: 26px; background: #22304C; margin: 0 6px;"></div>
+      <span class="kick" style="font-size: 11px; color: #667595;">Sort</span>
+      <span class="kick" style="font-size: 11px; border: 1px solid #22304C; color: #F2F5FA; padding: 8px 14px;">Rating &darr;</span>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        <span class="kick" style="font-size: 11px; color: #667595;">Showing</span>
+        <span class="kick" style="font-size: 11px; background: #101A2E; color: #F2F5FA; padding: 9px 15px;">Season</span>
+        <span class="kick" style="font-size: 11px; color: #667595;">Career</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px;">
+      <div style="background: #0B1120; border: 1px solid #4A3C1E; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #FFB020; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">93</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Okoye</span><span class="kick" style="font-size: 9px; color: #667595;">ST &middot; 8.1</span></div>
+      </div>
+      <div style="background: #0B1120; border: 1px solid #2C4A3A; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">87</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Mbala</span><span class="kick" style="font-size: 9px; color: #667595;">CM &middot; 7.4</span></div>
+      </div>
+      <div style="background: #0B1120; border: 1px solid #2C4A3A; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">84</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Duarte</span><span class="kick" style="font-size: 9px; color: #667595;">GK &middot; 7.6</span></div>
+      </div>
+      <div style="background: #0B1120; border: 1px solid #2C4A3A; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">81</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Hollis</span><span class="kick" style="font-size: 9px; color: #667595;">CB &middot; 7.2</span></div>
+      </div>
+      <div style="background: #0B1120; border: 1px solid #2C4A3A; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #00E27A; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">77</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Idris</span><span class="kick" style="font-size: 9px; color: #667595;">LB &middot; 7.0</span></div>
+      </div>
+      <div style="background: #0B1120; border: 1px solid #22304C; display: flex; align-items: center; gap: 11px; padding: 13px;">
+        <div style="width: 40px; height: 40px; background: #8494AE; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;"><span class="anton tnum" style="font-size: 18px; color: #05070E; transform: skewX(12deg);">68</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span class="anton" style="font-size: 14px; line-height: 1.1;">Aranda</span><span class="kick" style="font-size: 9px; color: #667595;">RW &middot; 6.6</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

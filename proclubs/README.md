@@ -16,6 +16,40 @@ Scheduled Events sync, below), it's a copy of the main bot's actual token,
 not a separately-registered credential. Everything else -- database,
 session, OAuth client -- stays as described above.
 
+## The design system
+
+The site is styled as a **broadcast matchday graphic** rather than a dark
+admin dashboard. The whole system lives in `static/css/site.css`'s `:root`
+block; the rules worth knowing before adding anything:
+
+- **Two accents, one job each.** `--accent` (pitch green) reports
+  *performance* -- form, win rate, anything the squad did. `--amber`
+  reports *standing* -- division, league position, rank. Don't mix them:
+  an amber win-rate or a green division number breaks the only convention
+  that makes the palette readable at a glance.
+- **`--live` (red) is reserved** for a stream that is genuinely on air
+  right now. If red shows up anywhere else it stops meaning "live."
+- **Square corners.** There are no rounded rectangles; `border-radius`
+  appears only at `50%`, for avatars and dots.
+- **The 12° skew (`--skew`) is the signature**, and it earns that by being
+  rare: accent rules, section blades, the OVR block on a player card, the
+  match-centre rail. It is not a texture -- don't spread it.
+- **Three faces.** `--font-headline` (Anton) shouts: scorelines, big
+  numbers, page and section headings, never below ~1rem. `--font-display`
+  (Barlow Condensed, carried over from the previous design) labels
+  everything: kickers, nav, table headers, badges -- always uppercase,
+  tracked out to `0.13em`. `--font-body` (Archivo) is what gets read.
+  Anything sitting in a numeric column gets
+  `font-variant-numeric: tabular-nums`.
+- **`--series-*` is untouched** by the redesign. It's the validated
+  categorical chart palette and is read directly by `charts.js`; the
+  status colours were retuned to the broadcast accents so a form chip and
+  a chart legend agree on what a win looks like.
+
+Fonts come from Google Fonts (declared in `base.html`), which is this
+site's one third-party origin -- the same exception the previous design
+took, not a new one.
+
 ## Permissions
 
 Three tiers, all derived live from Discord at sign-in time (never stored):
@@ -318,8 +352,8 @@ unlike everything else that writes to this site.
 
 `/stats` has four reports: an **Overview** (a club scoreboard, headline KPIs,
 a skill-rating trend, and a squad spotlight, with cards into the other
-three), **Players** (the full roster, filterable/sortable, click through for
-a per-player breakdown), **Matches** (result/shot/pass/tackle trends, click
+three), **Players** (the full roster as player cards, filterable/sortable, click
+through for a per-player breakdown -- see "Player cards" below), **Matches** (result/shot/pass/tackle trends, click
 a match for a team-vs-team comparison plus both full rosters), and
 **Competition** (our own divisional progress and a head-to-head record
 against every club we've played).
@@ -434,6 +468,40 @@ called directly, though they're unauthenticated (read-only, no secrets).
 `/api/tactics` is the one write endpoint in this list -- staff-only, CSRF-
 protected, see below.
 
+## Player cards
+
+The Players tab renders the roster as cards rather than the eight-column
+table it used to be (`playerCardHtml` in `static/js/app.js`, `.player-card`
+in `site.css`).
+
+- **Not an EA Ultimate Team card.** That layout is EA's own branded
+  design; this is the same job -- identity, rating, a few numbers -- done
+  in this site's broadcast language: a skewed OVR block, a lower-third
+  name bar, three stat cells.
+- **Every value is a real API field.** `proOverall`, `favoritePosition`,
+  `ratingAve`, `winRate`, `manOfTheMatch`, `cleanSheetsGK`, `gamesPlayed`,
+  `goals`, `assists` -- all straight from `/api/members`. There is
+  deliberately no pace/dribbling/passing attribute row: EA's Pro Clubs API
+  doesn't expose per-attribute ratings, and inventing or modelling them
+  would make the card lie. A missing `proOverall` shows `--`, not a zero.
+- **Tier colour is derived, not assigned.** `playerTier()` maps
+  `proOverall` to elite (amber, `>= TIER_ELITE`), squad (green,
+  `>= TIER_SQUAD`) or rotation (steel). It keeps itself current as ratings
+  move, and the thresholds are a judgement call about what should feel
+  rare -- if most of the roster comes out amber, raise `TIER_ELITE`.
+  Rotation is deliberately unglamorous but never punitive: no red, no
+  downward arrows.
+- **Keepers get a different third stat** -- clean sheets instead of win
+  rate, since the outfield framing says nothing useful about them.
+- **There's no player photography** in Pro Clubs to draw on, so the
+  oversized position code (`.pc-watermark`, 5.5% white) is what gives each
+  card its own silhouette.
+- The card is a `<button>`, so Enter/Space activation and focus come for
+  free -- unlike the table rows it replaced, which needed an explicit
+  `tabindex` and keydown handler. Clicking one opens the same full
+  breakdown as before, now as a full-width drawer spanning the grid
+  (`.member-detail-row`).
+
 ## The tactics board
 
 `/tactics` is a drag-and-drop formation board: staff drag names from the
@@ -447,6 +515,12 @@ slots, then hit Save. Everyone else sees the saved result, read-only. See
   tagged "Midfielder" in Discord) can't be resolved into "who plays CM vs
   CDM" without a human decision, so staff makes that call directly by
   dragging rather than the site guessing from roles or stats.
+- **The formation list is FC 26's.** All 20 shapes were taken from FC 26
+  and have *not* been re-checked against FC 27 (released 25 Sep 2026) --
+  EA hadn't published its formation list when this shipped. If FC 27 adds,
+  drops or renames a shape, `FORMATIONS` in `app.py` and
+  `test_formations_cover_all_fc26_shapes` both need updating; nothing
+  breaks in the meantime, the board just offers last year's set.
 - **Several common formations, each remembered independently.** Switching
   the formation dropdown doesn't discard what's set up for the others --
   each (formation, slot) pair is its own saved row (`TacticsSlot`), so

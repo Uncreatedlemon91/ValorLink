@@ -352,17 +352,9 @@ function renderPlayers(result) {
     </div>
     <p class="chart-caption">
       The name filter searches this club's roster only -- EA's API has no way to look up a player
-      across clubs, only within a club you already have loaded. Click a player for their full stat breakdown.
+      across clubs, only within a club you already have loaded. Click a card for the full stat breakdown.
     </p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th><th>Position</th><th>GP</th><th>Goals</th>
-          <th>Assists</th><th>Avg Rating</th><th>MOTM</th><th>Career Goals</th>
-        </tr>
-      </thead>
-      <tbody id="players-body"></tbody>
-    </table>
+    <div class="player-grid" id="players-body"></div>
   `;
 
   document.getElementById('pos-filter').addEventListener('click', (e) => {
@@ -394,6 +386,83 @@ function renderPlayers(result) {
   });
 }
 
+// EA reports favoritePosition as a whole word; the cards want the short
+// broadcast code. proPos is a positional id we can't decode reliably, so it
+// only ever reaches the card as-is when the word is missing.
+const POSITION_CODES = {
+  goalkeeper: 'GK', defender: 'DEF', midfielder: 'MID', forward: 'FWD',
+};
+
+// Card tier is derived from proOverall rather than assigned, so it keeps
+// itself current. The thresholds are a judgement call about what should
+// feel rare -- if most of the roster comes out amber, raise them.
+const TIER_ELITE = 88;
+const TIER_SQUAD = 75;
+
+function playerTier(member) {
+  const ovr = member.proOverall == null ? null : num(member.proOverall);
+  if (!ovr) return 'rotation';
+  if (ovr >= TIER_ELITE) return 'elite';
+  if (ovr >= TIER_SQUAD) return 'squad';
+  return 'rotation';
+}
+
+function positionCode(member) {
+  const word = (member.favoritePosition || '').toLowerCase();
+  return POSITION_CODES[word] || esc(String(member.proPos ?? '--'));
+}
+
+// Three headline stats per card. Keepers get clean sheets in place of the
+// win rate, since a shooting-style number says nothing about them.
+function cardStats(member) {
+  const rating = member.ratingAve != null ? member.ratingAve : '-';
+  const motm = member.manOfTheMatch != null ? member.manOfTheMatch : '-';
+  if ((member.favoritePosition || '').toLowerCase() === 'goalkeeper') {
+    return [
+      { label: 'Rating', value: rating },
+      { label: 'Clean Sheets', value: member.cleanSheetsGK != null ? member.cleanSheetsGK : '-' },
+      { label: 'MOTM', value: motm },
+    ];
+  }
+  return [
+    { label: 'Rating', value: rating },
+    { label: 'Win', value: member.winRate != null ? `${member.winRate}%` : '-' },
+    { label: 'MOTM', value: motm },
+  ];
+}
+
+function playerCardHtml(member, idx) {
+  const name = esc(member.proName ?? member.name ?? 'Unknown');
+  const tag = esc(member.name ?? '');
+  const pos = positionCode(member);
+  const ovr = num(member.proOverall) ? esc(String(member.proOverall)) : '--';
+  const stats = cardStats(member)
+    .map((st) => `
+      <span class="pc-stat">
+        <span class="pc-stat-value">${esc(String(st.value))}</span>
+        <span class="pc-stat-label">${esc(st.label)}</span>
+      </span>`)
+    .join('');
+
+  return `
+    <button class="player-card member-row tier-${playerTier(member)}" data-idx="${idx}" type="button">
+      <span class="pc-portrait">
+        <span class="pc-watermark" aria-hidden="true">${pos}</span>
+        <span class="pc-ovr"><b>${ovr}</b><small>OVR</small></span>
+        <span class="pc-pos">${pos}</span>
+      </span>
+      <span class="pc-name">
+        <b>${name}</b>
+        ${tag && tag !== name ? `<small>${tag}</small>` : ''}
+      </span>
+      <span class="pc-stats">${stats}</span>
+      <span class="pc-foot">
+        <span>${esc(String(member.gamesPlayed ?? '-'))} apps</span>
+        <span>${esc(String(member.goals ?? '-'))} g &middot; ${esc(String(member.assists ?? '-'))} a</span>
+      </span>
+    </button>`;
+}
+
 function renderPlayersTable(members) {
   const body = document.getElementById('players-body');
   const { pos, q, sort } = playerFilterState;
@@ -411,35 +480,16 @@ function renderPlayersTable(members) {
     .sort(PLAYER_SORTERS[sort]);
 
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="8" class="chart-empty" style="padding:1rem 0.75rem">No players match this filter.</td></tr>`;
+    body.innerHTML = '<p class="chart-empty player-grid-empty">No players match this filter.</p>';
     return;
   }
 
-  body.innerHTML = filtered
-    .map((m) => {
-      const idx = members.indexOf(m);
-      return `
-      <tr class="member-row" data-idx="${idx}" tabindex="0">
-        <td>${esc(m.proName ?? m.name ?? '-')}</td>
-        <td>${esc(m.favoritePosition ?? m.proPos ?? '-')}</td>
-        <td>${m.gamesPlayed ?? '-'}</td>
-        <td>${m.goals ?? '-'}</td>
-        <td>${m.assists ?? '-'}</td>
-        <td>${m.ratingAve ?? '-'}</td>
-        <td>${m.manOfTheMatch ?? '-'}</td>
-        <td>${m.careerGoals ?? '-'}</td>
-      </tr>`;
-    })
-    .join('');
+  body.innerHTML = filtered.map((m) => playerCardHtml(m, members.indexOf(m))).join('');
 
-  body.querySelectorAll('.member-row').forEach((row) => {
-    row.addEventListener('click', () => togglePlayerDetail(row, members[Number(row.dataset.idx)]));
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        togglePlayerDetail(row, members[Number(row.dataset.idx)]);
-      }
-    });
+  // A <button> already handles Enter/Space activation and focus, so unlike
+  // the table rows this replaced there's no keydown handler or tabindex.
+  body.querySelectorAll('.member-row').forEach((card) => {
+    card.addEventListener('click', () => togglePlayerDetail(card, members[Number(card.dataset.idx)]));
   });
 }
 
@@ -537,11 +587,13 @@ function togglePlayerDetail(row, member) {
 
   row.classList.add('expanded');
 
-  const detailRow = document.createElement('tr');
+  // Spans every column of the card grid (see .member-detail-row), so it
+  // opens as a full-width drawer directly beneath the card that was
+  // clicked rather than displacing the cards around it.
+  const detailRow = document.createElement('div');
   detailRow.className = 'member-detail-row';
   detailRow.dataset.forIdx = idx;
-  const td = document.createElement('td');
-  td.colSpan = 8;
+  const td = detailRow;
 
   const proName = esc(member.proName ?? member.name ?? 'Unknown');
   const gamertag = esc(member.name ?? '');
@@ -618,7 +670,6 @@ function togglePlayerDetail(row, member) {
     </div>
   `;
 
-  detailRow.appendChild(td);
   row.after(detailRow);
 
   Charts.sparkline(document.getElementById(`spark-${idx}`), {

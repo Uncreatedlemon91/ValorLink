@@ -1,0 +1,278 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #05070E; }
+    a { color: #00E27A; } a:hover { color: #00B863; }
+    .kick { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; }
+    .anton { font-family: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif; font-weight: 400; text-transform: uppercase; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; min-height: 1300px; background: #05070E; color: #F2F5FA; font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; padding: 48px 64px 72px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px;">
+
+  <!-- Page head -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px;">
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <span class="kick" style="font-size: 12px; color: #00E27A;">Club Dashboard</span>
+      <div class="anton" style="font-size: 52px; line-height: 0.94;">Stats</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="kick" style="font-size: 11px; color: #667595;">Updated 14 min ago</span>
+      <span class="kick" style="font-size: 11px; border: 1px solid #22304C; color: #93A0B8; padding: 8px 14px;">Season</span>
+      <span class="kick" style="font-size: 11px; color: #667595; padding: 8px 4px;">Career</span>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div style="display: flex; gap: 0; border-bottom: 1px solid #22304C;">
+    <span class="kick" style="font-size: 13px; color: #F2F5FA; padding: 14px 22px; border-bottom: 3px solid #00E27A; margin-bottom: -1px;">Overview</span>
+    <span class="kick" style="font-size: 13px; color: #667595; padding: 14px 22px;">Players</span>
+    <span class="kick" style="font-size: 13px; color: #667595; padding: 14px 22px;">Matches</span>
+    <span class="kick" style="font-size: 13px; color: #667595; padding: 14px 22px;">Competition</span>
+  </div>
+
+  <!-- Scoreboard strip -->
+  <div style="background: linear-gradient(100deg, #101A2E 0%, #0B1120 62%); border: 1px solid #22304C; position: relative; overflow: hidden; display: flex; align-items: stretch;">
+    <div style="position: absolute; right: -60px; top: -140px; width: 440px; height: 440px; background: radial-gradient(circle, rgba(0,226,122,0.13), transparent 68%);"></div>
+
+    <div style="position: relative; display: flex; align-items: center; gap: 22px; padding: 28px 34px; border-right: 1px solid #22304C;">
+      <div style="width: 74px; height: 74px; background: #FFB020; display: inline-flex; align-items: center; justify-content: center; transform: skewX(-12deg); flex: none;">
+        <span class="anton tnum" style="font-size: 40px; color: #05070E; transform: skewX(12deg); line-height: 1;">3</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span class="kick" style="font-size: 11px; color: #93A0B8;">Current Division</span>
+        <span style="font-size: 13px; color: #667595;">Best reached &middot; <span class="tnum" style="color: #C3CBD9;">2</span></span>
+      </div>
+    </div>
+
+    <div style="position: relative; display: flex; align-items: center; flex: 1; padding: 28px 34px; gap: 46px;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="anton tnum" style="font-size: 46px; line-height: 0.94;">1,284</span>
+        <span class="kick" style="font-size: 10px; color: #93A0B8;">Skill Points</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="anton tnum" style="font-size: 46px; line-height: 0.94; color: #00E27A;">+104</span>
+        <span class="kick" style="font-size: 10px; color: #93A0B8;">Last 30 Days</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="anton tnum" style="font-size: 46px; line-height: 0.94;">29&ndash;7&ndash;7</span>
+        <span class="kick" style="font-size: 10px; color: #93A0B8;">W &ndash; D &ndash; L</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 11px; margin-left: auto;">
+        <span class="kick" style="font-size: 10px; color: #93A0B8;">Last 5</span>
+        <div style="display: flex; gap: 5px;">
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #FF4D5E; color: #05070E; font-size: 13px;">L</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #8494AE; color: #05070E; font-size: 13px;">D</span>
+          <span class="kick" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: #00E27A; color: #05070E; font-size: 13px;">W</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px;">
+    <div style="background: #0B1120; border: 1px solid #22304C; border-top: 3px solid #00E27A; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="anton tnum" style="font-size: 38px; line-height: 0.95;">68%</span>
+      <span class="kick" style="font-size: 10px; color: #93A0B8;">Win Rate</span>
+    </div>
+    <div style="background: #0B1120; border: 1px solid #22304C; border-top: 3px solid #00E27A; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="anton tnum" style="font-size: 38px; line-height: 0.95;">43</span>
+      <span class="kick" style="font-size: 10px; color: #93A0B8;">Matches Played</span>
+    </div>
+    <div style="background: #0B1120; border: 1px solid #22304C; border-top: 3px solid #00E27A; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="anton tnum" style="font-size: 38px; line-height: 0.95;">2.7</span>
+      <span class="kick" style="font-size: 10px; color: #93A0B8;">Goals For / Game</span>
+    </div>
+    <div style="background: #0B1120; border: 1px solid #22304C; border-top: 3px solid #00E27A; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="anton tnum" style="font-size: 38px; line-height: 0.95;">1.3</span>
+      <span class="kick" style="font-size: 10px; color: #93A0B8;">Goals Against / Game</span>
+    </div>
+    <div style="background: #0B1120; border: 1px solid #22304C; border-top: 3px solid #00E27A; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="anton tnum" style="font-size: 38px; line-height: 0.95;">14</span>
+      <span class="kick" style="font-size: 10px; color: #93A0B8;">Clean Sheets</span>
+    </div>
+  </div>
+
+  <!-- Chart row -->
+  <div style="display: grid; grid-template-columns: 1.85fr 1fr; gap: 18px;">
+
+    <!-- Skill rating area chart -->
+    <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px 26px 20px; display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <span class="anton" style="font-size: 21px;">Skill Rating Over Time</span>
+          <span style="font-size: 12px; color: #667595;">Daily snapshot since polling began &mdash; EA returns no history of its own.</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <span class="kick" style="font-size: 10px; background: #16233C; color: #F2F5FA; padding: 7px 12px;">30d</span>
+          <span class="kick" style="font-size: 10px; color: #667595; padding: 7px 12px;">90d</span>
+          <span class="kick" style="font-size: 10px; color: #667595; padding: 7px 12px;">All</span>
+        </div>
+      </div>
+
+      <svg viewBox="0 0 780 242" width="100%" role="img" aria-label="Skill rating rising from about 1,178 to 1,284 over thirty days">
+        <defs>
+          <linearGradient id="srFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#00E27A" stop-opacity="0.30"/>
+            <stop offset="100%" stop-color="#00E27A" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+
+        <!-- grid -->
+        <g stroke="#16233C" stroke-width="1">
+          <line x1="44" y1="200" x2="756" y2="200"/>
+          <line x1="44" y1="155" x2="756" y2="155"/>
+          <line x1="44" y1="110" x2="756" y2="110"/>
+          <line x1="44" y1="65" x2="756" y2="65"/>
+          <line x1="44" y1="20" x2="756" y2="20"/>
+        </g>
+        <g fill="#667595" font-family="Archivo, Arial, sans-serif" font-size="11" text-anchor="end" style="font-variant-numeric: tabular-nums;">
+          <text x="36" y="204">1140</text>
+          <text x="36" y="159">1180</text>
+          <text x="36" y="114">1220</text>
+          <text x="36" y="69">1260</text>
+          <text x="36" y="24">1300</text>
+        </g>
+
+        <!-- area -->
+        <path fill="url(#srFill)" d="M44,157.3 L73,164 L102,148.3 L131,153.9 L160,138.1 L189,143.8 L218,128 L247,119 L276,125.8 L305,111.1 L334,97.6 L363,103.3 L392,89.8 L421,95.4 L450,81.9 L479,87.5 L508,74 L537,79.6 L566,67.3 L595,58.3 L624,63.9 L653,51.5 L682,56 L711,44.8 L740,38 L740,200 L44,200 Z"/>
+        <!-- line -->
+        <path fill="none" stroke="#00E27A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="M44,157.3 L73,164 L102,148.3 L131,153.9 L160,138.1 L189,143.8 L218,128 L247,119 L276,125.8 L305,111.1 L334,97.6 L363,103.3 L392,89.8 L421,95.4 L450,81.9 L479,87.5 L508,74 L537,79.6 L566,67.3 L595,58.3 L624,63.9 L653,51.5 L682,56 L711,44.8 L740,38"/>
+
+        <!-- latest point, direct-labelled -->
+        <circle cx="740" cy="38" r="5" fill="#00E27A" stroke="#0B1120" stroke-width="2"/>
+        <text x="740" y="24" fill="#F2F5FA" font-family="Anton, Arial, sans-serif" font-size="17" text-anchor="end" style="font-variant-numeric: tabular-nums;">1,284</text>
+
+        <!-- x labels -->
+        <g fill="#667595" font-family="Archivo, Arial, sans-serif" font-size="11">
+          <text x="44" y="224" text-anchor="start">7 Aug</text>
+          <text x="392" y="224" text-anchor="middle">22 Aug</text>
+          <text x="740" y="224" text-anchor="end">6 Sep</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- MOTM ranking -->
+    <div style="background: #0B1120; border: 1px solid #22304C; padding: 24px 26px; display: flex; flex-direction: column; gap: 20px;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="anton" style="font-size: 21px;">Man of the Match</span>
+        <span style="font-size: 12px; color: #667595;">This season, all competitions.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <span style="font-size: 13px; font-weight: 600;">Danny Okoye</span>
+            <span class="anton tnum" style="font-size: 16px; color: #93A0B8;">21</span>
+          </div>
+          <div style="height: 8px; background: #101A2E;"><div style="height: 8px; width: 100%; background: #00E27A; border-radius: 0 4px 4px 0;"></div></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <span style="font-size: 13px; font-weight: 600;">Reece Mbala</span>
+            <span class="anton tnum" style="font-size: 16px; color: #93A0B8;">12</span>
+          </div>
+          <div style="height: 8px; background: #101A2E;"><div style="height: 8px; width: 57%; background: #00E27A; border-radius: 0 4px 4px 0;"></div></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <span style="font-size: 13px; font-weight: 600;">Kez Duarte</span>
+            <span class="anton tnum" style="font-size: 16px; color: #93A0B8;">9</span>
+          </div>
+          <div style="height: 8px; background: #101A2E;"><div style="height: 8px; width: 43%; background: #00E27A; border-radius: 0 4px 4px 0;"></div></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <span style="font-size: 13px; font-weight: 600;">Sam Hollis</span>
+            <span class="anton tnum" style="font-size: 16px; color: #93A0B8;">7</span>
+          </div>
+          <div style="height: 8px; background: #101A2E;"><div style="height: 8px; width: 33%; background: #00E27A; border-radius: 0 4px 4px 0;"></div></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <span style="font-size: 13px; font-weight: 600;">Femi Idris</span>
+            <span class="anton tnum" style="font-size: 16px; color: #93A0B8;">5</span>
+          </div>
+          <div style="height: 8px; background: #101A2E;"><div style="height: 8px; width: 24%; background: #00E27A; border-radius: 0 4px 4px 0;"></div></div>
+        </div>
+      </div>
+
+      <span class="kick" style="font-size: 11px; color: #00E27A; margin-top: auto;">Full squad &rarr;</span>
+    </div>
+  </div>
+
+  <!-- Recent matches -->
+  <div style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #22304C; padding-bottom: 13px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 5px; height: 24px; background: #00E27A; transform: skewX(-12deg);"></div>
+        <span class="anton" style="font-size: 24px;">Recent Results</span>
+      </div>
+      <span class="kick" style="font-size: 12px; color: #00E27A;">All matches &rarr;</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px;">
+
+      <div style="background: #0B1120; border: 1px solid #22304C; border-left: 3px solid #00E27A; padding: 18px 20px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="kick" style="font-size: 10px; color: #00E27A;">Win</span>
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">4 Sep</span>
+        </div>
+        <span class="anton tnum" style="font-size: 32px; line-height: 1;">4&ndash;2</span>
+        <span style="font-size: 13px; color: #93A0B8;">v Northgate United</span>
+      </div>
+
+      <div style="background: #0B1120; border: 1px solid #22304C; border-left: 3px solid #00E27A; padding: 18px 20px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="kick" style="font-size: 10px; color: #00E27A;">Win</span>
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">2 Sep</span>
+        </div>
+        <span class="anton tnum" style="font-size: 32px; line-height: 1;">3&ndash;0</span>
+        <span style="font-size: 13px; color: #93A0B8;">v Castleford AFC</span>
+      </div>
+
+      <div style="background: #0B1120; border: 1px solid #22304C; border-left: 3px solid #FF4D5E; padding: 18px 20px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="kick" style="font-size: 10px; color: #FF4D5E;">Loss</span>
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">31 Aug</span>
+        </div>
+        <span class="anton tnum" style="font-size: 32px; line-height: 1;">1&ndash;2</span>
+        <span style="font-size: 13px; color: #93A0B8;">v Redhill Rovers</span>
+      </div>
+
+      <div style="background: #0B1120; border: 1px solid #22304C; border-left: 3px solid #8494AE; padding: 18px 20px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="kick" style="font-size: 10px; color: #93A0B8;">Draw</span>
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">29 Aug</span>
+        </div>
+        <span class="anton tnum" style="font-size: 32px; line-height: 1;">2&ndash;2</span>
+        <span style="font-size: 13px; color: #93A0B8;">v Ashfield Athletic</span>
+      </div>
+
+      <div style="background: #0B1120; border: 1px solid #22304C; border-left: 3px solid #00E27A; padding: 18px 20px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span class="kick" style="font-size: 10px; color: #00E27A;">Win</span>
+          <span class="kick tnum" style="font-size: 10px; color: #667595;">27 Aug</span>
+        </div>
+        <span class="anton tnum" style="font-size: 32px; line-height: 1;">5&ndash;1</span>
+        <span style="font-size: 13px; color: #93A0B8;">v Bellhaven FC</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
