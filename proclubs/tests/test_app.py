@@ -727,8 +727,12 @@ def test_home_standing_band_shows_countup_points_and_accent_colored_ring(client,
     home = client.get("/")
     assert 'class="standing-band"' in home.text
     assert 'data-countup="1450"' in home.text
-    # Uses the third-kit accent duo (blue + white), not the crest red.
-    assert 'border-color: #6CACDE;' in home.text
+    # Uses the third-kit accent duo (blue + white), not the crest red. The
+    # accent tints the band's glow and the trim outlines the best-division
+    # marker; current division is deliberately not club-colored -- standing
+    # is the amber accent's job, and a club color there could collide with
+    # the win/draw/loss colors sitting next to it.
+    assert '#6CACDE' in home.text
     assert 'border-color: #F2F2F2;' in home.text
     assert '#C91B1B' not in home.text
 
