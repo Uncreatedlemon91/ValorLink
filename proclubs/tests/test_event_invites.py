@@ -188,3 +188,43 @@ def test_invite_tier_parsing_drops_malformed_entries():
     assert config._parse_invite_tiers("create:abc,,nonsense,-5:444,24:333") == [
         {"key": "24", "hours_before": 24.0, "role_id": "333"},
     ]
+
+
+# --- the sign-ups gate ------------------------------------------------------ #
+def test_thread_channel_alone_is_enough_to_enable_signups(monkeypatch):
+    """Announcing into a thread posts into EVENT_THREAD_CHANNEL_ID, so
+    demanding EVENTS_ANNOUNCE_CHANNEL_ID as well is how a correct setup
+    gets told sign-ups aren't configured."""
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", "key")
+    monkeypatch.setattr(config, "EVENTS_ANNOUNCE_CHANNEL_ID", "")
+    monkeypatch.setattr(config, "EVENT_THREAD_CHANNEL_ID", "123")
+    assert config.event_rsvp_missing() == []
+
+
+def test_announce_channel_alone_is_still_enough(monkeypatch):
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", "key")
+    monkeypatch.setattr(config, "EVENTS_ANNOUNCE_CHANNEL_ID", "123")
+    monkeypatch.setattr(config, "EVENT_THREAD_CHANNEL_ID", "")
+    assert config.event_rsvp_missing() == []
+
+
+def test_missing_settings_are_named_individually(monkeypatch):
+    """The old message named two settings whatever was wrong, which sent
+    people to check ones they had already filled in."""
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", "")
+    monkeypatch.setattr(config, "EVENTS_ANNOUNCE_CHANNEL_ID", "123")
+    monkeypatch.setattr(config, "EVENT_THREAD_CHANNEL_ID", "")
+    assert config.event_rsvp_missing() == ["DISCORD_PUBLIC_KEY"]
+
+
+def test_no_channel_at_all_names_both_options(monkeypatch):
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "token")
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", "key")
+    monkeypatch.setattr(config, "EVENTS_ANNOUNCE_CHANNEL_ID", "")
+    monkeypatch.setattr(config, "EVENT_THREAD_CHANNEL_ID", "")
+    assert config.event_rsvp_missing() == [
+        "EVENTS_ANNOUNCE_CHANNEL_ID or EVENT_THREAD_CHANNEL_ID"
+    ]

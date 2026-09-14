@@ -724,8 +724,11 @@ def event_announce(request: Request, event_id: int, csrf_token: str = Form(...),
 
 def _announce_event(request: Request, session, event) -> None:
     if not config.EVENT_RSVP_ENABLED:
-        _flash(request, "Discord sign-ups aren't configured -- see EVENTS_ANNOUNCE_CHANNEL_ID "
-                        "and DISCORD_PUBLIC_KEY in .env.", "warn")
+        # Name only what's actually missing: pointing at settings that are
+        # already filled in sends people hunting through a correct .env.
+        missing = ", ".join(config.event_rsvp_missing())
+        _flash(request, f"Discord sign-ups aren't configured -- set {missing} in "
+                        "proclubs/.env, then restart valorlink-proclubs.", "warn")
         return
     if event.discord_message_id:
         _flash(request, "That event is already posted in Discord.", "warn")

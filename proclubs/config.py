@@ -80,8 +80,6 @@ CLIPS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID)
 # unverified endpoint would let anyone forge sign-ups.
 EVENTS_ANNOUNCE_CHANNEL_ID = os.getenv("EVENTS_ANNOUNCE_CHANNEL_ID", "")
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY", "")
-EVENT_RSVP_ENABLED = bool(DISCORD_BOT_TOKEN and EVENTS_ANNOUNCE_CHANNEL_ID and DISCORD_PUBLIC_KEY)
-
 
 # --- Staged event threads -------------------------------------------------- #
 # An event's sign-up post can live in its own thread rather than loose in a
@@ -89,7 +87,34 @@ EVENT_RSVP_ENABLED = bool(DISCORD_BOT_TOKEN and EVENTS_ANNOUNCE_CHANNEL_ID and D
 # Set this to the parent channel's ID and announcing an event creates a
 # PRIVATE thread in it; leave it blank and the post goes straight into
 # EVENTS_ANNOUNCE_CHANNEL_ID as before.
+#
+# Read before EVENT_RSVP_ENABLED below because that gate depends on it:
+# either channel is somewhere to put the post, and demanding the one you
+# aren't using is how you get "sign-ups aren't configured" while staring at
+# a perfectly good configuration.
 EVENT_THREAD_CHANNEL_ID = os.getenv("EVENT_THREAD_CHANNEL_ID", "")
+
+
+def event_rsvp_missing() -> list[str]:
+    """Which settings sign-ups are still waiting on, named individually.
+
+    A single "see X and Y in .env" message sends people to check settings
+    they have already filled in; this reports only what is actually
+    missing. Recomputed on call rather than frozen at import so tests (and
+    anyone poking at config in a shell) see the truth after a monkeypatch.
+    """
+    missing = []
+    if not DISCORD_BOT_TOKEN:
+        missing.append("DISCORD_BOT_TOKEN")
+    if not (EVENTS_ANNOUNCE_CHANNEL_ID or EVENT_THREAD_CHANNEL_ID):
+        # Either is a place to post; naming both makes the choice clear.
+        missing.append("EVENTS_ANNOUNCE_CHANNEL_ID or EVENT_THREAD_CHANNEL_ID")
+    if not DISCORD_PUBLIC_KEY:
+        missing.append("DISCORD_PUBLIC_KEY")
+    return missing
+
+
+EVENT_RSVP_ENABLED = not event_rsvp_missing()
 
 
 def _parse_invite_tiers(raw: str) -> list[dict]:

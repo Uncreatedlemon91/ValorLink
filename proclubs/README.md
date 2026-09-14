@@ -280,8 +280,10 @@ thread, so the notification is one tap from the position picker.
 - **Adding somebody already in the thread is a no-op success**, so re-runs
   and overlapping tiers cost API calls and change nothing.
 
-Leave `EVENT_THREAD_CHANNEL_ID` blank and everything above is skipped --
-announcements go into `EVENTS_ANNOUNCE_CHANNEL_ID` as before.
+`EVENT_THREAD_CHANNEL_ID` is enough on its own -- sign-ups need a bot
+token, a public key, and *a* channel to post in, and either setting
+satisfies the last of those. Leave it blank and everything above is
+skipped: announcements go into `EVENTS_ANNOUNCE_CHANNEL_ID` as before.
 
 Events created in Discord's own **Events** tab still mirror in on a timer
 (`proclubs-discord-events-poll.timer`) -- see below. That path is now one
