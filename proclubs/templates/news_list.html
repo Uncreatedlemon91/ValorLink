@@ -21,9 +21,10 @@
     <div class="card-grid">
       {% for a in articles %}
         <a class="card article-card" href="/news/{{ a.slug }}">
-          {% if a.cover_image %}
+          {% if a.has_cover %}
             <div class="article-thumb">
-              <img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />
+              <img class="cover" src="{{ media_url('article', a) }}" alt="" loading="lazy" decoding="async"
+                   width="400" height="225" style="object-position: {{ focal_position(a) }};" />
               {% include "_engagement_badge.html" %}
             </div>
           {% endif %}

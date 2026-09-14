@@ -10,19 +10,18 @@ app.py/services.py split.
 """
 from __future__ import annotations
 
-import base64
-import binascii
 import re
 from datetime import datetime, timezone
 from html import escape as _escape_html
 
 from fastapi import UploadFile
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, with_expression
 
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
 import html_sanitize
+import images
 from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer, TacticsBoard, TacticsSlot
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
@@ -52,38 +51,65 @@ def unique_slug(session: Session, title: str, *, exclude_id: int | None = None) 
         n += 1
 
 
-async def image_to_data_uri(upload: UploadFile | None) -> str | None:
+async def process_image_upload(upload: UploadFile | None) -> tuple[str, str] | tuple[None, None]:
+    """(display, thumbnail) data URIs for an uploaded image, or (None, None)
+    if nothing was uploaded. Both are downscaled and re-encoded rather than
+    stored verbatim -- see images.py for why, and app.py for how they're
+    then served as cacheable URLs instead of pasted into the markup."""
     if upload is None or not upload.filename:
-        return None
+        return None, None
     content_type = upload.content_type or ""
     if not content_type.startswith("image/"):
         raise ServiceError("That file doesn't look like an image.")
     data = await upload.read()
     if not data:
-        return None
+        return None, None
     if len(data) > _MAX_IMAGE_BYTES:
         raise ServiceError("Images must be under 2MB.")
-    encoded = base64.b64encode(data).decode("ascii")
-    return f"data:{content_type};base64,{encoded}"
-
-
-_DATA_URI_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.S)
-
-
-def decode_data_uri(data_uri: str | None) -> tuple[str, bytes] | tuple[None, None]:
-    """Splits a `data:<mime>;base64,<...>` URI (see image_to_data_uri above)
-    back into (content_type, raw bytes) -- used to serve a stored cover
-    image at a real fetchable URL (see GET /news/<slug>/cover-image),
-    since e.g. Discord's embed API needs a URL it can fetch, not a data:
-    URI baked into the embed JSON."""
-    match = _DATA_URI_RE.match(data_uri or "")
-    if not match:
-        return None, None
-    content_type, encoded = match.groups()
     try:
-        return content_type, base64.b64decode(encoded)
-    except (binascii.Error, ValueError):
-        return None, None
+        return images.render_variants(data)
+    except images.ImageError as exc:
+        raise ServiceError(str(exc)) from exc
+
+
+# Re-exported so callers that only need to turn a stored image back into
+# bytes don't have to reach past the service layer.
+decode_data_uri = images.decode_data_uri
+
+
+def article_image(session: Session, *, article_id: int | None = None,
+                   slug: str | None = None, variant: str = "cover") -> str | None:
+    """One article's stored cover image, as a data URI, selected on its own
+    -- these rows are the biggest thing in the database and there's no
+    reason to hydrate a whole Article (body_html included) to serve one
+    picture.
+
+    "thumb" falls back to the full-size cover for rows saved before
+    thumbnails existed, so old articles keep showing a cover rather than a
+    hole while only new uploads get the smaller variant."""
+    column = Article.cover_thumb if variant == "thumb" else Article.cover_image
+    query = select(column, Article.cover_image)
+    if article_id is not None:
+        query = query.where(Article.id == article_id)
+    elif slug is not None:
+        query = query.where(Article.slug == slug)
+    else:
+        return None
+    row = session.execute(query).first()
+    if row is None:
+        return None
+    return row[0] or row[1]
+
+
+def streamer_avatar(session: Session, streamer_id: int, *, variant: str = "thumb") -> str | None:
+    """Same idea as article_image, for a streamer's uploaded avatar."""
+    column = Streamer.avatar_thumb if variant == "thumb" else Streamer.avatar
+    row = session.execute(
+        select(column, Streamer.avatar).where(Streamer.id == streamer_id)
+    ).first()
+    if row is None:
+        return None
+    return row[0] or row[1]
 
 
 def _normalize_category(category: str) -> str:
@@ -103,9 +129,27 @@ def _is_meaningfully_empty(html: str) -> bool:
 
 
 # --- Articles ---------------------------------------------------------- #
+# The columns no list view ever renders: the full article body, and the two
+# base64 cover images. Left in the SELECT they dominate every listing query
+# -- a home page of 17 cards was reading tens of megabytes out of SQLite to
+# render a few hundred kilobytes of markup. Deferred instead, with a cheap
+# boolean standing in for "is there a cover" so templates never have to
+# touch the blob to find out (see Article.has_cover).
+_LIST_DEFERRED = (Article.body_html, Article.cover_image, Article.cover_thumb)
+
+
+def _list_options():
+    return [defer(column) for column in _LIST_DEFERRED] + [
+        with_expression(Article.has_cover, Article.cover_image.is_not(None)),
+    ]
+
+
 def list_articles(session: Session, *, include_drafts: bool = False,
                    category: str | None = None, limit: int | None = None) -> list[Article]:
-    query = select(Article).order_by(Article.published_at.desc())
+    """Articles for a listing page. Cover images and bodies are NOT loaded
+    -- see _LIST_DEFERRED. Use get_article() for a page that renders one
+    article in full."""
+    query = select(Article).options(*_list_options()).order_by(Article.published_at.desc())
     if not include_drafts:
         query = query.where(Article.published.is_(True))
     if category:
@@ -150,7 +194,8 @@ def _clamp_focal(value) -> float:
 
 def create_article(session: Session, *, title: str, summary: str, body_html: str,
                     cover_image: str | None, published: bool, author: dict,
-                    category: str = "News", cover_focal_x=50, cover_focal_y=50) -> Article:
+                    category: str = "News", cover_focal_x=50, cover_focal_y=50,
+                    cover_thumb: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -165,6 +210,7 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
         summary=summary.strip() or None,
         body_html=html_sanitize.sanitize(body_html),
         cover_image=cover_image,
+        cover_thumb=cover_thumb,
         cover_focal_x=_clamp_focal(cover_focal_x),
         cover_focal_y=_clamp_focal(cover_focal_y),
         author_discord_id=author.get("id") or None,
@@ -181,7 +227,8 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
 
 def update_article(session: Session, article: Article, *, title: str, summary: str,
                     body_html: str, cover_image: str | None, published: bool,
-                    category: str | None = None, cover_focal_x=50, cover_focal_y=50) -> Article:
+                    category: str | None = None, cover_focal_x=50, cover_focal_y=50,
+                    cover_thumb: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -197,6 +244,7 @@ def update_article(session: Session, article: Article, *, title: str, summary: s
     article.body_html = html_sanitize.sanitize(body_html)
     if cover_image is not None:
         article.cover_image = cover_image
+        article.cover_thumb = cover_thumb
     article.cover_focal_x = _clamp_focal(cover_focal_x)
     article.cover_focal_y = _clamp_focal(cover_focal_y)
     if published and not article.published:
@@ -505,7 +553,8 @@ def get_featured_streamer(session: Session) -> Streamer | None:
 
 
 def create_streamer(session: Session, *, display_name: str, twitch_login: str,
-                     avatar: str | None, author_name: str, featured: bool = False) -> Streamer:
+                     avatar: str | None, author_name: str, featured: bool = False,
+                     avatar_thumb: str | None = None) -> Streamer:
     display_name = display_name.strip()
     twitch_login = twitch_login.strip().lower().lstrip("@")
     if not display_name or not twitch_login:
@@ -521,6 +570,7 @@ def create_streamer(session: Session, *, display_name: str, twitch_login: str,
         display_name=display_name,
         twitch_login=twitch_login,
         avatar=avatar,
+        avatar_thumb=avatar_thumb,
         position=next_position,
         featured=featured,
         added_by_name=author_name,

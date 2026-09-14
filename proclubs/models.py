@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import query_expression
 
 from database import Base
 
@@ -35,7 +36,13 @@ class Article(Base):
     category = Column(String, nullable=False, server_default="News")  # see ARTICLE_CATEGORIES
     summary = Column(String, nullable=True)          # dek shown in list views
     body_html = Column(Text, nullable=False)
-    cover_image = Column(Text, nullable=True)         # data URI
+    # Both data URIs (see images.py), served as cacheable URLs rather
+    # than inlined into the page -- cover_thumb is the small variant the
+    # card/rail grids use, so a page showing a dozen covers doesn't pull
+    # a dozen hero-sized images. Null on rows saved before thumbnails
+    # existed; those fall back to cover_image.
+    cover_image = Column(Text, nullable=True)
+    cover_thumb = Column(Text, nullable=True)
     # Where the cover image should stay centered when it's cropped narrower
     # than its native shape -- the home hero, the article header, and card
     # thumbnails all crop it to a different aspect ratio (see focal_position
@@ -58,6 +65,15 @@ class Article(Base):
     # that message -- refreshed periodically by discord_reactions_poll.py,
     # never fetched live on a page view (see discord_announce.py).
     discord_reaction_count = Column(Integer, nullable=True)
+
+    # Populated by list queries (see services.list_articles), which defer
+    # the cover columns rather than dragging a megabyte of base64 per row
+    # into a page that only needs to know whether to render an <img> at
+    # all. Templates showing a list test this instead of cover_image;
+    # touching cover_image there would undo the deferral one lazy load at
+    # a time. None on a fully-loaded row, where cover_image is there to
+    # read directly.
+    has_cover = query_expression()
 
 
 class Event(Base):
@@ -150,6 +166,7 @@ class Streamer(Base):
     display_name = Column(String, nullable=False)
     twitch_login = Column(String, nullable=False, unique=True)
     avatar = Column(Text, nullable=True)               # data URI, optional override
+    avatar_thumb = Column(Text, nullable=True)         # small variant, see images.py
     position = Column(Integer, nullable=False, default=0)   # display order
     featured = Column(Boolean, nullable=False, server_default="0")  # gets the embedded player on Live/Home
     added_by_name = Column(String, nullable=True)

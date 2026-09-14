@@ -5,7 +5,7 @@ endpoints, fields, and platform codes have changed across FC titles and can
 break or go down without notice.
 """
 
-import time
+import cache
 
 # EA's edge (Akamai Bot Manager) fingerprints the TLS/HTTP handshake and
 # blocks plain `requests` traffic with a 403 even though the same URL works
@@ -27,8 +27,14 @@ PLATFORMS = {
 IMPERSONATE = "chrome124"
 
 _TIMEOUT = 10
-_CACHE_TTL = 30  # seconds -- avoid hammering EA on rapid repeat clicks
-_cache = {}
+
+# EA's API is slow and unreliable enough that nobody should ever wait on it
+# inside a page render if a recent answer is already on hand. Stale values
+# are served immediately and refreshed on a background thread (see cache.py);
+# the fresh window is what bounds how often we call EA at all, and max_stale
+# is the point past which a value is too old to stand behind, so a caller
+# waits for a real fetch (and sees a real error if EA is down).
+_cache = cache.SwrCache(fresh_for=60, max_stale=3600)
 
 
 class EAApiError(Exception):
@@ -44,11 +50,10 @@ def _get(path, params):
         raise EAApiError(f"unknown platform '{params['platform']}'", 400)
 
     cache_key = (path, tuple(sorted(params.items())))
-    now = time.time()
-    cached = _cache.get(cache_key)
-    if cached and now - cached[0] < _CACHE_TTL:
-        return cached[1]
+    return _cache.get(cache_key, lambda: _fetch(path, params))
 
+
+def _fetch(path, params):
     try:
         resp = requests.get(
             BASE_URL + path, params=params, impersonate=IMPERSONATE, timeout=_TIMEOUT
@@ -73,7 +78,6 @@ def _get(path, params):
         except ValueError as exc:
             raise EAApiError("EA API returned a non-JSON response") from exc
 
-    _cache[cache_key] = (now, data)
     return data
 
 

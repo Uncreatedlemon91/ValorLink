@@ -1,8 +1,12 @@
 {# Like/comment count overlay for an article thumbnail -- expects `a` (the
    article) plus `like_counts`/`comment_counts` (article_id -> count dicts)
    in scope. Renders nothing if there's no cover image or no counts to show,
-   so a fresh article's thumbnail isn't cluttered with zeroes. #}
-{% if a.cover_image and (like_counts.get(a.id) or comment_counts.get(a.id)) %}
+   so a fresh article's thumbnail isn't cluttered with zeroes.
+
+   Only ever included from a list view, so it tests has_cover rather than
+   cover_image -- the blob itself is deferred there (see
+   services.list_articles). #}
+{% if a.has_cover and (like_counts.get(a.id) or comment_counts.get(a.id)) %}
   <div class="engagement-badge">
     {% if like_counts.get(a.id) %}
       <span class="eng-item">

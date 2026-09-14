@@ -327,22 +327,22 @@ button:active, .btn:active { transform: translateY(0); }
   align-items: flex-end;
   min-height: min(76vh, 620px);
   background-color: var(--bg);
-  background-size: cover;
-  background-position: center;
   overflow: hidden;
   isolation: isolate;
   color: var(--text);
 }
-.hero-featured::before {
-  content: "";
+/* A real <img> rather than a background-image: this is the page's largest
+   element, and only an <img> gets picked up by the browser's preload
+   scanner and can be given fetchpriority, so it starts downloading with the
+   document instead of waiting for the stylesheet to parse. The inline
+   object-position on the element carries the article's focal point; the -4%
+   inset is the slack the zoom animation pans into. */
+.hero-image {
   position: absolute;
   inset: -4%;
-  /* `background: inherit` already pulls background-position from the parent
-     (which carries the article's focal point via inline style) -- an
-     explicit background-position here would silently override it back to
-     dead-center for every featured story. */
-  background: inherit;
-  background-size: cover;
+  width: 108%;
+  height: 108%;
+  object-fit: cover;
   animation: heroZoom 22s ease-in-out infinite alternate;
   z-index: -2;
 }
@@ -356,7 +356,6 @@ button:active, .btn:active { transform: translateY(0); }
     radial-gradient(ellipse 760px 500px at 88% 12%, rgba(110, 140, 255, 0.20), transparent 60%),
     linear-gradient(168deg, #0F2136 0%, #070B14 72%);
 }
-.hero-featured.no-image::before { content: none; }
 
 .hero-scrim {
   position: absolute;
@@ -434,7 +433,7 @@ button:active, .btn:active { transform: translateY(0); }
 @keyframes bounceCue { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-featured::before { animation: none; }
+  .hero-image { animation: none; }
   .scroll-cue { animation: none; }
 }
 
