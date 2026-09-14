@@ -57,6 +57,34 @@ class SwrCache:
             self._entries[key] = (time.monotonic(), value)
         return value
 
+    def get_if_cached(self, key, loader):
+        """Like get(), but never waits on ``loader()``.
+
+        A cold miss returns None and starts the fetch behind the request
+        instead of holding it. That matters because warm() only covers the
+        usual case: if the upstream is down when the app starts, the warm
+        fails, the cache stays empty, and every visitor after that pays the
+        full timeout -- twice, for the two EA calls the home page makes.
+        Page latency then tracks EA's worst day, which is exactly the
+        failure this cache exists to prevent.
+
+        _start_refresh dedupes, so a burst of traffic on a cold key starts
+        one fetch, not one per visitor.
+
+        For anything the page genuinely needs, use get(). This is for
+        decoration -- a standing band that is missing for a few seconds
+        after a restart is a fair trade for a page that always renders.
+        """
+        now = time.monotonic()
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None and now - entry[0] < self._max_stale:
+                if now - entry[0] >= self._fresh_for:
+                    self._start_refresh(key, loader)
+                return entry[1]
+            self._start_refresh(key, loader)
+        return None
+
     def warm(self, key, loader) -> None:
         """Populate ``key`` off the request path (see the startup hook in
         app.py), so the first visitor after a restart doesn't become the one

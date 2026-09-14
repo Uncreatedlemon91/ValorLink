@@ -267,9 +267,17 @@ def home(request: Request):
         stats_teaser = None
         crest_colors = None
         if config.CLUB_ID:
+            # blocking=False: the standing band is decoration, and the home
+            # page must not inherit EA's latency to render. On a cold cache
+            # these return None and fill in behind the request, so the band
+            # is missing for a few seconds after a restart instead of every
+            # visitor waiting out two 10-second timeouts. _warm_home_caches
+            # usually means nobody sees even that.
             try:
-                stats_teaser = ea_client.division_stats(config.CLUB_PLATFORM, config.CLUB_ID)
-                crest_colors = ea_client.crest_colors(config.CLUB_PLATFORM, config.CLUB_ID)
+                stats_teaser = ea_client.division_stats(
+                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False)
+                crest_colors = ea_client.crest_colors(
+                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False)
             except ea_client.EAApiError:
                 pass
         return templates.TemplateResponse(request, "home.html", _ctx(

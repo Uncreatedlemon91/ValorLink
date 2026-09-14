@@ -706,8 +706,8 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     _seed_event()
 
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: None)
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: None)
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
     })
     home = client.get("/")
@@ -717,10 +717,10 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
 
 def test_home_standing_band_shows_countup_points_and_accent_colored_ring(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: {
         "currentDivision": 3, "bestDivision": 1, "points": 1450,
     })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
         "accent": "#6CACDE", "accent_trim": "#F2F2F2",
     })
@@ -739,10 +739,10 @@ def test_home_standing_band_shows_countup_points_and_accent_colored_ring(client,
 
 def test_home_standing_band_handles_missing_points_gracefully(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: {
         "currentDivision": 3, "bestDivision": None, "points": None,
     })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
     home = client.get("/")
     assert "data-countup" not in home.text
     assert 'class="standing-band"' in home.text

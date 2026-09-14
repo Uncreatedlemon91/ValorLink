@@ -50,6 +50,45 @@ Fonts come from Google Fonts (declared in `base.html`), which is this
 site's one third-party origin -- the same exception the previous design
 took, not a new one.
 
+## Performance
+
+Two things made the site slow, and both are handled in ways worth knowing
+before changing them.
+
+**Upstream latency used to be page latency.** The home page reads the
+club's standing from EA and who's live from Twitch. `cache.py` is a
+stale-while-revalidate cache: a value past its fresh window is served
+immediately while a background thread refreshes it, a failed refresh keeps
+the last good value, and `app._warm_home_caches()` fills it at startup so
+the first visitor after a restart isn't the one who waits.
+
+The case that still bit was a **cold** cache: if EA is down when the app
+starts, the warm fails, nothing is cached, and every visitor then pays the
+full 10-second timeout -- twice, for the two calls behind the standing
+band. So the home page reads with `blocking=False`
+(`SwrCache.get_if_cached`, threaded through `ea_client` as a keyword-only
+flag): a cold miss returns `None` and fetches behind the request instead of
+in front of it. The band is missing for a few seconds after a restart
+rather than the page hanging. `_start_refresh` dedupes, so a burst on a
+cold key starts one fetch, not one per visitor.
+
+Use `blocking=True` (the default) anywhere an empty answer is a failure
+rather than a cosmetic gap -- the pollers and the `/api/*` stats routes all
+keep it.
+
+**Images used to be inlined.** Uploads were stored as base64 data URIs and
+pasted into the markup of every page that showed them, which made the home
+page ~10MB of HTML and the news index ~23MB -- none of it cacheable, since
+a data URI lives inside the document. `images.py` re-encodes uploads to
+WebP at two sizes (a display variant and a thumbnail), and they're served
+from `/media/...` with an ETag and a year-long immutable cache. The URL
+carries a version token derived from the row's `updated_at`, which is what
+makes that cache safe: editing an article changes the URL.
+
+Measured on a seeded copy with eight articles and real cover images: the
+home page is **11.6 KB of HTML**, 11 requests, ~473 KB total, FCP under
+300ms. A 2 MB upload becomes a 509 KB display variant and a 4 KB thumbnail.
+
 ## Permissions
 
 Three tiers, all derived live from Discord at sign-in time (never stored):
