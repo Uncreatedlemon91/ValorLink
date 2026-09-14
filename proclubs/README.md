@@ -238,6 +238,37 @@ which is also what events mirrored in from Discord's Events tab get.
   off the Discord post at the same time, rather than being left there to
   fail.
 
+### Times are local at both ends
+
+Event times are still **stored** as UTC -- one instant, no ambiguity -- but
+neither end of the site shows UTC to a person any more.
+
+- **Entering one.** The kick-off field is the author's own local time. An
+  `<input type="datetime-local">` submits bare wall-clock digits with no
+  zone, so the form sends a hidden `tz_offset` alongside:
+  JavaScript's `getTimezoneOffset()` **for the instant picked**, not for
+  today. That last part is what stops a November fixture booked in August
+  landing an hour out, and the field shows what it is about to save
+  ("Saving as Sat, Nov 14, 8:00 PM EST") so the conversion is visible
+  before you commit to it. Editing an event shifts the stored UTC back into
+  the author's zone first, so what you see is what you set.
+- **Reading one.** `app._localtime()` emits
+  `<time datetime="...Z" data-localtime="FORMAT">` and
+  `static/js/localtime.js` rewrites the text in the reader's zone via
+  `Intl.DateTimeFormat`, including the zone abbreviation so it is never
+  ambiguous. Dates are localised too, not just clocks: 23:30 UTC on the
+  20th is the 21st in Sydney, and a date badge disagreeing with the time
+  beside it is worse than either alone.
+- **With JavaScript off**, neither conversion happens: the server-rendered
+  UTC text stands (labelled UTC), and the kick-off field means UTC, which
+  is what it meant before. The label and a `<noscript>` note both say so,
+  rather than the field silently changing meaning.
+- **A junk offset is ignored**, not applied -- real ones run UTC-12..UTC+14
+  and shifting a fixture by a nonsense amount is worse than treating the
+  entry as UTC.
+- The Discord post was already per-member local (`<t:epoch:F>`) and is
+  unchanged.
+
 ### Staged thread invites
 
 With `EVENT_THREAD_CHANNEL_ID` set, announcing an event opens a **private

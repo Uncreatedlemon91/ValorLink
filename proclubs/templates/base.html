@@ -58,6 +58,10 @@
   <footer class="site-footer">
     {{ SITE_NAME }} &middot; unofficial fan-run site, not affiliated with EA
   </footer>
+  {# Rewrites every <time data-localtime> into the reader's own zone, and
+     wires the event form's local-time entry. Site-wide because times show
+     up on the home page, the events list and the event page alike. #}
+  <script src="/static/js/localtime.js?v={{ asset_version('js/localtime.js') }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

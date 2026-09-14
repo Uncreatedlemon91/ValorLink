@@ -9,13 +9,14 @@ database, no imports from valorlink's web/ or db/ packages (see README.md).
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from starlette.middleware.sessions import SessionMiddleware
 
 import auth
@@ -65,6 +66,40 @@ def _initials(name: str, limit: int = 3) -> str:
     return (letters[:limit] or "?").upper()
 
 
+# What each format renders server-side. The browser replaces the text with
+# the same moment in the viewer's own zone (static/js/localtime.js); these
+# are what stands if JavaScript never runs, so they say UTC rather than
+# quietly implying local.
+_TIME_FALLBACKS = {
+    "full": "%A, %b %-d, %Y at %H:%M UTC",
+    "short": "%A, %b %-d at %H:%M UTC",
+    "date": "%A, %b %-d, %Y",
+    "daymonth": "%a %b %-d",
+    "time": "%H:%M UTC",
+    "month": "%b",
+    "day": "%-d",
+}
+
+
+def _localtime(when: datetime, fmt: str = "full") -> Markup:
+    """A <time> element the browser rewrites into the viewer's own zone.
+
+    Event times are stored naive-UTC, so every reader outside UTC was doing
+    the conversion in their head. The datetime attribute carries the
+    instant; localtime.js reformats the text on load. Without it the
+    server-rendered UTC text stands -- correct, and labelled UTC.
+
+    Date parts (the month/day badges) are localised too, not just the
+    clock: 23:00 UTC on the 20th is the 21st in Sydney, and a badge that
+    disagrees with the time beside it is worse than either alone.
+    """
+    iso = when.replace(tzinfo=timezone.utc).isoformat()
+    fallback = when.strftime(_TIME_FALLBACKS.get(fmt, _TIME_FALLBACKS["full"]))
+    return Markup(
+        f'<time datetime="{escape(iso)}" data-localtime="{escape(fmt)}">{escape(fallback)}</time>'
+    )
+
+
 def _focal_position(article) -> str:
     """CSS object-position/background-position value for an article's
     cover image -- the same image gets cropped to several different aspect
@@ -85,6 +120,7 @@ templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
 templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
 templates.env.globals["initials"] = _initials
 templates.env.globals["focal_position"] = _focal_position
+templates.env.globals["localtime"] = _localtime
 templates.env.globals["CLIPS_SYNC_ENABLED"] = config.CLIPS_SYNC_ENABLED
 
 
@@ -473,15 +509,36 @@ def _slot_labels() -> dict[str, str]:
     return labels
 
 
-def _parse_scheduled_at(value: str) -> datetime | None:
-    """Parses the <input type="datetime-local"> value. That control submits
-    the wall-clock time the user typed with no zone, and this site treats
-    every stored time as UTC -- stated plainly next to the field, since
-    silently reinterpreting it is how a fixture ends up an hour out."""
+def _parse_scheduled_at(value: str, tz_offset: str = "") -> datetime | None:
+    """Parses the <input type="datetime-local"> value into stored UTC.
+
+    The control submits the wall-clock time the author typed with no zone
+    at all, so something has to say which zone that was. The form sends a
+    hidden tz_offset alongside it -- JavaScript\'s getTimezoneOffset() for
+    the *selected* instant, so a fixture booked across a daylight-saving
+    boundary uses the offset in force on the day rather than today\'s.
+
+    Offset is minutes behind UTC (JS sign convention: UTC-5 gives 300), so
+    adding it to the local wall clock gives UTC.
+
+    With no offset -- JavaScript off, or an old bookmarked form -- the
+    value is read as UTC, which is what this field meant before. That keeps
+    the form working rather than rejecting the save, and the label says
+    which of the two is in force.
+    """
     try:
-        return datetime.fromisoformat((value or "").strip())
+        local = datetime.fromisoformat((value or "").strip())
     except ValueError:
         return None
+    try:
+        minutes = int((tz_offset or "").strip())
+    except ValueError:
+        return local
+    # Real offsets run UTC-12..UTC+14; anything else is a broken client, and
+    # shifting a fixture by a nonsense amount is worse than ignoring it.
+    if not -14 * 60 <= minutes <= 12 * 60:
+        return local
+    return local + timedelta(minutes=minutes)
 
 
 def _event_view(session, event, user):
@@ -549,7 +606,8 @@ def event_new_form(request: Request, _staff=Depends(auth.require_staff)):
 @app.post("/events/new")
 async def event_new(
     request: Request, title: str = Form(...), event_type: str = Form("Match"),
-    scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
+    scheduled_at: str = Form(...), tz_offset: str = Form(""),
+    opponent: str = Form(""), description: str = Form(""),
     formation: str = Form(""), announce: str = Form(""), csrf_token: str = Form(...),
     image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
@@ -558,7 +616,7 @@ async def event_new(
     with get_session() as session:
         event = services.create_event(
             session, title=title, event_type=event_type,
-            scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
+            scheduled_at=_parse_scheduled_at(scheduled_at, tz_offset), opponent=opponent,
             description=description, image=image_uri, staff_name=staff["name"],
             formation=formation,
         )
@@ -601,7 +659,8 @@ def event_edit_form(request: Request, event_id: int, _staff=Depends(auth.require
 @app.post("/events/{event_id}/edit")
 async def event_edit(
     request: Request, event_id: int, title: str = Form(...), event_type: str = Form("Match"),
-    scheduled_at: str = Form(...), opponent: str = Form(""), description: str = Form(""),
+    scheduled_at: str = Form(...), tz_offset: str = Form(""),
+    opponent: str = Form(""), description: str = Form(""),
     result: str = Form(""), formation: str = Form(""), csrf_token: str = Form(...),
     image: UploadFile | None = None, _staff=Depends(auth.require_staff),
 ):
@@ -613,7 +672,7 @@ async def event_edit(
             raise HTTPException(status_code=404)
         services.update_event(
             session, event, title=title, event_type=event_type,
-            scheduled_at=_parse_scheduled_at(scheduled_at), opponent=opponent,
+            scheduled_at=_parse_scheduled_at(scheduled_at, tz_offset), opponent=opponent,
             description=description, image=image_uri, result=result, formation=formation,
         )
         _flash(request, "Event updated.")

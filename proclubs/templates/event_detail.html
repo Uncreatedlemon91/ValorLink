@@ -8,7 +8,7 @@
       {% if event.discord_message_id %}<span class="discord-sync-badge" title="Posted to Discord with sign-up buttons">Discord</span>{% endif %}
       <h1>{{ event.title }}{% if event.opponent %} vs {{ event.opponent }}{% endif %}</h1>
       <p class="page-lede">
-        {{ event.scheduled_at.strftime('%A, %b %-d, %Y at %H:%M UTC') }}
+        {{ localtime(event.scheduled_at, 'full') }}
         {% if event.result %} &middot; <strong>{{ event.result }}</strong>{% endif %}
       </p>
     </div>

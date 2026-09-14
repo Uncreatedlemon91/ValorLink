@@ -31,13 +31,26 @@
     </div>
 
     <div class="field">
-      <label for="scheduled_at">Kick-off (UTC)</label>
+      <label for="scheduled_at">Kick-off (your local time)</label>
+      {# The value is the stored UTC; localtime.js shifts it into the
+         author's zone before they see it, and stamps tz_offset with the
+         offset for the instant they pick -- not for today, which would be
+         an hour out across a daylight-saving boundary. With JavaScript off
+         neither happens and the field means UTC, as the hint says. #}
       <input id="scheduled_at" type="datetime-local" name="scheduled_at" required
-             value="{{ event.scheduled_at.strftime('%Y-%m-%dT%H:%M') if event else '' }}" />
+             value="{{ event.scheduled_at.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+             {% if event %}data-utc="{{ event.scheduled_at.isoformat() }}Z"{% endif %} />
+      <input id="tz_offset" type="hidden" name="tz_offset" value="" />
       <p class="field-hint">
-        Entered and stored as UTC, not your local time. The Discord post renders
-        it in each member's own timezone automatically.
+        <span id="tz-label">Entered in your own timezone and stored as UTC.</span>
+        Everyone sees it in theirs &mdash; on the site and in the Discord post.
       </p>
+      <noscript>
+        <p class="field-hint">
+          With JavaScript off this field is read as <strong>UTC</strong>, since the
+          browser is what tells us which zone you are in.
+        </p>
+      </noscript>
     </div>
 
     <div class="field">

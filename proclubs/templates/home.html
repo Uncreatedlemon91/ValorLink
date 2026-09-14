@@ -36,9 +36,9 @@
           <span class="mc-team-name">{{ SITE_NAME }}</span>
         </div>
         <div class="mc-vs">
-          <span>{{ next_event.scheduled_at.strftime('%a %b %-d') }}</span>
+          <span>{{ localtime(next_event.scheduled_at, 'daymonth') }}</span>
           <span class="mc-vs-text">VS</span>
-          <span>{{ next_event.scheduled_at.strftime('%H:%M UTC') }}</span>
+          <span>{{ localtime(next_event.scheduled_at, 'time') }}</span>
         </div>
         <div class="mc-team">
           {% if next_event.opponent %}
