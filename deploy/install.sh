@@ -15,7 +15,8 @@ cp "$DIR/valorlink-bot.service" "$DIR/valorlink-web.service" "$DIR/valorlink-pro
    "$DIR/proclubs-poll.service" "$DIR/proclubs-poll.timer" \
    "$DIR/proclubs-discord-events-poll.service" "$DIR/proclubs-discord-events-poll.timer" \
    "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" \
-   "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" /etc/systemd/system/
+   "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" \
+   "$DIR/proclubs-event-invites-poll.service" "$DIR/proclubs-event-invites-poll.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now valorlink-bot valorlink-web valorlink-proclubs
 systemctl restart valorlink-bot valorlink-web valorlink-proclubs
@@ -34,6 +35,10 @@ systemctl enable --now proclubs-clips-poll.timer
 # (optional -- only does anything if DISCORD_BOT_TOKEN and
 # NEWS_ANNOUNCE_CHANNEL_ID are set).
 systemctl enable --now proclubs-reactions-poll.timer
+# Staged event-thread invites, every 10 minutes (optional -- only does
+# anything if EVENT_THREAD_CHANNEL_ID and EVENT_INVITE_TIERS are set, and
+# the bot has the Server Members privileged intent; see deploy/README.md).
+systemctl enable --now proclubs-event-invites-poll.timer
 systemctl --no-pager --lines=0 status valorlink-bot valorlink-web valorlink-proclubs
 
 echo
@@ -61,3 +66,7 @@ echo
 echo "Discord article-reaction poll runs every 30 minutes. Check with:"
 echo "  systemctl list-timers proclubs-reactions-poll.timer"
 echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_reactions_poll.py    # run one now"
+echo
+echo "Staged event-thread invites run every 10 minutes. Check with:"
+echo "  systemctl list-timers proclubs-event-invites-poll.timer"
+echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/event_invites_poll.py    # run one now"

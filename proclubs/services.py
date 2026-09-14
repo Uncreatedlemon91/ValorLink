@@ -28,8 +28,8 @@ import discord_events as discord_events_mod
 import html_sanitize
 from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
-                    Comment, Event, EventSignup, Like, PlayerLink, Streamer, TacticsBoard,
-                    TacticsSlot)
+                    Comment, Event, EventSignup, EventTierInvite, Like, PlayerLink, Streamer,
+                    TacticsBoard, TacticsSlot)
 
 EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
 
@@ -466,6 +466,65 @@ def set_signups_open(session: Session, event: Event, *, open_: bool) -> Event:
 def set_event_announcement(session: Session, event: Event, *, channel_id: str, message_id: str) -> None:
     event.discord_channel_id = str(channel_id)
     event.discord_message_id = str(message_id)
+    session.commit()
+
+
+# --- Staged thread invites -------------------------------------------------- #
+def events_awaiting_invites(session: Session) -> list[Event]:
+    """Announced, still-upcoming events whose thread can still be widened.
+
+    Past events are excluded: a tier that comes due after kick-off has
+    missed its purpose, and pinging people to a fixture that has already
+    been played is worse than staying quiet. Events that were never
+    announced have no thread to add anyone to.
+    """
+    return list(session.execute(
+        select(Event)
+        .where(Event.discord_channel_id.is_not(None))
+        .where(Event.scheduled_at >= datetime.utcnow())
+        .order_by(Event.scheduled_at)
+    ).scalars())
+
+
+def invited_tier_keys(session: Session, event_id: int) -> set[str]:
+    return set(session.execute(
+        select(EventTierInvite.tier_key).where(EventTierInvite.event_id == event_id)
+    ).scalars())
+
+
+def due_invite_tiers(session: Session, event: Event, tiers: list[dict],
+                     now: datetime | None = None) -> list[dict]:
+    """Which rungs of the invite ladder this event owes right now.
+
+    A tier is due when its moment has passed and it has not already fired.
+    `create` is due the instant the event is announced; an hours-before
+    tier is due once kick-off is that close.
+
+    Deliberately "has passed", not "is within a window": an event announced
+    12 hours before kick-off owes its 48h and 24h tiers immediately rather
+    than never, and a poller that was down over a tier's moment still
+    catches up on its next run instead of silently skipping it.
+    """
+    now = now or datetime.utcnow()
+    already = invited_tier_keys(session, event.id)
+    due = []
+    for tier in tiers:
+        if tier["key"] in already:
+            continue
+        hours = tier["hours_before"]
+        if hours is not None and (event.scheduled_at - now).total_seconds() > hours * 3600:
+            continue
+        due.append(tier)
+    return due
+
+
+def record_tier_invite(session: Session, event: Event, tier: dict, member_count: int) -> None:
+    """Marks a tier as fired for this event. The unique constraint makes a
+    concurrent double-fire an error rather than a second ping."""
+    session.add(EventTierInvite(
+        event_id=event.id, tier_key=tier["key"],
+        role_id=str(tier["role_id"]), member_count=member_count,
+    ))
     session.commit()
 
 

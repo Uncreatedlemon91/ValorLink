@@ -82,6 +82,68 @@ EVENTS_ANNOUNCE_CHANNEL_ID = os.getenv("EVENTS_ANNOUNCE_CHANNEL_ID", "")
 DISCORD_PUBLIC_KEY = os.getenv("DISCORD_PUBLIC_KEY", "")
 EVENT_RSVP_ENABLED = bool(DISCORD_BOT_TOKEN and EVENTS_ANNOUNCE_CHANNEL_ID and DISCORD_PUBLIC_KEY)
 
+
+# --- Staged event threads -------------------------------------------------- #
+# An event's sign-up post can live in its own thread rather than loose in a
+# channel, so each fixture keeps its own conversation and its own audience.
+# Set this to the parent channel's ID and announcing an event creates a
+# PRIVATE thread in it; leave it blank and the post goes straight into
+# EVENTS_ANNOUNCE_CHANNEL_ID as before.
+EVENT_THREAD_CHANNEL_ID = os.getenv("EVENT_THREAD_CHANNEL_ID", "")
+
+
+def _parse_invite_tiers(raw: str) -> list[dict]:
+    """Parse EVENT_INVITE_TIERS into the staged invite ladder.
+
+    Format is a comma-separated list of `<when>:<role_id>`, where `<when>`
+    is either `create` (fire as soon as the event is announced) or a number
+    of hours before kick-off:
+
+        EVENT_INVITE_TIERS=create:111,48:222,24:333
+
+    Each tier mentions its role in the thread and adds that role's members
+    to it, so access widens as the fixture approaches -- first pick to the
+    first tier, then the next group, and so on.
+
+    Malformed entries are dropped rather than raised: a typo in one tier
+    shouldn't stop the whole app booting, and the poller logs what it
+    actually loaded. Ordered earliest-acting first (create, then the
+    largest hours-before), which is the order they fire in.
+    """
+    tiers: list[dict] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        when, _, role_id = chunk.partition(":")
+        when, role_id = when.strip().lower(), role_id.strip()
+        if not role_id.isdigit():
+            continue
+        if when == "create":
+            tiers.append({"key": "create", "hours_before": None, "role_id": role_id})
+            continue
+        try:
+            hours = float(when)
+        except ValueError:
+            continue
+        if hours < 0:
+            continue
+        tiers.append({"key": when, "hours_before": hours, "role_id": role_id})
+    # `create` first, then furthest-out hours down to nearest kick-off.
+    tiers.sort(key=lambda t: (t["hours_before"] is not None, -(t["hours_before"] or 0)))
+    return tiers
+
+
+EVENT_INVITE_TIERS = _parse_invite_tiers(os.getenv("EVENT_INVITE_TIERS", ""))
+
+# Listing a role's members needs the privileged GUILD_MEMBERS intent on the
+# bot (Developer Portal -> Bot -> Server Members Intent). Without it the
+# staged invites can still mention each role, but can't add anyone to a
+# private thread -- so the whole ladder is gated on the pieces it needs.
+EVENT_STAGED_INVITES_ENABLED = bool(
+    DISCORD_BOT_TOKEN and DISCORD_GUILD_ID and EVENT_THREAD_CHANNEL_ID and EVENT_INVITE_TIERS
+)
+
 # --- Discord article announcements ------------------------------------------
 # The announcement itself is one-directional (site -> Discord) and sent
 # right when an article goes live rather than polled -- this app is the

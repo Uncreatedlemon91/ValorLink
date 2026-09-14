@@ -238,6 +238,51 @@ which is also what events mirrored in from Discord's Events tab get.
   off the Discord post at the same time, rather than being left there to
   fail.
 
+### Staged thread invites
+
+With `EVENT_THREAD_CHANNEL_ID` set, announcing an event opens a **private
+thread** for that fixture instead of posting loose in a channel, and
+`EVENT_INVITE_TIERS` widens who can see it as kick-off approaches:
+
+```
+EVENT_INVITE_TIERS=create:<role>,48:<role>,24:<role>
+```
+
+The first rung fires the moment staff announce (not on the timer -- waiting
+ten minutes to tell the people with first pick would make "first pick" mean
+very little); the rest fire once kick-off is that many hours away. Each
+rung adds its role's members to the thread, then pings the role *in* the
+thread, so the notification is one tap from the position picker.
+
+- **Why members, not a role.** Threads carry no permission overwrites of
+  their own -- they inherit the parent channel's -- so a role cannot be
+  granted access to a thread. Members are added individually
+  (`PUT /channels/<thread>/thread-members/<user>`), which is also why the
+  thread is private: a public one is visible to everyone who can see the
+  parent channel, handing the whole ladder its access on day one.
+- **This needs the Server Members privileged intent.** Discord has no
+  "list a role's members" route, so `discord_rsvp.role_member_ids` pages
+  the guild's member list and filters. Turn it on at Developer Portal ->
+  your application -> Bot -> Server Members Intent. Without it every tier
+  still gets pinged but nobody gains access; the poller says so, and the
+  `member_count` recorded against each fired tier is 0, which is the
+  signature to look for.
+- **A tier is due once its moment has *passed***, not during a window. An
+  event announced 12 hours before kick-off owes its 48h and 24h rungs
+  immediately rather than never, and a poller that was down over a rung's
+  moment catches up on its next run.
+- **Each rung fires once**, enforced by a unique constraint on
+  (event, tier) in `event_tier_invites` -- so a double run is a database
+  error rather than a second ping to the same people. A rung whose Discord
+  call fails is deliberately left unrecorded, so the next run retries it:
+  a late ping is recoverable, a rung recorded as done having told nobody
+  is not.
+- **Adding somebody already in the thread is a no-op success**, so re-runs
+  and overlapping tiers cost API calls and change nothing.
+
+Leave `EVENT_THREAD_CHANNEL_ID` blank and everything above is skipped --
+announcements go into `EVENTS_ANNOUNCE_CHANNEL_ID` as before.
+
 Events created in Discord's own **Events** tab still mirror in on a timer
 (`proclubs-discord-events-poll.timer`) -- see below. That path is now one
 way of getting an event in, not the only one.

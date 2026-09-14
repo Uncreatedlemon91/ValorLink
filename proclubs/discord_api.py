@@ -151,6 +151,44 @@ def patch(path: str, json: dict) -> httpx.Response:
     return resp
 
 
+def _request_put(path: str) -> httpx.Response:
+    try:
+        return httpx.put(
+            f"{_API}{path}",
+            headers={"Authorization": f"Bot {config.DISCORD_BOT_TOKEN}"},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+
+
+def put(path: str) -> httpx.Response:
+    """PUT path with no body (e.g.
+    "/channels/123/thread-members/456"), retrying once on a 429. Same
+    failure semantics as get().
+
+    Bodyless because the only route this app PUTs to is thread membership,
+    which takes none. Adding a member who is already in the thread is a
+    success, not an error, so callers don't have to check first."""
+    resp = _request_put(path)
+
+    if resp.status_code == 429:
+        time.sleep(min(_MAX_RETRY_WAIT, _retry_after_seconds(resp)))
+        resp = _request_put(path)
+
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if resp.status_code == 429:
+            raise DiscordApiError(
+                "still rate-limited after retrying -- DISCORD_BOT_TOKEN is shared with the "
+                "main ValorLink bot, so this can happen under contention"
+            ) from exc
+        raise DiscordApiError(f"could not reach Discord's API: {exc}{_discord_error_detail(resp)}") from exc
+
+    return resp
+
+
 def get(path: str, params: dict | None = None) -> httpx.Response:
     """GET path (e.g. "/guilds/123/scheduled-events") against Discord's API
     with the shared bot token, retrying once on a 429. Returns the raw

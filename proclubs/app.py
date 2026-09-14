@@ -741,6 +741,38 @@ def _announce_event(request: Request, session, event) -> None:
         return
     services.set_event_announcement(session, event, channel_id=channel_id, message_id=message_id)
     _flash(request, "Posted to Discord with sign-up buttons.")
+    _invite_first_tier(request, session, event)
+
+
+def _invite_first_tier(request: Request, session, event) -> None:
+    """Ping the first rung of the invite ladder as soon as the event is up.
+
+    Only the first tier is done here; the rest are time-based and belong to
+    event_invites_poll.py. Waiting up to a poll interval to tell the people
+    who get first pick would make "first pick" mean very little.
+
+    Best-effort, like the announcement itself: the event and its thread
+    already exist, so a Discord hiccup here is a flash message and a tier
+    the poller will pick up on its next run -- never a failed save.
+    """
+    if not config.EVENT_STAGED_INVITES_ENABLED:
+        return
+    tiers = services.due_invite_tiers(session, event, config.EVENT_INVITE_TIERS)
+    first = next((t for t in tiers if t["hours_before"] is None), None)
+    if first is None:
+        return
+    try:
+        added = discord_rsvp.invite_role_to_thread(event.discord_channel_id, first["role_id"])
+        discord_rsvp.ping_tier(
+            event.discord_channel_id, first["role_id"], event,
+            _event_url(request, event), first=True)
+    except discord_rsvp.DiscordApiError as exc:
+        _flash(request, f"Posted, but couldn't invite the first group yet: {exc}", "warn")
+        return
+    services.record_tier_invite(session, event, first, added)
+    if added == 0:
+        _flash(request, "Posted, but nobody was added to the thread -- if that role has "
+                        "members, the bot is missing the Server Members intent.", "warn")
 
 
 # --------------------------------------------------------------------------- #

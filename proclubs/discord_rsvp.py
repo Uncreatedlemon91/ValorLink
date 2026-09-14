@@ -288,11 +288,121 @@ def _button_row(event, statuses: list[str]) -> dict:
     }
 
 
+def create_event_thread(event) -> str:
+    """Opens a private thread for one fixture and returns its id.
+
+    Private (type 12) rather than public because the audience is meant to
+    widen on a schedule -- see invite_role_to_thread. A public thread is
+    visible to anyone who can see the parent channel, which would hand the
+    whole ladder its access on day one.
+
+    A thread id IS a channel id as far as the rest of Discord's API is
+    concerned, so the caller stores it in Event.discord_channel_id and
+    every existing edit path (refresh, close) keeps working untouched.
+    """
+    resp = discord_api.post(f"/channels/{config.EVENT_THREAD_CHANNEL_ID}/threads", {
+        "name": _thread_name(event),
+        "type": 12,               # PRIVATE_THREAD
+        "invitable": False,       # only staff/this bot widen the audience
+        "auto_archive_duration": 10080,   # 7 days, the longest Discord allows
+    })
+    return str(resp.json()["id"])
+
+
+def _thread_name(event) -> str:
+    """Discord caps a thread name at 100 characters."""
+    opponent = f" v {event.opponent}" if event.opponent else ""
+    return f"{event.event_type}: {event.title}{opponent}"[:100]
+
+
+def role_member_ids(role_id: str) -> list[str]:
+    """Every guild member holding `role_id`.
+
+    Discord has no "list a role's members" route, so this pages the full
+    member list and filters. That needs the privileged GUILD_MEMBERS intent
+    (Developer Portal -> Bot -> Server Members Intent); without it Discord
+    answers 403 and this raises, which is why the caller records how many
+    members it actually added.
+    """
+    members: list[str] = []
+    after = "0"
+    while True:
+        resp = discord_api.get(
+            f"/guilds/{config.DISCORD_GUILD_ID}/members",
+            {"limit": 1000, "after": after},
+        )
+        page = resp.json() or []
+        if not page:
+            break
+        for member in page:
+            if role_id in (member.get("roles") or []):
+                user_id = (member.get("user") or {}).get("id")
+                if user_id:
+                    members.append(str(user_id))
+        after = str(page[-1]["user"]["id"])
+        if len(page) < 1000:
+            break
+    return members
+
+
+def invite_role_to_thread(thread_id: str, role_id: str) -> int:
+    """Adds every holder of `role_id` to the thread. Returns how many.
+
+    This is the only way to widen a thread's audience: threads carry no
+    permission overwrites of their own -- they inherit the parent channel's
+    -- so a role cannot be granted access to one. Members are added
+    individually, and adding somebody already in the thread is a no-op
+    success, so a re-run costs calls but changes nothing.
+
+    A single member failing (left the guild between the listing and the
+    add) must not abandon the rest of the tier, so failures are counted
+    out rather than raised.
+    """
+    added = 0
+    for user_id in role_member_ids(role_id):
+        try:
+            discord_api.put(f"/channels/{thread_id}/thread-members/{user_id}")
+        except DiscordApiError:
+            continue
+        added += 1
+    return added
+
+
+def ping_tier(thread_id: str, role_id: str, event, site_url: str,
+              *, first: bool = False) -> None:
+    """Mentions a tier in the thread now that its members can see it.
+
+    Posted inside the thread rather than the parent channel so the ping
+    lands where the team sheet is -- one tap from notification to picking a
+    position. allowed_mentions names the role explicitly: without it
+    Discord renders the mention as inert text, which looks identical and
+    notifies nobody.
+    """
+    if first:
+        body = (f"<@&{role_id}> \u2014 **{event.title}** is up. "
+                f"Pick your position below, or on the site: {site_url}")
+    else:
+        body = (f"<@&{role_id}> \u2014 sign-ups for **{event.title}** are now open to you. "
+                f"Whatever is still free is in the picker below: {site_url}")
+    discord_api.post(f"/channels/{thread_id}/messages", {
+        "content": body[:2000],
+        "allowed_mentions": {"roles": [str(role_id)]},
+    })
+
+
 def announce(event, signups: list, roles: dict[int, str], site_url: str,
              slots: dict[str, str] | None = None) -> tuple[str, str]:
-    """Posts the event to the configured channel. Returns (channel_id,
-    message_id) for the caller to store, so later sign-ups can edit it."""
-    channel_id = config.EVENTS_ANNOUNCE_CHANNEL_ID
+    """Posts the event to Discord. Returns (channel_id, message_id) for the
+    caller to store, so later sign-ups can edit it.
+
+    With EVENT_THREAD_CHANNEL_ID set the fixture gets its own private
+    thread and the post goes in there; otherwise it goes straight into
+    EVENTS_ANNOUNCE_CHANNEL_ID as it always did.
+    """
+    if config.EVENT_THREAD_CHANNEL_ID:
+        channel_id = create_event_thread(event)
+    else:
+        channel_id = str(config.EVENTS_ANNOUNCE_CHANNEL_ID)
     resp = discord_api.post(f"/channels/{channel_id}/messages", {
         "embeds": [build_embed(event, signups, roles, site_url, slots)],
         "components": build_components(event, signups, slots),

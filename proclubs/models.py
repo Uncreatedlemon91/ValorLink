@@ -151,6 +151,40 @@ class EventSignup(Base):
     attendance_marked_at = Column(DateTime, nullable=True)
 
 
+class EventTierInvite(Base):
+    """One staged invite that has already been sent for one event.
+
+    The invite ladder (config.EVENT_INVITE_TIERS) widens a fixture's
+    audience as it approaches: the first tier is pinged when the event is
+    announced, later tiers at a set number of hours before kick-off. This
+    table is what stops the poller re-pinging a tier on every run -- a row
+    here means "that tier has had its turn for this event", and the unique
+    constraint makes a double-fire a database error rather than a second
+    notification.
+
+    Kept as its own table rather than a column on Event because the ladder
+    is configurable: how many tiers exist, and their keys, can change
+    between deployments and between edits to .env, and a row per fired tier
+    survives that without a schema change.
+    """
+
+    __tablename__ = "event_tier_invites"
+    __table_args__ = (UniqueConstraint("event_id", "tier_key", name="uq_tier_event_key"),)
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, nullable=False, index=True)
+    # The tier's key from the config ladder: "create", or the hours-before
+    # as written ("48"). Stored as text because it is the config's own
+    # identifier for that rung, not a number we do arithmetic on.
+    tier_key = Column(String, nullable=False)
+    role_id = Column(String, nullable=False)
+    invited_at = Column(DateTime, default=_utcnow)
+    # How many members were actually added to the thread. Recorded because
+    # "we pinged the role but added nobody" is the signature of a missing
+    # GUILD_MEMBERS intent, and that is otherwise invisible after the fact.
+    member_count = Column(Integer, nullable=False, default=0)
+
+
 class PlayerLink(Base):
     """Ties a Discord account to the EA gamertag it plays under.
 

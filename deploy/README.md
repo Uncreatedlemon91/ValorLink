@@ -440,6 +440,38 @@ sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/procl
 Check on it with `systemctl list-timers proclubs-clips-poll.timer` and
 `journalctl -u proclubs-clips-poll`.
 
+**Staged event-thread invites (optional).** An event announced from the
+site can open its own **private thread** and widen who can see it as
+kick-off approaches -- see
+`proclubs/README.md#staged-thread-invites` for the mechanics. Needs
+`DISCORD_BOT_TOKEN`, `SITE_BASE_URL`, and two more settings:
+
+```bash
+sudo -u valorlink nano /opt/valorlink/proclubs/.env
+# EVENT_THREAD_CHANNEL_ID=<the parent channel's ID>
+# EVENT_INVITE_TIERS=create:<role>,48:<role>,24:<role>
+sudo systemctl restart valorlink-proclubs
+```
+
+**It also needs the Server Members privileged intent** on the bot
+(Developer Portal -> your application -> Bot -> Server Members Intent).
+Discord has no route to list a role's members and threads have no
+permissions of their own, so people are added to the thread one at a time,
+which means listing the guild's members. Without the intent each tier is
+pinged but nobody gains access.
+
+`proclubs-event-invites-poll.timer` (installed by `install.sh`) fires
+`event_invites_poll.py` every 10 minutes. Run it once to confirm instead of
+waiting:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/event_invites_poll.py
+```
+
+Check on it with `systemctl list-timers proclubs-event-invites-poll.timer`
+and `journalctl -u proclubs-event-invites-poll`. "added 0 member(s)" in the
+log is the signature of the missing intent.
+
 **Discord article-reaction counts (optional, needs the announcements
 above).** If `NEWS_ANNOUNCE_CHANNEL_ID` is set (see
 `proclubs/README.md#publishing-announces-to-discord`), reactions on an
