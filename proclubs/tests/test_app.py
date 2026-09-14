@@ -725,10 +725,10 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     # overall_stats deliberately fails here: the crest is fetched
     # independently, so a stats outage must not blank club identity.
-    def _boom(platform, club_id):
+    def _boom(platform, club_id, **kw):
         raise appmod.ea_client.EAApiError("stats down", 503)
     monkeypatch.setattr(appmod.ea_client, "overall_stats", _boom)
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
     })
     home = client.get("/")
@@ -738,11 +738,11 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
 
 def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {
         "skillRating": "1450", "wins": "111", "ties": "16", "losses": "58",
         "bestDivision": "9",
     })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
         "accent": "#6CACDE", "accent_trim": "#F2F2F2",
     })
@@ -764,8 +764,8 @@ def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeyp
 
 def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {})
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {})
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
     home = client.get("/")
     assert "data-countup" not in home.text
     assert 'class="standing-band"' in home.text
@@ -778,13 +778,13 @@ def test_site_never_shows_a_division_anywhere(client, monkeypatch):
     reports no division at all rather than a wrong or hand-maintained one
     -- see ea_client.division_stats and app._standing_teaser."""
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: {
         "currentDivision": "10", "bestDivision": "4", "points": "54",
     })
-    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {
         "skillRating": "2054", "wins": "111", "ties": "16", "losses": "58",
     })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
     home = client.get("/")
     assert 'data-countup="2054"' in home.text
     assert "Division" not in home.text

@@ -19,7 +19,9 @@
     {% endif %}
   </div>
 
-  {% if article.cover_image %}<img class="article-cover" src="{{ article.cover_image }}" alt="" style="object-position: {{ focal_position(article) }};" />{% endif %}
+  {% if article.cover_image %}<img class="article-cover" src="{{ media_url('article', article, 'cover') }}" alt=""
+                                  fetchpriority="high" decoding="async"
+                                  style="object-position: {{ focal_position(article) }};" />{% endif %}
   <div class="article-body">{{ body_html | safe }}</div>
 
   {# One figure, not two: site likes and Discord reactions are summed by

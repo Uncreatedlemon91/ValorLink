@@ -21,7 +21,7 @@ def _configured_and_reset(monkeypatch):
     monkeypatch.setattr(config, "TWITCH_ENABLED", True)
     monkeypatch.setattr(config, "TWITCH_GAME_FILTER", "EA Sports FC 26")
     twitch_client._token_cache.update({"value": None, "expires_at": 0.0})
-    twitch_client._streams_cache.update({"key": None, "value": None, "expires_at": 0.0})
+    twitch_client._streams_cache.clear()
     yield
 
 

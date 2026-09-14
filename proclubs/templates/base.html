@@ -6,8 +6,22 @@
   <title>{% block title %}{{ SITE_NAME }}{% endblock %} · {{ SITE_NAME }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet" />
+  <!-- Our own stylesheet first: it's same-origin and it's what the page
+       actually needs to lay out. The Google Fonts sheet is loaded
+       non-blocking (media="print" until it arrives, then flipped to all) so
+       a slow third-party round trip delays the webfont swap rather than
+       first paint -- the families already carry display=swap, so text is
+       painted in the fallback stack either way.
+       Weights are only those the stylesheet sets: 400/600/700. Asking for
+       Archivo 500 and Barlow Condensed 800/900, as this used to, fetched
+       three font files nothing on the site ever selects. -->
   <link rel="stylesheet" href="/static/css/site.css?v={{ css_v }}" />
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Barlow+Condensed:wght@600;700&display=swap" />
+  <noscript>
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Barlow+Condensed:wght@600;700&display=swap" />
+  </noscript>
   {% block head %}{% endblock %}
 </head>
 <body>

@@ -5,7 +5,7 @@ endpoints, fields, and platform codes have changed across FC titles and can
 break or go down without notice.
 """
 
-import time
+import cache
 
 # EA's edge (Akamai Bot Manager) fingerprints the TLS/HTTP handshake and
 # blocks plain `requests` traffic with a 403 even though the same URL works
@@ -27,8 +27,14 @@ PLATFORMS = {
 IMPERSONATE = "chrome124"
 
 _TIMEOUT = 10
-_CACHE_TTL = 30  # seconds -- avoid hammering EA on rapid repeat clicks
-_cache = {}
+
+# EA's API is slow and unreliable enough that nobody should ever wait on it
+# inside a page render if a recent answer is already on hand. Stale values
+# are served immediately and refreshed on a background thread (see cache.py);
+# the fresh window is what bounds how often we call EA at all, and max_stale
+# is the point past which a value is too old to stand behind, so a caller
+# waits for a real fetch (and sees a real error if EA is down).
+_cache = cache.SwrCache(fresh_for=60, max_stale=3600)
 
 
 class EAApiError(Exception):
@@ -37,18 +43,26 @@ class EAApiError(Exception):
         self.status_code = status_code
 
 
-def _get(path, params):
+def _get(path, params, *, blocking: bool = True):
+    """EA read, through the SWR cache.
+
+    ``blocking=False`` is for callers that would rather render without the
+    answer than wait for it -- see SwrCache.get_if_cached. Pollers and the
+    stats API keep the default, since for them an empty answer is a
+    failure rather than a cosmetic gap."""
     if "platform" not in params or not params["platform"]:
         raise EAApiError("platform is required", 400)
     if params["platform"] not in PLATFORMS:
         raise EAApiError(f"unknown platform '{params['platform']}'", 400)
 
     cache_key = (path, tuple(sorted(params.items())))
-    now = time.time()
-    cached = _cache.get(cache_key)
-    if cached and now - cached[0] < _CACHE_TTL:
-        return cached[1]
+    loader = lambda: _fetch(path, params)  # noqa: E731
+    if blocking:
+        return _cache.get(cache_key, loader)
+    return _cache.get_if_cached(cache_key, loader)
 
+
+def _fetch(path, params):
     try:
         resp = requests.get(
             BASE_URL + path, params=params, impersonate=IMPERSONATE, timeout=_TIMEOUT
@@ -73,7 +87,6 @@ def _get(path, params):
         except ValueError as exc:
             raise EAApiError("EA API returned a non-JSON response") from exc
 
-    _cache[cache_key] = (now, data)
     return data
 
 
@@ -89,8 +102,9 @@ def _normalize_dict_or_list(data):
     return []
 
 
-def _search_raw(platform, club_name):
-    data = _get("allTimeLeaderboard/search", {"platform": platform, "clubName": club_name})
+def _search_raw(platform, club_name, *, blocking: bool = True):
+    data = _get("allTimeLeaderboard/search", {"platform": platform, "clubName": club_name},
+                blocking=blocking)
     return [r for r in _normalize_dict_or_list(data) if r.get("clubId")]
 
 
@@ -109,8 +123,8 @@ def search_club(platform, club_name):
     return parsed
 
 
-def club_info(platform, club_id):
-    data = _get("clubs/info", {"platform": platform, "clubIds": club_id})
+def club_info(platform, club_id, *, blocking: bool = True):
+    data = _get("clubs/info", {"platform": platform, "clubIds": club_id}, blocking=blocking)
     records = _normalize_dict_or_list(data)
     return records[0] if records else None
 
@@ -124,7 +138,7 @@ def _hex_color(value):
         return None
 
 
-def crest_colors(platform, club_id):
+def crest_colors(platform, club_id, *, blocking: bool = True):
     """The club's actual kit/crest colors, decoded to CSS hex. There's no
     real crest *image* available here -- EA's clubs/info only returns
     numeric asset IDs (crestAssetId, kitId, ...) that its own game client
@@ -137,7 +151,7 @@ def crest_colors(platform, club_id):
     of clubs is a single saturated color that reads as too loud spread across
     a whole section. Falls back to the crest/home kit if a club has no third
     kit set."""
-    info = club_info(platform, club_id)
+    info = club_info(platform, club_id, blocking=blocking)
     kit = (info or {}).get("customKit") or {}
     if not kit:
         return None
@@ -150,13 +164,14 @@ def crest_colors(platform, club_id):
     }
 
 
-def overall_stats(platform, club_id):
-    data = _get("clubs/overallStats", {"platform": platform, "clubIds": club_id})
+def overall_stats(platform, club_id, *, blocking: bool = True):
+    data = _get("clubs/overallStats", {"platform": platform, "clubIds": club_id},
+                blocking=blocking)
     records = _normalize_dict_or_list(data)
     return records[0] if records else None
 
 
-def division_stats(platform, club_id):
+def division_stats(platform, club_id, *, blocking: bool = True):
     """The club's record from EA's ALL-TIME LEADERBOARD -- a frozen
     snapshot, NOT current standing.
 
@@ -180,10 +195,10 @@ def division_stats(platform, club_id):
     enough to bucket opponents -- see db.league_table. Looks the club up by
     name because that's the only way into this endpoint, then filters on
     clubId, so a name collision returns the right club or nothing."""
-    info = club_info(platform, club_id)
+    info = club_info(platform, club_id, blocking=blocking)
     if not info or not info.get("name"):
         return None
-    for r in _search_raw(platform, info["name"]):
+    for r in _search_raw(platform, info["name"], blocking=blocking):
         if str(r.get("clubId")) == str(club_id):
             return r
     return None

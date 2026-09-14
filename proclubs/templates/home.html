@@ -2,8 +2,14 @@
 {% block title %}Home{% endblock %}
 {% block content %}
 
-<section class="hero-featured {{ '' if (featured and featured.cover_image) else 'no-image' }}"
-         {% if featured and featured.cover_image %}style="background-image: url('{{ featured.cover_image }}'); background-position: {{ focal_position(featured) }};"{% endif %}>
+<section class="hero-featured {{ '' if (featured and featured.has_cover) else 'no-image' }}">
+  {% if featured and featured.has_cover %}
+    {# fetchpriority high: this is the page's LCP element, and it would
+       otherwise queue behind the stylesheet and the card thumbnails. #}
+    <img class="hero-image" src="{{ media_url('article', featured, 'cover') }}" alt=""
+         fetchpriority="high" decoding="async"
+         style="object-position: {{ focal_position(featured) }};" />
+  {% endif %}
   <div class="hero-scrim"></div>
   <div class="hero-content">
     {% if featured %}
@@ -74,7 +80,8 @@
       {% for a in articles %}
         <a class="rail-card" href="/news/{{ a.slug }}">
           <div class="rail-card-image">
-            {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
+            {% if a.has_cover %}<img src="{{ media_url('article', a) }}" alt="" loading="lazy" decoding="async"
+                                      width="320" height="180" style="object-position: {{ focal_position(a) }};" />{% endif %}
             {% if a.category == 'Match Highlight' %}<span class="play-badge">&#9658;</span>{% endif %}
             {% include "_engagement_badge.html" %}
           </div>
@@ -112,7 +119,8 @@
       {% for a in highlights %}
         <a class="card article-card" href="/news/{{ a.slug }}">
           <div class="rail-card-image" style="aspect-ratio: 16/9;">
-            {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
+            {% if a.has_cover %}<img class="cover" src="{{ media_url('article', a) }}" alt="" loading="lazy" decoding="async"
+                                      width="400" height="225" style="object-position: {{ focal_position(a) }};" />{% endif %}
             <span class="play-badge">&#9658;</span>
             {% include "_engagement_badge.html" %}
           </div>
@@ -137,10 +145,10 @@
       <div class="featured-stream-player">
         <iframe
           src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
-          allowfullscreen frameborder="0" scrolling="no"></iframe>
+          allowfullscreen frameborder="0" scrolling="no" loading="lazy"></iframe>
       </div>
       <div class="featured-stream-info">
-        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ featured_streamer.avatar }}" alt="" />{% endif %}
+        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', featured_streamer) }}" alt="" loading="lazy" decoding="async" />{% endif %}
         <div class="featured-stream-text">
           <div class="streamer-name">{{ featured_streamer.display_name }} <span class="featured-pill">Featured</span></div>
           <div class="streamer-status is-live">Live now</div>
@@ -159,9 +167,9 @@
         {% for s in other_live_streamers %}
           {% set info = live[s.twitch_login] %}
           <a class="live-banner-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
-            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
+            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" loading="lazy" decoding="async" />{% endif %}
             <div class="live-banner-info">
-              {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+              {% if s.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', s) }}" alt="" loading="lazy" decoding="async" />{% endif %}
               <div>
                 <div class="streamer-name">{{ s.display_name }}</div>
                 <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>

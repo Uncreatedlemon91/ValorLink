@@ -1,0 +1,26 @@
+{
+  "artboards": [
+    { "file": "Brand.dc.html", "x": 0, "y": 0, "w": 1440, "h": 1240 },
+    { "file": "Main.dc.html", "x": 1600, "y": 0, "w": 1440, "h": 2160 },
+    { "file": "PlayerCards.dc.html", "x": 3200, "y": 0, "w": 1440, "h": 1700 },
+    { "file": "Stats.dc.html", "x": 0, "y": 2360, "w": 1440, "h": 1320 },
+    { "file": "League.dc.html", "x": 1600, "y": 2360, "w": 1440, "h": 1240 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -220,
+      "w": 620,
+      "text": "YeeHaw FC — broadcast direction for FC 27.\nStatic mockups, not a clickable prototype. Ground moves from neutral #0f1115 to broadcast midnight, the single green splits into green (performance) + amber (standing), and every corner goes square with a 12° skew as the one signature motif.\nBarlow Condensed carries over from the current site as the label face."
+    },
+    {
+      "id": "cards-note",
+      "x": 3200,
+      "y": -220,
+      "w": 620,
+      "text": "Player cards are deliberately NOT an EA Ultimate Team card — that's their branded design. This is the same job done in our own broadcast language.\nEvery number on the card maps to a field the EA API already returns. Player names here are samples."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

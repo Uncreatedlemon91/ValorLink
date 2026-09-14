@@ -24,7 +24,7 @@ def test_hex_color_handles_bad_input():
 
 
 def test_crest_colors_decodes_custom_kit(monkeypatch):
-    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: {
+    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id, **kw: {
         "name": "Yeehaw FC",
         "customKit": {
             "crestColor": "13179675", "kitColor1": "15921906", "kitColor2": "14358546",
@@ -39,7 +39,7 @@ def test_crest_colors_decodes_custom_kit(monkeypatch):
 
 
 def test_crest_colors_falls_back_to_crest_and_home_kit_without_a_third_kit(monkeypatch):
-    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: {
+    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id, **kw: {
         "name": "No Third Kit FC",
         "customKit": {"crestColor": "13179675", "kitColor1": "15921906", "kitColor2": "14358546"},
     })
@@ -49,10 +49,10 @@ def test_crest_colors_falls_back_to_crest_and_home_kit_without_a_third_kit(monke
 
 
 def test_crest_colors_returns_none_without_custom_kit(monkeypatch):
-    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: {"name": "No Kit FC"})
+    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id, **kw: {"name": "No Kit FC"})
     assert ea_client.crest_colors("common-gen5", "1") is None
 
 
 def test_crest_colors_returns_none_when_club_not_found(monkeypatch):
-    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id: None)
+    monkeypatch.setattr(ea_client, "club_info", lambda platform, club_id, **kw: None)
     assert ea_client.crest_colors("common-gen5", "1") is None

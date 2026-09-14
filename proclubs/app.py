@@ -8,7 +8,9 @@ database, no imports from valorlink's web/ or db/ packages (see README.md).
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -41,7 +43,31 @@ app.add_middleware(
     same_site="lax",
     https_only=config.HTTPS_ONLY,
 )
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+class _VersionedStatic(StaticFiles):
+    """StaticFiles, but with a Cache-Control header.
+
+    Starlette sends only ETag/Last-Modified, so a returning visitor still
+    pays a revalidation round trip per asset before the browser will reuse
+    anything -- on a page pulling the stylesheet plus a couple of scripts
+    that's several serial-ish requests just to be told "unchanged."
+
+    Every template references static files through the asset_version helper
+    below, which stamps the file's own mtime into the query string, so a
+    changed file is a changed URL and a long immutable cache can't serve a
+    stale one. A request without that stamp (someone's bookmark, a hand-typed
+    URL) gets a short max-age instead, since nothing would bust it."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        query = scope.get("query_string", b"").decode("latin-1")
+        versioned = "v=" in query
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if versioned else "public, max-age=300"
+        )
+        return response
+
+
+app.mount("/static", _VersionedStatic(directory=BASE_DIR / "static"), name="static")
 app.include_router(auth.router)
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -111,6 +137,17 @@ def _focal_position(article) -> str:
     return f"{x}% {y}%"
 
 
+def _media_url(kind: str, obj, variant: str = "thumb") -> str:
+    """Versioned URL for a stored image (see the /media routes above the
+    news section). The token is the row's own updated_at, so an edited
+    cover gets a new URL and the year-long immutable cache stays honest."""
+    stamp = getattr(obj, "updated_at", None) or getattr(obj, "created_at", None)
+    version = int(stamp.timestamp()) if stamp else 0
+    if kind == "streamer":
+        return f"/media/streamer/{obj.id}/avatar?v={version}"
+    return f"/media/article/{obj.id}/{variant}?v={version}"
+
+
 templates.env.globals["css_v"] = _asset_version()
 templates.env.globals["asset_version"] = _asset_version
 templates.env.globals["SITE_NAME"] = config.SITE_NAME
@@ -121,12 +158,35 @@ templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
 templates.env.globals["initials"] = _initials
 templates.env.globals["focal_position"] = _focal_position
 templates.env.globals["localtime"] = _localtime
+templates.env.globals["media_url"] = _media_url
 templates.env.globals["CLIPS_SYNC_ENABLED"] = config.CLIPS_SYNC_ENABLED
+
+
+def _warm_home_caches():
+    """Fetch what the home page reads from EA before anyone asks for it.
+
+    Without this the SWR caches in ea_client/twitch_client still leave one
+    visitor per restart paying the cold-fetch cost -- two EA round trips at
+    a 10-second timeout each, right in the middle of their page load. The
+    thread is fire-and-forget: a failure here just leaves the cache cold,
+    which is exactly where it would have been anyway."""
+    if not config.CLUB_ID:
+        return
+
+    def _warm():
+        for fetch in (ea_client.overall_stats, ea_client.crest_colors):
+            try:
+                fetch(config.CLUB_PLATFORM, config.CLUB_ID)
+            except ea_client.EAApiError:
+                pass
+
+    threading.Thread(target=_warm, daemon=True).start()
 
 
 @app.on_event("startup")
 def _startup():
     init_db()
+    _warm_home_caches()
 
 
 @app.exception_handler(auth.NotAuthenticated)
@@ -273,17 +333,25 @@ def home(request: Request):
             # Two independent calls, so one failing doesn't blank the
             # other -- the crest is club identity and shouldn't disappear
             # because a stats endpoint had a bad minute.
+            #
+            # Both non-blocking: the standing band is decoration and the
+            # home page must not inherit EA's latency to render. On a cold
+            # cache these return None and fill in behind the request, so
+            # the band is missing for a few seconds after a restart instead
+            # of every visitor waiting out a 10-second timeout.
             try:
                 # overallStats, not division_stats: the latter is an
                 # all-time leaderboard snapshot whose division and points
                 # can be a hundred matches out of date. Skill rating here
                 # is live -- see _standing_teaser.
-                overall = ea_client.overall_stats(config.CLUB_PLATFORM, config.CLUB_ID) or {}
+                overall = ea_client.overall_stats(
+                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False) or {}
                 stats_teaser = _standing_teaser(overall)
             except ea_client.EAApiError:
                 pass
             try:
-                crest_colors = ea_client.crest_colors(config.CLUB_PLATFORM, config.CLUB_ID)
+                crest_colors = ea_client.crest_colors(
+                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False)
             except ea_client.EAApiError:
                 pass
         return templates.TemplateResponse(request, "home.html", _ctx(
@@ -341,11 +409,11 @@ async def news_new(
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
-    cover = await services.image_to_data_uri(cover_image)
+    cover, cover_thumb = await services.process_image_upload(cover_image)
     with get_session() as session:
         article = services.create_article(
             session, title=title, category=category, summary=summary, body_html=body_html,
-            cover_image=cover, published=bool(published), author=staff,
+            cover_image=cover, cover_thumb=cover_thumb, published=bool(published), author=staff,
             cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article published." if article.published else "Draft saved.")
@@ -355,19 +423,63 @@ async def news_new(
 
 
 @app.get("/news/{slug}/cover-image")
-def news_cover_image(slug: str):
-    """Serves an article's cover image at a real fetchable URL -- it's
-    normally stored as a data: URI (see services.image_to_data_uri), which
-    works fine embedded directly in this site's own pages, but Discord's
-    embed API needs a URL it can actually fetch (see discord_announce.py)."""
+def news_cover_image(slug: str, request: Request):
+    """An article's cover image at a real fetchable URL, addressed by slug.
+
+    Kept alongside the /media routes below because Discord's embed API
+    needs a URL it can fetch (see discord_announce.py) and the slug is what
+    the announcement already has. Unversioned, so it only gets a short
+    max-age -- the site's own pages use /media/article/... instead, which
+    carries a version token and can be cached indefinitely."""
     with get_session() as session:
-        article = services.get_article(session, slug)
-    if article is None:
-        raise HTTPException(status_code=404)
-    content_type, raw = services.decode_data_uri(article.cover_image)
+        image = services.article_image(session, slug=slug, variant="cover")
+    return _image_response(request, image, cache="public, max-age=300")
+
+
+# --------------------------------------------------------------------------- #
+# Media
+#
+# Uploaded images live in the database as data URIs (see images.py), but
+# they are served from here rather than pasted into the markup. Inlining
+# them made the home page ~10MB of HTML and the news index ~23MB: a data URI
+# can't be cached separately from the document, can't be fetched in
+# parallel, and can't be skipped for an image scrolled out of view, so every
+# navigation re-downloaded every cover before the page could finish.
+#
+# Templates build these URLs via the `media_url` global above, which appends
+# a version token derived from the row's own updated_at -- that's what makes
+# the long immutable cache safe: editing an article changes the URL.
+# --------------------------------------------------------------------------- #
+_IMMUTABLE = "public, max-age=31536000, immutable"
+
+
+def _image_response(request: Request, image: str | None, *, cache: str) -> Response:
+    content_type, raw = services.decode_data_uri(image)
     if content_type is None:
         raise HTTPException(status_code=404)
-    return Response(content=raw, media_type=content_type)
+    etag = '"%s"' % hashlib.md5(raw).hexdigest()
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
+    return Response(
+        content=raw, media_type=content_type,
+        headers={"ETag": etag, "Cache-Control": cache},
+    )
+
+
+@app.get("/media/article/{article_id}/{variant}")
+def media_article(request: Request, article_id: int, variant: str):
+    if variant not in ("cover", "thumb"):
+        raise HTTPException(status_code=404)
+    with get_session() as session:
+        image = services.article_image(session, article_id=article_id, variant=variant)
+    return _image_response(request, image, cache=_IMMUTABLE)
+
+
+@app.get("/media/streamer/{streamer_id}/avatar")
+def media_streamer_avatar(request: Request, streamer_id: int):
+    with get_session() as session:
+        image = services.streamer_avatar(session, streamer_id)
+    return _image_response(request, image, cache=_IMMUTABLE)
 
 
 @app.get("/news/{slug}", response_class=HTMLResponse)
@@ -408,7 +520,7 @@ async def news_edit(
     cover_image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
-    cover = await services.image_to_data_uri(cover_image)
+    cover, cover_thumb = await services.process_image_upload(cover_image)
     with get_session() as session:
         article = services.get_article(session, slug)
         if article is None:
@@ -418,7 +530,7 @@ async def news_edit(
         was_published = article.published
         article = services.update_article(
             session, article, title=title, category=category, summary=summary, body_html=body_html,
-            cover_image=cover, published=bool(published),
+            cover_image=cover, cover_thumb=cover_thumb, published=bool(published),
             cover_focal_x=cover_focal_x, cover_focal_y=cover_focal_y,
         )
         _flash(request, "Article updated.")
@@ -612,7 +724,11 @@ async def event_new(
     image: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
-    image_uri = await services.image_to_data_uri(image)
+    # Events keep a single image column, so they take the display variant
+    # and drop the thumbnail. They still go through the same downscale and
+    # re-encode as everything else rather than being stored verbatim --
+    # image_to_data_uri, which did store verbatim, is gone (see images.py).
+    image_uri, _ = await services.process_image_upload(image)
     with get_session() as session:
         event = services.create_event(
             session, title=title, event_type=event_type,
@@ -665,7 +781,11 @@ async def event_edit(
     image: UploadFile | None = None, _staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
-    image_uri = await services.image_to_data_uri(image)
+    # Events keep a single image column, so they take the display variant
+    # and drop the thumbnail. They still go through the same downscale and
+    # re-encode as everything else rather than being stored verbatim --
+    # image_to_data_uri, which did store verbatim, is gone (see images.py).
+    image_uri, _ = await services.process_image_upload(image)
     with get_session() as session:
         event = services.get_event(session, event_id)
         if event is None:
@@ -998,11 +1118,12 @@ async def streamer_add(
     avatar: UploadFile | None = None, staff=Depends(auth.require_staff),
 ):
     _check_csrf(request, csrf_token)
-    avatar_uri = await services.image_to_data_uri(avatar)
+    avatar_uri, avatar_thumb = await services.process_image_upload(avatar)
     with get_session() as session:
         services.create_streamer(
             session, display_name=display_name, twitch_login=twitch_login,
-            avatar=avatar_uri, author_name=staff.get("name", "Staff"), featured=bool(featured),
+            avatar=avatar_uri, avatar_thumb=avatar_thumb,
+            author_name=staff.get("name", "Staff"), featured=bool(featured),
         )
         _flash(request, "Streamer added to the showcase.")
     return RedirectResponse("/streamers", status_code=303)

@@ -204,6 +204,7 @@ TWITCH_ENABLED = bool(TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET)
 # the old behavior). Twitch's exact category name changes with each yearly
 # title; verify it at twitch.tv/directory/category/<slug> if this ever looks
 # wrong (a mismatched string just makes everyone look offline, not an error).
+#
 # Defaulted to FC 27 ahead of its 25 Sep 2026 release. Twitch's category
 # name for a new title is not published in advance and this one has NOT been
 # verified against a live category page -- check the slug on launch day and
