@@ -93,6 +93,10 @@ class SwrCache:
             self._start_refresh(key, loader)
 
     def clear(self) -> None:
+        """Forget everything, so the next read is a real fetch -- for when
+        the app knows the cached answer is now wrong because it just
+        caused the change itself (see discord_roster.announce_move), and
+        for keeping one test's stub data out of the next."""
         with self._lock:
             self._entries.clear()
 

@@ -25,6 +25,7 @@ import auth
 import config
 import db
 import discord_announce
+import discord_roster
 import discord_rsvp
 import ea_client
 import services
@@ -1152,6 +1153,98 @@ def streamer_delete(request: Request, streamer_id: int, csrf_token: str = Form(.
             services.delete_streamer(session, streamer)
             _flash(request, "Streamer removed.")
     return RedirectResponse("/streamers", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Squad moves: pick somebody out of Discord, announce an offer or a departure
+# --------------------------------------------------------------------------- #
+@app.get("/roster", response_class=HTMLResponse)
+def roster_page(request: Request, _staff=Depends(auth.require_staff)):
+    """The picker. Reads the Discord member list live (cached briefly) so
+    the only people who can be announced are people actually in the
+    server.
+
+    A failure to read that list is shown on the page rather than raised:
+    the recent-moves history below it is still worth seeing, and the 403
+    that a missing GUILD_MEMBERS intent produces is exactly the message
+    somebody needs in order to go and fix it.
+    """
+    members, load_error = [], None
+    if config.ROSTER_MOVES_ENABLED:
+        try:
+            members = discord_roster.roster_choices()
+        except discord_roster.DiscordApiError as exc:
+            load_error = str(exc)
+    with get_session() as session:
+        moves = services.recent_roster_moves(session)
+    return templates.TemplateResponse(request, "roster.html", _ctx(
+        request, members=members, load_error=load_error, moves=moves,
+        roster_enabled=config.ROSTER_MOVES_ENABLED,
+        roster_missing=config.roster_moves_missing(),
+        positions=discord_roster.POSITION_SUGGESTIONS,
+    ))
+
+
+@app.post("/roster/announce")
+def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Form(""),
+                    position: str = Form(""), note: str = Form(""),
+                    csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    """Publishes one squad announcement.
+
+    Announcement only -- no Discord role is added or removed here; see
+    discord_roster.py for why. The member is re-resolved against the live
+    list rather than trusted from the form, so a stale tab or a
+    hand-edited id can't publish an announcement naming somebody who
+    isn't in the server.
+    """
+    _check_csrf(request, csrf_token)
+    if not config.ROSTER_MOVES_ENABLED:
+        raise services.ServiceError(
+            "Squad announcements aren't configured -- missing "
+            + ", ".join(config.roster_moves_missing()) + " in .env."
+        )
+    if kind not in discord_roster.MOVE_KINDS:
+        raise services.ServiceError("Pick either Offer Position or Let Go.")
+    try:
+        member = discord_roster.find_member(discord_roster.roster_choices(), discord_id)
+    except discord_roster.DiscordApiError as exc:
+        raise services.ServiceError(f"Couldn't check Discord's member list: {exc}") from exc
+    if member is None:
+        raise services.ServiceError("Pick somebody from the Discord member list first.")
+
+    embed = discord_roster.build_move_embed(
+        kind=kind, member=member, position=position, note=note,
+        announced_by=staff.get("name"),
+    )
+    message_id, failure = None, None
+    try:
+        message_id = discord_roster.announce_move(
+            config.ROSTER_ANNOUNCE_CHANNEL_ID, embed, mention_id=member["id"],
+        )
+    except discord_roster.DiscordApiError as exc:
+        failure = str(exc)
+
+    # Recorded either way: an attempt that failed is still something staff
+    # need to see on the page, rather than a silent no-op they repeat.
+    with get_session() as session:
+        services.record_roster_move(
+            session, discord_id=member["id"], display_name=member["name"],
+            avatar_url=member["avatar_url"], kind=kind, position=position, note=note,
+            announced_by_name=staff.get("name"),
+            announced_by_discord_id=_int(staff.get("id")) or None,
+            discord_message_id=message_id,
+        )
+
+    if failure:
+        _flash(request, f"The announcement didn't send: {failure}", level="error")
+    else:
+        verb = "Offer announced for" if kind == discord_roster.MOVE_OFFER else "Departure announced for"
+        _flash(request, f"{verb} {member['name']}.")
+        # The move usually comes with a role change made by hand in
+        # Discord a moment later; don't serve a minute-old member list
+        # over the top of it.
+        discord_roster.invalidate_members_cache()
+    return RedirectResponse("/roster", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

@@ -26,6 +26,7 @@ from nacl.signing import VerifyKey
 
 import config
 import discord_api
+import discord_roster
 from models import SIGNUP_LABELS, SIGNUP_STATUSES
 
 DiscordApiError = discord_api.DiscordApiError
@@ -318,30 +319,23 @@ def _thread_name(event) -> str:
 def role_member_ids(role_id: str) -> list[str]:
     """Every guild member holding `role_id`.
 
-    Discord has no "list a role's members" route, so this pages the full
-    member list and filters. That needs the privileged GUILD_MEMBERS intent
-    (Developer Portal -> Bot -> Server Members Intent); without it Discord
-    answers 403 and this raises, which is why the caller records how many
-    members it actually added.
+    Discord has no "list a role's members" route, so this walks the full
+    member list and filters. The walk itself lives in discord_roster,
+    which is the one place that knows how to page it -- that needs the
+    privileged GUILD_MEMBERS intent (Developer Portal -> Bot -> Server
+    Members Intent); without it Discord answers 403 and this raises, which
+    is why the caller records how many members it actually added.
+
+    Reads the uncached walk on purpose: a tier fires once per event and
+    must see whoever holds the role at that moment, not whoever held it
+    when a staff page was last rendered.
     """
     members: list[str] = []
-    after = "0"
-    while True:
-        resp = discord_api.get(
-            f"/guilds/{config.DISCORD_GUILD_ID}/members",
-            {"limit": 1000, "after": after},
-        )
-        page = resp.json() or []
-        if not page:
-            break
-        for member in page:
-            if role_id in (member.get("roles") or []):
-                user_id = (member.get("user") or {}).get("id")
-                if user_id:
-                    members.append(str(user_id))
-        after = str(page[-1]["user"]["id"])
-        if len(page) < 1000:
-            break
+    for member in discord_roster.fetch_guild_members():
+        if role_id in (member.get("roles") or []):
+            user_id = (member.get("user") or {}).get("id")
+            if user_id:
+                members.append(str(user_id))
     return members
 
 

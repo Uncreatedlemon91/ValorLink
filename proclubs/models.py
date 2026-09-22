@@ -201,6 +201,46 @@ class EventTierInvite(Base):
     member_count = Column(Integer, nullable=False, default=0)
 
 
+class RosterMove(Base):
+    """One squad announcement that has been published to Discord.
+
+    Kept because the announcement itself lives in Discord, where it
+    scrolls away: without a row here, "did we ever announce that?" is a
+    question only answerable by scrolling a channel, and a staff member
+    who reloads the page after a flaky post has no way to tell whether it
+    went out. The /roster page reads these back as a short history.
+
+    Not a roster table. This records what was *announced*, not who is in
+    the squad -- membership is still Discord roles, which this app reads
+    and never writes (see discord_roster.py). A row here is a press
+    release, so it is never edited or back-dated; a mistake is corrected
+    by publishing the opposite move, exactly as it would be in the
+    channel.
+    """
+
+    __tablename__ = "roster_moves"
+
+    id = Column(Integer, primary_key=True)
+    # Text, not BigInteger: this is an opaque Discord snowflake used to
+    # build a mention and match against the picker's values, never
+    # arithmetic. (Article.author_discord_id predates that reasoning.)
+    discord_id = Column(String, nullable=False, index=True)
+    # Snapshotted at announcement time rather than looked up on render:
+    # someone who was let go is likely to leave the server, and the
+    # history should still say who the move was about.
+    display_name = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    kind = Column(String, nullable=False)     # see discord_roster.MOVE_KINDS
+    position = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    announced_by_name = Column(String, nullable=True)
+    announced_by_discord_id = Column(BigInteger, nullable=True)
+    announced_at = Column(DateTime, default=_utcnow)
+    # Null when the post itself failed -- the row is still written so the
+    # attempt is visible, and the page marks it as not delivered.
+    discord_message_id = Column(String, nullable=True)
+
+
 class PlayerLink(Base):
     """Ties a Discord account to the EA gamertag it plays under.
 

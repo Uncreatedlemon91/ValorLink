@@ -27,8 +27,8 @@ import html_sanitize
 import images
 from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
-                    Comment, Event, EventSignup, EventTierInvite, Like, PlayerLink, Streamer,
-                    TacticsBoard, TacticsSlot)
+                    Comment, Event, EventSignup, EventTierInvite, Like, PlayerLink, RosterMove,
+                    Streamer, TacticsBoard, TacticsSlot)
 
 EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
 
@@ -1011,6 +1011,42 @@ def render_clip_embeds(session: Session, body_html: str) -> str:
         )
 
     return _CLIP_EMBED_RE.sub(_replace, body_html)
+
+
+# --- Squad moves ------------------------------------------------------------ #
+def record_roster_move(session: Session, *, discord_id: str, display_name: str,
+                       avatar_url: str | None, kind: str, position: str | None,
+                       note: str | None, announced_by_name: str | None,
+                       announced_by_discord_id: int | None,
+                       discord_message_id: str | None) -> RosterMove:
+    """Writes the history row for one published squad announcement.
+
+    Called after the Discord post is attempted, not before, so
+    discord_message_id records what actually happened -- a null there is
+    the honest record of a post that failed, and the page says so rather
+    than implying the club announced something it didn't.
+    """
+    move = RosterMove(
+        discord_id=str(discord_id), display_name=display_name, avatar_url=avatar_url,
+        kind=kind, position=(position or "").strip() or None,
+        note=(note or "").strip() or None,
+        announced_by_name=announced_by_name,
+        announced_by_discord_id=announced_by_discord_id,
+        discord_message_id=discord_message_id,
+    )
+    session.add(move)
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def recent_roster_moves(session: Session, limit: int = 15) -> list[RosterMove]:
+    """Newest first, bounded -- this is a "what did we just publish"
+    panel on the staff page, not an archive anyone pages through."""
+    return list(session.execute(
+        select(RosterMove).order_by(RosterMove.announced_at.desc(), RosterMove.id.desc())
+        .limit(limit)
+    ).scalars())
 
 
 # --- Streamers ------------------------------------------------------------ #

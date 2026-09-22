@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Squad Moves{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Squad Moves</h1>
+      <p class="page-lede">
+        Pick somebody from the Discord server, then publish the announcement.
+      </p>
+    </div>
+  </div>
+
+  {# Said once, plainly, rather than left for someone to discover: this
+     page publishes a message and nothing else. #}
+  <p class="roster-disclaimer">
+    Publishing an announcement does not change anyone's Discord roles — move the
+    role in Discord yourself once the post is up.
+  </p>
+
+  {% if not roster_enabled %}
+    <div class="card empty-state">
+      Squad announcements aren't configured yet — missing
+      {{ roster_missing | join(', ') }} in <code>.env</code>.
+    </div>
+  {% elif load_error %}
+    <div class="card empty-state">
+      Couldn't read the Discord member list: {{ load_error }}
+      <p class="muted">
+        A <code>403</code> here almost always means the bot is missing the
+        <strong>Server Members Intent</strong> — turn it on at Discord
+        Developer Portal → your app → Bot → Server Members Intent.
+      </p>
+    </div>
+  {% elif not members %}
+    <div class="card empty-state">Discord returned no members to pick from.</div>
+  {% else %}
+    <form class="roster-form card" method="post" action="/roster/announce"
+          id="roster-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+      <div class="field">
+        <label for="roster-search">Find a member</label>
+        {# type=search, not type=text: on a phone that's the keyboard with
+           a clear button, and it needs no JS to be useful. #}
+        <input id="roster-search" type="search" autocomplete="off"
+               placeholder="Start typing a name…" />
+        <p class="field-hint" id="roster-count">{{ members | length }} members</p>
+      </div>
+
+      {# A radio group, not a JS widget: picking a person works with
+         scripting off, and the selected card is styled off :checked. #}
+      <div class="roster-picker" role="group" aria-label="Discord members">
+        {% for m in members %}
+          <label class="roster-chip" data-name="{{ (m.name ~ ' ' ~ m.username) | lower }}">
+            <input type="radio" name="discord_id" value="{{ m.id }}" required />
+            <img class="roster-avatar" src="{{ m.avatar_url }}" alt=""
+                 width="48" height="48" loading="lazy" decoding="async" />
+            <span class="roster-chip-text">
+              <span class="roster-chip-name">{{ m.name }}</span>
+              {% if m.username and m.username != m.name %}
+                <span class="roster-chip-handle">@{{ m.username }}</span>
+              {% endif %}
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+      <p class="field-hint roster-empty" id="roster-no-match" hidden>
+        Nobody in the server matches that.
+      </p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="position">Position <span class="muted">(optional)</span></label>
+          <input id="position" name="position" list="roster-positions"
+                 autocomplete="off" placeholder="e.g. Striker" maxlength="80" />
+          <datalist id="roster-positions">
+            {% for p in positions %}<option value="{{ p }}"></option>{% endfor %}
+          </datalist>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="note">Note from the staff <span class="muted">(optional)</span></label>
+        <textarea id="note" name="note" rows="3" maxlength="1000"
+                  placeholder="A line about the move — appears in the announcement."></textarea>
+      </div>
+
+      <div class="form-actions roster-actions">
+        <button type="submit" name="kind" value="offer" class="btn">Offer Position</button>
+        <button type="submit" name="kind" value="release" class="btn danger"
+                data-confirm="Publish a departure announcement for the selected member?">
+          Let Go
+        </button>
+      </div>
+    </form>
+  {% endif %}
+
+  <div class="section-head"><h2>Recently announced</h2></div>
+  {% if moves %}
+    <div class="roster-history card">
+      {% for move in moves %}
+        <div class="roster-move roster-move-{{ move.kind }}">
+          {% if move.avatar_url %}
+            <img class="roster-avatar" src="{{ move.avatar_url }}" alt=""
+                 width="40" height="40" loading="lazy" decoding="async" />
+          {% endif %}
+          <div class="roster-move-text">
+            <div class="roster-move-head">
+              <span class="roster-move-name">{{ move.display_name }}</span>
+              <span class="roster-move-kind">
+                {{ 'Offer' if move.kind == 'offer' else 'Departure' }}
+              </span>
+              {% if move.position %}<span class="roster-move-pos">{{ move.position }}</span>{% endif %}
+            </div>
+            <div class="roster-move-meta">
+              {{ localtime(move.announced_at) }}
+              {% if move.announced_by_name %} · by {{ move.announced_by_name }}{% endif %}
+              {% if not move.discord_message_id %}
+                <span class="roster-move-failed">not delivered to Discord</span>
+              {% endif %}
+            </div>
+            {% if move.note %}<p class="roster-move-note">{{ move.note }}</p>{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">No squad announcements yet.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/roster.js?v={{ asset_version('js/roster.js') }}" defer></script>
+{% endblock %}

@@ -1340,3 +1340,207 @@ def test_logout_clears_session(client):
     client.get("/logout", follow_redirects=False)
     r = client.get("/news/new", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --------------------------------------------------------------------------- #
+# Squad Moves (/roster)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def roster_ready(monkeypatch):
+    """A configured, reachable Discord with two members in it.
+
+    ROSTER_MOVES_ENABLED is computed at import, so the gate on the routes
+    is patched alongside the channel it reads -- monkeypatching the env
+    var alone would leave the flag stale and every test here blocked.
+    """
+    monkeypatch.setattr(config, "ROSTER_MOVES_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_ANNOUNCE_CHANNEL_ID", "555")
+    monkeypatch.setattr(appmod.discord_roster, "fetch_guild_members", lambda: [
+        {"nick": "Cap", "avatar": None, "roles": [],
+         "user": {"id": "42", "username": "alex", "global_name": None,
+                  "avatar": "abc", "discriminator": "0", "bot": False}},
+        {"nick": None, "avatar": None, "roles": [],
+         "user": {"id": "43", "username": "sam", "global_name": None,
+                  "avatar": None, "discriminator": "0", "bot": False}},
+    ])
+    appmod.discord_roster.invalidate_members_cache()
+    posted = []
+
+    def fake_post(path, json):
+        posted.append((path, json))
+
+        class _R:
+            @staticmethod
+            def json():
+                return {"id": "msg-1"}
+        return _R()
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "post", fake_post)
+    yield posted
+    appmod.discord_roster.invalidate_members_cache()
+
+
+def test_roster_page_is_staff_only(client, roster_ready):
+    # Signed out -> sent to sign in; signed in but not staff -> refused.
+    assert client.get("/roster", follow_redirects=False).status_code == 303
+    _login_fan(client)
+    assert client.get("/roster", follow_redirects=False).status_code == 403
+    _login_staff(client)
+    assert client.get("/roster").status_code == 200
+
+
+def test_roster_page_lists_members_with_their_discord_avatars(client, roster_ready):
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "Cap" in html and "sam" in html
+    assert "cdn.discordapp.com/avatars/42/abc.png" in html
+    # Nobody without an avatar set should render a broken image.
+    assert "cdn.discordapp.com/embed/avatars/" in html
+
+
+def test_roster_link_is_only_in_the_nav_for_staff(client, roster_ready):
+    _login_fan(client)
+    assert 'href="/roster"' not in client.get("/news").text
+    _login_staff(client)
+    assert 'href="/roster"' in client.get("/news").text
+
+
+def test_offering_a_position_posts_the_announcement_and_records_it(client, roster_ready):
+    _login_staff(client, name="Coach")
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "position": "Striker",
+        "note": "Joining from Rivals FC.", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    assert len(roster_ready) == 1
+    path, body = roster_ready[0]
+    assert path == "/channels/555/messages"
+    embed = body["embeds"][0]
+    assert "Cap" in embed["title"] and "Offer" in embed["title"]
+    assert "Striker" in embed["description"]
+    assert body["allowed_mentions"] == {"users": ["42"]}
+
+    with database.get_session() as session:
+        moves = services.recent_roster_moves(session)
+    assert len(moves) == 1
+    assert (moves[0].kind, moves[0].display_name) == ("offer", "Cap")
+    assert moves[0].discord_message_id == "msg-1"
+    assert moves[0].announced_by_name == "Coach"
+
+
+def test_letting_someone_go_posts_the_other_announcement(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "position": "", "note": "",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "Departure" in embed["title"]
+    assert "sam" in embed["title"]
+
+
+def test_announcing_never_touches_a_discord_role(client, roster_ready):
+    """The one thing this feature must not do: a squad announcement is a
+    message, not a permission change."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert [path for path, _ in roster_ready] == ["/channels/555/messages"]
+
+
+def test_the_history_shows_what_was_announced(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "position": "Striker", "csrf_token": token,
+    }, follow_redirects=False)
+    html = client.get("/roster").text
+    assert "Recently announced" in html
+    assert "roster-move-offer" in html
+    assert "Striker" in html
+
+
+def test_an_id_that_is_not_in_the_server_is_refused(client, roster_ready):
+    """The form posts an id back; a stale tab or a hand-edited one must
+    not be able to announce a position for a stranger."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "99999", "kind": "offer", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+    with database.get_session() as session:
+        assert services.recent_roster_moves(session) == []
+
+
+def test_an_unknown_kind_is_refused(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "promote", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_announcing_requires_a_valid_csrf_token(client, roster_ready):
+    _login_staff(client)
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "csrf_token": "forged",
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_failed_post_is_recorded_and_reported_not_silently_dropped(client, roster_ready, monkeypatch):
+    """Otherwise staff see a success redirect, assume the club announced
+    something, and never find out it didn't."""
+    def boom(path, json):
+        raise appmod.discord_roster.DiscordApiError("Missing Access, code 50001")
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "post", boom)
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "csrf_token": token,
+    }, follow_redirects=True)
+    assert "Missing Access" in r.text
+    with database.get_session() as session:
+        moves = services.recent_roster_moves(session)
+    assert len(moves) == 1 and moves[0].discord_message_id is None
+    assert "not delivered to Discord" in r.text
+
+
+def test_the_page_explains_a_missing_server_members_intent(client, roster_ready, monkeypatch):
+    """A 403 here is a checkbox in Discord's Developer Portal, not a bug
+    in this app -- the page has to say so or nobody will find it."""
+    def forbidden():
+        raise appmod.discord_roster.DiscordApiError("403 Forbidden (Missing Access, code 50001)")
+
+    monkeypatch.setattr(appmod.discord_roster, "fetch_guild_members", forbidden)
+    appmod.discord_roster.invalidate_members_cache()
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "Server Members Intent" in html
+    assert "403 Forbidden" in html
+
+
+def test_the_page_names_the_settings_it_is_missing_when_unconfigured(client, monkeypatch):
+    monkeypatch.setattr(config, "ROSTER_MOVES_ENABLED", False)
+    monkeypatch.setattr(config, "roster_moves_missing", lambda: ["DISCORD_BOT_TOKEN"])
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "DISCORD_BOT_TOKEN" in html
+
+
+def test_the_page_says_out_loud_that_roles_are_not_changed(client, roster_ready):
+    """Staff have to know the role move is still theirs to make, or
+    somebody will be 'let go' and keep their access for a week."""
+    _login_staff(client)
+    assert "does not change anyone's Discord roles" in client.get("/roster").text

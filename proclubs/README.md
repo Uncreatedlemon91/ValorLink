@@ -525,6 +525,74 @@ announcement forever isn't useful). **Added into the article's like
 count**, not shown as a separate badge -- see `services.combined_like_count`
 and "Comments and likes" below for what that total does and doesn't mean.
 
+## Squad moves: Offer Position / Let Go
+
+`/roster` (nav label "Squad", staff only) lists everyone in the Discord
+server with their Discord avatar, and publishes one of two announcements
+about whoever is picked. See `discord_roster.py`.
+
+**It never touches a Discord role.** Both buttons publish a message and
+nothing else -- nobody is added to a role, removed from one, kicked, or
+banned. That's deliberate, and it's the constraint the rest of the design
+hangs off:
+
+- Roles are how this app decides who is staff and who is a member (see
+  `auth.py`). A web form that moved them would mean one mis-click quietly
+  changing somebody's access to the site as well as their standing in the
+  club.
+- Removing access is the irreversible half of "let go". Doing it in
+  Discord, by hand, keeps it visible in the audit log and undoable by
+  anyone with the permission -- neither of which is true of a POST from a
+  browser tab.
+
+The page says so in as many words, above the form, so nobody assumes the
+role moved on its own. `test_discord_roster.py` asserts it against the
+module's source, so adding a role write would have to come and argue with
+that test.
+
+**Picking somebody.** The member list comes from
+`GET /guilds/<id>/members`, which needs the bot's privileged
+**GUILD_MEMBERS** intent (Developer Portal -> your app -> Bot -> Server
+Members Intent). Without it Discord answers 403; the page shows that error
+and names the intent rather than rendering an empty list, because the fix
+is a checkbox on Discord's side and nothing in this repo hints at it
+otherwise. That same walk is what `discord_rsvp.role_member_ids` uses for
+staged event invites -- one implementation, two callers.
+
+- **Bots are filtered out** and members are sorted case-insensitively.
+- **Avatars** follow Discord's own precedence: per-server avatar, then
+  account avatar, then the default art (which has two schemes, one for
+  legacy discriminator accounts and one for the new username system).
+  Animated avatars are requested as `.png`, which the CDN serves as a
+  still frame.
+- **The list is cached for 60s** (`cache.SwrCache`), and dropped after an
+  announcement, since a role change usually follows within a minute.
+- **The picker is a radio group**, not a JS widget, so choosing a person
+  works with scripting off; `roster.js` only adds the search filter and
+  the confirmation dialog.
+- **The posted id is re-resolved** against the live member list before
+  anything is published, so a stale tab or a hand-edited form can't
+  announce a position for somebody who isn't in the server.
+
+**The announcement** is an embed in the broadcast palette -- green for an
+offer, amber for a departure -- with the member's avatar as its thumbnail,
+an optional position, and an optional note from staff. The player is
+mentioned in the message body as well as inside the embed, because a
+mention *inside* an embed renders as a link and notifies nobody.
+`allowed_mentions` is always explicit and lists only that one user, so an
+`@everyone` typed into the staff note can never go out for real.
+
+**Every attempt is recorded**, delivered or not (`models.RosterMove`,
+shown under "Recently announced"). A post that fails writes a row with a
+null `discord_message_id` and the page marks it *not delivered to
+Discord* -- otherwise staff see a success redirect, assume the club
+announced something, and never find out it didn't. The row snapshots the
+name and avatar at announcement time, since somebody who was let go is
+likely to leave the server.
+
+Set `ROSTER_ANNOUNCE_CHANNEL_ID` to choose the channel; it falls back to
+`NEWS_ANNOUNCE_CHANNEL_ID`.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
@@ -707,6 +775,7 @@ proclubs/
   html_sanitize.py       Sanitizes the rich-text editor's HTML before it's stored
   twitch_client.py       Twitch Helix: is-this-channel-live, with a short cache
   discord_events.py      Discord Scheduled Events REST client (read-only)
+  discord_roster.py      Guild member list (with avatars) + squad-move announcements
   discord_events_poll.py Standalone poller, mirrors Discord events -> Event rows
   ea_client.py           EA Pro Clubs API client (curl_cffi, unrelated to the above)
   db.py                  Locally-accumulated EA stats history (own sqlite3 file)
@@ -733,6 +802,7 @@ proclubs/
 | `/stats` | everyone | EA stats dashboard for our club |
 | `/league` | everyone | Auto-built league table -- see below |
 | `/tactics` | everyone (editing: staff only) | Drag-and-drop formation board -- see below |
+| `/roster` (nav label: "Squad") | staff | Pick a Discord member, publish an offer or a departure -- see below |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
 
 `/api/overview`, `/api/standings`, `/api/members`, `/api/matches`,

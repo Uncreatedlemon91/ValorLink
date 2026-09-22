@@ -1751,3 +1751,106 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
   background: var(--panel-2);
 }
 .player-detail .stat-grid.compact .stat-card .value { font-size: 1.05rem; }
+
+/* --- Squad Moves (staff) --------------------------------------------------
+   A picker of real people, so the avatar does the identifying and the name
+   confirms it. Square corners and the amber/green split carry over from the
+   rest of the broadcast system; the skew stays off -- this is a working
+   form, not a lower-third. */
+.roster-disclaimer {
+  margin: 0 0 1rem; padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--amber);
+  background: var(--panel-2); color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.roster-form { padding: 1.1rem; display: grid; gap: 1rem; }
+
+/* Capped and scrollable: a server with 200 members must not push the
+   actions that act on the selection off the bottom of the page. */
+.roster-picker {
+  display: grid; gap: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  max-height: 22rem; overflow-y: auto;
+  padding: 0.5rem; background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.roster-chip {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.45rem 0.6rem; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border-soft);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.roster-chip:hover { border-color: var(--border); background: var(--panel-3); }
+.roster-chip[hidden] { display: none; }
+
+/* The radio is restyled, not hidden. Highlighting the whole chip needs
+   :has(), and on a browser without it a hidden radio would leave the
+   selection with no visual at all -- the dot alone is enough to see who
+   is picked, and it keeps the control's own focus ring and arrow-key
+   navigation. */
+.roster-chip input[type="radio"] {
+  appearance: none; -webkit-appearance: none;
+  /* padding: 0 matters -- the shared input rule above pads every field,
+     which would make this a 14px-tall ellipse instead of a circle. */
+  flex: none; box-sizing: border-box;
+  width: 16px; height: 16px; margin: 0; padding: 0;
+  border: 2px solid var(--faint); border-radius: 50%;
+  background: transparent; cursor: pointer;
+}
+/* The dot is a background gradient, not an inset box-shadow, because
+   box-shadow is what the shared :focus rule uses for the focus ring --
+   one of the two would have won and the other would have vanished. */
+.roster-chip input[type="radio"]:checked {
+  border-color: var(--accent);
+  background-image: radial-gradient(circle, var(--accent) 0 45%, transparent 48%);
+}
+.roster-chip:has(input:checked) {
+  border-color: var(--accent); background: rgba(var(--accent-rgb), 0.1);
+}
+
+.roster-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  object-fit: cover; background: var(--panel-3); flex: none;
+}
+.roster-chip-text { display: grid; min-width: 0; }
+.roster-chip-name {
+  font-weight: 600; font-size: 0.9rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.roster-chip-handle {
+  color: var(--faint); font-size: 0.75rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.roster-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+.roster-history { padding: 0.4rem 0; }
+.roster-move {
+  display: flex; gap: 0.75rem; align-items: flex-start;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-soft);
+  /* The kind is carried by a left edge as well as the word, so the two
+     don't rely on colour alone to be told apart. */
+  border-left: 3px solid var(--border);
+}
+.roster-move:last-child { border-bottom: none; }
+.roster-move .roster-avatar { width: 40px; height: 40px; }
+.roster-move-offer { border-left-color: var(--accent); }
+.roster-move-release { border-left-color: var(--amber); }
+.roster-move-text { min-width: 0; }
+.roster-move-head { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+.roster-move-name { font-weight: 700; }
+.roster-move-kind {
+  font-family: var(--font-display); font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+}
+.roster-move-offer .roster-move-kind { color: var(--accent-text); }
+.roster-move-release .roster-move-kind { color: var(--amber); }
+.roster-move-pos {
+  font-size: 0.72rem; padding: 0.1rem 0.4rem;
+  background: var(--panel-3); color: var(--muted);
+}
+.roster-move-meta { font-size: 0.78rem; color: var(--faint); margin-top: 0.15rem; }
+.roster-move-failed { color: var(--live); font-weight: 600; }
+.roster-move-note { margin: 0.4rem 0 0; font-size: 0.86rem; color: var(--muted); }

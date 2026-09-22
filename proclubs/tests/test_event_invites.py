@@ -228,3 +228,42 @@ def test_no_channel_at_all_names_both_options(monkeypatch):
     assert config.event_rsvp_missing() == [
         "EVENTS_ANNOUNCE_CHANNEL_ID or EVENT_THREAD_CHANNEL_ID"
     ]
+
+
+# --------------------------------------------------------------------------- #
+# role_member_ids: the one piece that does talk to Discord
+# --------------------------------------------------------------------------- #
+def test_role_member_ids_filters_the_shared_member_walk(monkeypatch):
+    """The paging lives in discord_roster now, shared with the Squad Moves
+    picker -- this checks the filtering on top of it still only returns
+    holders of the role asked for."""
+    import discord_roster  # noqa: PLC0415 -- kept local to this one test
+    import discord_rsvp    # noqa: PLC0415
+
+    monkeypatch.setattr(discord_roster, "fetch_guild_members", lambda: [
+        {"roles": ["111", "222"], "user": {"id": "1"}},
+        {"roles": ["222"], "user": {"id": "2"}},
+        {"roles": [], "user": {"id": "3"}},
+        {"user": {"id": "4"}},                    # no "roles" key at all
+    ])
+    assert discord_rsvp.role_member_ids("111") == ["1"]
+    assert discord_rsvp.role_member_ids("222") == ["1", "2"]
+    assert discord_rsvp.role_member_ids("999") == []
+
+
+def test_role_member_ids_reads_past_the_picker_cache(monkeypatch):
+    """A tier fires once. It must see who holds the role at that moment,
+    not whoever the staff page cached a few minutes ago."""
+    import discord_roster  # noqa: PLC0415
+    import discord_rsvp    # noqa: PLC0415
+
+    calls = []
+
+    def fetch():
+        calls.append(1)
+        return [{"roles": ["111"], "user": {"id": "1"}}]
+
+    monkeypatch.setattr(discord_roster, "fetch_guild_members", fetch)
+    discord_rsvp.role_member_ids("111")
+    discord_rsvp.role_member_ids("111")
+    assert len(calls) == 2, "the invite path must not read a cached list"

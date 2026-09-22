@@ -38,6 +38,9 @@
       <a href="/stats" class="{{ 'active' if request.url.path.startswith('/stats') else '' }}">Stats</a>
       <a href="/league" class="{{ 'active' if request.url.path.startswith('/league') else '' }}">League</a>
       <a href="/tactics" class="{{ 'active' if request.url.path.startswith('/tactics') else '' }}">Tactics</a>
+      {# Staff-only, so it isn't in the nav for everyone else -- the route
+         is gated regardless, this just stops a dead link showing up. #}
+      {% if is_staff %}<a href="/roster" class="{{ 'active' if request.url.path.startswith('/roster') else '' }}">Squad</a>{% endif %}
     </nav>
     <div class="nav-account">
       {% if user %}

@@ -183,6 +183,41 @@ NEWS_ANNOUNCE_ENABLED = bool(DISCORD_BOT_TOKEN and NEWS_ANNOUNCE_CHANNEL_ID)
 # services.articles_with_discord_message).
 DISCORD_REACTIONS_POLL_LIMIT = int(os.getenv("DISCORD_REACTIONS_POLL_LIMIT", "20"))
 
+# --- Squad move announcements (Offer Position / Let Go) ---------------------
+# One-directional (site -> Discord), same shape as the article
+# announcement above: staff pick somebody out of the Discord member list
+# on /roster and publish an offer or a departure.
+#
+# Falls back to NEWS_ANNOUNCE_CHANNEL_ID so a deployment that already has
+# an announcements channel needs no new setting; point this somewhere else
+# if squad news should be separated from site news.
+#
+# Reading the member list needs the privileged GUILD_MEMBERS intent on the
+# bot (Developer Portal -> Bot -> Server Members Intent) -- there is no
+# setting for that here, it's a checkbox on Discord's side, and without it
+# the page reports the 403 rather than showing an empty roster.
+#
+# NOTE: announcing never changes anyone's Discord roles -- see
+# discord_roster.py for why that's deliberate.
+ROSTER_ANNOUNCE_CHANNEL_ID = (os.getenv("ROSTER_ANNOUNCE_CHANNEL_ID", "")
+                              or NEWS_ANNOUNCE_CHANNEL_ID)
+
+
+def roster_moves_missing() -> list[str]:
+    """Which settings squad announcements are still waiting on, named
+    individually -- same reasoning as event_rsvp_missing() above."""
+    missing = []
+    if not DISCORD_BOT_TOKEN:
+        missing.append("DISCORD_BOT_TOKEN")
+    if not DISCORD_GUILD_ID:
+        missing.append("DISCORD_GUILD_ID")
+    if not ROSTER_ANNOUNCE_CHANNEL_ID:
+        missing.append("ROSTER_ANNOUNCE_CHANNEL_ID or NEWS_ANNOUNCE_CHANNEL_ID")
+    return missing
+
+
+ROSTER_MOVES_ENABLED = not roster_moves_missing()
+
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an
 # absolute link is required rather than a relative one -- currently just the
