@@ -1884,3 +1884,47 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
   font-size: 0.82rem; color: var(--text);
 }
 .roster-move-warn .muted { display: block; margin-top: 0.2rem; font-size: 0.78rem; }
+
+/* --- Squad Moves on the home page ----------------------------------------
+   Signings and departures as a compact grid of faces. The skew stays off:
+   these sit next to the Transfer Centre band and a dozen skewed tiles
+   would be texture, not signature. */
+.move-grid {
+  display: grid; gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  margin-bottom: 1.5rem;
+}
+.move-card {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--panel); border: 1px solid var(--border);
+  /* Direction on the edge as well as in the word -- the colour is
+     reinforcement, never the only carrier. */
+  border-left: 3px solid var(--border);
+}
+.move-in { border-left-color: var(--accent); }
+.move-out { border-left-color: var(--amber); }
+
+.move-avatar {
+  width: 56px; height: 56px; border-radius: 50%; flex: none;
+  object-fit: cover; background: var(--panel-3);
+}
+.move-avatar-fallback {
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+
+.move-body { display: grid; min-width: 0; }
+.move-tag {
+  font-family: var(--font-display); font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.13em;
+}
+.move-in .move-tag { color: var(--accent-text); }
+.move-out .move-tag { color: var(--amber); }
+.move-name {
+  font-weight: 700; font-size: 1rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.move-pos { font-size: 0.8rem; color: var(--muted); }
+.move-date { font-size: 0.74rem; color: var(--faint); }

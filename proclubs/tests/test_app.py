@@ -1892,3 +1892,100 @@ def test_the_page_shows_the_offer_moving_through_its_states(
     html = client.get("/roster").text
     assert "Signed" in html
     assert "Confirm signing" not in html
+
+
+# --------------------------------------------------------------------------- #
+# Squad Moves on the home page: what the public may and may not see
+# --------------------------------------------------------------------------- #
+def _seed_move(*, kind="offer", name="Bo", response=None, confirmed=False,
+               position="Striker", announced_at=None, confirmed_at=None):
+    with database.get_session() as session:
+        move = services.record_roster_move(
+            session, discord_id="1", display_name=name,
+            avatar_url="https://cdn.discordapp.com/embed/avatars/0.png",
+            kind=kind, position=position, note=None, announced_by_name="Coach",
+            announced_by_discord_id=1, discord_message_id="m",
+        )
+        if response:
+            services.record_offer_response(session, move, response=response,
+                                           role_granted=False, role_error=None)
+        if confirmed:
+            services.confirm_roster_move(session, move, confirmed_by_name="Coach",
+                                         confirm_message_id="c")
+        if announced_at:
+            move.announced_at = announced_at
+        if confirmed_at:
+            move.confirmed_at = confirmed_at
+        if announced_at or confirmed_at:
+            session.commit()
+        return move.id
+
+
+def test_a_confirmed_signing_and_a_departure_show_on_the_home_page(client):
+    _seed_move(kind="offer", name="Bo Nakamura", response="accepted", confirmed=True)
+    _seed_move(kind="release", name="Eli Strand", position="Centre Back")
+    html = client.get("/").text
+    assert "Squad Moves" in html
+    assert "Bo Nakamura" in html and ">Signed<" in html
+    assert "Eli Strand" in html and ">Departed<" in html
+
+
+def test_a_pending_offer_is_not_announced_over_the_players_head(client):
+    """They haven't answered. Putting it on the front page announces it
+    for them."""
+    _seed_move(kind="offer", name="Bo Nakamura")
+    html = client.get("/").text
+    assert "Bo Nakamura" not in html
+    assert "Squad Moves" not in html
+
+
+def test_an_accepted_but_unconfirmed_offer_stays_private(client):
+    """Deciding when an acceptance becomes public is the whole reason the
+    confirm step exists -- leaking it here would make that ornamental."""
+    _seed_move(kind="offer", name="Bo Nakamura", response="accepted")
+    assert "Bo Nakamura" not in client.get("/").text
+
+
+def test_a_declined_offer_is_never_shown_publicly(client):
+    """Publishing that somebody turned the club down is unkind, and isn't
+    the club's news to tell."""
+    _seed_move(kind="offer", name="Bo Nakamura", response="declined")
+    assert "Bo Nakamura" not in client.get("/").text
+
+
+def test_the_section_is_absent_entirely_when_there_is_nothing_public(client):
+    _seed_move(kind="offer", name="Pending One")
+    _seed_move(kind="offer", name="Declined One", response="declined")
+    assert "Squad Moves" not in client.get("/").text
+
+
+def test_moves_are_ordered_by_when_they_became_public(client):
+    """A signing confirmed today leads, even if the offer went out last
+    week -- the confirmation is the news, not the offer."""
+    old = datetime.utcnow() - timedelta(days=7)
+    _seed_move(kind="release", name="Departed Yesterday",
+               announced_at=datetime.utcnow() - timedelta(days=1))
+    _seed_move(kind="offer", name="Signed Today", response="accepted", confirmed=True,
+               announced_at=old, confirmed_at=datetime.utcnow())
+    html = client.get("/").text
+    assert html.index("Signed Today") < html.index("Departed Yesterday")
+
+
+def test_the_home_page_shows_a_bounded_number_of_moves(client):
+    for i in range(10):
+        _seed_move(kind="release", name=f"Player {i}")
+    html = client.get("/").text
+    assert html.count("move-card") == 6
+
+
+def test_a_move_with_no_stored_avatar_falls_back_to_initials(client):
+    """Rather than a broken image on the front page."""
+    with database.get_session() as session:
+        services.record_roster_move(
+            session, discord_id="1", display_name="No Avatar", avatar_url=None,
+            kind="release", position=None, note=None, announced_by_name="Coach",
+            announced_by_discord_id=1, discord_message_id="m",
+        )
+    html = client.get("/").text
+    assert "move-avatar-fallback" in html
+    assert "No Avatar" in html

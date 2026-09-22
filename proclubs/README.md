@@ -634,6 +634,25 @@ announced something, and never find out it didn't. The row snapshots the
 name and avatar at announcement time, since somebody who was let go is
 likely to leave the server.
 
+**The home page shows a "Squad Moves" band**, and what it leaves out is
+the point (`services.public_roster_moves`). Only two things are public:
+
+- a **departure**, which was announced the moment it was made;
+- a **signing** -- an offer the player accepted *and* staff confirmed.
+
+Everything else stays on the staff page. A **pending offer** hasn't been
+answered, so putting it on the front page announces it over the player's
+head. An **accepted but unconfirmed** offer is exactly what the confirm
+step exists to hold back; leaking it here would make that step
+ornamental. A **declined** offer is never shown at all -- publishing that
+somebody turned the club down is unkind, and isn't the club's news to
+tell. Tests in `test_app.py` pin each of those exclusions.
+
+Ordered by when each became public (`confirmed_at` where there is one,
+`announced_at` otherwise), so a signing confirmed today leads even if the
+offer went out last week. Capped at six, and the whole section is absent
+when nothing qualifies.
+
 Set `ROSTER_ANNOUNCE_CHANNEL_ID` to choose the channel (falls back to
 `NEWS_ANNOUNCE_CHANNEL_ID`) and `ROSTER_SQUAD_ROLE_ID` for the role an
 acceptance grants. The Accept/Decline buttons ride on the same signed
@@ -841,7 +860,7 @@ proclubs/
 
 | Path | Who | What |
 |---|---|---|
-| `/` | everyone | Hero, latest news, next event, featured live stream, stats teaser |
+| `/` | everyone | Hero, latest news, squad moves, next event, featured live stream, stats teaser |
 | `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
 | `/news/new`, `/news/<slug>/edit` | staff | Article form: rich-text (WYSIWYG) editor + optional cover image |
 | `/events` | everyone | Upcoming + past events -- read-only, see below |

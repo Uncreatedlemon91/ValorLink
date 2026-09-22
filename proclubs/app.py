@@ -322,6 +322,9 @@ def home(request: Request):
         like_counts = services.like_counts_for(session, thumbnail_article_ids)
         comment_counts = services.comment_counts_for(session, thumbnail_article_ids)
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
+        # Confirmed signings and departures only -- see
+        # services.public_roster_moves for what is deliberately left out.
+        squad_moves = services.public_roster_moves(session, limit=6)
         streamers = services.list_streamers(session)
         live = twitch_client.live_streams([s.twitch_login for s in streamers])
         featured_streamer = services.get_featured_streamer(session)
@@ -362,6 +365,7 @@ def home(request: Request):
             transfers=transfers,
             highlights=highlights,
             next_event=upcoming[0] if upcoming else None,
+            squad_moves=squad_moves,
             featured_streamer=featured_streamer,
             featured_streamer_live=bool(featured_streamer and featured_streamer.twitch_login in live),
             other_live_streamers=other_live_streamers,

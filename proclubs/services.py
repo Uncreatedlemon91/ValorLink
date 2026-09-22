@@ -1097,6 +1097,44 @@ def confirm_roster_move(session: Session, move: RosterMove, *,
     return move
 
 
+def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
+    """The squad moves that may be shown on the public home page.
+
+    ONLY two things qualify, and the exclusions matter more than the
+    inclusions:
+
+    * a DEPARTURE -- already announced publicly the moment it was made;
+    * a SIGNING, meaning an offer the player accepted AND staff then
+      confirmed.
+
+    Everything else is a negotiation, not news, and stays on the staff
+    page:
+
+    * a pending offer -- the player hasn't answered. Putting "we offered
+      X a place" on the front page announces it over their head.
+    * an offer accepted but not yet confirmed -- deciding when that
+      becomes public is the entire reason the confirm step exists;
+      leaking it here would make that step ornamental.
+    * a DECLINED offer -- publishing that someone turned the club down is
+      unkind and is not the club's news to tell.
+
+    Ordered by when each became public: a signing confirmed today belongs
+    at the top even if the offer went out last week, so the sort is on
+    confirmed_at where there is one and announced_at otherwise.
+    """
+    became_public = func.coalesce(RosterMove.confirmed_at, RosterMove.announced_at)
+    return list(session.execute(
+        select(RosterMove)
+        .where(
+            (RosterMove.kind == discord_roster.MOVE_RELEASE)
+            | ((RosterMove.kind == discord_roster.MOVE_OFFER)
+               & RosterMove.confirmed_at.is_not(None))
+        )
+        .order_by(became_public.desc(), RosterMove.id.desc())
+        .limit(limit)
+    ).scalars())
+
+
 def offer_is_open(move: RosterMove) -> bool:
     """An offer still waiting on the player. Departures are never open --
     there is nothing to accept about being let go."""

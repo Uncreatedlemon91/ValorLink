@@ -95,6 +95,35 @@
     </div>
   {% endif %}
 
+  {# Signings and departures, sat directly above the Transfer Centre: the
+     same subject, one structured and one written up. Only moves that are
+     genuinely public reach here -- see services.public_roster_moves. #}
+  {% if squad_moves %}
+    <div class="section-head"><h2>Squad Moves</h2></div>
+    <div class="move-grid">
+      {% for m in squad_moves %}
+        <div class="move-card move-{{ 'in' if m.kind == 'offer' else 'out' }}">
+          {% if m.avatar_url %}
+            <img class="move-avatar" src="{{ m.avatar_url }}" alt=""
+                 width="56" height="56" loading="lazy" decoding="async" />
+          {% else %}
+            <span class="move-avatar move-avatar-fallback">{{ initials(m.display_name) }}</span>
+          {% endif %}
+          <div class="move-body">
+            {# The word carries it, not the colour -- an arrow alone would
+               be meaningless to anyone who can't see the green. #}
+            <span class="move-tag">{{ 'Signed' if m.kind == 'offer' else 'Departed' }}</span>
+            <span class="move-name">{{ m.display_name }}</span>
+            {% if m.position %}<span class="move-pos">{{ m.position }}</span>{% endif %}
+            <span class="move-date">
+              {{ (m.confirmed_at or m.announced_at).strftime('%b %-d, %Y') }}
+            </span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {% if transfers %}
     <div class="section-band">
       <div class="band-head">
