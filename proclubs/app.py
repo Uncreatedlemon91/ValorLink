@@ -987,6 +987,16 @@ async def discord_interactions(request: Request):
     custom_id = data.get("custom_id", "")
     try:
         presser = discord_rsvp.interaction_user(interaction)
+    except discord_rsvp.InteractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Squad offers share this endpoint with event sign-ups; the custom_id
+    # prefix is what tells them apart, checked before either side tries to
+    # parse an id that isn't theirs.
+    if custom_id.startswith(discord_roster.CUSTOM_ID_PREFIX + ":"):
+        return _handle_offer_response(custom_id, presser)
+
+    try:
         # A position pick and a plain answer arrive through the same
         # interaction type; the custom_id prefix is what tells them apart.
         if custom_id.startswith(discord_rsvp.SLOT_CUSTOM_ID_PREFIX + ":"):
@@ -1034,6 +1044,70 @@ async def discord_interactions(request: Request):
                 "components": discord_rsvp.build_components(event, signups, slots),
             },
         }
+
+
+def _handle_offer_response(custom_id: str, presser: dict) -> dict:
+    """One player answering their own squad offer.
+
+    Three refusals, all ephemeral so only the presser sees them and the
+    post stays as it was for everyone else: an id that isn't ours, a
+    press by somebody the offer isn't for, and a press on an offer that
+    is already settled.
+
+    Accepting grants the configured squad role -- the only role write in
+    this app, and one the player triggers for themselves. If that write
+    fails, the ACCEPTANCE STILL STANDS: it's theirs, and a permissions
+    problem on our side is not a reason to pretend they didn't answer.
+    The failure is recorded against the row and surfaced on /roster,
+    where somebody can fix it.
+    """
+    try:
+        response, move_id = discord_roster.parse_offer_custom_id(custom_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unrecognized roster button")
+
+    with get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        if move is None:
+            return _interaction_note("That offer no longer exists.")
+        if str(move.discord_id) != str(presser["id"]):
+            return _interaction_note(
+                "This offer isn't yours to answer -- only the player it names can.")
+        if not services.offer_is_open(move):
+            already = move.response or "closed"
+            return _interaction_note(f"This offer has already been {already}.")
+
+        role_granted, role_error = False, None
+        if response == discord_roster.RESPONSE_ACCEPTED and config.ROSTER_ROLE_GRANT_ENABLED:
+            try:
+                discord_roster.grant_squad_role(str(move.discord_id))
+                role_granted = True
+            except discord_roster.DiscordApiError as exc:
+                role_error = str(exc)
+
+        services.record_offer_response(
+            session, move, response=response,
+            role_granted=role_granted, role_error=role_error,
+        )
+        member = discord_roster.member_from_move(move)
+        embed = discord_roster.build_move_embed(
+            kind=move.kind, member=member, position=move.position, note=move.note,
+            announced_by=move.announced_by_name, announced_at=move.announced_at,
+            response=response,
+        )
+
+    # The member list now shows a role that changed, so don't serve a
+    # minute-old copy of it to the next staff member to open /roster.
+    if role_granted:
+        discord_roster.invalidate_members_cache()
+
+    # UPDATE_MESSAGE re-renders the offer in the same round trip, and
+    # passing no components clears the buttons -- a settled offer with
+    # live buttons only invites presses that can't be honoured.
+    return {
+        "type": discord_rsvp.RESPONSE_UPDATE_MESSAGE,
+        "data": {"embeds": [embed], "components": []},
+    }
 
 
 def _interaction_note(text: str) -> dict:
@@ -1182,6 +1256,9 @@ def roster_page(request: Request, _staff=Depends(auth.require_staff)):
         roster_enabled=config.ROSTER_MOVES_ENABLED,
         roster_missing=config.roster_moves_missing(),
         positions=discord_roster.POSITION_SUGGESTIONS,
+        role_grant_enabled=config.ROSTER_ROLE_GRANT_ENABLED,
+        offer_is_open=services.offer_is_open,
+        awaits_confirmation=services.offer_awaits_confirmation,
     ))
 
 
@@ -1212,38 +1289,104 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
     if member is None:
         raise services.ServiceError("Pick somebody from the Discord member list first.")
 
-    embed = discord_roster.build_move_embed(
-        kind=kind, member=member, position=position, note=note,
-        announced_by=staff.get("name"),
-    )
-    message_id, failure = None, None
-    try:
-        message_id = discord_roster.announce_move(
-            config.ROSTER_ANNOUNCE_CHANNEL_ID, embed, mention_id=member["id"],
-        )
-    except discord_roster.DiscordApiError as exc:
-        failure = str(exc)
-
-    # Recorded either way: an attempt that failed is still something staff
-    # need to see on the page, rather than a silent no-op they repeat.
+    # The row is written BEFORE the post, because an offer's buttons carry
+    # its row id -- there is no id to put in a custom_id until it exists.
+    # The message id is backfilled after, so a post that fails still
+    # leaves the honest record (and the page marks it undelivered).
     with get_session() as session:
-        services.record_roster_move(
+        move = services.record_roster_move(
             session, discord_id=member["id"], display_name=member["name"],
             avatar_url=member["avatar_url"], kind=kind, position=position, note=note,
             announced_by_name=staff.get("name"),
             announced_by_discord_id=_int(staff.get("id")) or None,
-            discord_message_id=message_id,
+            discord_message_id=None,
         )
+        move_id = move.id
+
+    embed = discord_roster.build_move_embed(
+        kind=kind, member=member, position=position, note=note,
+        announced_by=staff.get("name"),
+    )
+    # Only an offer is answerable. Nobody declines being let go.
+    components = (discord_roster.build_offer_components(move_id)
+                  if kind == discord_roster.MOVE_OFFER else None)
+    message_id, failure = None, None
+    try:
+        message_id = discord_roster.announce_move(
+            config.ROSTER_ANNOUNCE_CHANNEL_ID, embed, mention_id=member["id"],
+            components=components,
+        )
+    except discord_roster.DiscordApiError as exc:
+        failure = str(exc)
+
+    if message_id:
+        with get_session() as session:
+            services.set_roster_move_message(
+                session, move_id, channel_id=config.ROSTER_ANNOUNCE_CHANNEL_ID,
+                message_id=message_id,
+            )
 
     if failure:
         _flash(request, f"The announcement didn't send: {failure}", level="error")
+    elif kind == discord_roster.MOVE_OFFER:
+        _flash(request, f"Offer sent to {member['name']} — waiting on their answer in Discord.")
     else:
-        verb = "Offer announced for" if kind == discord_roster.MOVE_OFFER else "Departure announced for"
-        _flash(request, f"{verb} {member['name']}.")
-        # The move usually comes with a role change made by hand in
-        # Discord a moment later; don't serve a minute-old member list
-        # over the top of it.
+        _flash(request, f"Departure announced for {member['name']}.")
+        # A departure is usually followed by a role change made by hand in
+        # Discord; don't serve a minute-old member list over the top of it.
         discord_roster.invalidate_members_cache()
+    return RedirectResponse("/roster", status_code=303)
+
+
+@app.post("/roster/{move_id}/confirm")
+def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
+                   staff=Depends(auth.require_staff)):
+    """Publishes the signing announcement for an offer the player accepted.
+
+    Deliberately a second, human step rather than something the
+    acceptance triggers by itself: the player accepting is them agreeing,
+    and the club announcing a signing is the club's own act. It also
+    leaves room for the paperwork between the two.
+    """
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        if move is None:
+            raise services.ServiceError("That squad move no longer exists.")
+        if not services.offer_awaits_confirmation(move):
+            # Covers every wrong state with the truth rather than a
+            # generic refusal: not accepted yet, declined, already
+            # confirmed, or a departure.
+            raise services.ServiceError(
+                "Only an offer the player has accepted, and that hasn't been "
+                "confirmed yet, can be announced as a signing."
+            )
+        member = discord_roster.member_from_move(move)
+        embed = discord_roster.build_signing_embed(
+            member=member, position=move.position, confirmed_by=staff.get("name"),
+        )
+        # Back into the channel the offer went to, not wherever
+        # ROSTER_ANNOUNCE_CHANNEL_ID points today -- the two can differ if
+        # the setting changed between the offer and the signing.
+        channel_id = move.discord_channel_id or config.ROSTER_ANNOUNCE_CHANNEL_ID
+        confirm_message_id, failure = None, None
+        try:
+            confirm_message_id = discord_roster.announce_move(
+                channel_id, embed, mention_id=member["id"],
+            )
+        except discord_roster.DiscordApiError as exc:
+            failure = str(exc)
+        services.confirm_roster_move(
+            session, move, confirmed_by_name=staff.get("name"),
+            confirm_message_id=confirm_message_id,
+        )
+        name = move.display_name
+
+    if failure:
+        _flash(request, f"Signing recorded, but the announcement didn't send: {failure}",
+               level="error")
+    else:
+        _flash(request, f"{name}'s signing is announced. Welcome to the squad.")
     return RedirectResponse("/roster", status_code=303)
 
 

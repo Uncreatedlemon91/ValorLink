@@ -11,14 +11,26 @@ Two halves, both site -> Discord:
 
 * Posting the announcement embed for an offer or a departure.
 
-DELIBERATELY DOES NOT TOUCH ROLES. "Offer Position" and "Let Go" publish
-an announcement and nothing else: nobody is added to or removed from a
-Discord role, kicked, or banned by this module. Roles are how this app
-decides who is staff and who is a member (see auth.py), so mutating them
-from a web form would mean a mis-click silently changing somebody's
-access to the site as well as their standing in the club. Whoever makes
-the announcement still moves the role in Discord, where the action is
-visible, reversible, and audited.
+NEVER REMOVES A ROLE, AND ONLY EVER ADDS ONE ON THE PLAYER'S OWN PRESS.
+Roles are how this app decides who is staff and who is a member (see
+auth.py), so a web form that moved them would mean a mis-click silently
+changing somebody's access to the site as well as their standing in the
+club. So:
+
+* "Let Go" publishes an announcement and nothing else. Removing access
+  is the irreversible half, and it stays a human action taken in
+  Discord, where it is visible, reversible, and audited.
+* "Offer Position" publishes an offer the player answers themselves,
+  with Accept / Decline buttons that only they can press. Accepting adds
+  exactly one configured role (ROSTER_SQUAD_ROLE_ID) -- grant-only,
+  self-triggered, and to one named role rather than whatever a form
+  posts. Declining touches nothing.
+* Staff then CONFIRM an accepted offer, which publishes the signing
+  announcement. Two steps on purpose: the player accepting is them
+  agreeing, not the club announcing.
+
+grant_squad_role() below is the only role write in this app, and there
+is no corresponding remove.
 
 REST only, same as every other Discord integration here -- no gateway, no
 always-on process. Reuses DISCORD_BOT_TOKEN; see discord_api.py for the
@@ -47,6 +59,20 @@ MOVE_KINDS = (MOVE_OFFER, MOVE_RELEASE)
 # actions.
 _OFFER_COLOR = 0x00E27A
 _RELEASE_COLOR = 0xFFB020
+# A declined offer is neither good news nor bad news; it's closed. Grey
+# rather than red, which on this site means "on air" and nothing else.
+_DECLINED_COLOR = 0x8A93A5
+
+# How the player answers their own offer. Persisted on RosterMove.response
+# and parsed back out of a button's custom_id, so the two must agree.
+RESPONSE_ACCEPTED = "accepted"
+RESPONSE_DECLINED = "declined"
+OFFER_RESPONSES = (RESPONSE_ACCEPTED, RESPONSE_DECLINED)
+
+# Prefix on this feature's button custom_ids. The interactions endpoint is
+# shared with event sign-ups, which parse their own ids -- the prefix is
+# what tells the two apart before either tries.
+CUSTOM_ID_PREFIX = "roster"
 
 # Positions offered to staff as suggestions. A datalist, not a closed
 # select -- clubs invent roles ("Set Piece Coach") and a fixed list would
@@ -200,11 +226,20 @@ def find_member(members: list[dict], discord_id: str) -> dict | None:
 
 def build_move_embed(*, kind: str, member: dict, position: str | None,
                      note: str | None, announced_by: str | None,
-                     announced_at: datetime | None = None) -> dict:
+                     announced_at: datetime | None = None,
+                     response: str | None = None) -> dict:
     """The announcement embed. Pure -- no network, so the wording and shape
-    can be tested without mocking Discord."""
+    can be tested without mocking Discord.
+
+    `response` re-renders an offer that has been answered: the same
+    message is edited in place when the player presses, so the channel
+    shows one live record of the offer rather than an original plus a
+    reply nobody scrolls back to.
+    """
     if kind not in MOVE_KINDS:
         raise ValueError(f"unknown roster move: {kind!r}")
+    if response is not None and response not in OFFER_RESPONSES:
+        raise ValueError(f"unknown offer response: {response!r}")
     name = member["name"]
     mention = f"<@{member['id']}>"
     club = config.SITE_NAME
@@ -216,14 +251,28 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     note = (note or "").strip()
 
     if kind == MOVE_OFFER:
-        title = f"{name} — Offer Extended"
         where = f" as **{position}**" if position else ""
-        description = (
-            f"{mention} has been offered a position with **{club}**{where}. "
-            f"We're looking forward to seeing what they bring to the pitch."
-        )
-        color = _OFFER_COLOR
-        heading = "Squad Announcement · Offer"
+        if response == RESPONSE_ACCEPTED:
+            title = f"{name} — Offer Accepted"
+            description = (
+                f"{mention} has accepted a position with **{club}**{where}. "
+                f"The club will confirm the signing shortly."
+            )
+            color, heading = _OFFER_COLOR, "Squad Announcement · Offer Accepted"
+        elif response == RESPONSE_DECLINED:
+            title = f"{name} — Offer Declined"
+            description = (
+                f"{mention} has declined the offer of a position with **{club}**. "
+                f"We wish them well."
+            )
+            color, heading = _DECLINED_COLOR, "Squad Announcement · Offer Declined"
+        else:
+            title = f"{name} — Offer Extended"
+            description = (
+                f"{mention} has been offered a position with **{club}**{where}. "
+                f"Accept or decline below — only {mention} can answer this one."
+            )
+            color, heading = _OFFER_COLOR, "Squad Announcement · Offer"
     else:
         title = f"{name} — Departure"
         held = f", who leaves us from **{position}**," if position else ""
@@ -232,17 +281,20 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
             f"We thank them for their time with the club and wish them "
             f"every success in what comes next."
         )
-        color = _RELEASE_COLOR
-        heading = "Squad Announcement · Departure"
+        color, heading = _RELEASE_COLOR, "Squad Announcement · Departure"
 
     embed: dict = {
         "title": title,
         "description": description,
         "color": color,
         "author": {"name": heading},
-        "thumbnail": {"url": member["avatar_url"]},
         "timestamp": (announced_at or datetime.now(timezone.utc)).isoformat(),
     }
+    # Only when there is one: Discord rejects an embed carrying a
+    # thumbnail with an empty url, and RosterMove.avatar_url is nullable,
+    # so a re-render of an old row would fail the whole press.
+    if member.get("avatar_url"):
+        embed["thumbnail"] = {"url": member["avatar_url"]}
     if position:
         embed["fields"] = [{"name": "Position", "value": position, "inline": True}]
     if note:
@@ -254,7 +306,107 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     return embed
 
 
-def announce_move(channel_id: str, embed: dict, *, mention_id: str | None = None) -> str:
+def build_signing_embed(*, member: dict, position: str | None,
+                        confirmed_by: str | None,
+                        confirmed_at: datetime | None = None) -> dict:
+    """The celebration, published when staff confirm an accepted offer.
+
+    A second message rather than another edit of the offer: the offer is a
+    record, this is news, and news that edits a week-old message into
+    place reaches nobody.
+    """
+    club = config.SITE_NAME
+    position = (position or "").strip()[:80]
+    where = f" as **{position}**" if position else ""
+    embed: dict = {
+        "title": f"{member['name']} has signed for {club}",
+        "description": (
+            f"It's official — <@{member['id']}> joins **{club}**{where}. "
+            f"Welcome to the squad."
+        ),
+        "color": _OFFER_COLOR,
+        "author": {"name": "Squad Announcement · Signing"},
+        "timestamp": (confirmed_at or datetime.now(timezone.utc)).isoformat(),
+    }
+    if member.get("avatar_url"):
+        embed["thumbnail"] = {"url": member["avatar_url"]}
+    if position:
+        embed["fields"] = [{"name": "Position", "value": position, "inline": True}]
+    if confirmed_by:
+        embed["footer"] = {"text": f"Confirmed by {confirmed_by} · {club}"}
+    return embed
+
+
+def build_offer_components(move_id: int) -> list[dict]:
+    """Accept / Decline under an open offer.
+
+    Returned empty by callers once the offer is answered: leaving dead
+    buttons on a settled offer only invites presses that can't be
+    honoured, and the edited embed already says what happened.
+    """
+    return [{
+        "type": 1,  # action row
+        "components": [
+            {"type": 2, "style": 3, "label": "Accept",
+             "custom_id": f"{CUSTOM_ID_PREFIX}:{RESPONSE_ACCEPTED}:{move_id}"},
+            {"type": 2, "style": 2, "label": "Decline",
+             "custom_id": f"{CUSTOM_ID_PREFIX}:{RESPONSE_DECLINED}:{move_id}"},
+        ],
+    }]
+
+
+def parse_offer_custom_id(custom_id: str) -> tuple[str, int]:
+    """("accepted"|"declined", move_id) out of a button's custom_id.
+
+    Raises ValueError on anything that isn't one of ours -- the
+    interactions endpoint shares a URL with event sign-ups, so "this isn't
+    mine" has to be a clean, distinguishable answer rather than an
+    IndexError.
+    """
+    parts = custom_id.split(":")
+    if len(parts) != 3 or parts[0] != CUSTOM_ID_PREFIX:
+        raise ValueError(f"not a roster custom_id: {custom_id!r}")
+    _, response, raw_id = parts
+    if response not in OFFER_RESPONSES:
+        raise ValueError(f"unknown offer response: {response!r}")
+    if not raw_id.isdigit():
+        raise ValueError(f"bad move id in custom_id: {custom_id!r}")
+    return response, int(raw_id)
+
+
+def member_from_move(move) -> dict:
+    """A stored RosterMove back in the shape the embed builders take.
+
+    The row snapshots the name and avatar from announcement time, which is
+    the point: re-rendering an offer must not depend on the player still
+    being in the server, or on Discord being reachable while somebody is
+    mid-press.
+    """
+    return {"id": str(move.discord_id), "name": move.display_name,
+            "avatar_url": move.avatar_url or ""}
+
+
+def grant_squad_role(user_id: str) -> None:
+    """Adds config.ROSTER_SQUAD_ROLE_ID to one member. The ONLY role write
+    in this app, and there is no remove to pair with it.
+
+    Discord treats adding a role somebody already has as success, so a
+    double-press costs a call and changes nothing. Raises DiscordApiError
+    when the bot lacks Manage Roles, or when its own highest role sits
+    below the squad role -- both show up as a 403, and both are fixed in
+    Server Settings -> Roles rather than in this app, so the caller
+    records the message instead of discarding it.
+    """
+    if not config.ROSTER_SQUAD_ROLE_ID:
+        raise DiscordApiError("ROSTER_SQUAD_ROLE_ID isn't set")
+    discord_api.put(
+        f"/guilds/{config.DISCORD_GUILD_ID}/members/{user_id}"
+        f"/roles/{config.ROSTER_SQUAD_ROLE_ID}"
+    )
+
+
+def announce_move(channel_id: str, embed: dict, *, mention_id: str | None = None,
+                  components: list[dict] | None = None) -> str:
     """Posts the embed and returns the new message's id.
 
     The player is mentioned in the message body as well as inside the
@@ -269,5 +421,7 @@ def announce_move(channel_id: str, embed: dict, *, mention_id: str | None = None
     }
     if mention_id:
         payload["content"] = f"<@{mention_id}>"
+    if components:
+        payload["components"] = components
     resp = discord_api.post(f"/channels/{channel_id}/messages", json=payload)
     return str(resp.json()["id"])

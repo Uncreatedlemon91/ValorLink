@@ -528,27 +528,70 @@ and "Comments and likes" below for what that total does and doesn't mean.
 ## Squad moves: Offer Position / Let Go
 
 `/roster` (nav label "Squad", staff only) lists everyone in the Discord
-server with their Discord avatar, and publishes one of two announcements
-about whoever is picked. See `discord_roster.py`.
+server with their Discord avatar, and starts one of two squad moves for
+whoever is picked. See `discord_roster.py`.
 
-**It never touches a Discord role.** Both buttons publish a message and
-nothing else -- nobody is added to a role, removed from one, kicked, or
-banned. That's deliberate, and it's the constraint the rest of the design
-hangs off:
+**Offer Position** publishes an offer the player answers themselves.
+**Let Go** publishes a departure and nothing else. Full flow:
 
-- Roles are how this app decides who is staff and who is a member (see
-  `auth.py`). A web form that moved them would mean one mis-click quietly
-  changing somebody's access to the site as well as their standing in the
-  club.
-- Removing access is the irreversible half of "let go". Doing it in
-  Discord, by hand, keeps it visible in the audit log and undoable by
-  anyone with the permission -- neither of which is true of a POST from a
-  browser tab.
+```
+staff picks a member  ->  OFFER posted to Discord with Accept / Decline
+                             |
+             player presses  |  (only the player the offer names can)
+                    +--------+--------+
+                    |                 |
+                ACCEPT            DECLINE
+                    |                 |
+      squad role added        nothing changes
+      offer edited in place   offer edited in place
+                    |
+      staff press "Confirm signing" on /roster
+                    |
+      SIGNING announcement posted -- the celebration
+```
 
-The page says so in as many words, above the form, so nobody assumes the
-role moved on its own. `test_discord_roster.py` asserts it against the
-module's source, so adding a role write would have to come and argue with
-that test.
+**The role rule.** Roles are how this app decides who is staff and who is
+a member (`auth.py`), so what this app may do to them is deliberately
+narrow:
+
+- **It never removes a role.** Not on "Let Go", not on "Decline", not
+  anywhere. Removing access is the irreversible half, and it stays a
+  human action taken in Discord, where it's in the audit log and undoable.
+- **It adds exactly one role, `ROSTER_SQUAD_ROLE_ID`, and only when the
+  player presses Accept on their own offer.** Grant-only, self-triggered,
+  and to one role named in `.env` rather than whatever a form posts.
+  `grant_squad_role` is the only role write in the codebase and there is
+  no remove to pair with it -- `test_discord_roster.py` asserts that
+  against the module's source, so a change that adds one has to come and
+  argue with the test first.
+- Leave `ROSTER_SQUAD_ROLE_ID` blank and the flow still works; accepting
+  is recorded on the site and you move the role by hand.
+
+**The acceptance and the role grant are recorded separately**, because
+they can disagree. If Discord refuses the role write -- the bot lacking
+Manage Roles, or its highest role sitting below the squad role -- the
+acceptance still stands (it is the player's, and our permissions problem
+is no reason to pretend they didn't answer). The failure is stored on the
+row and shown on `/roster` with what to go and fix, rather than leaving
+an acceptance that silently granted nothing.
+
+**Confirming is a second, human step.** The player accepting is them
+agreeing; the club announcing a signing is the club's own act, and there
+is usually paperwork between the two. So an accepted offer sits on
+`/roster` as *Accepted* with a **Confirm signing** button, and only that
+publishes the celebration. It goes back to the channel the offer went to
+(`RosterMove.discord_channel_id`), not wherever `ROSTER_ANNOUNCE_CHANNEL_ID`
+points today -- the two can differ if the setting changed in between.
+
+**Refusals on a button press are ephemeral**, so only the presser sees
+them and the post stays as it was for everyone else: an offer that isn't
+theirs, one already answered, one that no longer exists. A settled offer
+is re-rendered with its buttons removed, since dead controls only invite
+presses that can't be honoured.
+
+**The interactions endpoint is shared** with event sign-ups. The
+`roster:` custom_id prefix is checked before either side tries to parse
+an id that isn't theirs (see `app.py`'s `discord_interactions`).
 
 **Picking somebody.** The member list comes from
 `GET /guilds/<id>/members`, which needs the bot's privileged
@@ -583,15 +626,19 @@ mention *inside* an embed renders as a link and notifies nobody.
 `@everyone` typed into the staff note can never go out for real.
 
 **Every attempt is recorded**, delivered or not (`models.RosterMove`,
-shown under "Recently announced"). A post that fails writes a row with a
+shown under "Recently announced" with its state -- *Awaiting answer*,
+*Accepted*, *Declined*, *Signed*). A post that fails writes a row with a
 null `discord_message_id` and the page marks it *not delivered to
 Discord* -- otherwise staff see a success redirect, assume the club
 announced something, and never find out it didn't. The row snapshots the
 name and avatar at announcement time, since somebody who was let go is
 likely to leave the server.
 
-Set `ROSTER_ANNOUNCE_CHANNEL_ID` to choose the channel; it falls back to
-`NEWS_ANNOUNCE_CHANNEL_ID`.
+Set `ROSTER_ANNOUNCE_CHANNEL_ID` to choose the channel (falls back to
+`NEWS_ANNOUNCE_CHANNEL_ID`) and `ROSTER_SQUAD_ROLE_ID` for the role an
+acceptance grants. The Accept/Decline buttons ride on the same signed
+interactions webhook as event sign-ups, so they need `DISCORD_PUBLIC_KEY`
+and the Interactions Endpoint URL that those already require.
 
 ## Comments and likes
 

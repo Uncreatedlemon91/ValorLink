@@ -11,11 +11,21 @@
     </div>
   </div>
 
-  {# Said once, plainly, rather than left for someone to discover: this
-     page publishes a message and nothing else. #}
+  {# Said once, plainly, rather than left for someone to discover. The
+     one role this app writes is worth being explicit about. #}
   <p class="roster-disclaimer">
-    Publishing an announcement does not change anyone's Discord roles — move the
-    role in Discord yourself once the post is up.
+    An <strong>offer</strong> is posted to Discord with Accept / Decline buttons that
+    only that player can press.
+    {% if role_grant_enabled %}
+      Accepting adds them to the squad role automatically; you then confirm the
+      signing here to publish the announcement.
+    {% else %}
+      Accepting is recorded here — no Discord role is set, because
+      <code>ROSTER_SQUAD_ROLE_ID</code> isn't configured. You then confirm the
+      signing here to publish the announcement.
+    {% endif %}
+    <strong>Let Go</strong> only publishes a departure announcement — it never removes
+    a role, so revoke access in Discord yourself.
   </p>
 
   {% if not roster_enabled %}
@@ -100,7 +110,7 @@
   {% if moves %}
     <div class="roster-history card">
       {% for move in moves %}
-        <div class="roster-move roster-move-{{ move.kind }}">
+        <div class="roster-move roster-move-{{ move.kind }} roster-move-{{ move.response or 'pending' }}">
           {% if move.avatar_url %}
             <img class="roster-avatar" src="{{ move.avatar_url }}" alt=""
                  width="40" height="40" loading="lazy" decoding="async" />
@@ -112,15 +122,50 @@
                 {{ 'Offer' if move.kind == 'offer' else 'Departure' }}
               </span>
               {% if move.position %}<span class="roster-move-pos">{{ move.position }}</span>{% endif %}
+              {# Only an offer has a state to be in; a departure is just done. #}
+              {% if move.kind == 'offer' %}
+                {% if move.confirmed_at %}
+                  <span class="roster-state is-signed">Signed</span>
+                {% elif move.response == 'accepted' %}
+                  <span class="roster-state is-accepted">Accepted</span>
+                {% elif move.response == 'declined' %}
+                  <span class="roster-state is-declined">Declined</span>
+                {% else %}
+                  <span class="roster-state is-pending">Awaiting answer</span>
+                {% endif %}
+              {% endif %}
             </div>
             <div class="roster-move-meta">
               {{ localtime(move.announced_at) }}
               {% if move.announced_by_name %} · by {{ move.announced_by_name }}{% endif %}
+              {% if move.responded_at %} · answered {{ localtime(move.responded_at) }}{% endif %}
+              {% if move.confirmed_at %}
+                · signing confirmed {{ localtime(move.confirmed_at) }}
+                {%- if move.confirmed_by_name %} by {{ move.confirmed_by_name }}{% endif %}
+              {% endif %}
               {% if not move.discord_message_id %}
                 <span class="roster-move-failed">not delivered to Discord</span>
               {% endif %}
             </div>
+            {% if move.role_error %}
+              {# The acceptance stands either way; this is the bit somebody
+                 has to go and fix, so it can't be silent. #}
+              <p class="roster-move-warn">
+                Accepted, but the squad role wasn't added: {{ move.role_error }}
+                <span class="muted">Check the bot has Manage Roles, and that its highest
+                role sits above the squad role in Server Settings → Roles.</span>
+              </p>
+            {% elif move.response == 'accepted' and move.role_granted %}
+              <p class="roster-move-note muted">Squad role added automatically.</p>
+            {% endif %}
             {% if move.note %}<p class="roster-move-note">{{ move.note }}</p>{% endif %}
+            {% if awaits_confirmation(move) %}
+              <form class="roster-confirm" method="post" action="/roster/{{ move.id }}/confirm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn">Confirm signing</button>
+                <span class="field-hint">Publishes the signing announcement to Discord.</span>
+              </form>
+            {% endif %}
           </div>
         </div>
       {% endfor %}

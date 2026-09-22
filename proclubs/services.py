@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, defer, with_expression
 
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
+import discord_roster
 import html_sanitize
 import images
 from formations import BENCH_SLOTS, FORMATIONS
@@ -1038,6 +1039,76 @@ def record_roster_move(session: Session, *, discord_id: str, display_name: str,
     session.commit()
     session.refresh(move)
     return move
+
+
+def set_roster_move_message(session: Session, move_id: int, *, channel_id: str,
+                            message_id: str) -> None:
+    """Backfills where the announcement landed.
+
+    Split from record_roster_move because an offer's buttons carry its row
+    id, so the row has to exist before the message can be built -- the id
+    only comes back once Discord has accepted the post.
+    """
+    move = session.get(RosterMove, move_id)
+    if move is None:
+        return
+    move.discord_channel_id = str(channel_id)
+    move.discord_message_id = str(message_id)
+    session.commit()
+
+
+def get_roster_move(session: Session, move_id: int) -> RosterMove | None:
+    return session.get(RosterMove, move_id)
+
+
+def record_offer_response(session: Session, move: RosterMove, *, response: str,
+                          role_granted: bool, role_error: str | None) -> RosterMove:
+    """Stores the player's own answer to their offer.
+
+    The acceptance and the role write are recorded separately because
+    they can disagree: the press is theirs and always stands, while
+    granting the role can fail on Discord's side (see
+    discord_roster.grant_squad_role). Swallowing that would leave staff
+    looking at an acceptance that quietly granted nothing.
+    """
+    move.response = response
+    move.responded_at = datetime.utcnow()
+    move.role_granted = role_granted
+    move.role_error = role_error
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def confirm_roster_move(session: Session, move: RosterMove, *,
+                        confirmed_by_name: str | None,
+                        confirm_message_id: str | None) -> RosterMove:
+    """Marks an accepted offer as confirmed by staff.
+
+    Like record_roster_move, written after the announcement is attempted
+    so a null confirm_message_id is the honest record of a celebration
+    that didn't send.
+    """
+    move.confirmed_at = datetime.utcnow()
+    move.confirmed_by_name = confirmed_by_name
+    move.confirm_message_id = confirm_message_id
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def offer_is_open(move: RosterMove) -> bool:
+    """An offer still waiting on the player. Departures are never open --
+    there is nothing to accept about being let go."""
+    return move.kind == discord_roster.MOVE_OFFER and move.response is None
+
+
+def offer_awaits_confirmation(move: RosterMove) -> bool:
+    """Accepted by the player, not yet confirmed by staff -- the state the
+    /roster page turns into a Confirm signing button."""
+    return (move.kind == discord_roster.MOVE_OFFER
+            and move.response == discord_roster.RESPONSE_ACCEPTED
+            and move.confirmed_at is None)
 
 
 def recent_roster_moves(session: Session, limit: int = 15) -> list[RosterMove]:

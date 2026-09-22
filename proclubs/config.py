@@ -218,6 +218,26 @@ def roster_moves_missing() -> list[str]:
 
 ROSTER_MOVES_ENABLED = not roster_moves_missing()
 
+# The role a player is given when they ACCEPT an offer -- the one place
+# this app writes a Discord role, and the narrowest one it could be:
+#
+#   * it only ever adds, never removes;
+#   * it is triggered by the player themselves pressing Accept on their
+#     own offer, not by a staff click;
+#   * it is one specific role, named here, rather than whatever a form
+#     posts.
+#
+# Leave it blank and accepting is recorded on the site and nothing else
+# happens in Discord -- the offer flow still works, staff just move the
+# role by hand. Declining never touches a role either way.
+#
+# Needs the bot to have Manage Roles, AND its own highest role to sit
+# ABOVE this one in Server Settings -> Roles. Discord refuses otherwise,
+# and /roster shows that refusal against the acceptance rather than
+# swallowing it.
+ROSTER_SQUAD_ROLE_ID = os.getenv("ROSTER_SQUAD_ROLE_ID", "")
+ROSTER_ROLE_GRANT_ENABLED = bool(ROSTER_MOVES_ENABLED and ROSTER_SQUAD_ROLE_ID)
+
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an
 # absolute link is required rather than a relative one -- currently just the

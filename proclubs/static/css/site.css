@@ -1854,3 +1854,33 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .roster-move-meta { font-size: 0.78rem; color: var(--faint); margin-top: 0.15rem; }
 .roster-move-failed { color: var(--live); font-weight: 600; }
 .roster-move-note { margin: 0.4rem 0 0; font-size: 0.86rem; color: var(--muted); }
+
+/* An offer has a lifecycle; a departure doesn't. The state pill is the
+   one thing a staff member scans this list for, so it reads at a glance
+   and never relies on colour alone -- the word carries it. */
+.roster-state {
+  font-family: var(--font-display); font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem; border: 1px solid currentColor;
+}
+.roster-state.is-pending { color: var(--faint); }
+.roster-state.is-accepted { color: var(--accent-text); }
+.roster-state.is-declined { color: var(--muted); }
+.roster-state.is-signed { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+
+/* An accepted offer is the one row with something left to do on it, so
+   it keeps the accent edge while a pending or declined one recedes. */
+.roster-move-accepted { border-left-color: var(--accent); }
+.roster-move-declined { border-left-color: var(--border); }
+
+.roster-confirm {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.roster-move-warn {
+  margin: 0.4rem 0 0; padding: 0.45rem 0.6rem;
+  border-left: 3px solid var(--amber); background: var(--panel-2);
+  font-size: 0.82rem; color: var(--text);
+}
+.roster-move-warn .muted { display: block; margin-top: 0.2rem; font-size: 0.78rem; }

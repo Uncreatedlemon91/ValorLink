@@ -269,16 +269,146 @@ def test_an_announcement_can_never_become_an_everyone_ping(monkeypatch):
     assert "content" not in sent["body"]
 
 
-def test_nothing_in_this_module_writes_a_discord_role():
-    """The guardrail the feature rests on, checked against the source
-    rather than trusted: this module reads members and posts messages,
-    and must never PUT or DELETE a role. A change that adds one should
-    have to come here and argue for it."""
-    source = open(os.path.join(os.path.dirname(os.path.dirname(
+def _module_source() -> str:
+    return open(os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "discord_roster.py")).read()
-    assert "/roles/" not in source
-    assert "discord_api.put" not in source
+
+
+def test_this_module_never_removes_a_role():
+    """The guardrail the feature rests on, checked against the source
+    rather than trusted.
+
+    Granting one named role on the player's own Accept is deliberate (see
+    grant_squad_role). Taking a role away is not, and never was: removing
+    access is the irreversible half, and it stays a human action in
+    Discord. A change that adds a removal has to come here and argue with
+    this test first.
+    """
+    source = _module_source()
     assert "discord_api.delete" not in source
+    assert "DELETE" not in source
+    # Exactly one role write, and it is the additive one.
+    assert source.count("/roles/") == 1
+    assert source.count("discord_api.put") == 1
+
+
+def test_the_only_role_written_is_the_one_named_in_config():
+    """Not "whatever the form posted" -- a single configured role is what
+    makes the grant safe to trigger from a button press."""
+    source = _module_source()
+    assert "/roles/{config.ROSTER_SQUAD_ROLE_ID}" in source
+
+
+def test_granting_refuses_when_no_squad_role_is_configured(monkeypatch):
+    """Rather than PUTting to /roles/ with an empty id, which Discord
+    would answer with something far less clear."""
+    monkeypatch.setattr(discord_roster.config, "ROSTER_SQUAD_ROLE_ID", "")
+    called = []
+    monkeypatch.setattr(discord_roster.discord_api, "put", lambda p: called.append(p))
+    with pytest.raises(discord_roster.DiscordApiError):
+        discord_roster.grant_squad_role("42")
+    assert called == []
+
+
+def test_granting_puts_the_configured_role_on_the_member(monkeypatch):
+    monkeypatch.setattr(discord_roster.config, "ROSTER_SQUAD_ROLE_ID", "777")
+    monkeypatch.setattr(discord_roster.config, "DISCORD_GUILD_ID", 999)
+    calls = []
+    monkeypatch.setattr(discord_roster.discord_api, "put", lambda p: calls.append(p))
+    discord_roster.grant_squad_role("42")
+    assert calls == ["/guilds/999/members/42/roles/777"]
+
+
+# --- Accept / Decline ------------------------------------------------------- #
+def test_an_open_offer_carries_accept_and_decline_buttons():
+    rows = discord_roster.build_offer_components(7)
+    labels = [c["label"] for c in rows[0]["components"]]
+    ids = [c["custom_id"] for c in rows[0]["components"]]
+    assert labels == ["Accept", "Decline"]
+    assert ids == ["roster:accepted:7", "roster:declined:7"]
+
+
+def test_a_button_id_round_trips_through_the_parser():
+    for response in discord_roster.OFFER_RESPONSES:
+        parsed = discord_roster.parse_offer_custom_id(f"roster:{response}:12")
+        assert parsed == (response, 12)
+
+
+@pytest.mark.parametrize("custom_id", [
+    "signup:going:3",            # an event sign-up, sharing the endpoint
+    "roster:accepted",           # truncated
+    "roster:maybe:3",            # not an offer response
+    "roster:accepted:abc",       # non-numeric id
+    "",
+])
+def test_the_parser_rejects_anything_that_is_not_one_of_ours(custom_id):
+    """The interactions URL is shared with event sign-ups, so "not mine"
+    has to be a clean answer rather than an IndexError."""
+    with pytest.raises(ValueError):
+        discord_roster.parse_offer_custom_id(custom_id)
+
+
+def test_an_accepted_offer_re_renders_in_place():
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position="Striker",
+        note=None, announced_by="Coach",
+        response=discord_roster.RESPONSE_ACCEPTED,
+    )
+    assert "Offer Accepted" in embed["title"]
+    assert "has accepted" in embed["description"]
+    assert embed["color"] == discord_roster._OFFER_COLOR
+
+
+def test_a_declined_offer_is_neither_celebratory_nor_alarming():
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position=None,
+        note=None, announced_by=None,
+        response=discord_roster.RESPONSE_DECLINED,
+    )
+    assert "Offer Declined" in embed["title"]
+    assert embed["color"] == discord_roster._DECLINED_COLOR
+    assert embed["color"] not in (discord_roster._OFFER_COLOR,
+                                  discord_roster._RELEASE_COLOR)
+
+
+def test_an_open_offer_tells_the_reader_who_may_answer():
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position=None,
+        note=None, announced_by=None,
+    )
+    assert "only <@42> can answer" in embed["description"]
+
+
+def test_an_unknown_response_is_rejected_rather_than_rendered():
+    with pytest.raises(ValueError):
+        discord_roster.build_move_embed(
+            kind=discord_roster.MOVE_OFFER, member=_choice(), position=None,
+            note=None, announced_by=None, response="maybe",
+        )
+
+
+def test_the_signing_announcement_is_its_own_celebratory_message():
+    """Not another edit of the offer: an edit to a week-old message
+    reaches nobody, and the signing is the news."""
+    embed = discord_roster.build_signing_embed(
+        member=_choice(), position="Striker", confirmed_by="Coach",
+    )
+    assert embed["title"] == "Alex has signed for YeeHaw FC"
+    assert "<@42>" in embed["description"]
+    assert "Welcome to the squad" in embed["description"]
+    assert embed["color"] == discord_roster._OFFER_COLOR
+    assert embed["footer"]["text"].startswith("Confirmed by Coach")
+
+
+def test_member_from_move_survives_a_player_who_left_the_server():
+    """Re-rendering an offer must not depend on the member list, which is
+    exactly what a departing player disappears from."""
+    class _Row:
+        discord_id, display_name, avatar_url = "42", "Alex", None
+
+    assert discord_roster.member_from_move(_Row()) == {
+        "id": "42", "name": "Alex", "avatar_url": "",
+    }
 
 
 def test_an_over_long_position_is_capped_so_the_post_cannot_be_rejected():
@@ -290,3 +420,19 @@ def test_an_over_long_position_is_capped_so_the_post_cannot_be_rejected():
     )
     assert len(embed["fields"][0]["value"]) == 80
     assert len(embed["description"]) < 4096
+
+
+def test_an_embed_omits_the_thumbnail_rather_than_sending_an_empty_url():
+    """RosterMove.avatar_url is nullable, and Discord rejects an embed
+    carrying a thumbnail with an empty url -- which would fail the whole
+    re-render when somebody presses Accept on an older offer."""
+    member = {"id": "42", "name": "Alex", "avatar_url": ""}
+    offer = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=member, position=None,
+        note=None, announced_by=None,
+    )
+    signing = discord_roster.build_signing_embed(
+        member=member, position=None, confirmed_by=None,
+    )
+    assert "thumbnail" not in offer
+    assert "thumbnail" not in signing

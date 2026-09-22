@@ -239,6 +239,32 @@ class RosterMove(Base):
     # Null when the post itself failed -- the row is still written so the
     # attempt is visible, and the page marks it as not delivered.
     discord_message_id = Column(String, nullable=True)
+    # Where that message lives, so the confirmation announcement lands in
+    # the same channel even if ROSTER_ANNOUNCE_CHANNEL_ID is changed
+    # between the offer and the signing.
+    discord_channel_id = Column(String, nullable=True)
+
+    # --- The offer's own lifecycle (offers only; a departure has none) ---
+    # An offer is a question, so it has an answer: null while nobody has
+    # pressed, then "accepted" or "declined" (see
+    # discord_roster.OFFER_RESPONSES). Only the person the offer names can
+    # set it, and only once.
+    response = Column(String, nullable=True)
+    responded_at = Column(DateTime, nullable=True)
+    # Whether accepting actually put the squad role on them. Separate from
+    # `response` because the two can disagree: the acceptance is theirs and
+    # always stands, while the role write can fail on its own (bot missing
+    # Manage Roles, or its highest role sitting below the squad role).
+    # role_error carries why, so /roster can say what to fix instead of
+    # showing an acceptance that silently granted nothing.
+    role_granted = Column(Boolean, nullable=False, default=False)
+    role_error = Column(String, nullable=True)
+    # Staff's confirmation of an accepted offer, and the celebratory
+    # announcement it published. Deliberately a second, human step: the
+    # player accepting is them agreeing, not the club announcing.
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by_name = Column(String, nullable=True)
+    confirm_message_id = Column(String, nullable=True)
 
 
 class PlayerLink(Base):

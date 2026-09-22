@@ -3,6 +3,7 @@ event/streamer flows through the actual HTTP layer.
 
 Run with: pytest proclubs/tests/test_app.py
 """
+import json
 import os
 import re
 import sys
@@ -19,10 +20,12 @@ os.environ["HTTPS_ONLY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from nacl.signing import SigningKey  # noqa: E402
 
 import app as appmod  # noqa: E402
 import config  # noqa: E402
 import database  # noqa: E402
+import discord_rsvp  # noqa: E402
 import services  # noqa: E402
 from models import Clip, Event  # noqa: E402
 
@@ -1539,8 +1542,353 @@ def test_the_page_names_the_settings_it_is_missing_when_unconfigured(client, mon
     assert "DISCORD_BOT_TOKEN" in html
 
 
-def test_the_page_says_out_loud_that_roles_are_not_changed(client, roster_ready):
-    """Staff have to know the role move is still theirs to make, or
+def test_the_page_says_out_loud_that_let_go_never_removes_a_role(client, roster_ready):
+    """Staff have to know revoking access is still theirs to do, or
     somebody will be 'let go' and keep their access for a week."""
     _login_staff(client)
-    assert "does not change anyone's Discord roles" in client.get("/roster").text
+    assert "never removes" in client.get("/roster").text
+
+
+def test_the_page_says_whether_accepting_will_set_the_role(client, roster_ready, monkeypatch):
+    """The one automatic role write in the app -- staff should know from
+    the page whether it's actually switched on, not from the .env."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    _login_staff(client)
+    assert "adds them to the squad role automatically" in client.get("/roster").text
+
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
+    assert "ROSTER_SQUAD_ROLE_ID" in client.get("/roster").text
+
+
+# --------------------------------------------------------------------------- #
+# Offers: the player answers, then staff confirm the signing
+# --------------------------------------------------------------------------- #
+def _offer(client, roster_ready, *, discord_id="42", position="Striker"):
+    """Publishes an offer through the real route and returns its row id."""
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "offer", "position": position,
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0].id
+
+
+def _press(client, key, *, custom_id, user_id, name="Cap"):
+    """One button press, signed the way Discord signs it."""
+    payload = {
+        "type": discord_rsvp.INTERACTION_MESSAGE_COMPONENT,
+        "data": {"custom_id": custom_id},
+        "member": {"user": {"id": str(user_id), "username": name, "avatar": None}},
+    }
+    body = json.dumps(payload).encode()
+    timestamp = "1700000000"
+    signature = key.sign(timestamp.encode() + body).signature.hex()
+    return client.post("/discord/interactions", content=body, headers={
+        "X-Signature-Ed25519": signature,
+        "X-Signature-Timestamp": timestamp,
+        "Content-Type": "application/json",
+    })
+
+
+@pytest.fixture
+def discord_key(monkeypatch):
+    key = SigningKey.generate()
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", bytes(key.verify_key).hex())
+    return key
+
+
+@pytest.fixture
+def role_grant(monkeypatch):
+    """Role granting switched on, with the PUTs captured rather than sent."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
+    monkeypatch.setattr(config, "DISCORD_GUILD_ID", 999)
+    puts = []
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", lambda p: puts.append(p))
+    return puts
+
+
+def test_an_offer_is_posted_with_accept_and_decline_buttons(client, roster_ready):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    body = roster_ready[0][1]
+    ids = [c["custom_id"] for c in body["components"][0]["components"]]
+    assert ids == [f"roster:accepted:{move_id}", f"roster:declined:{move_id}"]
+
+
+def test_a_departure_gets_no_buttons(client, roster_ready):
+    """Nobody declines being let go."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert "components" not in roster_ready[0][1]
+
+
+def test_accepting_grants_the_squad_role_and_edits_the_offer_in_place(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Offer Accepted" in payload["data"]["embeds"][0]["title"]
+    # Buttons cleared: a settled offer with live buttons invites presses
+    # that can't be honoured.
+    assert payload["data"]["components"] == []
+
+    assert role_grant == ["/guilds/999/members/42/roles/777"]
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted"
+        assert move.role_granted is True
+        assert move.role_error is None
+        assert move.responded_at is not None
+
+
+def test_declining_records_the_answer_and_touches_no_role(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    assert "Offer Declined" in r.json()["data"]["embeds"][0]["title"]
+    assert role_grant == [], "declining must never write a role"
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "declined"
+        assert move.role_granted is False
+
+
+def test_only_the_player_the_offer_names_can_answer_it(
+        client, roster_ready, discord_key, role_grant):
+    """Otherwise anyone who can see the channel could accept on somebody
+    else's behalf -- and, with role granting on, give themselves a role."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=43)
+    assert r.status_code == 200
+    # Ephemeral refusal (type 4, flag 64), not an edit of the post.
+    assert r.json()["type"] == 4
+    assert r.json()["data"]["flags"] == 64
+    assert "isn't yours" in r.json()["data"]["content"]
+
+    assert role_grant == []
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).response is None
+
+
+def test_an_offer_can_only_be_answered_once(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    assert r.json()["type"] == 4
+    assert "already been accepted" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).response == "accepted"
+    assert len(role_grant) == 1, "a second press must not re-grant"
+
+
+def test_an_acceptance_stands_even_if_the_role_write_fails(
+        client, roster_ready, discord_key, monkeypatch):
+    """The press is theirs. A permissions problem on our side is not a
+    reason to pretend they didn't answer -- it's a thing to go and fix."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
+
+    def forbidden(path):
+        raise appmod.discord_roster.DiscordApiError("403 Forbidden (Missing Permissions, code 50013)")
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", forbidden)
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Offer Accepted" in r.json()["data"]["embeds"][0]["title"]
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted"
+        assert move.role_granted is False
+        assert "Missing Permissions" in move.role_error
+
+    # And staff are told, rather than seeing an acceptance that silently
+    # granted nothing.
+    html = client.get("/roster").text
+    assert "the squad role wasn't added" in html
+    assert "Missing Permissions" in html
+
+
+def test_accepting_records_the_answer_when_role_granting_is_off(
+        client, roster_ready, discord_key, monkeypatch):
+    """The offer flow has to work without ROSTER_SQUAD_ROLE_ID set."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
+    puts = []
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", lambda p: puts.append(p))
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert puts == []
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted" and move.role_error is None
+
+
+def test_a_press_on_an_offer_that_no_longer_exists_is_answered_not_crashed(
+        client, roster_ready, discord_key):
+    _login_staff(client)
+    r = _press(client, discord_key, custom_id="roster:accepted:9999", user_id=42)
+    assert r.json()["type"] == 4
+    assert "no longer exists" in r.json()["data"]["content"]
+
+
+def test_a_malformed_roster_button_is_rejected(client, roster_ready, discord_key):
+    r = _press(client, discord_key, custom_id="roster:maybe:1", user_id=42)
+    assert r.status_code == 400
+
+
+def test_event_signups_still_route_past_the_roster_branch(client, roster_ready, discord_key):
+    """Both features share the interactions URL; adding offers must not
+    have swallowed event sign-ups. Checked with a real, well-formed
+    sign-up press and a real event, not a string that would have failed
+    to parse anyway."""
+    event_id = _seed_event()
+    r = _press(client, discord_key, custom_id=f"rsvp:{event_id}:going", user_id=42)
+    assert r.status_code == 200
+    assert r.json()["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    with database.get_session() as session:
+        assert services.signup_counts(session, event_id)["going"] == 1
+
+
+# --- Staff confirmation ----------------------------------------------------- #
+def test_an_accepted_offer_offers_a_confirm_signing_button(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    assert "Confirm signing" not in client.get("/roster").text, "not before they answer"
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    html = client.get("/roster").text
+    assert "Confirm signing" in html
+    assert f"/roster/{move_id}/confirm" in html
+
+
+def test_confirming_publishes_the_celebration(client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 303
+
+    assert len(roster_ready) == 1
+    embed = roster_ready[0][1]["embeds"][0]
+    assert embed["title"] == "Cap has signed for YeeHaw FC"
+    assert "Welcome to the squad" in embed["description"]
+    assert embed["footer"]["text"].startswith("Confirmed by Coach")
+
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.confirmed_at is not None
+        assert move.confirm_message_id == "msg-1"
+        assert move.confirmed_by_name == "Coach"
+
+
+def test_the_celebration_goes_to_the_channel_the_offer_went_to(
+        client, roster_ready, discord_key, role_grant, monkeypatch):
+    """The setting can change between the offer and the signing; the
+    conversation shouldn't split across two channels because of it."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    monkeypatch.setattr(config, "ROSTER_ANNOUNCE_CHANNEL_ID", "different-channel")
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    assert roster_ready[0][0] == "/channels/555/messages"
+
+
+def test_an_unanswered_offer_cannot_be_confirmed(client, roster_ready):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_declined_offer_cannot_be_confirmed(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_signing_cannot_be_announced_twice(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    roster_ready.clear()
+
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_confirming_is_staff_only_and_csrf_protected(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    roster_ready.clear()
+
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": "forged"},
+                    follow_redirects=False)
+    assert r.status_code == 400
+
+    _login_fan(client)
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": "x"},
+                    follow_redirects=False)
+    assert r.status_code in (303, 403)
+    assert roster_ready == []
+
+
+def test_the_page_shows_the_offer_moving_through_its_states(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    assert "Awaiting answer" in client.get("/roster").text
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Accepted" in client.get("/roster").text
+
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    html = client.get("/roster").text
+    assert "Signed" in html
+    assert "Confirm signing" not in html

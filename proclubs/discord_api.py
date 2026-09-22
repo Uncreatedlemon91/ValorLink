@@ -167,9 +167,12 @@ def put(path: str) -> httpx.Response:
     "/channels/123/thread-members/456"), retrying once on a 429. Same
     failure semantics as get().
 
-    Bodyless because the only route this app PUTs to is thread membership,
-    which takes none. Adding a member who is already in the thread is a
-    success, not an error, so callers don't have to check first."""
+    Bodyless because neither route this app PUTs to takes one: thread
+    membership (discord_rsvp) and adding a single role to a member
+    (discord_roster.grant_squad_role). Both are idempotent -- adding
+    somebody who is already in the thread, or already has the role, is a
+    success rather than an error -- so callers don't have to check
+    first."""
     resp = _request_put(path)
 
     if resp.status_code == 429:
