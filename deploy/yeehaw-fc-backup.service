@@ -1,0 +1,13 @@
+[Unit]
+Description=YeeHaw FC database backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink
+# Optional (the leading "-"): backup.sh has working defaults for every
+# setting it reads, so a missing .env is not a reason to fail the run.
+EnvironmentFile=-/opt/valorlink/proclubs/.env
+ExecStart=/usr/bin/env bash /opt/valorlink/deploy/backup.sh

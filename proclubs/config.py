@@ -1,9 +1,9 @@
 """Configuration for the Pro Clubs team site.
 
-Deliberately isolated from ValorLink's own config.py / .env, matching the
-existing principle for this app: its own venv, own service, own subdomain,
-own secrets. Now that the site has accounts and third-party API keys, it
-does need a `.env` (the original stats-only tool didn't).
+Everything the site reads from the environment, in one place. It has its
+own venv, its own service and its own secrets; the original stats-only
+tool needed no `.env` at all, but a site with accounts and third-party
+API keys does.
 """
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ CLUB_ID = os.getenv("CLUB_ID", "")
 LEAGUE_TABLE_MAX_TEAMS = int(os.getenv("LEAGUE_TABLE_MAX_TEAMS", "25"))
 
 # --- Discord OAuth2 (staff sign-in) ---------------------------------------- #
-# A single guild, unlike ValorLink's multi-tenant auth -- this site belongs to
-# one team's one Discord server, so "is this person staff" is just "do they
-# hold the configured role in that one guild."
+# A single guild -- this site belongs to one team's one Discord server, so
+# "is this person staff" is just "do they hold the configured role in that
+# one guild."
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DISCORD_OAUTH_REDIRECT = os.getenv("DISCORD_OAUTH_REDIRECT", "")
@@ -51,10 +51,9 @@ OAUTH_ENABLED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
 # --- Discord Scheduled Events sync (fixtures) ------------------------------- #
 # One-directional: Discord's own Scheduled Events are the source of truth,
 # mirrored in as site Events (see discord_events.py / discord_events_poll.py).
-# Reuses the same DISCORD_GUILD_ID as OAuth above. DISCORD_BOT_TOKEN is
-# deliberately the same token the main ValorLink bot already uses -- a
-# reused secret, by explicit choice, not a separately-registered bot (see
-# proclubs/README.md for the tradeoff that was accepted here).
+# Reuses the same DISCORD_GUILD_ID as OAuth above. DISCORD_BOT_TOKEN is the
+# club bot's token: full bot access, so it is the most sensitive value in
+# this file (see discord_api.py).
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
 
@@ -270,14 +269,13 @@ TWITCH_ENABLED = bool(TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET)
 TWITCH_GAME_FILTER = os.getenv("TWITCH_GAME_FILTER", "EA Sports FC 27")
 
 # --- Sessions --------------------------------------------------------------- #
-# Opt-in, not opt-out -- matching ValorLink's own WEB_HTTPS_ONLY default.
-# A "secure" session cookie is silently dropped by browsers/HTTP clients over
+# Opt-in, not opt-out. A "secure" session cookie is silently dropped by browsers/HTTP clients over
 # plain HTTP, which would break local dev and the DEV_LOGIN flow if this
 # defaulted on. Set HTTPS_ONLY=1 in production (it always terminates behind
 # Caddy over HTTPS there).
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 HTTPS_ONLY = os.getenv("HTTPS_ONLY", "").lower() in ("1", "true", "yes")
 
-# Local-only "act as staff" login, mirroring ValorLink's WEB_DEV_LOGIN --
-# never reachable in production since it requires this exact env var.
+# Local-only "act as staff" login -- never reachable in production, since
+# it requires this exact env var.
 DEV_LOGIN_ENABLED = os.getenv("DEV_LOGIN", "").lower() in ("1", "true", "yes")

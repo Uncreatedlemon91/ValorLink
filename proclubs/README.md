@@ -2,20 +2,17 @@
 
 The team's public home: news/blog articles, an events calendar, a live
 Twitch streamer showcase, and an EA Pro Clubs stats dashboard locked to our
-own club. FastAPI + Jinja2 + SQLAlchemy, matching the main ValorLink
-platform's stack.
+own club. FastAPI + Jinja2 + SQLAlchemy.
 
-This runs as its own independent service alongside the ValorLink bot/web app
--- separate venv, separate systemd unit, separate domain
-(`yeehaw-fc.club`), separate `.env`, no shared database or code
-with `web/`, `db/`, `tenancy/`, or `utils/`. See
-[`../deploy/README.md`](../deploy/README.md) for the production deploy steps.
+This directory is the whole application. It runs as one systemd unit
+(`yeehaw-fc`) on its own domain (`yeehaw-fc.club`), with its own venv,
+`.env` and databases. See [`../deploy/README.md`](../deploy/README.md) for
+the production deploy steps.
 
-One deliberate exception: if `DISCORD_BOT_TOKEN` is set (for event
-announcements and the Discord syncs below), it's a copy of the main bot's
-actual token,
-not a separately-registered credential. Everything else -- database,
-session, OAuth client -- stays as described above.
+The repo used to carry an unrelated Discord bot and web app alongside this
+one, which is where the isolation described throughout these notes came
+from; that code is gone, and the isolation is simply how the site is
+built.
 
 ## The design system
 
@@ -182,16 +179,13 @@ The pieces that need real setup:
 - **Our club** (`CLUB_PLATFORM` / `CLUB_ID`) -- this site shows one club's
   stats, configured once, not a search box. `tracked_clubs.json` (used by
   the history poller, see below) should reference the same club.
-- **Discord OAuth2** -- reuses the same Discord application as the main
-  ValorLink bot/web app; a Discord app supports multiple OAuth2 redirect
-  URIs, so no second app is needed. On that existing application's OAuth2
-  page at [discord.com/developers/applications](https://discord.com/developers/applications),
-  add a redirect matching `DISCORD_OAUTH_REDIRECT`, then copy the same
-  client ID/secret into this app's `.env`. (Sharing the OAuth app is just
-  sharing an identity provider -- the `.env`, session, and database stay
-  separate.) Then find the team's guild ID and the staff role's ID (enable
-  Developer Mode in Discord, right-click the server/role, "Copy ID") --
-  the role doesn't have to be the same one ValorLink treats as officer.
+- **Discord OAuth2** -- on the club's application's OAuth2 page at
+  [discord.com/developers/applications](https://discord.com/developers/applications),
+  add a redirect matching `DISCORD_OAUTH_REDIRECT`, then copy the client
+  ID and secret into `.env`. Discord rejects a callback whose host doesn't
+  match a registered redirect exactly, so the two must agree character for
+  character. Then find the team's guild ID and the staff role's ID (enable
+  Developer Mode in Discord, right-click the server/role, "Copy ID").
 - **Twitch** -- register a free app at
   [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps). This
   site only uses the app-level client-credentials grant to check "is this
@@ -203,11 +197,11 @@ The pieces that need real setup:
   not a guess to double-check, but it does change with each yearly title.
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
-- **`DISCORD_BOT_TOKEN`** (optional) -- enables the Discord Scheduled
-  Events sync and the Clips sync, below. Copy `DISCORD_BOT_TOKEN` from
-  `/opt/valorlink/.env` (the main bot's own token) rather than registering
-  a separate bot -- an accepted exception to this app's usual isolation,
-  see above.
+- **`DISCORD_BOT_TOKEN`** (optional) -- enables every Discord feature
+  here: the Scheduled Events and Clips syncs, article and squad-move
+  announcements, and event sign-ups. Developer Portal -> your app -> Bot
+  -> Reset Token. This is full bot access rather than a scoped secret, so
+  it is the most sensitive value in `.env`.
 - **`CLIPS_CHANNEL_ID`** (optional) -- enables the Clips page sync, below.
   The ID of the Discord channel to pull video clips from (enable Developer
   Mode in Discord, right-click the channel, "Copy Channel ID"). Needs

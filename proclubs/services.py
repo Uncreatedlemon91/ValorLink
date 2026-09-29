@@ -7,9 +7,8 @@ alongside that (sync_discord_events below), so an event someone makes in
 Discord's own Events tab still appears here; it just isn't the only way in
 any more.
 
-Kept separate from app.py so the routes stay thin (parse request -> call
-service -> render/redirect), matching the ValorLink web app's own
-app.py/services.py split.
+Kept separate from app.py so the routes stay thin: parse request -> call
+service -> render/redirect.
 """
 from __future__ import annotations
 

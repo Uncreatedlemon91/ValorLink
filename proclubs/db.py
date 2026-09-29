@@ -7,9 +7,8 @@ what we see on each poll (see poll.py) into a small SQLite file so charts
 can eventually show real season-long trends instead of just "the last
 handful of matches EA still has lying around".
 
-Plain stdlib sqlite3 -- no new dependency, and isolated from ValorLink's
-own databases (its own file, its own schema, never touched by anything
-else in this repo).
+Plain stdlib sqlite3 -- no new dependency, and its own file and schema,
+separate from the site's content database (see database.py).
 """
 
 import sqlite3

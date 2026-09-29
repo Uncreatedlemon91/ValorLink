@@ -1,10 +1,10 @@
 """Pro Clubs team site: news, events, a Twitch streamer showcase, and the
 club's EA stats dashboard, gated by Discord roles.
 
-FastAPI + Jinja2, matching the main ValorLink platform's stack so proven
-patterns (Discord OAuth, CSRF, template conventions) carry over -- but this
-app remains fully isolated: own venv, own service, own subdomain, own
-database, no imports from valorlink's web/ or db/ packages (see README.md).
+FastAPI + Jinja2 + SQLAlchemy. This is the whole application: the repo
+used to carry an unrelated Discord bot alongside it, and the isolation
+that was designed for -- own venv, own service, own domain, own database,
+own .env -- is simply how it is built now.
 """
 from __future__ import annotations
 
@@ -912,7 +912,7 @@ def _announce_event(request: Request, session, event) -> None:
         # already filled in sends people hunting through a correct .env.
         missing = ", ".join(config.event_rsvp_missing())
         _flash(request, f"Discord sign-ups aren't configured -- set {missing} in "
-                        "proclubs/.env, then restart valorlink-proclubs.", "warn")
+                        "proclubs/.env, then restart yeehaw-fc.", "warn")
         return
     if event.discord_message_id:
         _flash(request, "That event is already posted in Discord.", "warn")

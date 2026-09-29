@@ -1,8 +1,8 @@
 """Discord OAuth2 sign-in and staff-role gating.
 
-Single-guild, unlike ValorLink's multi-tenant auth: this site belongs to one
-team's one Discord server, so "is this person staff" is just "do they hold
-the configured role in that one guild" -- no per-unit tier map to resolve.
+Single-guild: this site belongs to one team's one Discord server, so "is
+this person staff" is just "do they hold the configured role in that one
+guild" -- there is no tenancy to resolve first.
 
 Everyone (including signed-out visitors) can read the public site. Only
 staff -- holders of DISCORD_STAFF_ROLE_ID in DISCORD_GUILD_ID -- can write
