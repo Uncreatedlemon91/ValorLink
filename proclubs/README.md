@@ -176,9 +176,10 @@ Run the tests with:
 All configuration lives in `.env` (see `.env.example` for the full list).
 The pieces that need real setup:
 
-- **Our club** (`CLUB_PLATFORM` / `CLUB_ID`) -- this site shows one club's
-  stats, configured once, not a search box. `tracked_clubs.json` (used by
-  the history poller, see below) should reference the same club.
+- **Our club** (`CLUB_NAME` / `CLUB_PLATFORM` / `CLUB_ID`) -- this site
+  shows one club's stats, configured once, not a search box. Don't type
+  the ID in: `python season.py find` looks the club up on EA by name, and
+  `python season.py switch` writes it to `.env`. See "A new season" below.
 - **Discord OAuth2** -- on the club's application's OAuth2 page at
   [discord.com/developers/applications](https://discord.com/developers/applications),
   add a redirect matching `DISCORD_OAUTH_REDIRECT`, then copy the client
@@ -193,8 +194,9 @@ The pieces that need real setup:
   registration. "Live" also means *playing our game* -- see
   `TWITCH_GAME_FILTER` in `.env.example`; a roster member streaming
   something else doesn't show up as live here. Its default
-  (`EA Sports FC 26`) is Twitch's actual category name as of this writing,
-  not a guess to double-check, but it does change with each yearly title.
+  (`EA Sports FC 27`) has *not* been checked against Twitch's live
+  category page -- if the roster reads as offline while streaming, check
+  that first. It changes with each yearly title.
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
 - **`DISCORD_BOT_TOKEN`** (optional) -- enables every Discord feature
@@ -700,6 +702,55 @@ unlike everything else that writes to this site.
   `config.py`/`.env.example`; override `DISCORD_INVITE_URL` if the invite
   link ever needs to be regenerated.
 
+## A new season
+
+EA issues a **brand-new club ID every title**. The FC 26 club and the FC 27
+club are different clubs to the API even under the same name -- nothing
+carries over, not matches, not records, not skill rating. So each new
+game means pointing the site at a different club, and the stats collected
+for the old one stop meaning anything.
+
+`season.py` does the switch in one command:
+
+```bash
+cd /opt/valorlink/proclubs
+sudo -u valorlink .venv/bin/python3 season.py find      # search EA for CLUB_NAME
+sudo -u valorlink .venv/bin/python3 season.py switch    # take the one exact match
+# or, if the search is ambiguous or can't find it yet:
+sudo -u valorlink .venv/bin/python3 season.py switch --club-id 1234567
+```
+
+`switch` verifies the club against EA, erases the stats history, writes
+`CLUB_ID` and `CLUB_PLATFORM` into `.env` (every other line kept as it
+was), and prints the restart command. It resolves the club *before*
+erasing anything, so if EA can't be reached, nothing changes.
+
+- **It never guesses between clubs.** EA's search is a substring match and
+  names aren't unique, so it proceeds on its own only with exactly one
+  *exact*-name match. Two clubs called "Yeehaw FC" is a question for a
+  human; it lists them and asks for `--club-id`.
+- **A brand-new club may not show up in `find` yet.** EA's search runs over
+  its all-time leaderboard, which lags behind. `--club-id` looks the club
+  up directly and works regardless. The ID is in the URL of the club's page
+  on EA's Pro Clubs site.
+- **What's erased:** `data/history.db` -- snapshots, matches, per-player
+  lines, and the league table built from that season's opponents.
+- **What's kept:** everything in `site.db`. News, events and sign-ups,
+  squad moves, clips, streamers and the tactics board are the club's own
+  content, not the game's. Gamertag links carry over too -- they're EA
+  account names, not per-title.
+- **The old stats are archived, not destroyed**, into the backups directory
+  as `history-<old club id>-<timestamp>.db`, with the command to delete it
+  printed alongside. That data can't be re-fetched once EA evicts it, and
+  the step most likely to go wrong is picking the club. `--no-archive`
+  deletes outright.
+
+`season.py reset` erases the stats without changing the club.
+
+`CLUB_NAME` is the club's name as spelled in-game and is what `find`
+searches for. It's separate from `SITE_NAME`, the site's own branding,
+which doesn't have to match EA's casing.
+
 ## Important caveats about the EA stats dashboard
 
 `/stats` has four reports: an **Overview** (a club scoreboard, headline KPIs,
@@ -840,7 +891,8 @@ proclubs/
   ea_client.py           EA Pro Clubs API client (curl_cffi, unrelated to the above)
   db.py                  Locally-accumulated EA stats history (own sqlite3 file)
   poll.py                Standalone poller for db.py, run by proclubs-poll.timer
-  tracked_clubs.json     Clubs poll.py snapshots (just ours, normally)
+  season.py              New-season switch: find the club on EA, erase old stats
+  tracked_clubs.json     Extra clubs for poll.py to snapshot (ours comes from .env)
   templates/             Jinja2 templates
   static/css/site.css    Design system (also read by charts.js as CSS vars)
   static/js/app.js       Stats dashboard UI (fetches /api/*)

@@ -1,5 +1,5 @@
-"""One-shot poller: snapshot each club in tracked_clubs.json into
-data/history.db. Run on a schedule via systemd (see
+"""One-shot poller: snapshot our club (CLUB_ID in .env) and any extra
+clubs in tracked_clubs.json into data/history.db. Run on a schedule via systemd (see
 deploy/proclubs-poll.service + .timer) -- deliberately NOT part of the
 Flask app process, so it's unaffected by how many gunicorn workers are
 serving requests (no "which worker owns the timer" problem to solve).
@@ -31,10 +31,33 @@ LEAGUE_TABLE_MAX_TEAMS = config.LEAGUE_TABLE_MAX_TEAMS
 
 
 def load_tracked_clubs():
+    """Extra clubs to snapshot beyond our own. Usually empty."""
     if not TRACKED_CLUBS_PATH.exists():
-        print(f"{TRACKED_CLUBS_PATH} doesn't exist -- nothing to poll")
         return []
     return json.loads(TRACKED_CLUBS_PATH.read_text())
+
+
+def clubs_to_poll():
+    """Our club first, then any extras, without polling anyone twice.
+
+    Our club comes from CLUB_ID in .env rather than from tracked_clubs.json,
+    and that is the point: EA issues a new club ID every title, and with the
+    ID in a file in the repo, switching seasons meant a code change on top
+    of the .env edit -- two places to keep in step, and a droplet whose
+    local edit fought every later `git pull`. Now a season switch is one
+    .env value (see season.py).
+    """
+    clubs = []
+    if config.CLUB_ID:
+        clubs.append({"platform": config.CLUB_PLATFORM, "clubId": str(config.CLUB_ID),
+                      "label": config.CLUB_NAME})
+    seen = {(c["platform"], str(c["clubId"])) for c in clubs}
+    for extra in load_tracked_clubs():
+        key = (extra["platform"], str(extra["clubId"]))
+        if key not in seen:
+            clubs.append(extra)
+            seen.add(key)
+    return clubs
 
 
 def poll_club(platform, club_id, label):
@@ -91,9 +114,9 @@ def sync_and_poll_league_table(clubs, polled):
 
 
 def main():
-    clubs = load_tracked_clubs()
+    clubs = clubs_to_poll()
     if not clubs:
-        print("tracked_clubs.json is empty -- nothing to poll")
+        print("CLUB_ID isn't set and tracked_clubs.json is empty -- nothing to poll")
         return
 
     polled = set()

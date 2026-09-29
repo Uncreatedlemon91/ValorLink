@@ -22,6 +22,15 @@ SITE_TAGLINE = os.getenv("SITE_TAGLINE", "Pro Clubs")
 # club is configured once here rather than typed into a search box.
 CLUB_PLATFORM = os.getenv("CLUB_PLATFORM", "common-gen5")
 CLUB_ID = os.getenv("CLUB_ID", "")
+# The club's name as it appears in-game -- what season.py searches EA for,
+# and the label our club gets in the stats history and the league table.
+# Separate from SITE_NAME, which is the site's own branding and needn't
+# match EA's casing.
+#
+# EA issues a brand-new club ID every title: the FC 26 club and the FC 27
+# club are different clubs as far as the API is concerned, even under the
+# same name. `python season.py find` looks the current one up; see there.
+CLUB_NAME = os.getenv("CLUB_NAME", "Yeehaw FC")
 
 # --- League table (auto-built from clubs we actually play) ----------------- #
 # EA's API has no real league/region grouping to query (see ea_client.py), so
@@ -259,13 +268,9 @@ TWITCH_ENABLED = bool(TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET)
 # title; verify it at twitch.tv/directory/category/<slug> if this ever looks
 # wrong (a mismatched string just makes everyone look offline, not an error).
 #
-# Defaulted to FC 27 ahead of its 25 Sep 2026 release. Twitch's category
-# name for a new title is not published in advance and this one has NOT been
-# verified against a live category page -- check the slug on launch day and
-# override here if it differs. Until FC 27 streams actually exist, a roster
-# that streams FC 26 will read as offline: set TWITCH_GAME_FILTER back to
-# "EA Sports FC 26" (or blank, to drop the filter) if that matters before
-# the changeover.
+# The FC 27 category name has NOT been verified against Twitch's live
+# category page -- if the whole roster reads as offline while streaming,
+# check the slug and override TWITCH_GAME_FILTER in .env.
 TWITCH_GAME_FILTER = os.getenv("TWITCH_GAME_FILTER", "EA Sports FC 27")
 
 # --- Sessions --------------------------------------------------------------- #

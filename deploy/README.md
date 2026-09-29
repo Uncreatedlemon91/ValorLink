@@ -104,9 +104,19 @@ chmod 600 proclubs/.env
 
 `proclubs/.env.example` documents every setting inline.
 `proclubs/README.md#configuring-a-fresh-deployment` explains where each
-value comes from. The minimum for a working site is `CLUB_ID`,
-`SESSION_SECRET`, `HTTPS_ONLY=1`, `SITE_BASE_URL`, and the four Discord
-OAuth values; everything else switches on an optional feature.
+value comes from. The minimum for a working site is `SESSION_SECRET`,
+`HTTPS_ONLY=1`, `SITE_BASE_URL`, the four Discord OAuth values, and the
+club — which you don't type in. Look it up on EA and write it to `.env` in
+one step:
+
+```bash
+cd /opt/valorlink/proclubs
+sudo -u valorlink .venv/bin/python3 season.py find
+sudo -u valorlink .venv/bin/python3 season.py switch
+```
+
+(See `proclubs/README.md#a-new-season`; the same command handles every
+later season change.) Everything else switches on an optional feature.
 
 The database needs no setup — it is created on first start.
 
@@ -175,18 +185,21 @@ any of them. All need `sudo systemctl restart yeehaw-fc` after editing
 
 EA's API exposes only a rolling window of recent matches and no historical
 data at all, so season-long trends have to be accumulated over time.
-`proclubs-poll.timer` fires `poll.py` hourly, snapshotting every club in
-`proclubs/tracked_clubs.json` into `proclubs/data/history.db`. That file
-ships already set up for YeeHaw FC — nothing to create. Run it once rather
+`proclubs-poll.timer` fires `poll.py` hourly, snapshotting our club
+(`CLUB_ID` in `.env`) into `proclubs/data/history.db`. Run it once rather
 than waiting an hour:
 
 ```bash
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/poll.py
 ```
 
-Add more clubs by editing `tracked_clubs.json`; it takes effect on the next
-poll, no redeploy. History only accumulates forward from when a club is
-added — there is no way to backfill matches EA has already evicted.
+To snapshot extra clubs as well, list them in `proclubs/tracked_clubs.json`
+(it ships empty); it takes effect on the next poll, no redeploy. History
+only accumulates forward from when a club is added — there is no way to
+backfill matches EA has already evicted.
+
+A new game means a new club ID; `season.py switch` handles it and erases
+the previous season's stats (`proclubs/README.md#a-new-season`).
 
 The same run maintains `/league`, which builds itself from real opponents
 rather than a curated list (see
