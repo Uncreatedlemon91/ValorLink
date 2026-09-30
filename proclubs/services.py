@@ -1021,7 +1021,8 @@ def record_roster_move(session: Session, *, discord_id: str, display_name: str,
                        discord_message_id: str | None,
                        contract_weeks: int | None = None,
                        squad_status: str | None = None,
-                       contract_id: int | None = None) -> RosterMove:
+                       contract_id: int | None = None,
+                       secondary_position: str | None = None) -> RosterMove:
     """Writes the history row for one published squad announcement.
 
     Called after the Discord post is attempted, not before, so
@@ -1038,6 +1039,7 @@ def record_roster_move(session: Session, *, discord_id: str, display_name: str,
         discord_message_id=discord_message_id,
         contract_weeks=contract_weeks, squad_status=squad_status,
         contract_id=contract_id,
+        secondary_position=(secondary_position or "").strip() or None,
     )
     session.add(move)
     session.commit()
@@ -1109,7 +1111,7 @@ def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
 
     * a DEPARTURE -- already announced publicly the moment it was made;
     * a SIGNING, meaning an offer the player accepted AND staff then
-      confirmed.
+      confirmed -- or its staff equivalent, an APPOINTMENT.
 
     Everything else is a negotiation, not news, and stays on the staff
     page:
@@ -1131,7 +1133,7 @@ def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
         select(RosterMove)
         .where(
             (RosterMove.kind == discord_roster.MOVE_RELEASE)
-            | ((RosterMove.kind == discord_roster.MOVE_OFFER)
+            | (RosterMove.kind.in_(discord_roster.CONFIRMABLE_KINDS)
                & RosterMove.confirmed_at.is_not(None))
         )
         .order_by(became_public.desc(), RosterMove.id.desc())
@@ -1146,9 +1148,9 @@ def offer_is_open(move: RosterMove) -> bool:
 
 
 def offer_awaits_confirmation(move: RosterMove) -> bool:
-    """Accepted by the player, not yet confirmed by staff -- the state the
-    /roster page turns into a Confirm signing button."""
-    return (move.kind == discord_roster.MOVE_OFFER
+    """Accepted, not yet confirmed by staff -- the state the /roster page
+    turns into a Confirm signing (or Confirm appointment) button."""
+    return (move.kind in discord_roster.CONFIRMABLE_KINDS
             and move.response == discord_roster.RESPONSE_ACCEPTED
             and move.confirmed_at is None)
 
@@ -1191,6 +1193,43 @@ def parse_contract_terms(weeks: str, squad_status: str) -> tuple[int, str]:
     return weeks_n, squad_status
 
 
+def parse_positions(primary: str, secondary: str, *,
+                    keep: str | None = None) -> tuple[str, str | None]:
+    """(primary, secondary or None) out of form input, or a ServiceError
+    that says what's wrong.
+
+    Both must come from discord_roster.PITCH_POSITIONS; the selects are
+    only a suggestion to a browser. `keep` lets a renewal carry forward a
+    contract's existing primary position that predates the fixed list,
+    rather than forcing staff to change it just to renew.
+    """
+    primary = (primary or "").strip()
+    secondary = (secondary or "").strip()
+    allowed = set(discord_roster.PITCH_POSITIONS)
+    if not primary:
+        raise ServiceError("Pick the contract's primary position.")
+    if primary not in allowed and primary != keep:
+        raise ServiceError(f"{primary!r} isn't a position a contract can name.")
+    if not secondary:
+        return primary, None
+    if secondary not in allowed:
+        raise ServiceError(f"{secondary!r} isn't a position a contract can name.")
+    if secondary.casefold() == primary.casefold():
+        raise ServiceError("The secondary position has to differ from the primary one.")
+    return primary, secondary
+
+
+def parse_staff_role(role: str) -> str:
+    """The staff role on offer. Free text with suggestions, so this only
+    insists there is one and that it fits in an embed field."""
+    role = (role or "").strip()
+    if not role:
+        raise ServiceError("Name the staff role you're offering.")
+    if len(role) > 80:
+        raise ServiceError("Keep the staff role under 80 characters.")
+    return role
+
+
 def live_contract_for(session: Session, discord_id: str) -> Contract | None:
     """This person's contract that hasn't been ended by a release --
     including one that has run out, which is still theirs until staff
@@ -1210,7 +1249,8 @@ def create_contract(session: Session, *, discord_id: str, display_name: str,
                     avatar_url: str | None, position: str | None, squad_status: str,
                     weeks: int, source: str, created_by_name: str | None,
                     signing_move_id: int | None = None,
-                    starts_at: datetime | None = None) -> Contract:
+                    starts_at: datetime | None = None,
+                    secondary_position: str | None = None) -> Contract:
     """Starts a contract. Refuses a second live one for the same person:
     two contracts would mean two different answers to "when is their deal
     up?", and the fix for an existing one is to renew it."""
@@ -1221,7 +1261,9 @@ def create_contract(session: Session, *, discord_id: str, display_name: str,
     starts_at = starts_at or datetime.utcnow()
     contract = Contract(
         discord_id=str(discord_id), display_name=display_name, avatar_url=avatar_url,
-        position=(position or "").strip()[:80] or None, squad_status=squad_status,
+        position=(position or "").strip()[:80] or None,
+        secondary_position=(secondary_position or "").strip()[:80] or None,
+        squad_status=squad_status,
         weeks=weeks, starts_at=starts_at, expires_at=starts_at + timedelta(weeks=weeks),
         source=source, signing_move_id=signing_move_id, created_by_name=created_by_name,
     )
@@ -1243,8 +1285,12 @@ def apply_renewal(session: Session, contract: Contract, move: RosterMove,
     now = now or datetime.utcnow()
     contract.weeks = move.contract_weeks
     contract.squad_status = move.squad_status
+    # The renewal names the positions as a pair, so they're applied as a
+    # pair: dropping the secondary on renewal is a real choice staff can
+    # make, not something to paper over with the old value.
     if move.position:
         contract.position = move.position
+        contract.secondary_position = move.secondary_position
     contract.expires_at = max(contract.expires_at, now) + timedelta(weeks=move.contract_weeks)
     contract.renewal_count = (contract.renewal_count or 0) + 1
     contract.last_renewed_at = now

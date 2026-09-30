@@ -14,8 +14,9 @@
   {# Said once, plainly, rather than left for someone to discover. The
      one role this app writes is worth being explicit about. #}
   <p class="roster-disclaimer">
-    An <strong>offer</strong> carries a contract length and squad status, and is
-    posted to Discord with Accept / Decline buttons that only that player can press.
+    A <strong>contract offer</strong> names a primary and optional secondary position, a
+    length and a squad status, and is posted to Discord with Accept / Decline buttons that
+    only that player can press.
     {% if role_grant_enabled %}
       Accepting adds them to the squad role automatically; you then confirm the
       signing here to publish the announcement.
@@ -24,7 +25,8 @@
       <code>ROSTER_SQUAD_ROLE_ID</code> isn't configured. You then confirm the
       signing here to publish the announcement.
     {% endif %}
-    The contract starts when you confirm. <strong>Let Go</strong> ends their contract
+    The contract starts when you confirm. A <strong>staff role</strong> is offered the same
+    way but sets no Discord role on acceptance. <strong>Let Go</strong> ends their contract
     and publishes a departure announcement — it never removes a role, so revoke
     access in Discord yourself.
   </p>
@@ -84,59 +86,122 @@
         Nobody in the server matches that.
       </p>
 
-      <div class="field-row">
-        <div class="field">
-          <label for="position">Position <span class="muted">(optional)</span></label>
-          <input id="position" name="position" list="roster-positions"
-                 autocomplete="off" placeholder="e.g. Striker" maxlength="80" />
-          <datalist id="roster-positions">
-            {% for p in positions %}<option value="{{ p }}"></option>{% endfor %}
-          </datalist>
-        </div>
-        <div class="field">
-          <label for="contract-weeks">Contract length</label>
-          <div class="input-suffix">
-            <input id="contract-weeks" name="contract_weeks" type="number" inputmode="numeric"
-                   min="{{ min_weeks }}" max="{{ max_weeks }}" step="1" placeholder="e.g. 8"
-                   required />
-            <span>weeks</span>
+      {# Three separate panels sharing the one picker above. Each posts its
+         own field names, and the server reads only the pressed panel's,
+         so a half-filled contract never leaks into a staff offer. #}
+      <div class="move-panels">
+        <fieldset class="move-panel move-panel-contract">
+          <legend>Player contract</legend>
+          <div class="field-row">
+            <div class="field">
+              <label for="position">Primary position</label>
+              <select id="position" name="position" required>
+                <option value="" disabled selected>Choose…</option>
+                {% for pos in pitch_positions %}<option value="{{ pos }}">{{ pos }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label for="secondary-position">Secondary position <span class="muted">(optional)</span></label>
+              <select id="secondary-position" name="secondary_position">
+                <option value="">None</option>
+                {% for pos in pitch_positions %}<option value="{{ pos }}">{{ pos }}</option>{% endfor %}
+              </select>
+            </div>
           </div>
-        </div>
-        <div class="field">
-          <label for="squad-status">Squad status</label>
-          <select id="squad-status" name="squad_status" required>
-            <option value="" disabled selected>Choose…</option>
-            {% for st in squad_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
-          </select>
-        </div>
-      </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="contract-weeks">Contract length</label>
+              <div class="input-suffix">
+                <input id="contract-weeks" name="contract_weeks" type="number" inputmode="numeric"
+                       min="{{ min_weeks }}" max="{{ max_weeks }}" step="1" placeholder="e.g. 8"
+                       required />
+                <span>weeks</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="squad-status">Squad status</label>
+              <select id="squad-status" name="squad_status" required>
+                <option value="" disabled selected>Choose…</option>
+                {% for st in squad_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="note">Note from the staff <span class="muted">(optional)</span></label>
+            <textarea id="note" name="note" rows="2" maxlength="1000"
+                      placeholder="A line about the signing — appears in the announcement."></textarea>
+          </div>
+          <div class="form-actions roster-actions">
+            <button type="submit" name="kind" value="offer" class="btn">Offer Contract</button>
+            {# Posts nothing to Discord, so it goes to its own route rather than
+               being another "kind" of announcement. #}
+            <button type="submit" formaction="/roster/contracts" class="btn secondary"
+                    title="For somebody already in the squad — records the terms, posts nothing.">
+              Record Contract
+            </button>
+          </div>
+          <p class="field-hint">
+            <strong>Record Contract</strong> is for players who were already in the squad
+            before contracts were tracked here — it saves the terms without an offer or an
+            announcement.
+          </p>
+        </fieldset>
 
-      <div class="field">
-        <label for="note">Note from the staff <span class="muted">(optional)</span></label>
-        <textarea id="note" name="note" rows="3" maxlength="1000"
-                  placeholder="A line about the move — appears in the announcement."></textarea>
-      </div>
+        <fieldset class="move-panel move-panel-staff">
+          <legend>Staff role</legend>
+          <div class="field">
+            <label for="staff-role">Role</label>
+            {# Not `required`: this form's other buttons would then demand it.
+               The server insists on it for a staff offer. #}
+            <input id="staff-role" name="staff_role" list="staff-roles" maxlength="80"
+                   autocomplete="off" placeholder="e.g. Assistant Manager" />
+            <datalist id="staff-roles">
+              {% for r in staff_roles %}<option value="{{ r }}"></option>{% endfor %}
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="staff-note">Note from the staff <span class="muted">(optional)</span></label>
+            <textarea id="staff-note" name="staff_note" rows="2" maxlength="1000"
+                      placeholder="A line about the appointment."></textarea>
+          </div>
+          <div class="form-actions roster-actions">
+            {# formnovalidate: a staff offer has no contract terms, and the
+               browser would otherwise insist on the player panel's. #}
+            <button type="submit" name="kind" value="staff_offer" class="btn staff" formnovalidate>
+              Offer Staff Role
+            </button>
+          </div>
+          <p class="field-hint">
+            No contract, and accepting sets <strong>no</strong> Discord role — the staff role
+            controls this site, so give it to them yourself once you've confirmed the
+            appointment.
+          </p>
+        </fieldset>
 
-      <div class="form-actions roster-actions">
-        <button type="submit" name="kind" value="offer" class="btn">Offer Position</button>
-        {# Posts nothing to Discord, so it goes to its own route rather than
-           being a third "kind" of announcement. #}
-        <button type="submit" formaction="/roster/contracts" class="btn secondary"
-                title="For somebody already in the squad — records the terms, posts nothing.">
-          Record Contract
-        </button>
-        {# formnovalidate: letting somebody go doesn't need contract terms,
-           and the browser would otherwise insist on them. #}
-        <button type="submit" name="kind" value="release" class="btn danger" formnovalidate
-                data-confirm="End the selected member's contract and publish a departure announcement?">
-          Let Go
-        </button>
+        <fieldset class="move-panel move-panel-release">
+          <legend>Departure</legend>
+          <div class="field">
+            <label for="release-position">Position or role <span class="muted">(optional)</span></label>
+            <input id="release-position" name="release_position" maxlength="80"
+                   list="release-roles" autocomplete="off" placeholder="e.g. Centre Back" />
+            <datalist id="release-roles">
+              {% for pos in pitch_positions %}<option value="{{ pos }}"></option>{% endfor %}
+              {% for r in staff_roles %}<option value="{{ r }}"></option>{% endfor %}
+            </datalist>
+          </div>
+          <div class="field">
+            <label for="release-note">Note from the staff <span class="muted">(optional)</span></label>
+            <textarea id="release-note" name="release_note" rows="2" maxlength="1000"
+                      placeholder="A line about their time at the club."></textarea>
+          </div>
+          <div class="form-actions roster-actions">
+            <button type="submit" name="kind" value="release" class="btn danger" formnovalidate
+                    data-confirm="End the selected member's contract and publish a departure announcement?">
+              Let Go
+            </button>
+          </div>
+        </fieldset>
       </div>
-      <p class="field-hint">
-        <strong>Record Contract</strong> is for players who were already in the squad
-        before contracts were tracked here — it saves the terms without an offer or an
-        announcement.
-      </p>
     </form>
   {% endif %}
 
@@ -163,7 +228,7 @@
             <div class="roster-move-head">
               <span class="roster-move-name">{{ c.display_name }}</span>
               <span class="contract-status">{{ c.squad_status }}</span>
-              {% if c.position %}<span class="roster-move-pos">{{ c.position }}</span>{% endif %}
+              {% if c.position %}<span class="roster-move-pos">{{ c.position }}{% if c.secondary_position %} / {{ c.secondary_position }}{% endif %}</span>{% endif %}
               {% if state == 'expired' %}
                 <span class="roster-state is-expired">Expired</span>
               {% elif state == 'expiring' %}
@@ -206,10 +271,32 @@
                           {% endfor %}
                         </select>
                       </div>
+                    </div>
+                    <div class="field-row">
                       <div class="field">
-                        <label for="renew-pos-{{ c.id }}">Position</label>
-                        <input id="renew-pos-{{ c.id }}" name="position" list="roster-positions"
-                               maxlength="80" value="{{ c.position or '' }}" />
+                        <label for="renew-pos-{{ c.id }}">Primary position</label>
+                        <select id="renew-pos-{{ c.id }}" name="position" required>
+                          {# A contract from before the fixed list may hold a
+                             position that isn't on it; keep it on offer so
+                             renewing doesn't force a change. #}
+                          {% if c.position and c.position not in pitch_positions %}
+                            <option value="{{ c.position }}" selected>{{ c.position }}</option>
+                          {% elif not c.position %}
+                            <option value="" disabled selected>Choose…</option>
+                          {% endif %}
+                          {% for pos in pitch_positions %}
+                            <option value="{{ pos }}" {% if pos == c.position %}selected{% endif %}>{{ pos }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="renew-sec-{{ c.id }}">Secondary position</label>
+                        <select id="renew-sec-{{ c.id }}" name="secondary_position">
+                          <option value="">None</option>
+                          {% for pos in pitch_positions %}
+                            <option value="{{ pos }}" {% if pos == c.secondary_position %}selected{% endif %}>{{ pos }}</option>
+                          {% endfor %}
+                        </select>
                       </div>
                     </div>
                     <div class="field">
@@ -260,9 +347,10 @@
             <div class="roster-move-head">
               <span class="roster-move-name">{{ move.display_name }}</span>
               <span class="roster-move-kind">
-                {{ {'offer': 'Offer', 'renewal': 'Renewal'}.get(move.kind, 'Departure') }}
+                {{ {'offer': 'Contract offer', 'renewal': 'Renewal',
+                    'staff_offer': 'Staff offer'}.get(move.kind, 'Departure') }}
               </span>
-              {% if move.position %}<span class="roster-move-pos">{{ move.position }}</span>{% endif %}
+              {% if move.position %}<span class="roster-move-pos">{{ move.position }}{% if move.secondary_position %} / {{ move.secondary_position }}{% endif %}</span>{% endif %}
               {% if move.contract_weeks %}
                 <span class="roster-move-pos">{{ weeks_label(move.contract_weeks) }}{% if move.squad_status %} · {{ move.squad_status }}{% endif %}</span>
               {% endif %}
@@ -275,9 +363,9 @@
                 {% else %}
                   <span class="roster-state is-pending">Awaiting answer</span>
                 {% endif %}
-              {% elif move.kind == 'offer' %}
+              {% elif move.kind in ('offer', 'staff_offer') %}
                 {% if move.confirmed_at %}
-                  <span class="roster-state is-signed">Signed</span>
+                  <span class="roster-state is-signed">{{ 'Appointed' if move.kind == 'staff_offer' else 'Signed' }}</span>
                 {% elif move.response == 'accepted' %}
                   <span class="roster-state is-accepted">Accepted</span>
                 {% elif move.response == 'declined' %}
@@ -292,7 +380,7 @@
               {% if move.announced_by_name %} · by {{ move.announced_by_name }}{% endif %}
               {% if move.responded_at %} · answered {{ localtime(move.responded_at) }}{% endif %}
               {% if move.confirmed_at %}
-                · signing confirmed {{ localtime(move.confirmed_at) }}
+                · {{ 'appointment' if move.kind == 'staff_offer' else 'signing' }} confirmed {{ localtime(move.confirmed_at) }}
                 {%- if move.confirmed_by_name %} by {{ move.confirmed_by_name }}{% endif %}
               {% endif %}
               {% if not move.discord_message_id %}
@@ -309,13 +397,23 @@
               </p>
             {% elif move.response == 'accepted' and move.role_granted %}
               <p class="roster-move-note muted">Squad role added automatically.</p>
+            {% elif move.kind == 'staff_offer' and move.response == 'accepted' %}
+              {# Said on the row itself, because it's the step that's easy to
+                 forget once the announcement is out. #}
+              <p class="roster-move-note muted">No role is set for staff appointments —
+                give {{ move.display_name }} the staff role in Discord yourself.</p>
             {% endif %}
             {% if move.note %}<p class="roster-move-note">{{ move.note }}</p>{% endif %}
             {% if awaits_confirmation(move) %}
               <form class="roster-confirm" method="post" action="/roster/{{ move.id }}/confirm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                <button type="submit" class="btn">Confirm signing</button>
-                <span class="field-hint">Publishes the signing announcement to Discord.</span>
+                {% if move.kind == 'staff_offer' %}
+                  <button type="submit" class="btn staff">Confirm appointment</button>
+                  <span class="field-hint">Publishes the appointment announcement to Discord.</span>
+                {% else %}
+                  <button type="submit" class="btn">Confirm signing</button>
+                  <span class="field-hint">Publishes the signing announcement to Discord.</span>
+                {% endif %}
               </form>
             {% endif %}
           </div>

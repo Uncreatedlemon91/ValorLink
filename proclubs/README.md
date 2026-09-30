@@ -521,16 +521,24 @@ announcement forever isn't useful). **Added into the article's like
 count**, not shown as a separate badge -- see `services.combined_like_count`
 and "Comments and likes" below for what that total does and doesn't mean.
 
-## Squad moves: Offer Position / Let Go
+## Squad moves: contracts, staff roles, departures
 
 `/roster` (nav label "Squad", staff only) lists everyone in the Discord
-server with their Discord avatar, and starts one of two squad moves for
-whoever is picked. See `discord_roster.py`.
+server with their Discord avatar. Below the picker are three separate
+panels, one per kind of move. Each posts its own fields and only the
+pressed panel's are read, so a half-filled contract can't leak into a
+staff offer. See `discord_roster.py`.
 
-**Offer Position** publishes an offer the player answers themselves,
-carrying a contract length in weeks and a squad status (see
-"Contracts" below). **Let Go** ends their contract, if any, and
-publishes a departure. Full flow:
+- **Player contract** -- **Offer Contract** publishes an offer the player
+  answers themselves, carrying a primary and optional secondary position,
+  a length in weeks and a squad status (see "Contracts" below).
+- **Staff role** -- **Offer Staff Role** offers a role such as Assistant
+  Manager. Same Accept / Decline / confirm flow, but no contract and
+  **no Discord role** (see "Staff roles" below).
+- **Departure** -- **Let Go** ends their contract, if any, and publishes
+  a departure.
+
+The player-contract flow:
 
 ```
 staff picks a member  ->  OFFER posted to Discord with Accept / Decline
@@ -551,10 +559,21 @@ staff picks a member  ->  OFFER posted to Discord with Accept / Decline
 
 ### Contracts
 
-Every offer asks staff for a **contract length** (1-52 whole weeks) and a
+Every contract offer asks staff for a **primary position**, an optional
+**secondary position**, a **contract length** (1-52 whole weeks) and a
 **squad status** -- *Starter*, *Rotation* or *Reserve*, after Football
-Manager's squad statuses. Both show on the offer in Discord so the player
-sees the terms before pressing, and on the signing announcement.
+Manager's squad statuses. All of them show on the offer in Discord so the
+player sees the terms before pressing, and on the signing announcement.
+
+- **Positions come from a fixed list** of pitch positions
+  (`discord_roster.PITCH_POSITIONS`) rather than free text: a contract is a
+  record of what was agreed, "Stirker" on one is a real mistake, and "the
+  secondary must differ from the primary" can only be checked against
+  known values. Staff titles like Manager are not on it; they're offered
+  from the Staff role panel instead.
+- A renewal restates both positions as a pair, so dropping the secondary
+  on renewal really drops it. A contract recorded before the fixed list
+  existed keeps its old primary position through a renewal.
 
 - **A contract starts when staff confirm the signing**, not when the
   player presses Accept -- that's the moment it's official. Offers made
@@ -583,6 +602,30 @@ sees the terms before pressing, and on the signing announcement.
 - Renewals never reach the public home page -- a contract negotiation
   isn't news (`services.public_roster_moves`).
 
+### Staff roles
+
+A staff appointment is its own kind of move (`staff_offer`), not a
+"position" on a playing contract. It's offered from the Staff role panel
+with a role name (free text, with Manager / Assistant Manager / Coach as
+suggestions, since clubs invent titles), answered with the same Accept /
+Decline buttons, and confirmed by staff with **Confirm appointment**,
+which publishes an appointment announcement in the palette's blue rather
+than the signing green.
+
+- **No contract.** Squad status and contract length mean nothing for a
+  coach.
+- **No role on Accept, even with `ROSTER_SQUAD_ROLE_ID` set.** The squad
+  role isn't theirs by default, since a coach needn't be a player. The
+  staff role is what gives somebody control of this site, which is exactly
+  the kind of access that must never be handed out by a button press. The
+  page and the confirmation both remind staff to give it by hand.
+- **A player under contract can still be offered a staff role.** A
+  player-coach is normal, and "already under contract" only guards against
+  a second *playing* contract.
+- A confirmed appointment shows on the home page as *Appointed*; pending,
+  unconfirmed and declined staff offers stay private, the same rule as
+  player offers.
+
 **The role rule.** Roles are how this app decides who is staff and who is
 a member (`auth.py`), so what this app may do to them is deliberately
 narrow:
@@ -591,7 +634,8 @@ narrow:
   anywhere. Removing access is the irreversible half, and it stays a
   human action taken in Discord, where it's in the audit log and undoable.
 - **It adds exactly one role, `ROSTER_SQUAD_ROLE_ID`, and only when the
-  player presses Accept on their own offer.** Grant-only, self-triggered,
+  player presses Accept on their own *contract* offer** -- never on a
+  staff offer or a renewal. Grant-only, self-triggered,
   and to one role named in `.env` rather than whatever a form posts.
   `grant_squad_role` is the only role write in the codebase and there is
   no remove to pair with it -- `test_discord_roster.py` asserts that

@@ -1511,7 +1511,8 @@ def test_a_failed_post_is_recorded_and_reported_not_silently_dropped(client, ros
     _login_staff(client)
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
-        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": token,
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter",
+        "position": "Striker", "csrf_token": token,
     }, follow_redirects=True)
     assert "Missing Access" in r.text
     with database.get_session() as session:
@@ -2014,7 +2015,7 @@ def test_somebody_under_contract_is_renewed_not_offered_again(
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
         "discord_id": "42", "kind": "offer", "contract_weeks": "8",
-        "squad_status": "Starter", "csrf_token": token,
+        "squad_status": "Starter", "position": "Striker", "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 400
     assert "renew" in r.text
@@ -2380,3 +2381,239 @@ def test_a_move_with_no_stored_avatar_falls_back_to_initials(client):
     html = client.get("/").text
     assert "move-avatar-fallback" in html
     assert "No Avatar" in html
+
+
+# --------------------------------------------------------------------------- #
+# Secondary position on contracts; staff roles as their own offer
+# --------------------------------------------------------------------------- #
+def _contract_offer(client, *, position="Striker", secondary="Winger", follow=False):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "position": position,
+        "secondary_position": secondary, "contract_weeks": "8",
+        "squad_status": "Starter", "csrf_token": token,
+    }, follow_redirects=follow)
+
+
+def _staff_offer(client, *, role="Assistant Manager", discord_id="42"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "staff_offer", "staff_role": role,
+        "staff_note": "Runs set pieces.", "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _latest_move():
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0]
+
+
+def test_the_page_has_separate_contract_staff_and_departure_panels(client, roster_ready):
+    _login_staff(client)
+    html = client.get("/roster").text
+    for legend in ("Player contract", "Staff role", "Departure"):
+        assert f"<legend>{legend}</legend>" in html
+    assert 'name="secondary_position"' in html
+    assert 'value="staff_offer"' in html
+    # Staff roles are offered in the staff panel, not as contract positions.
+    contract_panel = html.split("move-panel-staff")[0]
+    assert "Assistant Manager" not in contract_panel
+
+
+def test_a_contract_offer_carries_both_positions(client, roster_ready):
+    _login_staff(client)
+    assert _contract_offer(client).status_code == 303
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Position"] == "Striker" and fields["Secondary position"] == "Winger"
+    move = _latest_move()
+    assert (move.position, move.secondary_position) == ("Striker", "Winger")
+
+
+def test_the_secondary_position_is_optional(client, roster_ready):
+    _login_staff(client)
+    assert _contract_offer(client, secondary="").status_code == 303
+    assert _latest_move().secondary_position is None
+
+
+@pytest.mark.parametrize("position, secondary, message", [
+    ("", "Winger", "primary position"),
+    ("Striker", "Striker", "has to differ"),
+    ("Manager", "", "a position a contract can name"),   # staff roles aren't positions
+])
+def test_a_bad_contract_offer_posts_nothing(client, roster_ready, position, secondary, message):
+    _login_staff(client)
+    r = _contract_offer(client, position=position, secondary=secondary)
+    assert r.status_code == 400 and message in r.text
+    assert roster_ready == []
+
+
+def test_signing_starts_a_contract_with_both_positions(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _contract_offer(client, position="Centre Back", secondary="Full Back")
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=False)
+
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Secondary position"] == "Full Back"
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        assert (contract.position, contract.secondary_position) == ("Centre Back", "Full Back")
+    assert "Centre Back / Full Back" in client.get("/roster").text
+
+
+def test_recording_a_contract_takes_a_secondary_position(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/contracts", data={
+        "discord_id": "42", "position": "Goalkeeper", "secondary_position": "Centre Back",
+        "contract_weeks": "8", "squad_status": "Reserve", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42").secondary_position == "Centre Back"
+
+
+def test_a_renewal_can_change_the_secondary_position(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    contract = _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/contracts/{contract.id}/renew", data={
+        "contract_weeks": "4", "squad_status": "Starter", "position": "Striker",
+        "secondary_position": "Attacking Midfield", "csrf_token": token,
+    }, follow_redirects=False)
+    renewal = _latest_move()
+    assert renewal.secondary_position == "Attacking Midfield"
+    _press(client, discord_key, custom_id=f"roster:accepted:{renewal.id}", user_id=42)
+    with database.get_session() as session:
+        assert services.get_contract(session, contract.id).secondary_position == "Attacking Midfield"
+
+
+def test_a_legacy_position_survives_a_renewal(client, roster_ready, discord_key, role_grant):
+    """A contract recorded before the fixed list may say "Sweeper"; renewing
+    it keeps working without forcing a change."""
+    _login_staff(client)
+    contract = _sign(client, roster_ready, discord_key)
+    with database.get_session() as session:
+        c = services.get_contract(session, contract.id)
+        c.position = "Sweeper"
+        session.commit()
+    assert '<option value="Sweeper" selected>' in client.get("/roster").text
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract.id}/renew", data={
+        "contract_weeks": "4", "squad_status": "Starter", "position": "Sweeper",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_a_staff_offer_is_posted_as_a_role_with_buttons(client, roster_ready):
+    _login_staff(client)
+    assert _staff_offer(client).status_code == 303
+    body = roster_ready[0][1]
+    embed = body["embeds"][0]
+    assert embed["title"] == "Cap — Staff Role Offered"
+    assert embed["fields"][0] == {"name": "Role", "value": "Assistant Manager", "inline": True}
+    assert "Contract" not in {f["name"] for f in embed["fields"]}
+    assert len(body["components"][0]["components"]) == 2   # Accept / Decline
+    move = _latest_move()
+    assert (move.kind, move.position, move.contract_weeks) == ("staff_offer", "Assistant Manager", None)
+    assert move.note == "Runs set pieces."
+
+
+def test_a_staff_offer_needs_a_role(client, roster_ready):
+    _login_staff(client)
+    r = _staff_offer(client, role="  ")
+    assert r.status_code == 400 and "Name the staff role" in r.text
+    assert roster_ready == []
+
+
+def test_a_player_under_contract_can_still_be_offered_a_staff_role(
+        client, roster_ready, discord_key, role_grant):
+    """Player-coach is a normal thing; the 'already under contract' rule is
+    about a second playing contract, not about staff roles."""
+    _login_staff(client)
+    _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    assert _staff_offer(client).status_code == 303
+    assert len(roster_ready) == 1
+
+
+def test_accepting_a_staff_role_grants_no_discord_role(client, roster_ready, discord_key, role_grant):
+    """The guarantee the feature rests on: the staff role controls this
+    site, so it's never handed out by a button press -- and the squad role
+    isn't theirs by default either. Role granting is ON here, and still
+    nothing is written."""
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert r.json()["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Staff Role Accepted" in r.json()["data"]["embeds"][0]["title"]
+    assert role_grant == []
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted" and move.role_granted is False
+    assert "give Cap the staff role in Discord yourself" in client.get("/roster").text
+
+
+def test_only_the_person_named_can_answer_a_staff_offer(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=43)
+    assert r.json()["type"] == 4 and "isn't yours" in r.json()["data"]["content"]
+
+
+def test_confirming_a_staff_offer_announces_an_appointment_not_a_signing(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Confirm appointment" in client.get("/roster").text
+
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=True)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert embed["title"] == "Cap appointed Assistant Manager"
+    assert embed["author"]["name"] == "Staff Announcement · Appointment"
+    # The reminder that the role is still theirs to give.
+    assert "give them the staff role in Discord" in r.text
+    assert role_grant == []
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None, "no contract for staff"
+    assert ">Appointed<" in client.get("/roster").text
+
+
+def test_a_confirmed_appointment_shows_on_the_home_page(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=False)
+    html = client.get("/").text
+    assert "move-staff" in html and ">Appointed<" in html
+    assert "Assistant Manager" in html
+
+
+def test_a_departure_reads_its_own_panel(client, roster_ready):
+    """The departure panel posts its own fields, so a half-filled contract
+    above it can't leak into the announcement."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "position": "Striker", "note": "WRONG PANEL",
+        "release_position": "Coach", "release_note": "Thanks for everything.",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "**Coach**" in embed["description"]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["From the staff"] == "Thanks for everything."
+    assert "WRONG PANEL" not in str(embed)

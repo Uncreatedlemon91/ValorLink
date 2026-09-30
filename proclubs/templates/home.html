@@ -102,7 +102,8 @@
     <div class="section-head"><h2>Squad Moves</h2></div>
     <div class="move-grid">
       {% for m in squad_moves %}
-        <div class="move-card move-{{ 'in' if m.kind == 'offer' else 'out' }}">
+        {% set direction = {'offer': 'in', 'staff_offer': 'staff'}.get(m.kind, 'out') %}
+        <div class="move-card move-{{ direction }}">
           {% if m.avatar_url %}
             <img class="move-avatar" src="{{ m.avatar_url }}" alt=""
                  width="56" height="56" loading="lazy" decoding="async" />
@@ -112,9 +113,11 @@
           <div class="move-body">
             {# The word carries it, not the colour -- an arrow alone would
                be meaningless to anyone who can't see the green. #}
-            <span class="move-tag">{{ 'Signed' if m.kind == 'offer' else 'Departed' }}</span>
+            <span class="move-tag">{{ {'in': 'Signed', 'staff': 'Appointed'}.get(direction, 'Departed') }}</span>
             <span class="move-name">{{ m.display_name }}</span>
-            {% if m.position %}<span class="move-pos">{{ m.position }}</span>{% endif %}
+            {% if m.position %}
+              <span class="move-pos">{{ m.position }}{% if m.secondary_position %} · {{ m.secondary_position }}{% endif %}</span>
+            {% endif %}
             <span class="move-date">
               {{ (m.confirmed_at or m.announced_at).strftime('%b %-d, %Y') }}
             </span>

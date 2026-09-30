@@ -274,6 +274,10 @@ class RosterMove(Base):
     # contracts existed.
     contract_weeks = Column(Integer, nullable=True)
     squad_status = Column(String, nullable=True)    # see discord_roster.SQUAD_STATUSES
+    # The contract's second position, alongside `position` (the primary).
+    # Optional -- not everybody has one -- and null on staff offers, where
+    # `position` holds the staff role instead of a pitch position.
+    secondary_position = Column(String, nullable=True)
     # A renewal's contract. Null on everything else: an offer's contract
     # points back at the offer instead (Contract.signing_move_id).
     contract_id = Column(Integer, nullable=True, index=True)
@@ -303,7 +307,8 @@ class Contract(Base):
     # contract ran out may well have left the server.
     display_name = Column(String, nullable=False)
     avatar_url = Column(String, nullable=True)
-    position = Column(String, nullable=True)
+    position = Column(String, nullable=True)            # primary
+    secondary_position = Column(String, nullable=True)  # optional
     squad_status = Column(String, nullable=False)   # see discord_roster.SQUAD_STATUSES
     # The length of the current term -- the last renewal's, once renewed.
     weeks = Column(Integer, nullable=False)

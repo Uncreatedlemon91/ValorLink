@@ -1971,6 +1971,9 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 }
 .move-in { border-left-color: var(--accent); }
 .move-out { border-left-color: var(--amber); }
+/* Staff appointments take the secondary accent, as their Discord embed
+   does -- a new coach shouldn't read as a new signing at a glance. */
+.move-staff { border-left-color: var(--accent-2); }
 
 .move-avatar {
   width: 56px; height: 56px; border-radius: 50%; flex: none;
@@ -1988,6 +1991,7 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
   text-transform: uppercase; letter-spacing: 0.13em;
 }
 .move-in .move-tag { color: var(--accent-text); }
+.move-staff .move-tag { color: var(--accent-2); }
 .move-out .move-tag { color: var(--amber); }
 .move-name {
   font-weight: 700; font-size: 1rem;
@@ -1995,3 +1999,39 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 }
 .move-pos { font-size: 0.8rem; color: var(--muted); }
 .move-date { font-size: 0.74rem; color: var(--faint); }
+
+
+/* --- Squad Moves panels -----------------------------------------------------
+   One picker, three separate jobs. Each panel is its own bordered block
+   with its own actions, so a staff appointment is visibly not a variant
+   of a player contract. The left edge echoes each job's colour in the
+   history and on Discord. */
+.move-panels {
+  display: grid; gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.move-panel {
+  margin: 0; padding: 0.9rem 1rem 1rem; min-width: 0;
+  border: 1px solid var(--border); border-left: 3px solid var(--border);
+  background: var(--panel-2); display: grid; gap: 0.8rem; align-content: start;
+}
+.move-panel legend {
+  padding: 0 0.4rem; font-family: var(--font-display); font-weight: 700;
+  font-size: 0.8rem; letter-spacing: 0.13em; text-transform: uppercase;
+}
+.move-panel-contract { border-left-color: var(--accent); }
+.move-panel-contract legend { color: var(--accent-text); }
+.move-panel-staff { border-left-color: var(--accent-2); }
+.move-panel-staff legend { color: var(--accent-2); }
+.move-panel-release { border-left-color: var(--amber); }
+.move-panel-release legend { color: var(--amber); }
+.move-panel .field-row { gap: 0.6rem; }
+.move-panel .field-hint { margin: 0; }
+
+/* Filled in the secondary accent: the primary action of the staff panel,
+   without borrowing the contract panel's green. Dark text, since the
+   accent is light -- same rule as the green buttons. */
+.btn.staff { background: var(--accent-2); color: var(--on-accent); border-color: var(--accent-2); }
+.btn.staff:hover { filter: brightness(1.08); }
+.roster-move-staff_offer:not(.roster-move-declined) { border-left-color: var(--accent-2); }
+.roster-move-staff_offer .roster-move-kind { color: var(--accent-2); }

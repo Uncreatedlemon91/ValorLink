@@ -20,7 +20,7 @@ club. So:
 * "Let Go" publishes an announcement and nothing else. Removing access
   is the irreversible half, and it stays a human action taken in
   Discord, where it is visible, reversible, and audited.
-* "Offer Position" publishes an offer the player answers themselves,
+* "Offer Contract" publishes an offer the player answers themselves,
   with Accept / Decline buttons that only they can press. Accepting adds
   exactly one configured role (ROSTER_SQUAD_ROLE_ID) -- grant-only,
   self-triggered, and to one named role rather than whatever a form
@@ -36,6 +36,16 @@ CONTRACTS. An offer carries a length in weeks and a squad status, and
 the contract starts when staff confirm the signing (see models.Contract).
 A renewal (MOVE_RENEWAL) is answered with the same buttons, but only ever
 extends the contract -- the player is already in, so no role is touched.
+A contract names a primary position and, optionally, a secondary one.
+
+STAFF APPOINTMENTS (MOVE_STAFF_OFFER) are their own kind of move, not a
+"position" on a player's contract: a staff role, no contract terms (squad
+status means nothing for a coach), and NO role granted on Accept. The
+squad role isn't theirs to get by default -- a coach needn't be a player --
+and the staff role is what gives somebody control of this site (see
+auth.py), which is exactly the kind of access that must never be handed
+out by a button press. Staff move it by hand once the appointment is
+confirmed.
 
 REST only, same as every other Discord integration here -- no gateway, no
 always-on process. Reuses DISCORD_BOT_TOKEN; see discord_api.py for the
@@ -60,12 +70,19 @@ MOVE_RELEASE = "release"
 # same Accept / Decline buttons as an offer, but never posted from the
 # announce form -- it comes from a contract's own Renew button.
 MOVE_RENEWAL = "renewal"
-MOVE_KINDS = (MOVE_OFFER, MOVE_RELEASE, MOVE_RENEWAL)
+# A staff role offered to somebody -- a separate thing from a playing
+# contract, with its own form, wording and announcement. See the module
+# docstring for why accepting one grants no role.
+MOVE_STAFF_OFFER = "staff_offer"
+MOVE_KINDS = (MOVE_OFFER, MOVE_RELEASE, MOVE_RENEWAL, MOVE_STAFF_OFFER)
 # What the announce form may post. Renewals are left out: a renewal needs
 # a contract to renew, which that form doesn't carry.
-ANNOUNCE_KINDS = (MOVE_OFFER, MOVE_RELEASE)
-# The moves a player answers themselves.
-ANSWERABLE_KINDS = (MOVE_OFFER, MOVE_RENEWAL)
+ANNOUNCE_KINDS = (MOVE_OFFER, MOVE_RELEASE, MOVE_STAFF_OFFER)
+# The moves a person answers themselves.
+ANSWERABLE_KINDS = (MOVE_OFFER, MOVE_RENEWAL, MOVE_STAFF_OFFER)
+# The moves that end in staff confirming and announcing them: a player's
+# signing, or a staff appointment.
+CONFIRMABLE_KINDS = (MOVE_OFFER, MOVE_STAFF_OFFER)
 
 # Squad status, as in Football Manager: what the player can expect of
 # their playing time. Persisted (Contract.squad_status) and posted back
@@ -89,6 +106,9 @@ _RELEASE_COLOR = 0xFFB020
 # A declined offer is neither good news nor bad news; it's closed. Grey
 # rather than red, which on this site means "on air" and nothing else.
 _DECLINED_COLOR = 0x8A93A5
+# Staff appointments get the palette's secondary accent, so a new coach
+# never reads as a new signing at a glance in the channel.
+_STAFF_COLOR = 0x6E8CFF
 
 # How the player answers their own offer. Persisted on RosterMove.response
 # and parsed back out of a button's custom_id, so the two must agree.
@@ -101,15 +121,21 @@ OFFER_RESPONSES = (RESPONSE_ACCEPTED, RESPONSE_DECLINED)
 # what tells the two apart before either tries.
 CUSTOM_ID_PREFIX = "roster"
 
-# Positions offered to staff as suggestions. A datalist, not a closed
-# select -- clubs invent roles ("Set Piece Coach") and a fixed list would
-# just push people into picking the nearest wrong one.
-POSITION_SUGGESTIONS = [
+# Pitch positions a contract can name, primary and secondary. A closed
+# list, posted from selects: a contract is a record of what was agreed,
+# "Stirker" on one is a real mistake, and "secondary must differ from
+# primary" can only be checked against known values. Stored as the label
+# itself, like squad status.
+PITCH_POSITIONS = (
     "Goalkeeper", "Centre Back", "Full Back", "Wing Back",
     "Defensive Midfield", "Centre Midfield", "Attacking Midfield",
     "Winger", "Striker", "Any Outfield",
-    "Manager", "Assistant Manager", "Coach",
-]
+)
+
+# Staff roles offered as suggestions. A datalist, not a closed select --
+# clubs invent roles ("Set Piece Coach"), and a fixed list would just push
+# people into picking the nearest wrong one.
+STAFF_ROLE_SUGGESTIONS = ("Manager", "Assistant Manager", "Coach")
 
 _CDN = "https://cdn.discordapp.com"
 
@@ -268,13 +294,17 @@ def discord_date(when: datetime) -> str:
 
 
 def _term_fields(position: str | None, contract_weeks: int | None,
-                 squad_status: str | None) -> list[dict]:
-    """Position, contract length and squad status as inline embed fields,
+                 squad_status: str | None,
+                 secondary_position: str | None = None) -> list[dict]:
+    """Positions, contract length and squad status as inline embed fields,
     each only when there is one -- an old offer from before contracts
     existed re-renders with just its position, as it was posted."""
     fields = []
     if position:
         fields.append({"name": "Position", "value": position, "inline": True})
+    if secondary_position:
+        fields.append({"name": "Secondary position", "value": secondary_position[:80],
+                       "inline": True})
     if contract_weeks:
         fields.append({"name": "Contract", "value": weeks_label(contract_weeks), "inline": True})
     if squad_status:
@@ -288,7 +318,8 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
                      response: str | None = None,
                      contract_weeks: int | None = None,
                      squad_status: str | None = None,
-                     contract_ends_at: datetime | None = None) -> dict:
+                     contract_ends_at: datetime | None = None,
+                     secondary_position: str | None = None) -> dict:
     """The announcement embed. Pure -- no network, so the wording and shape
     can be tested without mocking Discord.
 
@@ -301,6 +332,9 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     as fields so the player can see what they're agreeing to before they
     press. `contract_ends_at` is only for an answered renewal, where the
     useful fact is the date the deal now runs to.
+
+    For a staff offer, `position` is the staff role on offer, shown as
+    "Role"; there are no contract terms to show.
     """
     if kind not in MOVE_KINDS:
         raise ValueError(f"unknown roster move: {kind!r}")
@@ -339,6 +373,29 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
                 f"Accept or decline below — only {mention} can answer this one."
             )
             color, heading = _OFFER_COLOR, "Squad Announcement · Offer"
+    elif kind == MOVE_STAFF_OFFER:
+        role = f"**{position}**" if position else "a staff role"
+        if response == RESPONSE_ACCEPTED:
+            title = f"{name} — Staff Role Accepted"
+            description = (
+                f"{mention} has accepted the role of {role} at **{club}**. "
+                f"The club will confirm the appointment shortly."
+            )
+            color, heading = _STAFF_COLOR, "Staff Announcement · Offer Accepted"
+        elif response == RESPONSE_DECLINED:
+            title = f"{name} — Staff Role Declined"
+            description = (
+                f"{mention} has declined the role of {role} at **{club}**. "
+                f"We wish them well."
+            )
+            color, heading = _DECLINED_COLOR, "Staff Announcement · Offer Declined"
+        else:
+            title = f"{name} — Staff Role Offered"
+            description = (
+                f"{mention} has been offered the role of {role} at **{club}**. "
+                f"Accept or decline below — only {mention} can answer this one."
+            )
+            color, heading = _STAFF_COLOR, "Staff Announcement · Offer"
     elif kind == MOVE_RENEWAL:
         until = f" It now runs until {discord_date(contract_ends_at)}." if contract_ends_at else ""
         if response == RESPONSE_ACCEPTED:
@@ -380,7 +437,10 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     # so a re-render of an old row would fail the whole press.
     if member.get("avatar_url"):
         embed["thumbnail"] = {"url": member["avatar_url"]}
-    fields = _term_fields(position, contract_weeks, squad_status)
+    if kind == MOVE_STAFF_OFFER:
+        fields = [{"name": "Role", "value": position, "inline": True}] if position else []
+    else:
+        fields = _term_fields(position, contract_weeks, squad_status, secondary_position)
     if note:
         fields.append({"name": "From the staff", "value": note[:1024], "inline": False})
     if fields:
@@ -394,7 +454,8 @@ def build_signing_embed(*, member: dict, position: str | None,
                         confirmed_by: str | None,
                         confirmed_at: datetime | None = None,
                         contract_weeks: int | None = None,
-                        squad_status: str | None = None) -> dict:
+                        squad_status: str | None = None,
+                        secondary_position: str | None = None) -> dict:
     """The celebration, published when staff confirm an accepted offer.
 
     A second message rather than another edit of the offer: the offer is a
@@ -416,9 +477,39 @@ def build_signing_embed(*, member: dict, position: str | None,
     }
     if member.get("avatar_url"):
         embed["thumbnail"] = {"url": member["avatar_url"]}
-    fields = _term_fields(position, contract_weeks, squad_status)
+    fields = _term_fields(position, contract_weeks, squad_status, secondary_position)
     if fields:
         embed["fields"] = fields
+    if confirmed_by:
+        embed["footer"] = {"text": f"Confirmed by {confirmed_by} · {club}"}
+    return embed
+
+
+def build_appointment_embed(*, member: dict, role: str | None,
+                            confirmed_by: str | None,
+                            confirmed_at: datetime | None = None) -> dict:
+    """The staff equivalent of build_signing_embed, published when staff
+    confirm an accepted staff offer. Its own wording and colour: "joins
+    the staff as Coach" is different news from "signs for the club", and
+    the channel should say which it is."""
+    club = config.SITE_NAME
+    role = (role or "").strip()[:80]
+    as_role = f" as **{role}**" if role else ""
+    embed: dict = {
+        "title": (f"{member['name']} appointed {role}" if role
+                  else f"{member['name']} joins the {club} staff"),
+        "description": (
+            f"It's official — <@{member['id']}> joins the **{club}** staff{as_role}. "
+            f"Welcome aboard."
+        ),
+        "color": _STAFF_COLOR,
+        "author": {"name": "Staff Announcement · Appointment"},
+        "timestamp": (confirmed_at or datetime.now(timezone.utc)).isoformat(),
+    }
+    if member.get("avatar_url"):
+        embed["thumbnail"] = {"url": member["avatar_url"]}
+    if role:
+        embed["fields"] = [{"name": "Role", "value": role, "inline": True}]
     if confirmed_by:
         embed["footer"] = {"text": f"Confirmed by {confirmed_by} · {club}"}
     return embed

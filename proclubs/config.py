@@ -191,7 +191,7 @@ NEWS_ANNOUNCE_ENABLED = bool(DISCORD_BOT_TOKEN and NEWS_ANNOUNCE_CHANNEL_ID)
 # services.articles_with_discord_message).
 DISCORD_REACTIONS_POLL_LIMIT = int(os.getenv("DISCORD_REACTIONS_POLL_LIMIT", "20"))
 
-# --- Squad move announcements (Offer Position / Let Go) ---------------------
+# --- Squad move announcements (contracts, staff roles, departures) ----------
 # One-directional (site -> Discord), same shape as the article
 # announcement above: staff pick somebody out of the Discord member list
 # on /roster and publish an offer or a departure.

@@ -895,3 +895,94 @@ def test_live_contracts_put_the_soonest_to_run_out_first():
             squad_status="Reserve", weeks=2, source="recorded", created_by_name=None,
         )
         assert [c.id for c in services.live_contracts(session)] == [sooner.id, later.id]
+
+
+# --- Contract positions ------------------------------------------------------ #
+def test_positions_parse_to_primary_and_optional_secondary():
+    assert services.parse_positions("Striker", "Winger") == ("Striker", "Winger")
+    assert services.parse_positions(" Striker ", "") == ("Striker", None)
+
+
+@pytest.mark.parametrize("primary, secondary, message", [
+    ("", "Winger", "primary position"),
+    ("Stirker", "", "isn't a position"),
+    ("Striker", "Manager", "isn't a position"),       # staff roles aren't positions
+    ("Striker", "Striker", "has to differ"),
+])
+def test_bad_positions_are_refused_with_the_reason(primary, secondary, message):
+    with pytest.raises(services.ServiceError, match=message):
+        services.parse_positions(primary, secondary)
+
+
+def test_a_renewal_may_keep_a_primary_from_before_the_fixed_list():
+    """Old contracts hold free-text positions; renewing one mustn't force
+    staff to change it."""
+    assert services.parse_positions("Sweeper", "", keep="Sweeper") == ("Sweeper", None)
+    with pytest.raises(services.ServiceError):
+        services.parse_positions("Sweeper", "", keep="Libero")
+
+
+def test_a_staff_role_is_required_and_bounded():
+    assert services.parse_staff_role("  Set Piece Coach ") == "Set Piece Coach"
+    with pytest.raises(services.ServiceError, match="Name the staff role"):
+        services.parse_staff_role("   ")
+    with pytest.raises(services.ServiceError, match="80 characters"):
+        services.parse_staff_role("x" * 81)
+
+
+def test_a_renewal_restates_both_positions():
+    """Positions are applied as a pair, so dropping the secondary on
+    renewal really drops it."""
+    with database.get_session() as session:
+        contract = services.create_contract(
+            session, discord_id="42", display_name="Cap", avatar_url=None,
+            position="Striker", secondary_position="Winger", squad_status="Starter",
+            weeks=8, source="recorded", created_by_name="Coach",
+        )
+        assert contract.secondary_position == "Winger"
+        move = services.record_roster_move(
+            session, discord_id="42", display_name="Cap", avatar_url=None,
+            kind="renewal", position="Centre Midfield", secondary_position=None,
+            note=None, announced_by_name="Coach", announced_by_discord_id=1,
+            discord_message_id="m", contract_weeks=4, squad_status="Rotation",
+            contract_id=contract.id,
+        )
+        services.apply_renewal(session, contract, move)
+        assert (contract.position, contract.secondary_position) == ("Centre Midfield", None)
+
+
+# --- Staff appointments on the home page ------------------------------------- #
+def _staff_offer(session, *, response=None, confirmed=False):
+    move = services.record_roster_move(
+        session, discord_id="7", display_name="Sam", avatar_url=None,
+        kind="staff_offer", position="Coach", note=None, announced_by_name="Coach",
+        announced_by_discord_id=1, discord_message_id="m",
+    )
+    if response:
+        services.record_offer_response(session, move, response=response,
+                                       role_granted=False, role_error=None)
+    if confirmed:
+        services.confirm_roster_move(session, move, confirmed_by_name="Coach",
+                                     confirm_message_id="c")
+    return move
+
+
+def test_a_confirmed_appointment_is_public_news():
+    with database.get_session() as session:
+        _staff_offer(session, response="accepted", confirmed=True)
+        assert [m.display_name for m in services.public_roster_moves(session)] == ["Sam"]
+
+
+def test_an_unconfirmed_or_declined_staff_offer_stays_private():
+    """The same rule as player offers: a negotiation isn't news."""
+    with database.get_session() as session:
+        _staff_offer(session)
+        _staff_offer(session, response="accepted")
+        _staff_offer(session, response="declined")
+        assert services.public_roster_moves(session) == []
+
+
+def test_an_accepted_staff_offer_awaits_confirmation():
+    with database.get_session() as session:
+        move = _staff_offer(session, response="accepted")
+        assert services.offer_awaits_confirmation(move)

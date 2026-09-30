@@ -504,3 +504,99 @@ def test_the_signing_announcement_carries_the_contract():
     )
     fields = {f["name"]: f["value"] for f in embed["fields"]}
     assert fields["Contract"] == "12 weeks" and fields["Squad status"] == "Rotation"
+
+
+# --- Secondary position ------------------------------------------------------ #
+def test_a_contract_offer_shows_both_positions():
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position="Striker",
+        secondary_position="Winger", note=None, announced_by=None,
+        contract_weeks=8, squad_status="Starter",
+    )
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["Position"] == "Striker"
+    assert fields["Secondary position"] == "Winger"
+    # The headline names the primary only -- the secondary is a term.
+    assert "Winger" not in embed["description"]
+
+
+def test_no_secondary_field_when_there_is_none():
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position="Striker",
+        note=None, announced_by=None, contract_weeks=8, squad_status="Starter",
+    )
+    assert "Secondary position" not in {f["name"] for f in embed["fields"]}
+
+
+def test_the_signing_announcement_carries_the_secondary_position():
+    embed = discord_roster.build_signing_embed(
+        member=_choice(), position="Centre Back", secondary_position="Full Back",
+        confirmed_by="Coach", contract_weeks=8, squad_status="Rotation",
+    )
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["Secondary position"] == "Full Back"
+
+
+def test_staff_roles_are_not_pitch_positions():
+    """The whole point of the split: a contract can't name "Manager"."""
+    assert not set(discord_roster.STAFF_ROLE_SUGGESTIONS) & set(discord_roster.PITCH_POSITIONS)
+
+
+# --- Staff offers ------------------------------------------------------------ #
+def _staff_embed(response=None, role="Assistant Manager"):
+    return discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_STAFF_OFFER, member=_choice(), position=role,
+        note=None, announced_by="Coach", response=response,
+    )
+
+
+def test_a_staff_offer_is_worded_as_a_role_not_a_contract():
+    embed = _staff_embed()
+    assert embed["title"] == "Alex — Staff Role Offered"
+    assert "the role of **Assistant Manager**" in embed["description"]
+    assert "only <@42> can answer" in embed["description"]
+    assert embed["author"]["name"].startswith("Staff Announcement")
+    assert embed["fields"] == [{"name": "Role", "value": "Assistant Manager", "inline": True}]
+
+
+def test_a_staff_offer_is_visually_distinct_from_a_player_offer():
+    player = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_OFFER, member=_choice(), position="Striker",
+        note=None, announced_by=None,
+    )
+    assert _staff_embed()["color"] == discord_roster._STAFF_COLOR != player["color"]
+
+
+def test_a_staff_offer_re_renders_when_answered():
+    assert "Staff Role Accepted" in _staff_embed(discord_roster.RESPONSE_ACCEPTED)["title"]
+    assert "confirm the appointment" in _staff_embed(discord_roster.RESPONSE_ACCEPTED)["description"]
+    declined = _staff_embed(discord_roster.RESPONSE_DECLINED)
+    assert "Staff Role Declined" in declined["title"]
+    assert declined["color"] == discord_roster._DECLINED_COLOR
+
+
+def test_a_staff_offer_never_shows_contract_terms():
+    """Even if some were passed -- a coach has no squad status."""
+    embed = discord_roster.build_move_embed(
+        kind=discord_roster.MOVE_STAFF_OFFER, member=_choice(), position="Coach",
+        note=None, announced_by=None, contract_weeks=8, squad_status="Starter",
+        secondary_position="Winger",
+    )
+    assert [f["name"] for f in embed["fields"]] == ["Role"]
+
+
+def test_the_appointment_announcement():
+    embed = discord_roster.build_appointment_embed(
+        member=_choice(), role="Assistant Manager", confirmed_by="Coach",
+    )
+    assert embed["title"] == "Alex appointed Assistant Manager"
+    assert "joins the **YeeHaw FC** staff as **Assistant Manager**" in embed["description"]
+    assert embed["color"] == discord_roster._STAFF_COLOR
+    assert embed["author"]["name"] == "Staff Announcement · Appointment"
+    assert embed["footer"]["text"].startswith("Confirmed by Coach")
+
+
+def test_staff_offers_are_answerable_and_confirmable_but_not_renewals():
+    assert discord_roster.MOVE_STAFF_OFFER in discord_roster.ANSWERABLE_KINDS
+    assert discord_roster.MOVE_STAFF_OFFER in discord_roster.CONFIRMABLE_KINDS
+    assert discord_roster.MOVE_RENEWAL not in discord_roster.CONFIRMABLE_KINDS
