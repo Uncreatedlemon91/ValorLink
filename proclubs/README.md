@@ -527,8 +527,10 @@ and "Comments and likes" below for what that total does and doesn't mean.
 server with their Discord avatar, and starts one of two squad moves for
 whoever is picked. See `discord_roster.py`.
 
-**Offer Position** publishes an offer the player answers themselves.
-**Let Go** publishes a departure and nothing else. Full flow:
+**Offer Position** publishes an offer the player answers themselves,
+carrying a contract length in weeks and a squad status (see
+"Contracts" below). **Let Go** ends their contract, if any, and
+publishes a departure. Full flow:
 
 ```
 staff picks a member  ->  OFFER posted to Discord with Accept / Decline
@@ -544,7 +546,42 @@ staff picks a member  ->  OFFER posted to Discord with Accept / Decline
       staff press "Confirm signing" on /roster
                     |
       SIGNING announcement posted -- the celebration
+      CONTRACT starts: N weeks from the confirmation
 ```
+
+### Contracts
+
+Every offer asks staff for a **contract length** (1-52 whole weeks) and a
+**squad status** -- *Starter*, *Rotation* or *Reserve*, after Football
+Manager's squad statuses. Both show on the offer in Discord so the player
+sees the terms before pressing, and on the signing announcement.
+
+- **A contract starts when staff confirm the signing**, not when the
+  player presses Accept -- that's the moment it's official. Offers made
+  before contracts existed have no terms, so confirming one starts
+  nothing.
+- **Record Contract** is for players who were in the squad before the
+  site tracked this: it saves terms directly, with no offer, no
+  announcement and no role change.
+- **One live contract per person.** Offering or recording for somebody
+  already under contract is refused -- renew the one they have.
+- **Nothing happens by itself when a contract runs out.** Expiry is
+  computed from `Contract.expires_at`, not stored, so there's no timer. The
+  Contracts panel on `/roster` lists every live contract soonest-first,
+  marks the last 7 days as *Expiring soon* and anything past its date as
+  *Expired*, and says at the top how many need a decision. Staff then:
+  - **Renew** -- posts a renewal to Discord with the same Accept /
+    Decline buttons, only the player can press. Accepting adds the new
+    weeks to the **current end date** (renewing early never costs the
+    player time), or to today if it had already lapsed, and applies the
+    new status and position. Declining changes nothing; the contract runs
+    out as it was going to. One open renewal per contract at a time, and
+    no role is written either way.
+  - **Release** -- ends the contract and publishes a departure, exactly
+    like Let Go (and, like it, never removes a role). A renewal left
+    unanswered can't be accepted after a release.
+- Renewals never reach the public home page -- a contract negotiation
+  isn't news (`services.public_roster_moves`).
 
 **The role rule.** Roles are how this app decides who is staff and who is
 a member (`auth.py`), so what this app may do to them is deliberately
@@ -614,8 +651,9 @@ staged event invites -- one implementation, two callers.
   announce a position for somebody who isn't in the server.
 
 **The announcement** is an embed in the broadcast palette -- green for an
-offer, amber for a departure -- with the member's avatar as its thumbnail,
-an optional position, and an optional note from staff. The player is
+offer or renewal, amber for a departure -- with the member's avatar as its
+thumbnail, the position and contract terms as fields, and an optional note
+from staff. The player is
 mentioned in the message body as well as inside the embed, because a
 mention *inside* an embed renders as a link and notifies nobody.
 `allowed_mentions` is always explicit and lists only that one user, so an

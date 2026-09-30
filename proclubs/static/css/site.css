@@ -1885,6 +1885,73 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 }
 .roster-move-warn .muted { display: block; margin-top: 0.2rem; font-size: 0.78rem; }
 
+.roster-move-renewal { border-left-color: var(--accent); }
+.roster-move-renewal .roster-move-kind { color: var(--accent-text); }
+
+/* "Under contract" under a name in the picker -- the difference between
+   sending an offer and renewing, visible before anybody gets refused. */
+.roster-chip-contract {
+  font-size: 0.7rem; color: var(--accent-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* A number field with its unit beside it, so "8" can't be misread as
+   days or matches. */
+.input-suffix { display: flex; align-items: center; gap: 0.5rem; }
+.input-suffix input { flex: 1 1 auto; min-width: 0; }
+.input-suffix span { color: var(--muted); font-size: 0.85rem; }
+
+/* --- Contracts (staff) ------------------------------------------------------
+   Same row anatomy as the move history above it, so the two read as one
+   page. The left edge carries the state: nothing on the clock is green,
+   close to the end is amber, run out is the loud one. */
+.contract-alert {
+  margin: 0 0 0.8rem; padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--status-critical);
+  background: var(--panel-2); color: var(--text);
+  font-size: 0.88rem; font-weight: 600;
+}
+.contract-list { padding: 0.4rem 0; margin-bottom: 1.5rem; }
+.contract-row {
+  display: flex; gap: 0.75rem; align-items: flex-start;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+}
+.contract-row:last-child { border-bottom: none; }
+.contract-row .roster-avatar { width: 40px; height: 40px; }
+.contract-expiring { border-left-color: var(--amber); }
+.contract-expired { border-left-color: var(--status-critical); }
+.contract-status {
+  font-family: var(--font-display); font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-text);
+}
+.contract-left { color: var(--text); font-weight: 600; }
+.contract-expired .contract-left { color: var(--status-critical); }
+.contract-expiring .contract-left { color: var(--amber); }
+.roster-state.is-active { color: var(--accent-text); }
+.roster-state.is-expiring { color: var(--amber); }
+.roster-state.is-expired {
+  color: #fff; background: var(--status-critical); border-color: var(--status-critical);
+}
+
+.contract-actions {
+  display: flex; gap: 0.6rem; align-items: flex-start; flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+.contract-actions form { margin: 0; }
+/* The renew form folds away inside its own button: every row carrying an
+   open form would make the list unreadable, and a <details> needs no
+   script to open. */
+.contract-renew { flex: 1 1 100%; order: -1; }
+.contract-renew:not([open]) { flex: 0 0 auto; order: 0; }
+.contract-renew > summary { list-style: none; display: inline-block; cursor: pointer; }
+.contract-renew > summary::-webkit-details-marker { display: none; }
+.contract-renew[open] > summary { margin-bottom: 0.6rem; }
+.contract-renew form {
+  padding: 0.8rem; background: var(--panel-2); border: 1px solid var(--border);
+}
+.contract-renew .field { margin-bottom: 0.7rem; }
+
 /* --- Squad Moves on the home page ----------------------------------------
    Signings and departures as a compact grid of faces. The skew stays off:
    these sit next to the Transfer Centre band and a dozen skewed tiles

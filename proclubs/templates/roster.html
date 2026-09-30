@@ -14,8 +14,8 @@
   {# Said once, plainly, rather than left for someone to discover. The
      one role this app writes is worth being explicit about. #}
   <p class="roster-disclaimer">
-    An <strong>offer</strong> is posted to Discord with Accept / Decline buttons that
-    only that player can press.
+    An <strong>offer</strong> carries a contract length and squad status, and is
+    posted to Discord with Accept / Decline buttons that only that player can press.
     {% if role_grant_enabled %}
       Accepting adds them to the squad role automatically; you then confirm the
       signing here to publish the announcement.
@@ -24,8 +24,9 @@
       <code>ROSTER_SQUAD_ROLE_ID</code> isn't configured. You then confirm the
       signing here to publish the announcement.
     {% endif %}
-    <strong>Let Go</strong> only publishes a departure announcement — it never removes
-    a role, so revoke access in Discord yourself.
+    The contract starts when you confirm. <strong>Let Go</strong> ends their contract
+    and publishes a departure announcement — it never removes a role, so revoke
+    access in Discord yourself.
   </p>
 
   {% if not roster_enabled %}
@@ -71,6 +72,10 @@
               {% if m.username and m.username != m.name %}
                 <span class="roster-chip-handle">@{{ m.username }}</span>
               {% endif %}
+              {% set c = contracted.get(m.id) %}
+              {% if c %}
+                <span class="roster-chip-contract">Under contract · {{ c.squad_status }}</span>
+              {% endif %}
             </span>
           </label>
         {% endfor %}
@@ -88,6 +93,22 @@
             {% for p in positions %}<option value="{{ p }}"></option>{% endfor %}
           </datalist>
         </div>
+        <div class="field">
+          <label for="contract-weeks">Contract length</label>
+          <div class="input-suffix">
+            <input id="contract-weeks" name="contract_weeks" type="number" inputmode="numeric"
+                   min="{{ min_weeks }}" max="{{ max_weeks }}" step="1" placeholder="e.g. 8"
+                   required />
+            <span>weeks</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="squad-status">Squad status</label>
+          <select id="squad-status" name="squad_status" required>
+            <option value="" disabled selected>Choose…</option>
+            {% for st in squad_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+          </select>
+        </div>
       </div>
 
       <div class="field">
@@ -98,12 +119,132 @@
 
       <div class="form-actions roster-actions">
         <button type="submit" name="kind" value="offer" class="btn">Offer Position</button>
-        <button type="submit" name="kind" value="release" class="btn danger"
-                data-confirm="Publish a departure announcement for the selected member?">
+        {# Posts nothing to Discord, so it goes to its own route rather than
+           being a third "kind" of announcement. #}
+        <button type="submit" formaction="/roster/contracts" class="btn secondary"
+                title="For somebody already in the squad — records the terms, posts nothing.">
+          Record Contract
+        </button>
+        {# formnovalidate: letting somebody go doesn't need contract terms,
+           and the browser would otherwise insist on them. #}
+        <button type="submit" name="kind" value="release" class="btn danger" formnovalidate
+                data-confirm="End the selected member's contract and publish a departure announcement?">
           Let Go
         </button>
       </div>
+      <p class="field-hint">
+        <strong>Record Contract</strong> is for players who were already in the squad
+        before contracts were tracked here — it saves the terms without an offer or an
+        announcement.
+      </p>
     </form>
+  {% endif %}
+
+  <div class="section-head"><h2>Contracts</h2></div>
+  {% if expired_count %}
+    {# The one thing on this page with a clock on it. Nothing happens by
+       itself when a contract runs out, so somebody has to be told. #}
+    <p class="contract-alert" role="status">
+      {{ expired_count }} contract{{ 's have' if expired_count != 1 else ' has' }} run out
+      and {{ 'need' if expired_count != 1 else 'needs' }} a decision — renew or release below.
+    </p>
+  {% endif %}
+  {% if contracts %}
+    <div class="contract-list card">
+      {% for c in contracts %}
+        {% set state = contract_states[c.id] %}
+        {% set pending = renewals.get(c.id) %}
+        <div class="contract-row contract-{{ state }}">
+          {% if c.avatar_url %}
+            <img class="roster-avatar" src="{{ c.avatar_url }}" alt=""
+                 width="40" height="40" loading="lazy" decoding="async" />
+          {% endif %}
+          <div class="roster-move-text">
+            <div class="roster-move-head">
+              <span class="roster-move-name">{{ c.display_name }}</span>
+              <span class="contract-status">{{ c.squad_status }}</span>
+              {% if c.position %}<span class="roster-move-pos">{{ c.position }}</span>{% endif %}
+              {% if state == 'expired' %}
+                <span class="roster-state is-expired">Expired</span>
+              {% elif state == 'expiring' %}
+                <span class="roster-state is-expiring">Expiring soon</span>
+              {% else %}
+                <span class="roster-state is-active">Active</span>
+              {% endif %}
+              {% if pending %}<span class="roster-state is-pending">Renewal offered</span>{% endif %}
+            </div>
+            <div class="roster-move-meta">
+              <strong class="contract-left">{{ time_left(c) }}</strong>
+              · {{ weeks_label(c.weeks) }} to {{ localtime(c.expires_at, 'date') }}
+              {% if c.renewal_count %} · renewed {{ c.renewal_count }}×{% endif %}
+              {% if c.source == 'recorded' %} · recorded{% else %} · signed{% endif %}
+              {%- if c.created_by_name %} by {{ c.created_by_name }}{% endif %}
+            </div>
+            <div class="contract-actions">
+              {% if pending %}
+                <span class="field-hint">
+                  Waiting on {{ c.display_name }} to answer a renewal of
+                  {{ weeks_label(pending.contract_weeks) }} in Discord.
+                </span>
+              {% elif roster_enabled %}
+                <details class="contract-renew">
+                  <summary class="btn secondary">Renew</summary>
+                  <form method="post" action="/roster/contracts/{{ c.id }}/renew">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="renew-weeks-{{ c.id }}">Additional weeks</label>
+                        <input id="renew-weeks-{{ c.id }}" name="contract_weeks" type="number"
+                               inputmode="numeric" min="{{ min_weeks }}" max="{{ max_weeks }}"
+                               step="1" value="{{ c.weeks }}" required />
+                      </div>
+                      <div class="field">
+                        <label for="renew-status-{{ c.id }}">Squad status</label>
+                        <select id="renew-status-{{ c.id }}" name="squad_status" required>
+                          {% for st in squad_statuses %}
+                            <option value="{{ st }}" {% if st == c.squad_status %}selected{% endif %}>{{ st }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="renew-pos-{{ c.id }}">Position</label>
+                        <input id="renew-pos-{{ c.id }}" name="position" list="roster-positions"
+                               maxlength="80" value="{{ c.position or '' }}" />
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label for="renew-note-{{ c.id }}">Note <span class="muted">(optional)</span></label>
+                      <input id="renew-note-{{ c.id }}" name="note" maxlength="1000" />
+                    </div>
+                    <p class="field-hint">
+                      Posted to Discord for {{ c.display_name }} to accept or decline. The new
+                      weeks are added from the current end date{% if state == 'expired' %} — or
+                      from today, since this one has already run out{% endif %}.
+                    </p>
+                    <button type="submit" class="btn">Offer renewal</button>
+                  </form>
+                </details>
+              {% endif %}
+              {% if roster_enabled %}
+                <form method="post" action="/roster/contracts/{{ c.id }}/release"
+                      {# tojson in a single-quoted attribute: a player's name can hold
+                         any character, and this is the escaping that survives both
+                         the HTML and the JavaScript it's nested in. #}
+                      onsubmit='return confirm({{ ("End " ~ c.display_name ~ "’s contract and publish a departure announcement?") | tojson }});'>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="btn danger">Release</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card empty-state">
+      No contracts yet. They start when you confirm a signing, or use Record Contract
+      for somebody already in the squad.
+    </div>
   {% endif %}
 
   <div class="section-head"><h2>Recently announced</h2></div>
@@ -119,11 +260,22 @@
             <div class="roster-move-head">
               <span class="roster-move-name">{{ move.display_name }}</span>
               <span class="roster-move-kind">
-                {{ 'Offer' if move.kind == 'offer' else 'Departure' }}
+                {{ {'offer': 'Offer', 'renewal': 'Renewal'}.get(move.kind, 'Departure') }}
               </span>
               {% if move.position %}<span class="roster-move-pos">{{ move.position }}</span>{% endif %}
+              {% if move.contract_weeks %}
+                <span class="roster-move-pos">{{ weeks_label(move.contract_weeks) }}{% if move.squad_status %} · {{ move.squad_status }}{% endif %}</span>
+              {% endif %}
               {# Only an offer has a state to be in; a departure is just done. #}
-              {% if move.kind == 'offer' %}
+              {% if move.kind == 'renewal' %}
+                {% if move.response == 'accepted' %}
+                  <span class="roster-state is-signed">Renewed</span>
+                {% elif move.response == 'declined' %}
+                  <span class="roster-state is-declined">Declined</span>
+                {% else %}
+                  <span class="roster-state is-pending">Awaiting answer</span>
+                {% endif %}
+              {% elif move.kind == 'offer' %}
                 {% if move.confirmed_at %}
                   <span class="roster-state is-signed">Signed</span>
                 {% elif move.response == 'accepted' %}

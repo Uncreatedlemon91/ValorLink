@@ -1412,7 +1412,7 @@ def test_offering_a_position_posts_the_announcement_and_records_it(client, roste
     _login_staff(client, name="Coach")
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
-        "discord_id": "42", "kind": "offer", "position": "Striker",
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": "Striker",
         "note": "Joining from Rivals FC.", "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 303
@@ -1460,7 +1460,7 @@ def test_the_history_shows_what_was_announced(client, roster_ready):
     _login_staff(client)
     token = _csrf(client, "/roster")
     client.post("/roster/announce", data={
-        "discord_id": "42", "kind": "offer", "position": "Striker", "csrf_token": token,
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": "Striker", "csrf_token": token,
     }, follow_redirects=False)
     html = client.get("/roster").text
     assert "Recently announced" in html
@@ -1474,7 +1474,7 @@ def test_an_id_that_is_not_in_the_server_is_refused(client, roster_ready):
     _login_staff(client)
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
-        "discord_id": "99999", "kind": "offer", "csrf_token": token,
+        "discord_id": "99999", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 400
     assert roster_ready == []
@@ -1495,7 +1495,7 @@ def test_an_unknown_kind_is_refused(client, roster_ready):
 def test_announcing_requires_a_valid_csrf_token(client, roster_ready):
     _login_staff(client)
     r = client.post("/roster/announce", data={
-        "discord_id": "42", "kind": "offer", "csrf_token": "forged",
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": "forged",
     }, follow_redirects=False)
     assert r.status_code == 400
     assert roster_ready == []
@@ -1511,7 +1511,7 @@ def test_a_failed_post_is_recorded_and_reported_not_silently_dropped(client, ros
     _login_staff(client)
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
-        "discord_id": "42", "kind": "offer", "csrf_token": token,
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": token,
     }, follow_redirects=True)
     assert "Missing Access" in r.text
     with database.get_session() as session:
@@ -1567,7 +1567,7 @@ def _offer(client, roster_ready, *, discord_id="42", position="Striker"):
     """Publishes an offer through the real route and returns its row id."""
     token = _csrf(client, "/roster")
     r = client.post("/roster/announce", data={
-        "discord_id": discord_id, "kind": "offer", "position": position,
+        "discord_id": discord_id, "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": position,
         "csrf_token": token,
     }, follow_redirects=False)
     assert r.status_code == 303
@@ -1892,6 +1892,397 @@ def test_the_page_shows_the_offer_moving_through_its_states(
     html = client.get("/roster").text
     assert "Signed" in html
     assert "Confirm signing" not in html
+
+
+# --------------------------------------------------------------------------- #
+# Contracts: length and squad status, renewals, expiry
+# --------------------------------------------------------------------------- #
+def _sign(client, roster_ready, discord_key, *, discord_id="42", weeks="8", status="Starter"):
+    """Offer -> accept -> confirm through the real routes. Returns the
+    live contract that confirming started."""
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "offer", "position": "Striker",
+        "contract_weeks": weeks, "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        move_id = services.recent_roster_moves(session)[0].id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=discord_id)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    with database.get_session() as session:
+        return services.live_contract_for(session, discord_id)
+
+
+def _record(client, *, discord_id="42", weeks="8", status="Rotation", position="Winger"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/contracts", data={
+        "discord_id": discord_id, "contract_weeks": weeks, "squad_status": status,
+        "position": position, "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _set_expiry(contract_id, when):
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        contract.expires_at = when
+        session.commit()
+
+
+def _renew(client, contract_id, *, weeks="6", status="Rotation", position=""):
+    token = _csrf(client, "/roster")
+    return client.post(f"/roster/contracts/{contract_id}/renew", data={
+        "contract_weeks": weeks, "squad_status": status, "position": position,
+        "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _latest_move_id():
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0].id
+
+
+@pytest.mark.parametrize("weeks,status", [
+    ("", "Starter"),        # no length at all
+    ("0", "Starter"),       # below the minimum
+    ("53", "Starter"),      # above the maximum
+    ("eight", "Starter"),   # not a number
+    ("8", ""),              # no status
+    ("8", "Key Player"),    # not one of ours
+])
+def test_an_offer_needs_a_contract_length_and_a_squad_status(client, roster_ready, weeks, status):
+    """The form marks both required, but that's only a suggestion to a
+    browser -- the route has to refuse too."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": weeks,
+        "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_the_offer_shows_the_player_the_terms_they_are_agreeing_to(client, roster_ready):
+    _login_staff(client)
+    _offer(client, roster_ready)
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Contract"] == "8 weeks"
+    assert fields["Squad status"] == "Starter"
+
+
+def test_letting_go_needs_no_contract_terms(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    assert len(roster_ready) == 1
+
+
+def test_accepting_alone_does_not_start_a_contract(client, roster_ready, discord_key, role_grant):
+    """The contract starts when the club confirms, not when the player
+    presses -- until then it isn't a signing."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_confirming_a_signing_starts_the_contract(client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    contract = _sign(client, roster_ready, discord_key, weeks="10", status="Rotation")
+    assert contract is not None
+    assert (contract.weeks, contract.squad_status, contract.position) == (10, "Rotation", "Striker")
+    assert contract.expires_at - contract.starts_at == timedelta(weeks=10)
+    assert contract.source == "signing"
+
+    signing = roster_ready[-1][1]["embeds"][0]
+    assert "has signed for" in signing["title"]
+    fields = {f["name"]: f["value"] for f in signing["fields"]}
+    assert fields["Contract"] == "10 weeks" and fields["Squad status"] == "Rotation"
+
+
+def test_somebody_under_contract_is_renewed_not_offered_again(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8",
+        "squad_status": "Starter", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert "renew" in r.text
+    assert roster_ready == []
+
+
+def test_recording_a_contract_for_an_existing_player_posts_nothing(client, roster_ready, role_grant):
+    """For people who were in the squad before contracts were tracked --
+    announcing a signing of somebody who's been here all along would be
+    wrong, and so would touching their roles."""
+    _login_staff(client, name="Coach")
+    r = _record(client, weeks="12", status="Reserve")
+    assert r.status_code == 303
+    assert roster_ready == [] and role_grant == []
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+    assert (contract.weeks, contract.squad_status, contract.source) == (12, "Reserve", "recorded")
+    assert contract.display_name == "Cap"
+    assert contract.created_by_name == "Coach"
+
+
+def test_a_second_contract_cannot_be_recorded_over_a_live_one(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    r = _record(client, weeks="20")
+    assert r.status_code == 400
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42").weeks == 8
+
+
+def test_recording_refuses_somebody_not_in_the_server(client, roster_ready):
+    _login_staff(client)
+    assert _record(client, discord_id="99999").status_code == 400
+
+
+def test_recording_a_contract_is_staff_only_and_csrf_protected(client, roster_ready):
+    _login_staff(client)
+    r = client.post("/roster/contracts", data={
+        "discord_id": "42", "contract_weeks": "8", "squad_status": "Starter",
+        "csrf_token": "forged",
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    _login_fan(client)
+    r = client.post("/roster/contracts", data={
+        "discord_id": "42", "contract_weeks": "8", "squad_status": "Starter",
+        "csrf_token": "x",
+    }, follow_redirects=False)
+    assert r.status_code in (303, 403)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_the_contracts_panel_lists_terms_and_time_left(client, roster_ready):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    html = client.get("/roster").text
+    assert "Contracts" in html
+    assert "Rotation" in html
+    assert "weeks left" in html
+    assert "Under contract · Rotation" in html, "the picker should say who is signed"
+
+
+def test_an_expired_contract_is_flagged_and_nothing_happens_by_itself(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() - timedelta(days=2))
+
+    html = client.get("/roster").text
+    assert "1 contract has run out" in html
+    assert "Expired" in html and "expired 2 days ago" in html
+    assert f"/roster/contracts/{contract_id}/renew" in html
+    assert f"/roster/contracts/{contract_id}/release" in html
+    # Still theirs until staff decide: not ended, nothing posted.
+    assert roster_ready == []
+    with database.get_session() as session:
+        assert services.get_contract(session, contract_id).ended_at is None
+
+
+def test_a_contract_close_to_the_end_is_marked_expiring(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() + timedelta(days=3, hours=1))
+    html = client.get("/roster").text
+    assert "Expiring soon" in html and "3 days left" in html
+
+
+def test_renewing_posts_an_offer_only_the_player_can_answer(client, roster_ready):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation", position="Winger")
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+
+    r = _renew(client, contract_id, weeks="6", status="Starter")
+    assert r.status_code == 303
+    assert len(roster_ready) == 1
+    body = roster_ready[0][1]
+    embed = body["embeds"][0]
+    assert "Contract Renewal" in embed["title"]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields == {"Position": "Winger", "Contract": "6 weeks", "Squad status": "Starter"}
+    move_id = _latest_move_id()
+    ids = [c["custom_id"] for c in body["components"][0]["components"]]
+    assert ids == [f"roster:accepted:{move_id}", f"roster:declined:{move_id}"]
+
+    # Nothing changes until they answer.
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        assert (contract.weeks, contract.squad_status) == (8, "Rotation")
+    assert "Renewal offered" in client.get("/roster").text
+
+
+def test_accepting_a_renewal_adds_the_weeks_to_the_current_end_date(
+        client, roster_ready, discord_key, role_grant):
+    """Renewing early must never cost the player time they already had."""
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id, weeks="6", status="Starter")
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    payload = r.json()
+    assert payload["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Contract Renewed" in payload["data"]["embeds"][0]["title"]
+    assert "<t:" in payload["data"]["embeds"][0]["description"]
+    assert payload["data"]["components"] == []
+
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert contract.expires_at == old_end + timedelta(weeks=6)
+    assert (contract.weeks, contract.squad_status) == (6, "Starter")
+    assert contract.renewal_count == 1
+    assert role_grant == [], "a renewal is not a signing -- no role is written"
+
+
+def test_renewing_a_lapsed_contract_starts_the_new_term_from_today(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() - timedelta(weeks=3))
+    _renew(client, contract_id, weeks="4")
+    before = datetime.utcnow()
+    _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert contract.expires_at >= before + timedelta(weeks=4)
+    assert contract.expires_at <= datetime.utcnow() + timedelta(weeks=4)
+    assert services.contract_state(contract) == services.CONTRACT_ACTIVE
+
+
+def test_declining_a_renewal_leaves_the_contract_to_run_out(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id, weeks="6", status="Starter")
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{_latest_move_id()}", user_id=42)
+    assert "Renewal Declined" in r.json()["data"]["embeds"][0]["title"]
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert (contract.expires_at, contract.weeks, contract.squad_status) == (old_end, 8, "Rotation")
+    assert contract.ended_at is None
+
+
+def test_only_the_player_can_answer_their_renewal(client, roster_ready, discord_key):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id)
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=43)
+    assert r.json()["type"] == 4 and "isn't yours" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_contract(session, contract_id).expires_at == old_end
+
+
+def test_one_renewal_at_a_time(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    roster_ready.clear()
+    r = _renew(client, contract_id, weeks="10")
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_releasing_ends_the_contract_and_announces_the_departure(client, roster_ready, role_grant):
+    _login_staff(client, name="Coach")
+    _record(client, position="Winger")
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract_id}/release",
+                    data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "Departure" in embed["title"] and "Winger" in embed["description"]
+    assert role_grant == []
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        assert contract.ended_at is not None and contract.ended_by_name == "Coach"
+        assert services.live_contract_for(session, "42") is None
+    # Gone from the panel; a released contract can't be renewed or
+    # released again.
+    assert f"/roster/contracts/{contract_id}/renew" not in client.get("/roster").text
+    assert _renew(client, contract_id).status_code == 400
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract_id}/release",
+                    data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 400
+
+
+def test_a_renewal_left_open_cannot_be_accepted_after_a_release(
+        client, roster_ready, discord_key):
+    """Otherwise the player could extend a deal the club already ended."""
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    renewal_id = _latest_move_id()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/contracts/{contract_id}/release",
+                data={"csrf_token": token}, follow_redirects=False)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{renewal_id}", user_id=42)
+    assert r.json()["type"] == 4
+    assert "already ended" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_roster_move(session, renewal_id).response is None
+
+
+def test_let_go_from_the_picker_also_ends_their_contract(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_a_renewal_never_reaches_the_public_home_page(
+        client, roster_ready, discord_key, role_grant):
+    """A contract negotiation is not news."""
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    with database.get_session() as session:
+        assert services.public_roster_moves(session) == []
 
 
 # --------------------------------------------------------------------------- #

@@ -27,9 +27,12 @@ design-fc27/   the broadcast design canvas the current look came from
   pick a position from the site or from the Discord post; both stay in
   step. Times render in each viewer's own timezone.
 - **Squad moves** — pick a member out of the Discord server, offer them a
-  position or announce a departure. An offer carries Accept / Decline
-  buttons only that player can press; accepting adds the squad role, and
-  staff then confirm the signing to publish the announcement.
+  position or announce a departure. An offer carries a contract length in
+  weeks and a squad status (Starter / Rotation / Reserve), with Accept /
+  Decline buttons only that player can press; accepting adds the squad
+  role, and staff then confirm the signing to publish the announcement and
+  start the contract. Expired contracts are flagged for staff to renew
+  (the player accepts again) or release.
 - **Stats** — the club's EA figures, with a locally-accumulated history
   (EA only exposes a rolling window, so the trend data has to be collected
   over time).

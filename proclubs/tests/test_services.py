@@ -830,3 +830,68 @@ def test_set_featured_streamer_is_exclusive():
         assert first.featured is False
         assert second.featured is True
         assert services.get_featured_streamer(session).id == second.id
+
+
+# --- Contracts ------------------------------------------------------------- #
+def _contract(session, *, weeks=8, starts_at=None):
+    return services.create_contract(
+        session, discord_id="42", display_name="Cap", avatar_url=None,
+        position="Striker", squad_status="Starter", weeks=weeks,
+        source="recorded", created_by_name="Coach", starts_at=starts_at,
+    )
+
+
+def test_a_contract_runs_for_its_weeks_from_its_start():
+    start = datetime(2026, 9, 1, 20, 0)
+    with database.get_session() as session:
+        contract = _contract(session, weeks=8, starts_at=start)
+    assert contract.expires_at == datetime(2026, 10, 27, 20, 0)
+
+
+@pytest.mark.parametrize("weeks,status", [("0", "Starter"), ("53", "Starter"),
+                                          ("x", "Starter"), ("4", "Captain")])
+def test_contract_terms_are_validated(weeks, status):
+    with pytest.raises(services.ServiceError):
+        services.parse_contract_terms(weeks, status)
+
+
+def test_contract_terms_accept_the_bounds():
+    assert services.parse_contract_terms("1", "Reserve") == (1, "Reserve")
+    assert services.parse_contract_terms(" 52 ", "Starter") == (52, "Starter")
+
+
+@pytest.mark.parametrize("remaining,state,text", [
+    (timedelta(weeks=5, hours=1), services.CONTRACT_ACTIVE, "5 weeks left"),
+    (timedelta(days=13, hours=1), services.CONTRACT_ACTIVE, "13 days left"),
+    (timedelta(days=6, hours=1), services.CONTRACT_EXPIRING, "6 days left"),
+    (timedelta(days=1, hours=1), services.CONTRACT_EXPIRING, "1 day left"),
+    (timedelta(hours=3), services.CONTRACT_EXPIRING, "ends today"),
+    (-timedelta(hours=3), services.CONTRACT_EXPIRED, "expired today"),
+    (-timedelta(days=4, hours=1), services.CONTRACT_EXPIRED, "expired 4 days ago"),
+])
+def test_contract_state_and_time_left(remaining, state, text):
+    now = datetime(2026, 9, 30, 12, 0)
+    with database.get_session() as session:
+        contract = _contract(session)
+        contract.expires_at = now + remaining
+        assert services.contract_state(contract, now) == state
+        assert services.contract_time_left(contract, now) == text
+
+
+def test_a_released_contract_is_released_whatever_its_date():
+    with database.get_session() as session:
+        contract = _contract(session)
+        services.end_contract(session, contract, ended_by_name="Coach")
+        assert services.contract_state(contract) == services.CONTRACT_RELEASED
+        assert services.live_contract_for(session, "42") is None
+        assert services.live_contracts(session) == []
+
+
+def test_live_contracts_put_the_soonest_to_run_out_first():
+    with database.get_session() as session:
+        later = _contract(session, weeks=20)
+        sooner = services.create_contract(
+            session, discord_id="43", display_name="Sam", avatar_url=None, position=None,
+            squad_status="Reserve", weeks=2, source="recorded", created_by_name=None,
+        )
+        assert [c.id for c in services.live_contracts(session)] == [sooner.id, later.id]

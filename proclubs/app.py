@@ -1081,6 +1081,9 @@ def _handle_offer_response(custom_id: str, presser: dict) -> dict:
             already = move.response or "closed"
             return _interaction_note(f"This offer has already been {already}.")
 
+        if move.kind == discord_roster.MOVE_RENEWAL:
+            return _handle_renewal_response(session, move, response)
+
         role_granted, role_error = False, None
         if response == discord_roster.RESPONSE_ACCEPTED and config.ROSTER_ROLE_GRANT_ENABLED:
             try:
@@ -1097,7 +1100,8 @@ def _handle_offer_response(custom_id: str, presser: dict) -> dict:
         embed = discord_roster.build_move_embed(
             kind=move.kind, member=member, position=move.position, note=move.note,
             announced_by=move.announced_by_name, announced_at=move.announced_at,
-            response=response,
+            response=response, contract_weeks=move.contract_weeks,
+            squad_status=move.squad_status,
         )
 
     # The member list now shows a role that changed, so don't serve a
@@ -1233,6 +1237,36 @@ def streamer_delete(request: Request, streamer_id: int, csrf_token: str = Form(.
     return RedirectResponse("/streamers", status_code=303)
 
 
+def _handle_renewal_response(session, move, response: str) -> dict:
+    """The player answering a contract renewal. No role is involved --
+    they're already in the squad -- so accepting only extends the
+    contract, and declining leaves it to run out as it was going to.
+
+    Refused if the contract was released while the renewal sat
+    unanswered: accepting would otherwise extend a deal the club has
+    already ended.
+    """
+    contract = services.get_contract(session, move.contract_id) if move.contract_id else None
+    if contract is None or contract.ended_at is not None:
+        return _interaction_note(
+            "This contract has already ended, so the renewal can't be accepted.")
+    services.record_offer_response(
+        session, move, response=response, role_granted=False, role_error=None)
+    if response == discord_roster.RESPONSE_ACCEPTED:
+        services.apply_renewal(session, contract, move)
+    embed = discord_roster.build_move_embed(
+        kind=move.kind, member=discord_roster.member_from_move(move),
+        position=move.position, note=move.note, announced_by=move.announced_by_name,
+        announced_at=move.announced_at, response=response,
+        contract_weeks=move.contract_weeks, squad_status=move.squad_status,
+        contract_ends_at=contract.expires_at,
+    )
+    return {
+        "type": discord_rsvp.RESPONSE_UPDATE_MESSAGE,
+        "data": {"embeds": [embed], "components": []},
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Squad moves: pick somebody out of Discord, announce an offer or a departure
 # --------------------------------------------------------------------------- #
@@ -1253,82 +1287,139 @@ def roster_page(request: Request, _staff=Depends(auth.require_staff)):
             members = discord_roster.roster_choices()
         except discord_roster.DiscordApiError as exc:
             load_error = str(exc)
+    now = datetime.utcnow()
     with get_session() as session:
         moves = services.recent_roster_moves(session)
+        contracts = services.live_contracts(session)
+        renewals = services.open_renewals(session)
+    states = {c.id: services.contract_state(c, now) for c in contracts}
     return templates.TemplateResponse(request, "roster.html", _ctx(
         request, members=members, load_error=load_error, moves=moves,
         roster_enabled=config.ROSTER_MOVES_ENABLED,
         roster_missing=config.roster_moves_missing(),
         positions=discord_roster.POSITION_SUGGESTIONS,
+        squad_statuses=discord_roster.SQUAD_STATUSES,
+        min_weeks=discord_roster.CONTRACT_MIN_WEEKS,
+        max_weeks=discord_roster.CONTRACT_MAX_WEEKS,
         role_grant_enabled=config.ROSTER_ROLE_GRANT_ENABLED,
         offer_is_open=services.offer_is_open,
         awaits_confirmation=services.offer_awaits_confirmation,
+        contracts=contracts, contract_states=states, renewals=renewals,
+        # Who is already signed, so the picker can say so next to their
+        # name -- the difference between an offer and a renewal is
+        # otherwise only discovered by getting refused.
+        contracted={c.discord_id: c for c in contracts},
+        expired_count=sum(1 for st in states.values() if st == services.CONTRACT_EXPIRED),
+        time_left=lambda c: services.contract_time_left(c, now),
+        weeks_label=discord_roster.weeks_label,
     ))
 
 
-@app.post("/roster/announce")
-def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Form(""),
-                    position: str = Form(""), note: str = Form(""),
-                    csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
-    """Publishes one squad announcement.
-
-    Announcement only -- no Discord role is added or removed here; see
-    discord_roster.py for why. The member is re-resolved against the live
-    list rather than trusted from the form, so a stale tab or a
-    hand-edited id can't publish an announcement naming somebody who
-    isn't in the server.
-    """
-    _check_csrf(request, csrf_token)
+def _require_roster_configured() -> None:
     if not config.ROSTER_MOVES_ENABLED:
         raise services.ServiceError(
             "Squad announcements aren't configured -- missing "
             + ", ".join(config.roster_moves_missing()) + " in .env."
         )
-    if kind not in discord_roster.MOVE_KINDS:
-        raise services.ServiceError("Pick either Offer Position or Let Go.")
+
+
+def _resolve_member(discord_id: str) -> dict:
+    """The picked member, re-resolved against the live list rather than
+    trusted from the form, so a stale tab or a hand-edited id can't name
+    somebody who isn't in the server."""
     try:
         member = discord_roster.find_member(discord_roster.roster_choices(), discord_id)
     except discord_roster.DiscordApiError as exc:
         raise services.ServiceError(f"Couldn't check Discord's member list: {exc}") from exc
     if member is None:
         raise services.ServiceError("Pick somebody from the Discord member list first.")
+    return member
 
-    # The row is written BEFORE the post, because an offer's buttons carry
-    # its row id -- there is no id to put in a custom_id until it exists.
-    # The message id is backfilled after, so a post that fails still
-    # leaves the honest record (and the page marks it undelivered).
+
+def _publish_move(staff: dict, member: dict, *, kind: str, position: str | None,
+                  note: str | None = None, contract_weeks: int | None = None,
+                  squad_status: str | None = None,
+                  contract_id: int | None = None) -> str | None:
+    """Records one squad move and posts it. Returns why the post failed,
+    or None if it went out.
+
+    The row is written BEFORE the post, because an offer's buttons carry
+    its row id -- there is no id to put in a custom_id until it exists.
+    The message id is backfilled after, so a post that fails still leaves
+    the honest record (and the page marks it undelivered).
+    """
     with get_session() as session:
         move = services.record_roster_move(
             session, discord_id=member["id"], display_name=member["name"],
             avatar_url=member["avatar_url"], kind=kind, position=position, note=note,
             announced_by_name=staff.get("name"),
             announced_by_discord_id=_int(staff.get("id")) or None,
-            discord_message_id=None,
+            discord_message_id=None, contract_weeks=contract_weeks,
+            squad_status=squad_status, contract_id=contract_id,
         )
         move_id = move.id
 
     embed = discord_roster.build_move_embed(
         kind=kind, member=member, position=position, note=note,
-        announced_by=staff.get("name"),
+        announced_by=staff.get("name"), contract_weeks=contract_weeks,
+        squad_status=squad_status,
     )
-    # Only an offer is answerable. Nobody declines being let go.
+    # Only offers and renewals are answerable. Nobody declines being let go.
     components = (discord_roster.build_offer_components(move_id)
-                  if kind == discord_roster.MOVE_OFFER else None)
-    message_id, failure = None, None
+                  if kind in discord_roster.ANSWERABLE_KINDS else None)
     try:
         message_id = discord_roster.announce_move(
             config.ROSTER_ANNOUNCE_CHANNEL_ID, embed, mention_id=member["id"],
             components=components,
         )
     except discord_roster.DiscordApiError as exc:
-        failure = str(exc)
+        return str(exc)
+    with get_session() as session:
+        services.set_roster_move_message(
+            session, move_id, channel_id=config.ROSTER_ANNOUNCE_CHANNEL_ID,
+            message_id=message_id,
+        )
+    return None
 
-    if message_id:
+
+@app.post("/roster/announce")
+def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Form(""),
+                    position: str = Form(""), note: str = Form(""),
+                    contract_weeks: str = Form(""), squad_status: str = Form(""),
+                    csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    """Publishes one squad announcement.
+
+    Announcement only -- no Discord role is added or removed here; see
+    discord_roster.py for why. An offer carries the contract terms the
+    player is being asked to agree to; a departure ends whatever contract
+    they were on.
+    """
+    _check_csrf(request, csrf_token)
+    _require_roster_configured()
+    if kind not in discord_roster.ANNOUNCE_KINDS:
+        raise services.ServiceError("Pick either Offer Position or Let Go.")
+    weeks, status = None, None
+    if kind == discord_roster.MOVE_OFFER:
+        weeks, status = services.parse_contract_terms(contract_weeks, squad_status)
+    member = _resolve_member(discord_id)
+    if kind == discord_roster.MOVE_OFFER:
         with get_session() as session:
-            services.set_roster_move_message(
-                session, move_id, channel_id=config.ROSTER_ANNOUNCE_CHANNEL_ID,
-                message_id=message_id,
-            )
+            if services.live_contract_for(session, member["id"]) is not None:
+                raise services.ServiceError(
+                    f"{member['name']} is already under contract -- renew it from "
+                    f"the Contracts list instead of sending a new offer.")
+
+    failure = _publish_move(staff, member, kind=kind, position=position, note=note,
+                            contract_weeks=weeks, squad_status=status)
+
+    if kind == discord_roster.MOVE_RELEASE:
+        # The decision is made whether or not the post went out -- a
+        # failed post is flagged on the page to be re-sent, not a reason
+        # to keep somebody on a contract the club has ended.
+        with get_session() as session:
+            contract = services.live_contract_for(session, member["id"])
+            if contract is not None:
+                services.end_contract(session, contract, ended_by_name=staff.get("name"))
 
     if failure:
         _flash(request, f"The announcement didn't send: {failure}", level="error")
@@ -1365,9 +1456,16 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                 "Only an offer the player has accepted, and that hasn't been "
                 "confirmed yet, can be announced as a signing."
             )
+        # Checked before anything is posted: announcing a signing and then
+        # failing to write its contract would leave the two disagreeing.
+        if move.contract_weeks and services.live_contract_for(session, move.discord_id):
+            raise services.ServiceError(
+                f"{move.display_name} is already under contract, so this offer "
+                f"can't start another one. Renew the existing contract instead.")
         member = discord_roster.member_from_move(move)
         embed = discord_roster.build_signing_embed(
             member=member, position=move.position, confirmed_by=staff.get("name"),
+            contract_weeks=move.contract_weeks, squad_status=move.squad_status,
         )
         # Back into the channel the offer went to, not wherever
         # ROSTER_ANNOUNCE_CHANNEL_ID points today -- the two can differ if
@@ -1384,6 +1482,17 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
             session, move, confirmed_by_name=staff.get("name"),
             confirm_message_id=confirm_message_id,
         )
+        # The contract starts on the club's confirmation, not the
+        # player's press -- that is the moment the signing is official.
+        # Offers from before contracts existed have no terms to start.
+        if move.contract_weeks and move.squad_status:
+            services.create_contract(
+                session, discord_id=move.discord_id, display_name=move.display_name,
+                avatar_url=move.avatar_url, position=move.position,
+                squad_status=move.squad_status, weeks=move.contract_weeks,
+                source="signing", signing_move_id=move.id,
+                created_by_name=staff.get("name"), starts_at=move.confirmed_at,
+            )
         name = move.display_name
 
     if failure:
@@ -1391,6 +1500,117 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                level="error")
     else:
         _flash(request, f"{name}'s signing is announced. Welcome to the squad.")
+    return RedirectResponse("/roster", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Contracts: how long somebody is signed for, renewals and releases
+# --------------------------------------------------------------------------- #
+@app.post("/roster/contracts")
+def roster_record_contract(request: Request, discord_id: str = Form(""),
+                           position: str = Form(""), contract_weeks: str = Form(""),
+                           squad_status: str = Form(""), csrf_token: str = Form(...),
+                           staff=Depends(auth.require_staff)):
+    """Records a contract for somebody who is already in the squad.
+
+    For players who joined before the site tracked contracts: they never
+    had an offer to accept, and sending them one now would announce a
+    signing of somebody who has been here all along. So nothing is posted
+    and no role is touched -- this only writes down terms staff have
+    already agreed with the player.
+    """
+    _check_csrf(request, csrf_token)
+    _require_roster_configured()
+    weeks, status = services.parse_contract_terms(contract_weeks, squad_status)
+    member = _resolve_member(discord_id)
+    with get_session() as session:
+        contract = services.create_contract(
+            session, discord_id=member["id"], display_name=member["name"],
+            avatar_url=member["avatar_url"], position=position, squad_status=status,
+            weeks=weeks, source="recorded", created_by_name=staff.get("name"),
+        )
+        until = contract.expires_at
+    _flash(request, f"Contract recorded for {member['name']}: "
+                    f"{discord_roster.weeks_label(weeks)}, {status}, "
+                    f"until {until.strftime('%b %-d, %Y')}.")
+    return RedirectResponse("/roster", status_code=303)
+
+
+@app.post("/roster/contracts/{contract_id}/renew")
+def roster_renew_contract(request: Request, contract_id: int,
+                          contract_weeks: str = Form(""), squad_status: str = Form(""),
+                          position: str = Form(""), note: str = Form(""),
+                          csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    """Offers the player a new contract, which they accept or decline in
+    Discord exactly like the original offer.
+
+    Nothing changes until they accept: a renewal is a question, and the
+    current contract carries on -- and runs out -- as normal if they say
+    no or never answer.
+    """
+    _check_csrf(request, csrf_token)
+    _require_roster_configured()
+    weeks, status = services.parse_contract_terms(contract_weeks, squad_status)
+    with get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        if contract is None or contract.ended_at is not None:
+            raise services.ServiceError("That contract has ended, so it can't be renewed.")
+        if contract_id in services.open_renewals(session):
+            raise services.ServiceError(
+                f"{contract.display_name} already has a renewal waiting on their answer.")
+        member = {"id": contract.discord_id, "name": contract.display_name,
+                  "avatar_url": contract.avatar_url or ""}
+        position = position.strip() or contract.position or ""
+    # Refreshed from the live list when they're still in the server, so
+    # the renewal shows their current name and face; the stored snapshot
+    # is only the fallback for somebody Discord can't find right now.
+    try:
+        live = discord_roster.find_member(discord_roster.roster_choices(), member["id"])
+    except discord_roster.DiscordApiError:
+        live = None
+    if live is not None:
+        member = live
+
+    failure = _publish_move(
+        staff, member, kind=discord_roster.MOVE_RENEWAL, position=position, note=note,
+        contract_weeks=weeks, squad_status=status, contract_id=contract_id,
+    )
+    if failure:
+        _flash(request, f"The renewal didn't send: {failure}", level="error")
+    else:
+        _flash(request, f"Renewal sent to {member['name']} — waiting on their answer in Discord.")
+    return RedirectResponse("/roster", status_code=303)
+
+
+@app.post("/roster/contracts/{contract_id}/release")
+def roster_release_contract(request: Request, contract_id: int,
+                            note: str = Form(""), csrf_token: str = Form(...),
+                            staff=Depends(auth.require_staff)):
+    """Ends a contract and announces the departure -- Let Go, started
+    from the contract rather than the member picker, so it works for
+    somebody who has already left the server too.
+
+    Like Let Go, it never removes a role; see discord_roster.py.
+    """
+    _check_csrf(request, csrf_token)
+    _require_roster_configured()
+    with get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        if contract is None or contract.ended_at is not None:
+            raise services.ServiceError("That contract has already ended.")
+        member = {"id": contract.discord_id, "name": contract.display_name,
+                  "avatar_url": contract.avatar_url or ""}
+        position = contract.position
+        services.end_contract(session, contract, ended_by_name=staff.get("name"))
+
+    failure = _publish_move(staff, member, kind=discord_roster.MOVE_RELEASE,
+                            position=position, note=note)
+    if failure:
+        _flash(request, f"Contract ended, but the departure didn't send: {failure}",
+               level="error")
+    else:
+        _flash(request, f"{member['name']} released — departure announced.")
+    discord_roster.invalidate_members_cache()
     return RedirectResponse("/roster", status_code=303)
 
 

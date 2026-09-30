@@ -13,7 +13,7 @@ service -> render/redirect.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape as _escape_html
 
 from fastapi import UploadFile
@@ -27,7 +27,7 @@ import html_sanitize
 import images
 from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
-                    Comment, Event, EventSignup, EventTierInvite, Like, PlayerLink, RosterMove,
+                    Comment, Contract, Event, EventSignup, EventTierInvite, Like, PlayerLink, RosterMove,
                     Streamer, TacticsBoard, TacticsSlot)
 
 EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
@@ -1018,7 +1018,10 @@ def record_roster_move(session: Session, *, discord_id: str, display_name: str,
                        avatar_url: str | None, kind: str, position: str | None,
                        note: str | None, announced_by_name: str | None,
                        announced_by_discord_id: int | None,
-                       discord_message_id: str | None) -> RosterMove:
+                       discord_message_id: str | None,
+                       contract_weeks: int | None = None,
+                       squad_status: str | None = None,
+                       contract_id: int | None = None) -> RosterMove:
     """Writes the history row for one published squad announcement.
 
     Called after the Discord post is attempted, not before, so
@@ -1033,6 +1036,8 @@ def record_roster_move(session: Session, *, discord_id: str, display_name: str,
         announced_by_name=announced_by_name,
         announced_by_discord_id=announced_by_discord_id,
         discord_message_id=discord_message_id,
+        contract_weeks=contract_weeks, squad_status=squad_status,
+        contract_id=contract_id,
     )
     session.add(move)
     session.commit()
@@ -1135,9 +1140,9 @@ def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
 
 
 def offer_is_open(move: RosterMove) -> bool:
-    """An offer still waiting on the player. Departures are never open --
-    there is nothing to accept about being let go."""
-    return move.kind == discord_roster.MOVE_OFFER and move.response is None
+    """An offer or renewal still waiting on the player. Departures are
+    never open -- there is nothing to accept about being let go."""
+    return move.kind in discord_roster.ANSWERABLE_KINDS and move.response is None
 
 
 def offer_awaits_confirmation(move: RosterMove) -> bool:
@@ -1155,6 +1160,162 @@ def recent_roster_moves(session: Session, limit: int = 15) -> list[RosterMove]:
         select(RosterMove).order_by(RosterMove.announced_at.desc(), RosterMove.id.desc())
         .limit(limit)
     ).scalars())
+
+
+# --- Contracts ------------------------------------------------------------- #
+# How close to the end a contract has to be before the staff page starts
+# drawing attention to it. A week is one matchday cycle for most clubs --
+# enough notice to have the conversation before it lapses.
+CONTRACT_EXPIRING_SOON = timedelta(days=7)
+
+CONTRACT_ACTIVE = "active"
+CONTRACT_EXPIRING = "expiring"
+CONTRACT_EXPIRED = "expired"
+CONTRACT_RELEASED = "released"
+
+
+def parse_contract_terms(weeks: str, squad_status: str) -> tuple[int, str]:
+    """(weeks, squad status) out of form input, or a ServiceError that
+    says which one is wrong. The form's own min/max and <select> are only
+    suggestions to a browser, so the bounds are enforced here too."""
+    try:
+        weeks_n = int(str(weeks).strip())
+    except ValueError:
+        weeks_n = 0
+    lo, hi = discord_roster.CONTRACT_MIN_WEEKS, discord_roster.CONTRACT_MAX_WEEKS
+    if not lo <= weeks_n <= hi:
+        raise ServiceError(f"Give the contract a length between {lo} and {hi} weeks.")
+    if squad_status not in discord_roster.SQUAD_STATUSES:
+        raise ServiceError(
+            "Pick a squad status: " + ", ".join(discord_roster.SQUAD_STATUSES) + ".")
+    return weeks_n, squad_status
+
+
+def live_contract_for(session: Session, discord_id: str) -> Contract | None:
+    """This person's contract that hasn't been ended by a release --
+    including one that has run out, which is still theirs until staff
+    decide what happens to it."""
+    return session.execute(
+        select(Contract)
+        .where(Contract.discord_id == str(discord_id), Contract.ended_at.is_(None))
+        .order_by(Contract.id.desc())
+    ).scalars().first()
+
+
+def get_contract(session: Session, contract_id: int) -> Contract | None:
+    return session.get(Contract, contract_id)
+
+
+def create_contract(session: Session, *, discord_id: str, display_name: str,
+                    avatar_url: str | None, position: str | None, squad_status: str,
+                    weeks: int, source: str, created_by_name: str | None,
+                    signing_move_id: int | None = None,
+                    starts_at: datetime | None = None) -> Contract:
+    """Starts a contract. Refuses a second live one for the same person:
+    two contracts would mean two different answers to "when is their deal
+    up?", and the fix for an existing one is to renew it."""
+    existing = live_contract_for(session, discord_id)
+    if existing is not None:
+        raise ServiceError(
+            f"{existing.display_name} is already under contract -- renew that one instead.")
+    starts_at = starts_at or datetime.utcnow()
+    contract = Contract(
+        discord_id=str(discord_id), display_name=display_name, avatar_url=avatar_url,
+        position=(position or "").strip()[:80] or None, squad_status=squad_status,
+        weeks=weeks, starts_at=starts_at, expires_at=starts_at + timedelta(weeks=weeks),
+        source=source, signing_move_id=signing_move_id, created_by_name=created_by_name,
+    )
+    session.add(contract)
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def apply_renewal(session: Session, contract: Contract, move: RosterMove,
+                  now: datetime | None = None) -> Contract:
+    """Puts an accepted renewal's terms on the contract.
+
+    The new weeks are added from the CURRENT end date, not from today --
+    renewing early must never cost the player time they already had.
+    Renewing a contract that has already lapsed starts the new term from
+    today instead, since the weeks in between were nobody's.
+    """
+    now = now or datetime.utcnow()
+    contract.weeks = move.contract_weeks
+    contract.squad_status = move.squad_status
+    if move.position:
+        contract.position = move.position
+    contract.expires_at = max(contract.expires_at, now) + timedelta(weeks=move.contract_weeks)
+    contract.renewal_count = (contract.renewal_count or 0) + 1
+    contract.last_renewed_at = now
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def end_contract(session: Session, contract: Contract, *, ended_by_name: str | None) -> Contract:
+    contract.ended_at = datetime.utcnow()
+    contract.ended_by_name = ended_by_name
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def contract_state(contract: Contract, now: datetime | None = None) -> str:
+    """Active, expiring (inside CONTRACT_EXPIRING_SOON), expired, or
+    released. Computed rather than stored, so a contract runs out on time
+    without a timer having to notice."""
+    now = now or datetime.utcnow()
+    if contract.ended_at is not None:
+        return CONTRACT_RELEASED
+    if contract.expires_at <= now:
+        return CONTRACT_EXPIRED
+    if contract.expires_at - now <= CONTRACT_EXPIRING_SOON:
+        return CONTRACT_EXPIRING
+    return CONTRACT_ACTIVE
+
+
+def contract_time_left(contract: Contract, now: datetime | None = None) -> str:
+    """"5 weeks left", "3 days left", "expired 2 days ago" -- whole weeks
+    while there are some, days once it's close, because "0 weeks left"
+    on a contract with six days to run reads as already over."""
+    now = now or datetime.utcnow()
+    delta = contract.expires_at - now
+    if delta.total_seconds() <= 0:
+        days = (-delta).days
+        if days == 0:
+            return "expired today"
+        return f"expired {days} day{'s' if days != 1 else ''} ago"
+    days = delta.days
+    if days >= 14:
+        weeks = days // 7
+        return f"{weeks} weeks left"
+    if days >= 1:
+        return f"{days} day{'s' if days != 1 else ''} left"
+    return "ends today"
+
+
+def live_contracts(session: Session) -> list[Contract]:
+    """Every contract not yet released, soonest to run out first -- the
+    ones needing a decision are the ones at the top."""
+    return list(session.execute(
+        select(Contract).where(Contract.ended_at.is_(None))
+        .order_by(Contract.expires_at.asc(), Contract.id.asc())
+    ).scalars())
+
+
+def open_renewals(session: Session) -> dict[int, RosterMove]:
+    """contract_id -> the renewal still waiting on the player, for every
+    contract that has one. One query for the whole staff page rather than
+    one per row."""
+    rows = session.execute(
+        select(RosterMove).where(
+            RosterMove.kind == discord_roster.MOVE_RENEWAL,
+            RosterMove.response.is_(None),
+            RosterMove.contract_id.is_not(None),
+        )
+    ).scalars()
+    return {move.contract_id: move for move in rows}
 
 
 # --- Streamers ------------------------------------------------------------ #

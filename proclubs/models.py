@@ -266,6 +266,63 @@ class RosterMove(Base):
     confirmed_by_name = Column(String, nullable=True)
     confirm_message_id = Column(String, nullable=True)
 
+    # --- Contract terms (offers and renewals) ---
+    # What the player is being asked to agree to. Carried on the move, not
+    # only the Contract, because an offer's terms exist before any
+    # contract does -- the contract is only written when staff confirm
+    # the signing. Null on departures, and on offers made before
+    # contracts existed.
+    contract_weeks = Column(Integer, nullable=True)
+    squad_status = Column(String, nullable=True)    # see discord_roster.SQUAD_STATUSES
+    # A renewal's contract. Null on everything else: an offer's contract
+    # points back at the offer instead (Contract.signing_move_id).
+    contract_id = Column(Integer, nullable=True, index=True)
+
+
+class Contract(Base):
+    """How long somebody is signed for, and at what squad status.
+
+    Written when staff confirm a signing, or recorded directly for a
+    player who was already in the squad before the site tracked this.
+    Unlike RosterMove this row IS edited: a renewal the player accepts
+    extends it in place, so there is only ever one live contract per
+    person and "when is X's deal up?" has one answer.
+
+    Nothing happens by itself when a contract runs out. Expiry is
+    computed (expires_at in the past, ended_at unset) and shown to staff,
+    who then Renew or Release -- the same rule as the rest of squad
+    moves, where nothing public happens and no role changes without a
+    person deciding it.
+    """
+
+    __tablename__ = "contracts"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    # Snapshotted like RosterMove's, for the same reason: somebody whose
+    # contract ran out may well have left the server.
+    display_name = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    position = Column(String, nullable=True)
+    squad_status = Column(String, nullable=False)   # see discord_roster.SQUAD_STATUSES
+    # The length of the current term -- the last renewal's, once renewed.
+    weeks = Column(Integer, nullable=False)
+    starts_at = Column(DateTime, nullable=False, default=_utcnow)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    # "signing" (an offer staff confirmed) or "recorded" (entered directly
+    # for an existing squad member). Only for the staff page to say where
+    # the contract came from.
+    source = Column(String, nullable=False, default="signing")
+    signing_move_id = Column(Integer, nullable=True)
+    created_by_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    renewal_count = Column(Integer, nullable=False, default=0, server_default="0")
+    last_renewed_at = Column(DateTime, nullable=True)
+    # Set when staff release the player. A released contract is history:
+    # it stays listed for the record but can't be renewed.
+    ended_at = Column(DateTime, nullable=True)
+    ended_by_name = Column(String, nullable=True)
+
 
 class PlayerLink(Base):
     """Ties a Discord account to the EA gamertag it plays under.

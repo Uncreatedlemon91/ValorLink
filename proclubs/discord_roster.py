@@ -32,6 +32,11 @@ club. So:
 grant_squad_role() below is the only role write in this app, and there
 is no corresponding remove.
 
+CONTRACTS. An offer carries a length in weeks and a squad status, and
+the contract starts when staff confirm the signing (see models.Contract).
+A renewal (MOVE_RENEWAL) is answered with the same buttons, but only ever
+extends the contract -- the player is already in, so no role is touched.
+
 REST only, same as every other Discord integration here -- no gateway, no
 always-on process. Reuses DISCORD_BOT_TOKEN; see discord_api.py for the
 shared-credential tradeoff that was accepted.
@@ -51,7 +56,29 @@ DiscordApiError = discord_api.DiscordApiError
 # typo in one place should fail loudly in the other.
 MOVE_OFFER = "offer"
 MOVE_RELEASE = "release"
-MOVE_KINDS = (MOVE_OFFER, MOVE_RELEASE)
+# A new contract offered to somebody already under one. Answered with the
+# same Accept / Decline buttons as an offer, but never posted from the
+# announce form -- it comes from a contract's own Renew button.
+MOVE_RENEWAL = "renewal"
+MOVE_KINDS = (MOVE_OFFER, MOVE_RELEASE, MOVE_RENEWAL)
+# What the announce form may post. Renewals are left out: a renewal needs
+# a contract to renew, which that form doesn't carry.
+ANNOUNCE_KINDS = (MOVE_OFFER, MOVE_RELEASE)
+# The moves a player answers themselves.
+ANSWERABLE_KINDS = (MOVE_OFFER, MOVE_RENEWAL)
+
+# Squad status, as in Football Manager: what the player can expect of
+# their playing time. Persisted (Contract.squad_status) and posted back
+# from a select, so the stored value is the label itself -- there is
+# nothing to translate, and a typo fails validation rather than
+# rendering.
+SQUAD_STATUSES = ("Starter", "Rotation", "Reserve")
+
+# Contract length, in weeks. A whole-weeks number rather than an end date
+# because that's how staff talk about it ("eight weeks"), and a year is
+# already longer than anybody plans a Pro Clubs squad.
+CONTRACT_MIN_WEEKS = 1
+CONTRACT_MAX_WEEKS = 52
 
 # Broadcast palette (see static/css/site.css): green for the performance
 # side of the brand, amber for the sober one. A departure is news, not an
@@ -224,10 +251,44 @@ def find_member(members: list[dict], discord_id: str) -> dict | None:
     return None
 
 
+def weeks_label(weeks: int) -> str:
+    return f"{weeks} week" if weeks == 1 else f"{weeks} weeks"
+
+
+def discord_date(when: datetime) -> str:
+    """A date Discord renders in each reader's own zone and locale.
+
+    Stored times are naive UTC (see models._utcnow), so the zone is
+    attached before converting -- otherwise the server's local zone would
+    quietly shift the instant.
+    """
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return f"<t:{int(when.timestamp())}:D>"
+
+
+def _term_fields(position: str | None, contract_weeks: int | None,
+                 squad_status: str | None) -> list[dict]:
+    """Position, contract length and squad status as inline embed fields,
+    each only when there is one -- an old offer from before contracts
+    existed re-renders with just its position, as it was posted."""
+    fields = []
+    if position:
+        fields.append({"name": "Position", "value": position, "inline": True})
+    if contract_weeks:
+        fields.append({"name": "Contract", "value": weeks_label(contract_weeks), "inline": True})
+    if squad_status:
+        fields.append({"name": "Squad status", "value": squad_status, "inline": True})
+    return fields
+
+
 def build_move_embed(*, kind: str, member: dict, position: str | None,
                      note: str | None, announced_by: str | None,
                      announced_at: datetime | None = None,
-                     response: str | None = None) -> dict:
+                     response: str | None = None,
+                     contract_weeks: int | None = None,
+                     squad_status: str | None = None,
+                     contract_ends_at: datetime | None = None) -> dict:
     """The announcement embed. Pure -- no network, so the wording and shape
     can be tested without mocking Discord.
 
@@ -235,6 +296,11 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     message is edited in place when the player presses, so the channel
     shows one live record of the offer rather than an original plus a
     reply nobody scrolls back to.
+
+    `contract_weeks` and `squad_status` are the terms on the table, shown
+    as fields so the player can see what they're agreeing to before they
+    press. `contract_ends_at` is only for an answered renewal, where the
+    useful fact is the date the deal now runs to.
     """
     if kind not in MOVE_KINDS:
         raise ValueError(f"unknown roster move: {kind!r}")
@@ -273,6 +339,25 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
                 f"Accept or decline below — only {mention} can answer this one."
             )
             color, heading = _OFFER_COLOR, "Squad Announcement · Offer"
+    elif kind == MOVE_RENEWAL:
+        until = f" It now runs until {discord_date(contract_ends_at)}." if contract_ends_at else ""
+        if response == RESPONSE_ACCEPTED:
+            title = f"{name} — Contract Renewed"
+            description = f"{mention} has signed a new contract with **{club}**.{until}"
+            color, heading = _OFFER_COLOR, "Squad Announcement · Contract Renewed"
+        elif response == RESPONSE_DECLINED:
+            still = (f" Their current contract runs until {discord_date(contract_ends_at)}."
+                     if contract_ends_at else "")
+            title = f"{name} — Renewal Declined"
+            description = f"{mention} has declined a new contract with **{club}**.{still}"
+            color, heading = _DECLINED_COLOR, "Squad Announcement · Renewal Declined"
+        else:
+            title = f"{name} — Contract Renewal"
+            description = (
+                f"**{club}** has offered {mention} a new contract. "
+                f"Accept or decline below — only {mention} can answer this one."
+            )
+            color, heading = _OFFER_COLOR, "Squad Announcement · Renewal"
     else:
         title = f"{name} — Departure"
         held = f", who leaves us from **{position}**," if position else ""
@@ -295,12 +380,11 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
     # so a re-render of an old row would fail the whole press.
     if member.get("avatar_url"):
         embed["thumbnail"] = {"url": member["avatar_url"]}
-    if position:
-        embed["fields"] = [{"name": "Position", "value": position, "inline": True}]
+    fields = _term_fields(position, contract_weeks, squad_status)
     if note:
-        embed.setdefault("fields", []).append(
-            {"name": "From the staff", "value": note[:1024], "inline": False}
-        )
+        fields.append({"name": "From the staff", "value": note[:1024], "inline": False})
+    if fields:
+        embed["fields"] = fields
     if announced_by:
         embed["footer"] = {"text": f"Announced by {announced_by} · {club}"}
     return embed
@@ -308,7 +392,9 @@ def build_move_embed(*, kind: str, member: dict, position: str | None,
 
 def build_signing_embed(*, member: dict, position: str | None,
                         confirmed_by: str | None,
-                        confirmed_at: datetime | None = None) -> dict:
+                        confirmed_at: datetime | None = None,
+                        contract_weeks: int | None = None,
+                        squad_status: str | None = None) -> dict:
     """The celebration, published when staff confirm an accepted offer.
 
     A second message rather than another edit of the offer: the offer is a
@@ -330,8 +416,9 @@ def build_signing_embed(*, member: dict, position: str | None,
     }
     if member.get("avatar_url"):
         embed["thumbnail"] = {"url": member["avatar_url"]}
-    if position:
-        embed["fields"] = [{"name": "Position", "value": position, "inline": True}]
+    fields = _term_fields(position, contract_weeks, squad_status)
+    if fields:
+        embed["fields"] = fields
     if confirmed_by:
         embed["footer"] = {"text": f"Confirmed by {confirmed_by} · {club}"}
     return embed

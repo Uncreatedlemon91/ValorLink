@@ -436,3 +436,71 @@ def test_an_embed_omits_the_thumbnail_rather_than_sending_an_empty_url():
     )
     assert "thumbnail" not in offer
     assert "thumbnail" not in signing
+
+
+# --- Contract terms and renewals ------------------------------------------- #
+def test_terms_are_shown_as_their_own_fields_only_when_there_are_some():
+    with_terms = discord_roster.build_move_embed(
+        kind="offer", member=_choice(), position="Striker", note=None,
+        announced_by=None, contract_weeks=1, squad_status="Reserve",
+    )
+    fields = {f["name"]: f["value"] for f in with_terms["fields"]}
+    assert fields == {"Position": "Striker", "Contract": "1 week", "Squad status": "Reserve"}
+
+    # An offer made before contracts existed re-renders as it was posted.
+    legacy = discord_roster.build_move_embed(
+        kind="offer", member=_choice(), position="Striker", note=None,
+        announced_by=None, response="accepted",
+    )
+    assert [f["name"] for f in legacy["fields"]] == ["Position"]
+
+
+def test_an_open_renewal_says_who_may_answer_it():
+    embed = discord_roster.build_move_embed(
+        kind="renewal", member=_choice(), position=None, note=None,
+        announced_by=None, contract_weeks=6, squad_status="Starter",
+    )
+    assert "Contract Renewal" in embed["title"]
+    assert "only <@42> can answer" in embed["description"]
+
+
+def test_an_answered_renewal_names_the_date_it_runs_to():
+    ends = datetime(2026, 12, 1, tzinfo=timezone.utc)
+    accepted = discord_roster.build_move_embed(
+        kind="renewal", member=_choice(), position=None, note=None, announced_by=None,
+        response="accepted", contract_weeks=6, squad_status="Starter",
+        contract_ends_at=ends,
+    )
+    assert "Contract Renewed" in accepted["title"]
+    assert f"<t:{int(ends.timestamp())}:D>" in accepted["description"]
+
+    declined = discord_roster.build_move_embed(
+        kind="renewal", member=_choice(), position=None, note=None, announced_by=None,
+        response="declined", contract_ends_at=ends,
+    )
+    assert "Renewal Declined" in declined["title"]
+    assert "current contract runs until" in declined["description"]
+    assert declined["color"] != accepted["color"]
+
+
+def test_discord_date_reads_a_naive_time_as_utc():
+    """Stored times are naive UTC; the server's own zone must not shift
+    the instant."""
+    naive = datetime(2026, 12, 1, 12, 0)
+    aware = datetime(2026, 12, 1, 12, 0, tzinfo=timezone.utc)
+    assert discord_roster.discord_date(naive) == discord_roster.discord_date(aware)
+    assert discord_roster.discord_date(aware) == f"<t:{int(aware.timestamp())}:D>"
+
+
+def test_a_renewal_is_answerable_but_never_posted_from_the_announce_form():
+    assert discord_roster.MOVE_RENEWAL in discord_roster.ANSWERABLE_KINDS
+    assert discord_roster.MOVE_RENEWAL not in discord_roster.ANNOUNCE_KINDS
+
+
+def test_the_signing_announcement_carries_the_contract():
+    embed = discord_roster.build_signing_embed(
+        member=_choice(), position="Striker", confirmed_by="Coach",
+        contract_weeks=12, squad_status="Rotation",
+    )
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["Contract"] == "12 weeks" and fields["Squad status"] == "Rotation"
