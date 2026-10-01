@@ -2035,3 +2035,109 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .btn.staff:hover { filter: brightness(1.08); }
 .roster-move-staff_offer:not(.roster-move-declined) { border-left-color: var(--accent-2); }
 .roster-move-staff_offer .roster-move-kind { color: var(--accent-2); }
+
+
+/* --- Squad screen (/squad) ---------------------------------------------------
+   Contracts against what EA says happened. Built on the league table's
+   look so the two read as the same family; the additions are the summary
+   strip, the depth grid and the per-player flag row. */
+.page-crumbs { margin: 0.4rem 0 0; font-size: 0.85rem; }
+
+.squad-summary {
+  display: grid; gap: 0.7rem; margin-bottom: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.squad-stat {
+  display: grid; gap: 0.1rem; padding: 0.8rem 1rem;
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+}
+.squad-stat.is-warn { border-left-color: var(--amber); }
+.squad-stat-value {
+  font-family: var(--font-headline); font-size: 1.9rem; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.squad-stat.is-warn .squad-stat-value { color: var(--amber); }
+.squad-stat-label {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.72rem;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted);
+}
+.squad-stat-sub { font-size: 0.78rem; color: var(--faint); }
+
+/* Depth: one card per position the formation uses. Amber is standing in
+   this palette, so it marks the shortfalls; a covered position recedes. */
+.depth-grid {
+  display: grid; gap: 0.6rem; margin-bottom: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.depth-card {
+  padding: 0.7rem 0.85rem; background: var(--panel);
+  border: 1px solid var(--border); border-left: 3px solid var(--border);
+  display: grid; gap: 0.3rem; align-content: start;
+}
+.depth-gap { border-left-color: var(--amber); background: rgba(255, 176, 32, 0.07); }
+.depth-thin { border-left-color: var(--amber); }
+.depth-ok { border-left-color: var(--accent); }
+.depth-head { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+.depth-pos { font-weight: 700; }
+.depth-need { color: var(--faint); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.depth-state {
+  margin-left: auto; font-family: var(--font-display); font-weight: 700;
+  font-size: 0.68rem; letter-spacing: 0.13em; text-transform: uppercase;
+}
+.depth-gap .depth-state, .depth-thin .depth-state { color: var(--amber); }
+.depth-ok .depth-state { color: var(--accent-text); }
+.depth-names { font-size: 0.86rem; }
+.depth-cover { font-size: 0.8rem; color: var(--muted); }
+.depth-unused, .depth-key { margin: 0.2rem 0 0; }
+
+/* The players table. A wider minimum than the league table -- eight
+   columns -- and it scrolls inside its card at phone width rather than
+   pushing the page sideways. */
+.squad-table { min-width: 860px; }
+.squad-table th, .squad-table td { padding: 0.6rem 0.75rem; vertical-align: middle; }
+.th-sub { color: var(--faint); font-weight: 600; letter-spacing: 0; }
+.squad-player { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.squad-player .roster-avatar { width: 36px; height: 36px; }
+.squad-player .move-avatar-fallback { display: grid; place-items: center; font-size: 0.8rem; }
+.squad-player-text { display: grid; min-width: 0; }
+.squad-name { font-weight: 700; }
+.squad-gamertag, .squad-sub { font-size: 0.76rem; color: var(--faint); }
+.squad-sub { display: block; }
+.squad-positions { white-space: nowrap; }
+.squad-sec { color: var(--muted); margin-left: 0.3rem; }
+.squad-contract { white-space: nowrap; }
+.squad-contract.contract-expiring, .squad-contract.contract-expired { color: var(--amber); }
+
+/* A row whose flags follow it sits closer to them: the flags belong to
+   the player above, not to the table. */
+.squad-table tbody tr.squad-row:has(+ .squad-flags-row) td { border-bottom: none; }
+.squad-flags-row td { padding-top: 0; }
+.squad-flags { list-style: none; margin: 0; padding: 0 0 0 2.85rem; display: grid; gap: 0.2rem; }
+.squad-flag { font-size: 0.82rem; padding-left: 0.9rem; position: relative; }
+.squad-flag::before {
+  content: ""; position: absolute; left: 0; top: 0.45em;
+  width: 0.45rem; height: 0.45rem; background: var(--faint);
+}
+.flag-warn { color: var(--text); }
+.flag-warn::before { background: var(--amber); }
+.flag-good::before { background: var(--accent); }
+.flag-info { color: var(--muted); }
+
+.squad-link summary {
+  cursor: pointer; font-size: 0.78rem; color: var(--accent-2); list-style: none;
+}
+.squad-link summary::-webkit-details-marker { display: none; }
+.squad-link form { display: flex; gap: 0.4rem; margin-top: 0.35rem; }
+.squad-link input { padding: 0.35rem 0.55rem; font-size: 0.85rem; min-width: 0; width: 11rem; }
+.squad-link .btn { padding: 0.35rem 0.7rem; }
+
+.regulars-list { padding: 0.3rem 0; }
+.regular-row { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border-soft); }
+.regular-row:last-child { border-bottom: none; }
+
+/* The gamertag field on Confirm signing sits inline with its button, lined
+   up on the input rather than centred on input-plus-label. */
+.roster-confirm:has(.roster-confirm-gamertag) { align-items: flex-end; }
+.roster-confirm-gamertag { margin: 0; min-width: 14rem; }
+.roster-confirm-gamertag input { padding: 0.4rem 0.6rem; }

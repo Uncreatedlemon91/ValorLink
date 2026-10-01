@@ -29,6 +29,7 @@ import discord_roster
 import discord_rsvp
 import ea_client
 import services
+import squad
 import twitch_client
 from database import get_session, init_db
 from formations import BENCH_SLOTS, FORMATIONS
@@ -1296,6 +1297,13 @@ def roster_page(request: Request, _staff=Depends(auth.require_staff)):
         moves = services.recent_roster_moves(session)
         contracts = services.live_contracts(session)
         renewals = services.open_renewals(session)
+        # Existing links for anybody awaiting a signing confirmation, so
+        # the gamertag field arrives pre-filled when there's one already.
+        awaiting = [int(m.discord_id) for m in moves
+                    if services.offer_awaits_confirmation(m) and str(m.discord_id).isdigit()]
+        links = services.player_links_for(session, awaiting)
+    history_names = (db.player_names(config.CLUB_PLATFORM, str(config.CLUB_ID))
+                     if config.CLUB_ID else [])
     states = {c.id: services.contract_state(c, now) for c in contracts}
     return templates.TemplateResponse(request, "roster.html", _ctx(
         request, members=members, load_error=load_error, moves=moves,
@@ -1310,6 +1318,7 @@ def roster_page(request: Request, _staff=Depends(auth.require_staff)):
         offer_is_open=services.offer_is_open,
         awaits_confirmation=services.offer_awaits_confirmation,
         contracts=contracts, contract_states=states, renewals=renewals,
+        links=links, gamertag_options=_gamertag_options(history_names),
         # Who is already signed, so the picker can say so next to their
         # name -- the difference between an offer and a renewal is
         # otherwise only discovered by getting refused.
@@ -1462,7 +1471,7 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
 
 @app.post("/roster/{move_id}/confirm")
 def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
-                   staff=Depends(auth.require_staff)):
+                   player_name: str = Form(""), staff=Depends(auth.require_staff)):
     """Publishes the signing announcement for an offer the player accepted
     -- or, for a staff offer, the appointment announcement.
 
@@ -1470,6 +1479,11 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
     acceptance triggers by itself: the player accepting is them agreeing,
     and the club announcing a signing is the club's own act. It also
     leaves room for the paperwork between the two.
+
+    A signing can carry the player's gamertag (`player_name`), linked
+    here so the squad screen can track their playing time from day one.
+    Optional, because a new signing may not have joined the EA club yet;
+    the squad screen flags anybody still unlinked.
     """
     _check_csrf(request, csrf_token)
     with get_session() as session:
@@ -1492,6 +1506,14 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
             raise services.ServiceError(
                 f"{move.display_name} is already under contract, so this offer "
                 f"can't start another one. Renew the existing contract instead.")
+        # Linked after every refusal above and before anything is posted: a
+        # refused confirm writes nothing, and a gamertag another member
+        # already holds stops the signing with nothing announced.
+        linked_as = None
+        if not appointment and player_name.strip():
+            services.set_player_link(session, discord_user_id=int(move.discord_id),
+                                     player_name=player_name)
+            linked_as = player_name.strip()
         member = discord_roster.member_from_move(move)
         if appointment:
             embed = discord_roster.build_appointment_embed(
@@ -1531,16 +1553,22 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                 created_by_name=staff.get("name"), starts_at=move.confirmed_at,
             )
         name, role = move.display_name, move.position
+        unlinked = (not appointment and linked_as is None
+                    and services.get_player_link(session, int(move.discord_id)) is None)
 
     what = "appointment" if appointment else "signing"
+    linked_note = f" Linked to {linked_as}." if linked_as else ""
     if failure:
-        _flash(request, f"The {what} is recorded, but the announcement didn't send: {failure}",
-               level="error")
+        _flash(request, f"The {what} is recorded, but the announcement didn't send: {failure}"
+                        + linked_note, level="error")
     elif appointment:
         _flash(request, f"{name}'s appointment{' as ' + role if role else ''} is announced. "
                         f"Remember to give them the staff role in Discord.")
     else:
-        _flash(request, f"{name}'s signing is announced. Welcome to the squad.")
+        _flash(request, f"{name}'s signing is announced. Welcome to the squad." + linked_note)
+    if unlinked:
+        _flash(request, f"{name} has no gamertag linked yet — link it on the Squad page "
+                        f"so their playing time is tracked.", "warn")
     return RedirectResponse("/roster", status_code=303)
 
 
@@ -1663,6 +1691,104 @@ def roster_release_contract(request: Request, contract_id: int,
         _flash(request, f"{member['name']} released — departure announced.")
     discord_roster.invalidate_members_cache()
     return RedirectResponse("/roster", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Squad screen: contracts against what EA says actually happened
+# --------------------------------------------------------------------------- #
+def _squad_usage() -> dict:
+    if not config.CLUB_ID:
+        return {"window": 0, "players": {}}
+    return db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
+                          window=squad.USAGE_WINDOW, form_games=squad.FORM_GAMES,
+                          min_form_apps=squad.MIN_APPS_FOR_FORM)
+
+
+def _gamertag_options(history_names) -> list[str]:
+    """Gamertags to suggest when linking: everybody seen in a recorded
+    match, plus the live EA club roster if it's already cached.
+
+    Non-blocking on EA, so a slow or down API never holds up a staff page;
+    the recorded history alone covers anybody who has actually played.
+    """
+    names = set(history_names)
+    if config.CLUB_ID:
+        try:
+            roster = ea_client.member_stats(
+                config.CLUB_PLATFORM, config.CLUB_ID, blocking=False) or {}
+            names.update(m["name"] for m in roster.get("members", []) if m.get("name"))
+        except ea_client.EAApiError:
+            pass
+    return sorted(names, key=str.casefold)
+
+
+def _safe_redirect(target: str, default: str) -> str:
+    """Only same-site paths -- "//evil.example" is a protocol-relative URL
+    to somewhere else entirely."""
+    return target if target.startswith("/") and not target.startswith("//") else default
+
+
+@app.get("/squad", response_class=HTMLResponse)
+def squad_page(request: Request, _staff=Depends(auth.require_staff)):
+    """Football Manager's squad screen, from real data: every contracted
+    player's terms beside their appearances, form and attendance, with the
+    mismatches flagged, and how well the current formation is covered."""
+    now = datetime.utcnow()
+    with get_session() as session:
+        contracts = services.live_contracts(session)
+        ids = [int(c.discord_id) for c in contracts]
+        links = services.player_links_for(session, ids)
+        attendance = services.attendance_records_for(session, ids)
+        formation = services.get_active_formation(session)
+    usage = _squad_usage()
+    states = {c.id: services.contract_state(c, now) for c in contracts}
+    rows = squad.squad_rows(
+        contracts=contracts, links=links, usage=usage, attendance=attendance,
+        contract_states=states, time_left=lambda c: services.contract_time_left(c, now),
+    )
+    slots = FORMATIONS.get(formation) or FORMATIONS["4-3-3"]
+    return templates.TemplateResponse(request, "squad.html", _ctx(
+        request, rows=rows, summary=squad.summarize(rows),
+        depth=squad.squad_depth(slots, contracts), formation=formation,
+        regulars=squad.uncontracted_regulars(usage, links, contracts),
+        window=usage["window"], usage_window=squad.USAGE_WINDOW,
+        min_window=squad.MIN_WINDOW_TO_JUDGE,
+        gamertag_options=_gamertag_options(u["name"] for u in usage["players"].values()),
+        has_history=bool(usage["players"]), club_configured=bool(config.CLUB_ID),
+        form_label=squad.form_label, weeks_label=discord_roster.weeks_label,
+    ))
+
+
+@app.post("/squad/gamertag")
+def squad_link_gamertag(request: Request, discord_id: str = Form(""),
+                        player_name: str = Form(""), redirect_to: str = Form("/squad"),
+                        csrf_token: str = Form(...), _staff=Depends(auth.require_staff)):
+    """Staff linking a contracted player's gamertag on their behalf.
+
+    Limited to people under contract: that's who the squad screen tracks,
+    and staff have no reason to rewrite anybody else's link -- members
+    still link their own from an event page. A gamertag somebody else has
+    already claimed is refused, the same rule as self-service.
+    """
+    _check_csrf(request, csrf_token)
+    back = _safe_redirect(redirect_to, "/squad")
+    if not discord_id.isdigit():
+        raise services.ServiceError("Pick a player to link.")
+    with get_session() as session:
+        contract = services.live_contract_for(session, discord_id)
+        if contract is None:
+            raise services.ServiceError("Only players under contract can be linked from here.")
+        try:
+            if player_name.strip():
+                services.set_player_link(session, discord_user_id=int(discord_id),
+                                         player_name=player_name)
+                _flash(request, f"{contract.display_name} linked to {player_name.strip()}.")
+            else:
+                services.clear_player_link(session, int(discord_id))
+                _flash(request, f"{contract.display_name}'s gamertag unlinked.")
+        except services.ServiceError as exc:
+            _flash(request, str(exc), "warn")
+    return RedirectResponse(back, status_code=303)
 
 
 # --------------------------------------------------------------------------- #

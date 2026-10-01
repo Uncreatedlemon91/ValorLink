@@ -737,6 +737,72 @@ acceptance grants. The Accept/Decline buttons ride on the same signed
 interactions webhook as event sign-ups, so they need `DISCORD_PUBLIC_KEY`
 and the Interactions Endpoint URL that those already require.
 
+## The squad screen
+
+`/squad` (nav label "Squad", staff only; Squad Moves is linked from it) is
+Football Manager's squad view built from data the site already has. It
+joins each contract to what EA recorded through the player's linked
+gamertag. See `squad.py` for the rules and `db.squad_usage` for the query.
+
+**Players.** One row per player under contract: squad status, primary /
+secondary position, appearances in the club's last 10 matches, form
+(average rating over their last 5 appearances, shown once they have 3),
+goals · assists · Man of the Match, attendance, and time left on the
+contract. Under a row go the things worth acting on, each naming the
+evidence it's based on:
+
+- **Playing time against squad status.** A *Starter* who has played in
+  fewer than half of the last 10, or a *Rotation* player in fewer than 2.
+  A *Reserve* is promised nothing. Not judged until the club has 5
+  recorded matches.
+- **Promotion candidates.** A Rotation or Reserve player averaging 7.5 or
+  better.
+- **Contracts** expiring or expired, louder when the player is in form.
+- **Attendance** under 60%, once there are enough marked events for a rate
+  (`services.attendance_record`; excused absences don't count against them).
+- **No gamertag linked**, so nothing about them can be measured.
+
+Thresholds are named constants at the top of `squad.py`.
+
+**"Played" means appearances, not starts.** EA doesn't record who started
+and who came off the bench, so the page says "played 2 of the last 10"
+and never claims to count starts. Only league and playoff matches count,
+since those are all `poll.py` records.
+
+**Depth.** For the formation currently on the tactics board, each position
+it uses, how many of it the formation needs, and who covers it. A
+player's primary position makes them a **natural** there and their
+secondary makes them **cover**; "Any Outfield" covers every outfield
+position but never goal. Each position is *Uncovered* (can't be filled),
+*No backup* (filled with nobody spare) or *Covered*. Contracted positions
+the formation doesn't use are listed under it, which is worth knowing
+before offering another one. Every slot label in `formations.py` must map
+to a contract position (`squad.SLOT_POSITION`); a test enforces it, so a
+new formation can't quietly drop a row.
+
+**Playing without a contract** lists gamertags that have played at least
+3 of the last 10 but aren't linked to anybody under contract. Each one is
+either somebody who needs a contract recorded, or a contracted player
+whose gamertag isn't linked yet.
+
+### Gamertag links
+
+Everything above depends on knowing which gamertag is whose, and linking
+used to be left to each member. Now:
+
+- **Confirm signing takes the gamertag**, linked before anything is posted,
+  so a gamertag another member already holds stops the signing with
+  nothing announced. It's optional, because a new signing may not have
+  joined the EA club yet. Confirming without one still signs them, and
+  says plainly that they still need linking.
+- **Staff can link from the squad screen** for anybody under contract,
+  using a field that suggests every gamertag seen in a recorded match plus
+  the live EA roster if it's cached. Linking somebody who isn't under
+  contract is refused, since members still link their own from an event
+  page. A gamertag already claimed is refused there too.
+- Suggestions never wait on EA: the roster is read non-blocking, so a slow
+  or down API leaves just the recorded names.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
@@ -974,6 +1040,7 @@ proclubs/
   db.py                  Locally-accumulated EA stats history (own sqlite3 file)
   poll.py                Standalone poller for db.py, run by proclubs-poll.timer
   season.py              New-season switch: find the club on EA, erase old stats
+  squad.py               Squad screen rules: depth by position, playing-time flags
   tracked_clubs.json     Extra clubs for poll.py to snapshot (ours comes from .env)
   templates/             Jinja2 templates
   static/css/site.css    Design system (also read by charts.js as CSS vars)
@@ -996,7 +1063,8 @@ proclubs/
 | `/stats` | everyone | EA stats dashboard for our club |
 | `/league` | everyone | Auto-built league table -- see below |
 | `/tactics` | everyone (editing: staff only) | Drag-and-drop formation board -- see below |
-| `/roster` (nav label: "Squad") | staff | Pick a Discord member, publish an offer or a departure -- see below |
+| `/squad` (nav label: "Squad") | staff | Squad screen: contracts beside appearances, form and attendance, plus depth for the current formation -- see below |
+| `/roster` | staff | Squad Moves: pick a Discord member, offer a contract or staff role, or publish a departure -- see below |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
 
 `/api/overview`, `/api/standings`, `/api/members`, `/api/matches`,

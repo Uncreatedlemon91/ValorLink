@@ -208,8 +208,9 @@ def member_career_stats(platform, club_id):
     return _get("members/career/stats", {"platform": platform, "clubId": club_id})
 
 
-def member_stats(platform, club_id):
-    return _get("members/stats", {"platform": platform, "clubId": club_id})
+def member_stats(platform, club_id, *, blocking: bool = True):
+    return _get("members/stats", {"platform": platform, "clubId": club_id},
+                blocking=blocking)
 
 
 def matches_stats(platform, club_id, match_type="leagueMatch", max_results=10):

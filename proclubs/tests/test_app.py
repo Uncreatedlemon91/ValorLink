@@ -1401,11 +1401,13 @@ def test_roster_page_lists_members_with_their_discord_avatars(client, roster_rea
     assert "cdn.discordapp.com/embed/avatars/" in html
 
 
-def test_roster_link_is_only_in_the_nav_for_staff(client, roster_ready):
+def test_squad_link_is_only_in_the_nav_for_staff(client, roster_ready):
+    # The nav's "Squad" lands on the overview (/squad), which links on to
+    # Squad Moves (/roster).
     _login_fan(client)
-    assert 'href="/roster"' not in client.get("/news").text
+    assert 'href="/squad"' not in client.get("/news").text
     _login_staff(client)
-    assert 'href="/roster"' in client.get("/news").text
+    assert 'href="/squad"' in client.get("/news").text
 
 
 def test_offering_a_position_posts_the_announcement_and_records_it(client, roster_ready):
@@ -2617,3 +2619,235 @@ def test_a_departure_reads_its_own_panel(client, roster_ready):
     fields = {f["name"]: f["value"] for f in embed["fields"]}
     assert fields["From the staff"] == "Thanks for everything."
     assert "WRONG PANEL" not in str(embed)
+
+
+# --------------------------------------------------------------------------- #
+# Squad screen (/squad) and gamertag linking at signing
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def history_db(tmp_path, monkeypatch):
+    """A scratch history.db for our club, with a helper to add matches."""
+    monkeypatch.setattr(appmod.db, "DB_PATH", tmp_path / "history.db")
+    monkeypatch.setattr(config, "CLUB_ID", "c1")
+    monkeypatch.setattr(config, "CLUB_PLATFORM", "common-gen5")
+    # The EA roster is only a suggestion source; keep tests off the network.
+    monkeypatch.setattr(appmod.ea_client, "member_stats",
+                        lambda p, c, blocking=True: {"members": [{"name": "RosterOnly"}]})
+
+    def add(n, players):
+        for i in range(n):
+            appmod.db.record_matches("common-gen5", "c1", "leagueMatch", [{
+                "matchId": f"m{add.count}", "timestamp": 1_700_000_000 + add.count * 1000,
+                "clubs": {"c1": {"goals": "2", "details": {"name": "Us"}},
+                          "c2": {"goals": "1", "details": {"name": "Them"}}},
+                "players": {"c1": {str(j): {"playername": name, "rating": str(r),
+                                            "goals": "1", "assists": "0", "mom": "0",
+                                            "pos": "forward"}
+                                   for j, (name, r) in enumerate(players.items())}},
+            }])
+            add.count += 1
+    add.count = 0
+    return add
+
+
+def _record_contract(client, *, discord_id="42", position="Striker", secondary="",
+                     status="Starter"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/contracts", data={
+        "discord_id": discord_id, "position": position, "secondary_position": secondary,
+        "contract_weeks": "8", "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _link(client, discord_id, gamertag, follow=False):
+    # From /roster, which always carries a token; /squad has no form at
+    # all when nobody is under contract.
+    token = _csrf(client, "/roster")
+    return client.post("/squad/gamertag", data={
+        "discord_id": discord_id, "player_name": gamertag, "csrf_token": token,
+    }, follow_redirects=follow)
+
+
+def test_squad_page_is_staff_only(client, roster_ready):
+    assert client.get("/squad", follow_redirects=False).status_code == 303
+    _login_fan(client)
+    assert client.get("/squad", follow_redirects=False).status_code == 403
+    _login_staff(client)
+    assert client.get("/squad").status_code == 200
+
+
+def test_squad_page_with_nobody_under_contract_points_to_squad_moves(client, roster_ready):
+    _login_staff(client)
+    assert "Nobody is under contract yet" in client.get("/squad").text
+
+
+def test_a_starter_who_isnt_playing_is_flagged_on_the_squad_page(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", status="Starter")
+    _link(client, "42", "Cap_GT")
+    history_db(10, {"SomebodyElse": 7.0})        # Cap_GT never appears
+    html = client.get("/squad").text
+    assert "Cap_GT" in html
+    assert "Starter, but has played 0 of the last 10 matches." in html
+
+
+def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="43", status="Reserve")
+    _link(client, "43", "Sam_GT")
+    history_db(6, {"Sam_GT": 8.1})
+    assert "Reserve, averaging 8.1 — worth a promotion?" in client.get("/squad").text
+
+
+def test_depth_follows_the_formation_on_the_tactics_board(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", position="Goalkeeper")
+    html = client.get("/squad").text
+    assert "Depth · 4-3-3" in html
+    assert "depth-thin" in html            # one keeper, no backup
+
+    # Switch the board to a two-striker shape: the depth chart follows.
+    from formations import FORMATIONS
+    with database.get_session() as session:
+        services.save_tactics_lineup(session, formation="4-4-2", slots={},
+                                     valid_slot_keys=set(FORMATIONS["4-4-2"]),
+                                     staff_name="Coach")
+    html = client.get("/squad").text
+    assert "Depth · 4-4-2" in html
+    assert '<span class="depth-pos">Striker</span>\n            <span class="depth-need">×2</span>' in html
+
+
+def test_a_secondary_position_fills_a_gap_on_the_depth_chart(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", position="Centre Back", secondary="Goalkeeper")
+    html = client.get("/squad").text
+    assert "Cover: Cap" in html
+
+
+def test_regulars_without_a_contract_are_listed(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    history_db(4, {"Trialist_GT": 6.9})
+    html = client.get("/squad").text
+    assert "Playing without a contract" in html and "Trialist_GT" in html
+
+
+def test_no_history_is_explained_rather_than_shown_as_dashes(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    assert "No matches recorded yet" in client.get("/squad").text
+
+
+def test_gamertag_suggestions_include_history_and_the_cached_roster(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    history_db(1, {"Seen_In_A_Match": 7.0})
+    html = client.get("/squad").text
+    assert '<option value="Seen_In_A_Match">' in html
+    assert '<option value="RosterOnly">' in html
+
+
+def test_staff_can_link_a_contracted_players_gamertag(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    assert _link(client, "42", "Cap_GT").status_code == 303
+    with database.get_session() as session:
+        assert services.get_player_link(session, 42).player_name == "Cap_GT"
+
+
+def test_staff_cannot_link_somebody_who_is_not_under_contract(client, roster_ready):
+    """Members link their own; staff only manage the squad they track."""
+    _login_staff(client)
+    assert _link(client, "43", "Sam_GT").status_code == 400
+    with database.get_session() as session:
+        assert services.get_player_link(session, 43) is None
+
+
+def test_a_gamertag_already_claimed_is_refused_not_stolen(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=999, player_name="Taken_GT")
+    r = _link(client, "42", "Taken_GT", follow=True)
+    assert "already claimed" in r.text
+    with database.get_session() as session:
+        assert services.get_player_link(session, 999).player_name == "Taken_GT"
+        assert services.get_player_link(session, 42) is None
+
+
+def test_linking_rejects_an_offsite_redirect(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    token = _csrf(client, "/squad")
+    r = client.post("/squad/gamertag", data={
+        "discord_id": "42", "player_name": "Cap_GT", "redirect_to": "//evil.example",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.headers["location"] == "/squad"
+
+
+def _accepted_offer(client, roster_ready, discord_key):
+    _offer(client, roster_ready)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    return move_id
+
+
+def test_confirming_a_signing_can_link_the_gamertag(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    assert 'name="player_name"' in client.get("/roster").text
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm",
+                    data={"csrf_token": token, "player_name": "Cap_GT"}, follow_redirects=True)
+    assert "Linked to Cap_GT" in r.text
+    with database.get_session() as session:
+        assert services.get_player_link(session, 42).player_name == "Cap_GT"
+
+
+def test_confirming_without_a_gamertag_still_signs_but_says_so(client, roster_ready, discord_key, role_grant):
+    """A new signing may not be in the EA club yet -- that can't block the
+    signing, but it mustn't be silent either."""
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=True)
+    assert len(roster_ready) == 1, "the signing still goes out"
+    assert "no gamertag linked yet" in r.text
+
+
+def test_a_claimed_gamertag_stops_the_signing_before_anything_is_posted(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=999, player_name="Taken_GT")
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm",
+                    data={"csrf_token": token, "player_name": "Taken_GT"}, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == [], "nothing announced"
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).confirmed_at is None
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_an_existing_link_prefills_the_confirm_form(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=42, player_name="Cap_GT")
+    _accepted_offer(client, roster_ready, discord_key)
+    html = client.get("/roster").text
+    assert 'value="Cap_GT"' in html and "(linked)" in html
+
+
+def test_an_appointment_never_asks_for_a_gamertag(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    html = client.get("/roster").text
+    assert "Confirm appointment" in html
+    assert f'id="gt-{move_id}"' not in html

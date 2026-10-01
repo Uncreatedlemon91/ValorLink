@@ -5,6 +5,7 @@
   <div class="page-head">
     <div>
       <h1>Squad Moves</h1>
+      <p class="page-crumbs"><a href="/squad">← Squad overview</a></p>
       <p class="page-lede">
         Pick somebody from the Discord server, then publish the announcement.
       </p>
@@ -334,6 +335,10 @@
     </div>
   {% endif %}
 
+  <datalist id="gamertag-options">
+    {% for g in gamertag_options %}<option value="{{ g }}"></option>{% endfor %}
+  </datalist>
+
   <div class="section-head"><h2>Recently announced</h2></div>
   {% if moves %}
     <div class="roster-history card">
@@ -411,6 +416,14 @@
                   <button type="submit" class="btn staff">Confirm appointment</button>
                   <span class="field-hint">Publishes the appointment announcement to Discord.</span>
                 {% else %}
+                  {% set linked = links.get(move.discord_id | int) %}
+                  <div class="field roster-confirm-gamertag">
+                    <label for="gt-{{ move.id }}">Gamertag
+                      <span class="muted">{{ '(linked)' if linked else '(so playing time is tracked)' }}</span></label>
+                    <input id="gt-{{ move.id }}" name="player_name" list="gamertag-options"
+                           maxlength="64" autocomplete="off" value="{{ linked or '' }}"
+                           placeholder="Their EA gamertag" />
+                  </div>
                   <button type="submit" class="btn">Confirm signing</button>
                   <span class="field-hint">Publishes the signing announcement to Discord.</span>
                 {% endif %}

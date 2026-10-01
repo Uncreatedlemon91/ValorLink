@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Squad{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Squad</h1>
+      <p class="page-lede">Every contract beside what EA says actually happened.</p>
+      <p class="page-crumbs"><a href="/roster">Moves &amp; contracts →</a></p>
+    </div>
+  </div>
+
+  {# Why numbers are missing, said once at the top rather than as a column
+     of dashes nobody can explain. #}
+  {% if not club_configured %}
+    <p class="roster-disclaimer">
+      <code>CLUB_ID</code> isn't set, so there's no match history to measure playing time
+      or form against. Run <code>season.py switch</code> (see the README).
+    </p>
+  {% elif not has_history %}
+    <p class="roster-disclaimer">
+      No matches recorded yet. Playing time and form appear once the hourly poll has
+      recorded some of the club's matches.
+    </p>
+  {% elif window < min_window %}
+    <p class="roster-disclaimer">
+      Only {{ window }} match{{ 'es' if window != 1 else '' }} recorded so far, so playing
+      time isn't judged against squad status until there are {{ min_window }}.
+    </p>
+  {% endif %}
+
+  {% if not rows %}
+    <div class="card empty-state">
+      Nobody is under contract yet. Sign players, or record contracts for the squad you
+      already have, on <a href="/roster">Squad Moves</a>.
+    </div>
+  {% else %}
+    <div class="squad-summary">
+      <div class="squad-stat">
+        <span class="squad-stat-value">{{ summary.players }}</span>
+        <span class="squad-stat-label">Under contract</span>
+        <span class="squad-stat-sub">
+          {% for st, n in summary.by_status.items() %}{{ n }} {{ st }}{% if not loop.last %} · {% endif %}{% endfor %}
+        </span>
+      </div>
+      <div class="squad-stat {{ 'is-warn' if summary.warnings else '' }}">
+        <span class="squad-stat-value">{{ summary.warnings }}</span>
+        <span class="squad-stat-label">Need a decision</span>
+      </div>
+      <div class="squad-stat {{ 'is-warn' if depth.gaps else '' }}">
+        <span class="squad-stat-value">{{ depth.gaps }}</span>
+        <span class="squad-stat-label">Positions uncovered</span>
+        {% if depth.thin %}<span class="squad-stat-sub">{{ depth.thin }} with no backup</span>{% endif %}
+      </div>
+      <div class="squad-stat">
+        <span class="squad-stat-value">{{ summary.unlinked }}</span>
+        <span class="squad-stat-label">No gamertag linked</span>
+      </div>
+    </div>
+
+    {# ------------------------------------------------------------------ #}
+    <div class="section-head accent-amber">
+      <h2>Depth · {{ formation }}</h2><a href="/tactics">Change formation →</a>
+    </div>
+    <div class="depth-grid">
+      {% for d in depth.rows %}
+        <div class="depth-card depth-{{ d.state }}">
+          <div class="depth-head">
+            <span class="depth-pos">{{ d.position }}</span>
+            <span class="depth-need">×{{ d.needed }}</span>
+            {# The word carries the state; the colour only reinforces it. #}
+            <span class="depth-state">
+              {{ {'gap': 'Uncovered', 'thin': 'No backup', 'ok': 'Covered'}[d.state] }}
+            </span>
+          </div>
+          {% if d.naturals %}
+            <div class="depth-names">{{ d.naturals | join(', ') }}</div>
+          {% endif %}
+          {% if d.cover %}
+            <div class="depth-cover">Cover: {{ d.cover | join(', ') }}</div>
+          {% endif %}
+          {% if not d.naturals and not d.cover %}
+            <div class="depth-cover">Nobody under contract plays here.</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% if depth.unused %}
+      <p class="field-hint depth-unused">
+        Not used by {{ formation }}:
+        {% for pos, n in depth.unused.items() %}{{ pos }} ×{{ n }}{% if not loop.last %}, {% endif %}{% endfor %}
+      </p>
+    {% endif %}
+    <p class="field-hint depth-key">
+      Counted from contracts: a player's primary position makes them a natural there, their
+      secondary makes them cover. "Any Outfield" covers every outfield position.
+    </p>
+
+    {# ------------------------------------------------------------------ #}
+    <div class="section-head"><h2>Players</h2></div>
+    <div class="card league-table-card">
+      <table class="league-table squad-table">
+        <thead>
+          <tr>
+            <th scope="col">Player</th>
+            <th scope="col">Status</th>
+            <th scope="col">Positions</th>
+            <th scope="col" class="lt-num" title="Matches played among the club's last {{ window }}">
+              Played{% if window %} <span class="th-sub">/{{ window }}</span>{% endif %}</th>
+            <th scope="col" class="lt-num" title="Average rating, last few appearances">Form</th>
+            <th scope="col" class="lt-num" title="Goals · assists · Man of the Match, all recorded matches">G · A · MOTM</th>
+            <th scope="col" class="lt-num" title="Of events where staff marked attendance">Attended</th>
+            <th scope="col">Contract</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            {% set c = r.contract %}
+            {% set u = r.usage %}
+            <tr class="squad-row">
+              <td>
+                <div class="squad-player">
+                  {% if c.avatar_url %}
+                    <img class="roster-avatar" src="{{ c.avatar_url }}" alt="" width="36" height="36"
+                         loading="lazy" decoding="async" />
+                  {% else %}
+                    <span class="roster-avatar move-avatar-fallback">{{ initials(c.display_name) }}</span>
+                  {% endif %}
+                  <div class="squad-player-text">
+                    <span class="squad-name">{{ c.display_name }}</span>
+                    {% if r.gamertag %}
+                      <span class="squad-gamertag">{{ r.gamertag }}</span>
+                    {% else %}
+                      <details class="squad-link">
+                        <summary>Link gamertag</summary>
+                        <form method="post" action="/squad/gamertag">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                          <input type="hidden" name="discord_id" value="{{ c.discord_id }}" />
+                          <input name="player_name" list="gamertag-options" maxlength="64"
+                                 autocomplete="off" required aria-label="Gamertag for {{ c.display_name }}"
+                                 placeholder="EA gamertag" />
+                          <button type="submit" class="btn secondary">Link</button>
+                        </form>
+                      </details>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td><span class="contract-status">{{ c.squad_status }}</span></td>
+              <td class="squad-positions">
+                {{ c.position or '—' }}{% if c.secondary_position %}<span class="squad-sec">/ {{ c.secondary_position }}</span>{% endif %}
+              </td>
+              <td class="lt-num">{{ u.apps_window if u else '—' }}</td>
+              <td class="lt-num"><span class="lt-rating">{{ form_label(u.form if u else None) }}</span></td>
+              <td class="lt-num">{% if u %}{{ u.goals }} · {{ u.assists }} · {{ u.mom }}{% else %}—{% endif %}</td>
+              <td class="lt-num">
+                {% if r.attendance and r.attendance.rate is not none %}{{ r.attendance.rate }}%
+                {% elif r.attendance and r.attendance.has_history %}{{ r.attendance.present }}/{{ r.attendance.counted }}
+                {% else %}—{% endif %}
+              </td>
+              <td class="squad-contract contract-{{ r.contract_state }}">
+                {{ r.time_left }}
+                <span class="squad-sub">{{ weeks_label(c.weeks) }}</span>
+              </td>
+            </tr>
+            {% if r.flags %}
+              <tr class="squad-flags-row">
+                <td colspan="8">
+                  <ul class="squad-flags">
+                    {% for f in r.flags %}<li class="squad-flag flag-{{ f.kind }}">{{ f.text }}</li>{% endfor %}
+                  </ul>
+                </td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="league-table-footnote">
+      "Played" counts the club's last {{ window or usage_window }} league and playoff matches
+      that EA lists the player in. EA doesn't say who started and who came off the bench,
+      so this is appearances, not starts.
+    </p>
+  {% endif %}
+
+  {% if regulars %}
+    <div class="section-head accent-amber"><h2>Playing without a contract</h2></div>
+    <p class="field-hint">
+      These gamertags have played regularly but aren't linked to anybody under contract.
+      Either record a contract for them on <a href="/roster">Squad Moves</a>, or link the
+      contracted player they belong to above.
+    </p>
+    <div class="card regulars-list">
+      {% for u in regulars %}
+        <div class="regular-row">
+          <span class="squad-name">{{ u.name }}</span>
+          <span class="squad-sub">played {{ u.apps_window }} of the last {{ window }}
+            · form {{ form_label(u.form) }} · {{ u.goals }} goals</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <datalist id="gamertag-options">
+    {% for g in gamertag_options %}<option value="{{ g }}"></option>{% endfor %}
+  </datalist>
+</div>
+{% endblock %}

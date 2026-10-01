@@ -549,6 +549,68 @@ def player_trend(platform, club_id, player_name):
     return [dict(r) for r in rows]
 
 
+def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
+    """Who has been playing, from the matches recorded for our club.
+
+    Returns {"window": n, "players": {gamertag_casefolded: {...}}} where n
+    is how many of the club's most recent matches the window actually
+    covers (fewer than `window` early in a season), and each player has:
+
+      name          gamertag as EA spells it
+      apps_window   matches played among those n
+      apps_total    every recorded appearance
+      goals, assists, mom   totals across every recorded appearance
+      form          average rating over their last `form_games`
+                    appearances, or None with fewer than `min_form_apps`
+      positions     {pos: count} as EA recorded where they played
+
+    Keyed case-insensitively because gamertag links are matched that way
+    (see services.set_player_link).
+    """
+    conn = _connect()
+    recent = [r["match_id"] for r in conn.execute(
+        """SELECT match_id FROM matches WHERE platform=? AND club_id=?
+           ORDER BY played_at DESC, match_id DESC LIMIT ?""",
+        (platform, club_id, window),
+    ).fetchall()]
+    rows = conn.execute(
+        """SELECT mp.player_name, mp.match_id, mp.pos, mp.rating, mp.goals,
+                  mp.assists, mp.mom
+           FROM match_players mp
+           JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
+           WHERE m.platform=? AND m.club_id=?
+           ORDER BY m.played_at DESC, m.match_id DESC""",
+        (platform, club_id),
+    ).fetchall()
+    conn.close()
+
+    in_window = set(recent)
+    players = {}
+    for r in rows:
+        key = r["player_name"].casefold()
+        p = players.setdefault(key, {
+            "name": r["player_name"], "apps_window": 0, "apps_total": 0,
+            "goals": 0, "assists": 0, "mom": 0, "ratings": [], "positions": {},
+        })
+        p["apps_total"] += 1
+        if r["match_id"] in in_window:
+            p["apps_window"] += 1
+        p["goals"] += r["goals"] or 0
+        p["assists"] += r["assists"] or 0
+        p["mom"] += r["mom"] or 0
+        # Rows arrive newest first, so the first ratings seen are the
+        # most recent ones.
+        if r["rating"] is not None and len(p["ratings"]) < form_games:
+            p["ratings"].append(r["rating"])
+        if r["pos"]:
+            p["positions"][r["pos"]] = p["positions"].get(r["pos"], 0) + 1
+    for p in players.values():
+        ratings = p.pop("ratings")
+        p["form"] = (round(sum(ratings) / len(ratings), 2)
+                     if len(ratings) >= min_form_apps else None)
+    return {"window": len(recent), "players": players}
+
+
 def tracked_since(platform, club_id):
     """Earliest timestamp we have anything captured for this club, or None
     if we've never successfully polled it (used by the frontend to show an
