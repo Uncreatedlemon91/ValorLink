@@ -14,7 +14,8 @@ interactions webhook — no gateway connection, nothing to keep online.
 ```
 proclubs/      the application  — see proclubs/README.md
 deploy/        systemd units, Caddy config, install/backup/restore
-design-fc27/   the broadcast design canvas the current look came from
+design-fc27/   the earlier broadcast design canvas (superseded by the
+               management UI described in proclubs/README.md)
 ```
 
 ## What it does

@@ -14,49 +14,77 @@ one, which is where the isolation described throughout these notes came
 from; that code is gone, and the isolation is simply how the site is
 built.
 
+## Navigation
+
+The site is grouped into sections by what people come to do, defined once
+in `navigation.py`. The sidebar, every section's tab bar, the shortcut
+URLs and the tests all read that one list:
+
+| Section | Tabs | Shortcut |
+|---|---|---|
+| Home | -- | `/` |
+| News | -- | `/news` |
+| Matchday | Fixtures & sign-ups (`/events`) · Tactics (`/tactics`) | `/matchday` |
+| Club | Stats (`/stats`) · League table (`/league`) | `/club` |
+| Media | Clips (`/clips`) · Live (`/streamers`) | `/media` |
+| Squad (staff) | Overview (`/squad`) · Moves & contracts (`/roster`) | -- |
+
+A section is one place in the navigation, with the same header and tab bar
+on every tab, but **each tab keeps its own URL**. Links people have saved
+keep working, the back button behaves, and a page loads only its own
+scripts: the tactics board and the stats dashboard are both script-heavy
+and have nothing to share. The shortcuts redirect (302, not 301, since
+which tab comes first is a choice that may change) to a section's first
+tab. Staff-only sections are left out of the sidebar for everybody else;
+the routes are gated regardless.
+
+To add a page to a section, add a `Tab` in `navigation.py`; a test fails
+if a tab points at a route that doesn't exist.
+
 ## The design system
 
-The site is styled as a **broadcast matchday graphic**. The whole system
-lives in `static/css/site.css`'s `:root` block; the rules worth knowing
-before adding anything:
+The site is styled as a **management tool**, after Football Manager's
+screens: a fixed sidebar of sections, a context bar with the section's
+tabs, and content laid out as panels with title strips and compact tables.
+Staff run the club from it and players check it before a match, so it's
+built to be scanned rather than to put on a show. The tokens live in
+`static/css/site.css`'s `:root`; the component layer is the last block in
+that file. The rules worth knowing before adding anything:
 
-- **Two accents, one job each.** `--accent` (pitch green) reports
-  *performance* -- form, win rate, anything the squad did. `--amber`
-  reports *standing* -- division, league position, rank. Don't mix them:
-  an amber win-rate or a green division number breaks the only convention
-  that makes the palette readable at a glance.
-- **`--live` (red) is reserved** for a stream that is genuinely on air
-  right now. If red shows up anywhere else it stops meaning "live."
-- **`--danger-strong` is Republic Red**, kept from the previous FC Dallas
-  theme where it was the brand colour. It is no longer an accent -- it is
-  the destructive/decline colour (delete buttons, an "out" RSVP), which is
-  the one job it can still do here. Filling those with the accent would
-  make "delete" read as the encouraged action. Its documented 5.88:1
-  against white is why this exact value survived the retheme.
-- **Square corners.** There are no rounded rectangles; `border-radius`
-  appears only at `50%`, for avatars and dots.
-- **The 12° skew (`--skew`) is the signature**, and it earns that by being
-  rare: accent rules, section blades, the OVR block on a player card, the
-  match-centre rail. It is not a texture -- don't spread it.
-- **Three faces.** `--font-headline` (Anton) shouts: scorelines, big
-  numbers, page and section headings. `--font-display` (Barlow Condensed)
-  labels everything: kickers, nav, table headers, badges -- always
-  uppercase, tracked to `0.13em`. `--font-body` (Archivo) is what gets
-  read. Anything in a numeric column gets `font-variant-numeric:
-  tabular-nums`.
-- **The accent is light, so text on it is dark** (`--on-accent`). This is
-  the opposite of the red theme it replaced, where accent fills took white
-  text. `--accent-strong` and `--accent-text` are kept as names because the
-  stylesheet and templates reference them, but they no longer need to be
-  three different values: dark-on-accent is 12.6:1, and the accent as small
-  text on `--bg` is 9.9:1.
-- **`--series-*` is untouched.** It's the validated categorical chart
-  palette, read directly by `charts.js`. The status colours were retuned to
-  the broadcast accents so a form chip and a chart legend agree on what a
-  win looks like.
+- **One accent.** `--accent` (pitch green) marks the primary action and
+  where you are (active section, active tab, panel markers). Every other
+  colour has a meaning: amber is "needs attention" or standing, `--live`
+  red is a stream on air right now and nothing else, `--danger-strong` is
+  destructive, `--accent-2` blue is staff. If a colour isn't saying one of
+  those things, it should be grey.
+- **Slate surfaces in three steps.** `--bg` is the app, `--panel` is
+  content, `--panel-2` is title strips, inputs and table heads. Borders do
+  the separating; there are no drop shadows.
+- **Panels.** `.panel` > `.panel-head` (`h2` + an optional link) >
+  `.panel-body`. The small marker before a panel title is green by
+  default, `.panel-amber` for standing, `.panel-live` only for live
+  streams. `.section-head` is the same title strip without a panel around
+  it.
+- **Small, consistent radius** (`--radius`, 4px). No skew, no diagonal
+  motifs.
+- **Two faces, both Barlow.** Barlow is for reading: body text, headings,
+  numbers. Barlow Condensed is for labels (tabs, table headers, panel
+  titles, badges), always uppercase and tracked. Numeric columns get
+  `tabular-nums`.
+- **Dense by default.** 14.5px body and compact rows, but real actions keep
+  a 40px hit target. The reading is tight; the tapping isn't.
+- **On a phone** the sidebar folds into a top bar: club and account on one
+  row, the sections in a scrollable row beneath. Every section stays one
+  tap away with no menu to open, and tables scroll inside their panel
+  rather than pushing the page sideways.
+- **`--series-*` is the validated categorical chart palette**, read
+  directly by `charts.js`; the `--status-*` colours are for win/draw/loss
+  and health states only.
 
-Fonts come from Google Fonts (declared in `base.html`) -- this site's one
-third-party origin, the same exception the previous design took.
+The home page is a dashboard of panels: next match and club standing
+across the top, the news down the main column (a lead story, then a
+compact list), and squad moves, transfers and the Discord invite down the
+side. "Live Now" appears only while somebody is actually streaming.
 
 ## Player cards
 
@@ -65,8 +93,7 @@ The Players tab renders the roster as cards rather than a table
 
 - **Not an EA Ultimate Team card.** That layout is EA's own branded design;
   this is the same job -- identity, rating, a few numbers -- done in this
-  site's broadcast language: a skewed OVR block, a lower-third name bar,
-  three stat cells.
+  site's own design language: an OVR block, a name bar, three stat cells.
 - **Every value is a real API field**: `proOverall`, `favoritePosition`,
   `ratingAve`, `winRate`, `manOfTheMatch`, `cleanSheetsGK`, `gamesPlayed`,
   `goals`, `assists`. There is deliberately no pace/dribbling attribute
@@ -463,9 +490,9 @@ raw Markdown. A few things worth knowing:
   an oversight. See the comment in html_sanitize.py.
 
 **The cover image has a focal point.** The same cover photo gets cropped
-to several different shapes across the site -- a short wide banner in the
-home hero, a 21:9 header on the article page, ~4:3/16:9 card thumbnails in
-the news rail/grid -- and a plain center crop often cuts off the part that
+to several different shapes across the site -- the lead story on the home
+page, a 21:9 header on the article page, small thumbnails in the home news
+list and 16:9 cards in the grids -- and a plain center crop often cuts off the part that
 actually matters (a face at the edge of the frame, for instance). On the
 article form, clicking the cover preview sets `Article.cover_focal_x`/`
 cover_focal_y` (percentages, defaulting to 50/50 -- dead center), which
@@ -694,7 +721,7 @@ staged event invites -- one implementation, two callers.
   anything is published, so a stale tab or a hand-edited form can't
   announce a position for somebody who isn't in the server.
 
-**The announcement** is an embed in the broadcast palette -- green for an
+**The announcement** is an embed in the site's palette -- green for an
 offer or renewal, amber for a departure -- with the member's avatar as its
 thumbnail, the position and contract terms as fields, and an optional note
 from staff. The player is
@@ -1041,6 +1068,7 @@ proclubs/
   poll.py                Standalone poller for db.py, run by proclubs-poll.timer
   season.py              New-season switch: find the club on EA, erase old stats
   squad.py               Squad screen rules: depth by position, playing-time flags
+  navigation.py          Sections and tabs: the sidebar, tab bars and shortcut URLs
   tracked_clubs.json     Extra clubs for poll.py to snapshot (ours comes from .env)
   templates/             Jinja2 templates
   static/css/site.css    Design system (also read by charts.js as CSS vars)
@@ -1055,16 +1083,16 @@ proclubs/
 
 | Path | Who | What |
 |---|---|---|
-| `/` | everyone | Hero, latest news, squad moves, next event, featured live stream, stats teaser |
+| `/` | everyone | Dashboard: next match, club standing, news, squad moves, transfers, who's live |
 | `/news`, `/news/<slug>` | everyone (drafts: staff only) | Article list/detail |
 | `/news/new`, `/news/<slug>/edit` | staff | Article form: rich-text (WYSIWYG) editor + optional cover image |
 | `/events` | everyone | Upcoming + past events -- read-only, see below |
-| `/streamers` (nav label: "Live") | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
+| `/streamers` (Media › Live) | everyone | Featured channel (embedded player) + the rest of the showcase, live status from Twitch |
 | `/stats` | everyone | EA stats dashboard for our club |
 | `/league` | everyone | Auto-built league table -- see below |
 | `/tactics` | everyone (editing: staff only) | Drag-and-drop formation board -- see below |
-| `/squad` (nav label: "Squad") | staff | Squad screen: contracts beside appearances, form and attendance, plus depth for the current formation -- see below |
-| `/roster` | staff | Squad Moves: pick a Discord member, offer a contract or staff role, or publish a departure -- see below |
+| `/squad` (Squad › Overview) | staff | Squad screen: contracts beside appearances, form and attendance, plus depth for the current formation -- see below |
+| `/roster` (Squad › Moves & contracts) | staff | pick a Discord member, offer a contract or staff role, or publish a departure -- see below |
 | `/login`, `/logout` | everyone | Discord sign-in / dev sign-in |
 
 `/api/overview`, `/api/standings`, `/api/members`, `/api/matches`,
@@ -1082,8 +1110,8 @@ in `site.css`).
 
 - **Not an EA Ultimate Team card.** That layout is EA's own branded
   design; this is the same job -- identity, rating, a few numbers -- done
-  in this site's broadcast language: a skewed OVR block, a lower-third
-  name bar, three stat cells.
+  in this site's own design language: an OVR block, a name bar, three
+  stat cells.
 - **Every value is a real API field.** `proOverall`, `favoritePosition`,
   `ratingAve`, `winRate`, `manOfTheMatch`, `cleanSheetsGK`, `gamesPlayed`,
   `goals`, `assists` -- all straight from `/api/members`. There is

@@ -1,0 +1,23 @@
+{# Sidebar icons. Inline SVG, stroked in currentColor, so they take the
+   link's colour in every state and cost no extra request. Decorative:
+   the label beside each one carries the meaning. #}
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"
+     fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+{%- if name == 'home' %}
+  <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>
+{%- elif name == 'news' %}
+  <rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M7 8h10M7 12h10M7 16h6"/>
+{%- elif name == 'matchday' %}
+  <rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15.5" r="2"/>
+{%- elif name == 'club' %}
+  <path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/>
+{%- elif name == 'media' %}
+  <rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="m10 9 5 3-5 3z"/>
+{%- elif name == 'squad' %}
+  <circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.5a3 3 0 0 1 0 5.5M18 14.5c1.8.8 3 2.6 3 4.5"/>
+{%- elif name == 'menu' %}
+  <path d="M4 7h16M4 12h16M4 17h16"/>
+{%- endif %}
+</svg>
+{%- endmacro %}

@@ -1,65 +1,67 @@
+/* ===========================================================================
+   YeeHaw FC -- management UI
+
+   Modelled on a Football Manager screen: a fixed sidebar of sections, a
+   context bar with the section's tabs, and content laid out as dense
+   panels with title strips and compact tables. The site is something
+   staff run the club from and players check before a match, so it is
+   built to be scanned, not to perform.
+
+   Rules worth knowing before adding anything:
+
+   - ONE accent (--accent, pitch green) for the primary action and the
+     current location. Everything else that has colour has a MEANING:
+     amber = needs attention / standing, red (--live) = on air right now,
+     --danger-strong = destructive, --accent-2 = staff. If a colour isn't
+     saying one of those things, it should be grey.
+   - Slate surfaces in three steps: --bg (the app), --panel (content),
+     --panel-2 (panel title strips, inputs, table heads). Borders do the
+     separating; there are no drop shadows.
+   - Small, consistent radius (--radius). No skew, no diagonal motifs.
+   - Two faces. Barlow is read (body, headings, numbers). Barlow Condensed
+     labels (tabs, table headers, kickers, badges) -- always uppercase,
+     tracked. Numeric columns get tabular-nums.
+   - Dense by default: 14.5px body, compact rows. Touch targets for real
+     actions stay >= 40px; it's the reading that's tight, not the tapping.
+   =========================================================================== */
 :root {
   color-scheme: dark;
 
-  /* --- Broadcast ground ---------------------------------------------------
-     Colder and darker than the neutral ground this replaced. The point is
-     contrast headroom: on this ground an accent reads as signal rather
-     than decoration, which is what lets the palette below stay this
-     small. */
-  --bg: #05070E;
-  --panel: #0B1120;
-  --panel-2: #101A2E;
-  --panel-3: #16233C;
-  --text: #F2F5FA;
-  --muted: #93A0B8;
-  --faint: #667595;
-  --border: #22304C;
-  --border-soft: #16233C;
+  --bg: #0E131B;
+  --sidebar: #0A0E14;
+  --panel: #151B25;
+  --panel-2: #1B2330;
+  --panel-3: #232D3D;
+  --text: #E8EDF4;
+  --muted: #9AA6B8;
+  --faint: #6F7B8E;
+  --border: #29344A;
+  --border-soft: #1E2734;
 
-  /* Two accents, each with one job. Green reports performance (form, win
-     rate, anything the squad did); amber reports standing (division,
-     position, rank). --live is reserved for a stream that is actually on
-     air right now and is never used decoratively -- if red appears
-     anywhere else on the page it has stopped meaning "live".
-
-     Unlike the red this replaced, the accent is LIGHT, so the three roles
-     that red needed three values for collapse into one: dark text on the
-     accent clears AA comfortably (#05070E on #00E27A is 12.6:1), and the
-     accent as small text on our dark surfaces is 9.9:1 on --bg.
-     --accent-strong and --accent-text are kept as names because the rest
-     of this file and the templates reference them. */
   --accent: #00E27A;
   --accent-strong: #00E27A;
-  --accent-text: #00E27A;
+  --accent-text: #2BEA8B;
   --accent-deep: #00B863;
   --accent-rgb: 0, 226, 122;
-  --accent-2: #6E8CFF;
-  --amber: #FFB020;
-  --live: #FF3355;
-  --on-accent: #05070E;
-
-  /* Republic Red, kept from the previous theme where it was the brand
-     colour. It is no longer an accent -- it's the destructive/decline
-     colour, which is the one job it can still do here: a filled control
-     that must not read as "the primary thing to click". Its 5.88:1
-     against white is why this exact value survived the retheme. */
-  --danger-strong: #C8102E;
+  --on-accent: #06110B;
+  --accent-2: #7C96FF;            /* staff */
+  --amber: #FFB020;               /* attention, standing */
+  --live: #FF3355;                /* on air -- never decorative */
+  --danger-strong: #C8102E;       /* destructive actions */
   --danger-rgb: 200, 16, 46;
 
-  /* The one signature motif. Applied to crests, accent rules, OVR blocks
-     and lower-thirds -- and deliberately nowhere else, so it stays a
-     signature instead of becoming texture. */
-  --skew: -12deg;
+  /* Zero: kept as a token so components that once used a skew simply
+     sit straight. */
+  --skew: 0deg;
+  --radius: 4px;
+  --sidebar-w: 224px;
 
-  /* Three faces: Anton shouts (scorelines, headlines, big numbers),
-     Barlow Condensed labels (kickers, nav, table headers -- carried over
-     from the previous design), Archivo is read (body copy, table cells). */
-  --font-headline: "Anton", "Haettenschweiler", "Arial Narrow", sans-serif;
+  --font-headline: "Barlow", "Helvetica Neue", Arial, sans-serif;
   --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
 
-  /* Categorical palette, dark-surface steps, fixed hue order -- never
-     reassign a slot's hue, never cycle. Also read directly by charts.js. */
+  /* Categorical chart palette, validated -- read directly by charts.js.
+     Assign slots in order; never cycle. */
   --series-1: #3987e5; /* blue */
   --series-2: #d95926; /* orange */
   --series-3: #199e70; /* aqua */
@@ -68,10 +70,7 @@
   --series-6: #008300; /* green */
   --series-7: #9085e9; /* violet */
   --series-8: #e66767; /* red */
-
-  /* Status palette -- reserved for actual state (win/loss, live/offline),
-     never reused as a generic series color. Win/loss are tuned to the
-     broadcast accents so a form chip and a chart legend agree. */
+  /* Status colours -- for win/draw/loss and health states only. */
   --status-good: #00E27A;
   --status-warning: #FFB020;
   --status-serious: #ec835a;
@@ -81,198 +80,209 @@
 
 * { box-sizing: border-box; }
 
+html { font-size: 14.5px; }
+
 body {
   margin: 0;
   font-family: var(--font-body);
-  background:
-    radial-gradient(ellipse 1200px 600px at 18% -12%, rgba(var(--accent-rgb), 0.055), transparent 62%) fixed,
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
+  line-height: 1.45;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
 }
 
 a { color: var(--accent-2); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
 img { max-width: 100%; }
+h1, h2, h3 { font-family: var(--font-headline); }
 
-/* --- Top nav ------------------------------------------------------------ */
-.site-header {
-  padding: 1rem 2rem;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: rgba(5, 7, 14, 0.92);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+/* --- App shell: sidebar + main -------------------------------------------- */
+.app-shell { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100vh; }
+
+.sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+  background: var(--sidebar); border-right: 1px solid var(--border-soft);
 }
+.sidebar-top { padding: 1rem 1rem 0.75rem; border-bottom: 1px solid var(--border-soft); }
 
-.brand {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-right: auto;
+.brand { display: flex; align-items: center; gap: 0.65rem; color: var(--text); }
+.brand:hover { text-decoration: none; }
+.brand-mark {
+  flex: none; width: 36px; height: 36px; border-radius: var(--radius);
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--on-accent);
+  font-family: var(--font-display); font-weight: 700; font-size: 1rem; letter-spacing: 0.04em;
 }
-
-.brand-name {
-  margin: 0;
-  font-family: var(--font-headline);
-  font-size: 1.55rem;
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.005em;
-  color: var(--text);
-}
-
+.brand-text { display: grid; min-width: 0; line-height: 1.15; }
+.brand-name { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
 .brand-tagline {
-  font-family: var(--font-display); font-weight: 700; font-size: 0.72rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.68rem;
   text-transform: uppercase; letter-spacing: 0.13em; color: var(--faint);
 }
 
-.site-nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
-
-.site-nav a {
-  color: var(--muted);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
-  padding: 0.55rem 0.9rem;
-  transition: background 0.15s ease, color 0.15s ease;
+.side-nav { display: grid; gap: 2px; padding: 0.75rem 0.6rem; flex: 1; align-content: start; overflow-y: auto; }
+.side-link {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.6rem 0.7rem; border-radius: var(--radius);
+  color: var(--muted); font-weight: 600; font-size: 0.98rem;
+  border-left: 3px solid transparent;
+}
+.side-link:hover { background: var(--panel); color: var(--text); text-decoration: none; }
+.side-link.active { background: var(--panel-2); color: var(--text); border-left-color: var(--accent); }
+.side-link.active .icon { color: var(--accent-text); }
+.side-link .icon { flex: none; }
+.side-badge {
+  margin-left: auto; font-family: var(--font-display); font-weight: 700;
+  font-size: 0.62rem; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--accent-2); border: 1px solid currentColor; border-radius: 3px; padding: 0 0.3rem;
 }
 
-.site-nav a:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); text-decoration: none; }
-.site-nav a.active { color: var(--on-accent); background: var(--accent-strong); }
-
-.nav-account { display: flex; align-items: center; gap: 0.6rem; }
-
+.side-account {
+  padding: 0.8rem 1rem 1rem; border-top: 1px solid var(--border-soft);
+  display: grid; gap: 0.6rem;
+}
+.account-who { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.account-name { font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-avatar {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: var(--panel-2); border: 1px solid var(--border);
-  object-fit: cover;
+  flex: none; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--panel-2); border: 1px solid var(--border); object-fit: cover;
 }
-
+.nav-avatar-fallback {
+  display: grid; place-items: center; font-family: var(--font-display);
+  font-weight: 700; font-size: 0.7rem; color: var(--muted);
+}
 .staff-pill {
-  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
-  color: var(--accent-text); border: 1px solid var(--accent);
-  border-radius: 0; padding: 0.1rem 0.5rem;
+  margin-left: auto; font-family: var(--font-display); font-weight: 700;
+  font-size: 0.62rem; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--accent-2); border: 1px solid currentColor; border-radius: 3px; padding: 0 0.3rem;
 }
 
-/* --- Layout --------------------------------------------------------------- */
+.app-main { min-width: 0; display: flex; flex-direction: column; }
+
+/* The context bar: which section you're in, and its tabs. */
+.context-bar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: stretch; gap: 1.5rem; flex-wrap: wrap;
+  padding: 0 2rem; min-height: 52px;
+  background: rgba(14, 19, 27, 0.94);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.context-title {
+  align-self: center; font-family: var(--font-display); font-weight: 700;
+  font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint);
+}
+.tab-bar { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; }
+.tab-bar::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex; align-items: center; white-space: nowrap;
+  padding: 0 0.9rem; color: var(--muted);
+  font-family: var(--font-display); font-weight: 700; font-size: 0.9rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); text-decoration: none; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
 main { flex: 1; }
 
-.page {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.page.narrow { max-width: 720px; }
+.page { max-width: 1200px; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
+.page.narrow { max-width: 760px; }
 
 .page-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;
 }
-
 .page-head h1 {
-  margin: 0; font-family: var(--font-headline); font-weight: 400;
-  font-size: 2.9rem; line-height: 0.94; text-transform: uppercase; letter-spacing: 0.005em;
+  margin: 0; font-weight: 700; font-size: 1.85rem; line-height: 1.1; letter-spacing: -0.01em;
 }
-.page-lede { color: var(--muted); margin: 0.35rem 0 0; }
+.page-lede { color: var(--muted); margin: 0.3rem 0 0; }
 
 .site-footer {
-  border-top: 1px solid var(--border);
-  padding: 1.75rem 2rem;
-  color: var(--faint);
-  font-family: var(--font-display); font-weight: 700; font-size: 0.75rem;
+  border-top: 1px solid var(--border-soft);
+  padding: 1.1rem 2rem; color: var(--faint);
+  font-family: var(--font-display); font-weight: 700; font-size: 0.7rem;
   text-transform: uppercase; letter-spacing: 0.13em;
-  text-align: center;
 }
 
 /* --- Flash messages ------------------------------------------------------- */
-.flash-stack { max-width: 1080px; margin: 1rem auto 0; padding: 0 2rem; display: grid; gap: 0.5rem; }
+.flash-stack { max-width: 1200px; width: 100%; margin: 1rem auto 0; padding: 0 2rem; display: grid; gap: 0.5rem; }
 .flash {
-  border-radius: 0;
-  padding: 0.65rem 1rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--border);
-  background: var(--panel);
+  border-radius: var(--radius); padding: 0.6rem 0.9rem; font-size: 0.92rem;
+  border: 1px solid var(--border); border-left-width: 3px; background: var(--panel);
 }
-.flash.ok { border-color: var(--status-good); }
-.flash.error { border-color: var(--status-critical); }
+.flash.ok { border-left-color: var(--status-good); }
+.flash.warn { border-left-color: var(--amber); }
+.flash.error { border-left-color: var(--status-critical); }
 
 /* --- Discord invite banner ---------------------------------------------- */
 .discord-banner {
-  display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap;
-  background: #2c2f7a; color: #fff; padding: 0.6rem 1.5rem; font-size: 0.85rem; text-align: center;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin: 1rem 2rem 0; padding: 0.6rem 0.9rem; border-radius: var(--radius);
+  background: rgba(88, 101, 242, 0.12); border: 1px solid rgba(88, 101, 242, 0.45);
+  font-size: 0.9rem;
 }
-.discord-banner .btn.discord { flex: none; padding: 0.4rem 0.9rem; }
 
 /* --- Buttons / forms -------------------------------------------------- */
 input, select, textarea, button {
-  background: var(--panel);
+  background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
   font-size: 0.95rem;
   font-family: inherit;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-
 textarea { resize: vertical; }
+input::placeholder, textarea::placeholder { color: var(--faint); }
 
-input:focus, select:focus, textarea:focus, button:focus-visible {
+input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
 
 button, .btn {
   cursor: pointer;
   background: var(--accent-strong);
   color: var(--on-accent);
-  border: none;
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   text-transform: uppercase;
-  letter-spacing: 0.13em;
-  /* 44px minimum hit target -- these are primary actions on a page read
-     on a phone as often as a desktop. */
-  min-height: 44px;
-  padding: 0.7rem 1.35rem;
+  letter-spacing: 0.1em;
+  /* Real actions keep a comfortable hit target on a phone; it's the
+     reading that's dense, not the tapping. */
+  min-height: 40px;
+  padding: 0.5rem 1.1rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  transition: transform 0.1s ease, opacity 0.15s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
 }
+button:hover, .btn:hover { filter: brightness(1.08); text-decoration: none; }
 
-button:hover, .btn:hover { opacity: 0.9; transform: translateY(-1px); text-decoration: none; }
-button:active, .btn:active { transform: translateY(0); }
+.btn.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+.btn.secondary:hover { border-color: var(--muted); background: var(--panel-2); filter: none; }
+.btn.danger { background: transparent; color: var(--status-critical); border-color: rgba(255, 77, 94, 0.55); }
+.btn.danger:hover { background: rgba(255, 77, 94, 0.1); filter: none; }
+.btn.discord { background: #5865F2; border-color: #5865F2; color: #fff; }
+.btn-sm { min-height: 32px; padding: 0.3rem 0.75rem; font-size: 0.78rem; }
 
-.btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
-.btn.secondary:hover { border-color: var(--accent); opacity: 1; }
-.btn.danger { background: transparent; color: var(--status-critical); border: 1px solid var(--status-critical); }
-
-.field { display: grid; gap: 0.35rem; margin-bottom: 1.1rem; }
-.field label { font-weight: 600; font-size: 0.85rem; color: var(--muted); }
+.field { display: grid; gap: 0.3rem; margin-bottom: 1rem; }
+.field label {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.field label .muted { text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-weight: 400; }
 .field-row { display: flex; gap: 1rem; flex-wrap: wrap; }
 .field-row .field { flex: 1 1 200px; }
-.field-hint { color: var(--muted); font-size: 0.78rem; margin: 0; }
+.field-hint { color: var(--muted); font-size: 0.82rem; margin: 0; }
 
 /* --- Cover image focal-point picker ------------------------------------- */
 .focal-picker {
@@ -287,7 +297,8 @@ button:active, .btn:active { transform: translateY(0); }
   border: 2px solid #fff; border-radius: 50%; background: rgba(var(--accent-rgb), 0.85);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none;
 }
-.checkbox-field { flex-direction: row; align-items: center; gap: 0.5rem; }
+/* .field is a grid; a checkbox and its text belong on one line. */
+.checkbox-field { display: flex; flex-direction: row; align-items: center; gap: 0.5rem; }
 .checkbox-field input { width: auto; }
 
 /* --- Article editor: clip embeds ---------------------------------------- */
@@ -327,154 +338,18 @@ button:active, .btn:active { transform: translateY(0); }
 .card-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 
 /* --- Hero: full-bleed featured story banner ---------------------------- */
-.hero-featured {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  min-height: min(76vh, 620px);
-  background-color: var(--bg);
-  overflow: hidden;
-  isolation: isolate;
-  color: var(--text);
-}
-/* A real <img> rather than a background-image: this is the page's largest
-   element, and only an <img> gets picked up by the browser's preload
-   scanner and can be given fetchpriority, so it starts downloading with the
-   document instead of waiting for the stylesheet to parse. The inline
-   object-position on the element carries the article's focal point; the -4%
-   inset is the slack the zoom animation pans into. */
-.hero-image {
-  position: absolute;
-  inset: -4%;
-  width: 108%;
-  height: 108%;
-  object-fit: cover;
-  animation: heroZoom 22s ease-in-out infinite alternate;
-  z-index: -2;
-}
-.hero-featured.no-image {
-  /* Floodlit-turf stand-in for an article with no cover image: angled
-     hairlines under two light pools, kept well under 4% so a headline
-     never fights the ground it sits on. */
-  background:
-    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 46px),
-    radial-gradient(circle at 25% 20%, rgba(var(--accent-rgb), 0.35), transparent 55%),
-    radial-gradient(circle at 80% 75%, rgba(57, 135, 229, 0.25), transparent 50%),
-    linear-gradient(160deg, #3d0f1a 0%, #0b0f14 65%);
-}
 
-.hero-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(5, 7, 14, 0.10) 0%, rgba(5, 7, 14, 0.55) 52%, rgba(5, 7, 14, 0.97) 100%);
-  z-index: -1;
-}
-
-.hero-content {
-  position: relative;
-  width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 3rem 2rem 4.5rem;
-}
-
-/* The lower-third: a skewed leading blade against a solid label. The same
-   shape is reused for goal events and player cards, so it has to read at
-   any size. */
-.hero-kicker {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
-  color: var(--on-accent);
-  background: var(--accent);
-  padding: 0.4rem 0.85rem;
-  margin-bottom: 0.6rem;
-  position: relative;
-}
-.hero-kicker::before {
-  content: "";
-  position: absolute; left: -0.55rem; top: 0; bottom: 0; width: 0.4rem;
-  background: var(--accent);
-  transform: skewX(var(--skew));
-}
-.hero-content .category-badge { margin-left: 0.6rem; vertical-align: middle; }
-
-.hero-content h1 {
-  margin: 0.6rem 0 0.7rem;
-  font-family: var(--font-headline);
-  font-weight: 400;
-  font-size: clamp(2.5rem, 6.4vw, 5.4rem);
-  line-height: 0.9;
-  text-transform: uppercase;
-  letter-spacing: 0.005em;
-  text-wrap: balance;
-}
-.hero-content h1 a { color: inherit; }
-.hero-content h1 a:hover { text-decoration: none; color: var(--accent-text); }
-.hero-content p { margin: 0 0 1.25rem; color: #d7d9de; max-width: 620px; font-size: 1.1rem; }
-
-.hero-meta { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
-.hero-meta .article-meta { color: #b7bac2; }
-.hero-cta { padding: 0.7rem 1.4rem; }
-
-.scroll-cue {
-  position: absolute;
-  bottom: 1.25rem;
-  left: 50%;
-  transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 1.1rem;
-  animation: bounceCue 2s ease-in-out infinite;
-}
-
-@keyframes heroZoom { from { transform: scale(1); } to { transform: scale(1.09); } }
 @keyframes bounceCue { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero-image { animation: none; }
-  .scroll-cue { animation: none; }
-}
-
 /* --- Match center ribbon ------------------------------------------------- */
-.match-center {
-  background: linear-gradient(96deg, #0D2B1F 0%, var(--panel) 46%, var(--panel-2) 100%);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-/* The accent rail that marks a live strip on broadcast furniture. */
-.match-center::before {
-  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 5px; background: var(--accent);
-}
-.match-center-inner {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 1.1rem 2rem;
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-.mc-kicker-label {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent-text);
-  flex: none;
-}
+
 .mc-matchup { display: flex; align-items: center; gap: 1rem; flex: 1 1 auto; min-width: 240px; }
 .mc-team { display: flex; align-items: center; gap: 0.6rem; }
 .crest {
   display: inline-flex; align-items: center; justify-content: center;
   width: 44px; height: 44px; line-height: 1;
   background: var(--panel-3); border: 1px solid var(--border);
-  font-family: var(--font-headline); font-weight: 400; font-size: 0.95rem;
+  font-family: var(--font-headline); font-weight: 700; font-size: 0.95rem;
   text-transform: uppercase;
   flex: none;
 }
@@ -483,16 +358,16 @@ button:active, .btn:active { transform: translateY(0); }
    the saturated colors EA actually issues (team kit colors), even though
    it isn't a true contrast check against arbitrary values. */
 .crest-branded { color: #fff; border-color: rgba(255, 255, 255, 0.35); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
-.mc-team-name { font-family: var(--font-headline); font-weight: 400; font-size: 1.15rem; text-transform: uppercase; }
+.mc-team-name { font-family: var(--font-headline); font-weight: 700; font-size: 1.15rem; text-transform: uppercase; }
 .mc-vs { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; color: var(--muted); font-size: 0.72rem; }
-.mc-vs-text { font-family: var(--font-headline); font-weight: 400; font-size: 1.5rem; color: var(--text); }
+.mc-vs-text { font-family: var(--font-headline); font-weight: 700; font-size: 1.5rem; color: var(--text); }
 .mc-countdown { display: flex; gap: 0.5rem; flex: none; }
 .cd-box {
   display: flex; flex-direction: column; align-items: center;
   background: rgba(255, 255, 255, 0.06); border-radius: 0; padding: 0.4rem 0.6rem; min-width: 44px;
 }
 .cd-box span {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.45rem; line-height: 1;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.45rem; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .cd-box small { color: var(--muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -500,27 +375,7 @@ button:active, .btn:active { transform: translateY(0); }
 .mc-empty { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
 /* --- News rail (horizontal scroll) --------------------------------------- */
-.news-rail {
-  display: flex;
-  gap: 1.25rem;
-  overflow-x: auto;
-  padding-bottom: 0.75rem;
-  scroll-snap-type: x proximity;
-}
-.news-rail::-webkit-scrollbar { height: 8px; }
-.news-rail::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
 
-.rail-card {
-  flex: 0 0 280px;
-  scroll-snap-align: start;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  overflow: hidden;
-  color: var(--text);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.rail-card:hover { text-decoration: none; transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
 /* An article with no cover image would otherwise be a flat grey box; this
    is the same floodlit-turf ground the hero uses in its no-image state. */
 .rail-card-image {
@@ -531,9 +386,6 @@ button:active, .btn:active { transform: translateY(0); }
     linear-gradient(160deg, var(--panel-3), var(--panel));
 }
 .rail-card-image img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
-.rail-card:hover .rail-card-image img { transform: scale(1.06); }
-.rail-card-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.35rem; }
-.rail-card-body h3 { margin: 0; font-size: 1.05rem; font-weight: 600; line-height: 1.32; }
 
 .play-badge {
   position: absolute; inset: 0; margin: auto; width: 42px; height: 42px;
@@ -543,23 +395,12 @@ button:active, .btn:active { transform: translateY(0); }
 }
 
 /* --- Transfer centre band -------------------------------------------------- */
-.section-band {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 1.5rem 1.75rem;
-  margin: 2.5rem 0;
-}
-.band-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.band-head a {
-  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem;
-  text-transform: uppercase; letter-spacing: 0.13em; color: var(--amber);
-}
+
 .band-list { display: grid; gap: 0.1rem; }
 .band-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0; border-bottom: 1px solid var(--border); color: var(--text); }
 .band-row:last-child { border-bottom: none; }
 .band-row:hover { text-decoration: none; color: var(--status-warning); }
-.band-arrow { color: var(--status-warning); font-weight: 700; flex: none; }
+
 .band-title { flex: 1; font-weight: 600; }
 
 /* --- Featured stream (embedded Twitch player) ---------------------------- */
@@ -617,42 +458,7 @@ button:active, .btn:active { transform: translateY(0); }
   padding: 0;
   margin-bottom: 1rem;
 }
-.standing-glow {
-  position: absolute;
-  inset: -20%;
-  background: radial-gradient(circle, rgba(255, 176, 32, 0.16), transparent 68%);
-  animation: standingDrift 10s ease-in-out infinite alternate;
-  z-index: -2;
-  pointer-events: none;
-}
-.standing-shine {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.08) 45%, transparent 60%);
-  background-size: 250% 100%;
-  animation: standingShine 6s ease-in-out infinite;
-  z-index: -1;
-  pointer-events: none;
-}
-@keyframes standingDrift {
-  from { transform: translate(-6%, -4%) scale(1); }
-  to { transform: translate(6%, 4%) scale(1.15); }
-}
-@keyframes standingShine {
-  0% { background-position: 150% 0; }
-  55%, 100% { background-position: -50% 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .standing-glow, .standing-shine { animation: none; }
-}
 
-/* A scoreboard strip, not a row of floating figures: equal cells divided
-   by hairlines, the way a broadcast standings bug is built. */
-.standing-grid {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
 .standing-item {
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem;
   padding: clamp(1.5rem, 3.5vw, 2.15rem) clamp(1.25rem, 2.5vw, 1.9rem);
@@ -660,7 +466,7 @@ button:active, .btn:active { transform: translateY(0); }
 }
 .standing-item + .standing-item { border-left: 1px solid var(--border); }
 @media (max-width: 720px) {
-  .standing-grid { grid-template-columns: 1fr; }
+  
   .standing-item + .standing-item { border-left: none; border-top: 1px solid var(--border); }
 }
 .standing-label {
@@ -668,31 +474,11 @@ button:active, .btn:active { transform: translateY(0); }
   text-transform: uppercase; letter-spacing: 0.13em; color: var(--muted);
 }
 
-/* Standing is amber's job, so the division marker is a solid amber block
-   rather than the old outlined ring. Kept as .division-ring so the
-   templates that render it don't have to change. */
-.division-ring {
-  width: 76px; height: 76px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--amber);
-  border: none;
-  transition: transform 0.2s ease;
-}
-.division-ring:hover { transform: translateY(-2px); }
-.division-ring span {
-  font-family: var(--font-headline); font-weight: 400; font-size: 2.4rem; line-height: 1;
-  color: var(--on-accent); font-variant-numeric: tabular-nums;
-}
-/* "Best division" is a past peak, not the live standing -- outlined so it
-   reads as secondary to the filled block beside it. */
-.division-ring--muted { background: transparent; border: 2px solid var(--border); }
-.division-ring--muted span { color: var(--muted); }
-
 /* The two figures flanking the hero: same face, stepped down, so the band
    reads as one scoreboard rather than three unrelated numbers. */
 .standing-value {
   font-family: var(--font-headline);
-  font-weight: 400;
+  font-weight: 700;
   font-size: clamp(1.75rem, 3.5vw, 2.4rem);
   line-height: 0.95;
   color: var(--text);
@@ -702,7 +488,7 @@ button:active, .btn:active { transform: translateY(0); }
 
 .standing-value--hero {
   font-family: var(--font-headline);
-  font-weight: 400;
+  font-weight: 700;
   font-size: clamp(3rem, 7vw, 4.25rem);
   line-height: 0.92;
   color: var(--text);
@@ -791,11 +577,12 @@ button:active, .btn:active { transform: translateY(0); }
   padding-bottom: 0.85rem;
 }
 .section-head h2 {
-  margin: 0; font-family: var(--font-headline); font-weight: 400;
+  margin: 0; font-family: var(--font-headline); font-weight: 700;
   font-size: 1.75rem; text-transform: uppercase; line-height: 1;
   display: flex; align-items: center; gap: 0.85rem;
 }
-/* The skewed blade that opens every section band. */
+/* The marker that opens every section title (restyled in the component
+   layer at the end of this file). */
 .section-head h2::before {
   content: ""; width: 5px; height: 1.6rem; background: var(--accent);
   transform: skewX(var(--skew)); flex: none;
@@ -859,11 +646,7 @@ button:active, .btn:active { transform: translateY(0); }
   gap: 1.5rem; flex-wrap: wrap;
   background: linear-gradient(135deg, rgba(88, 101, 242, 0.16), transparent 70%), var(--panel);
 }
-.connect-band-text h2 {
-  margin: 0 0 0.35rem; font-family: var(--font-headline); font-weight: 400;
-  font-size: 1.6rem; text-transform: uppercase;
-}
-.connect-band-text p { margin: 0; color: var(--muted); }
+
 .connect-band-cta { flex: none; padding: 0.75rem 1.5rem; }
 
 .article-reactions { margin-top: 1.75rem; }
@@ -877,7 +660,7 @@ button:active, .btn:active { transform: translateY(0); }
 .like-btn.static { color: var(--muted); cursor: default; }
 
 .comments { margin-top: 2.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
-.comments-head { font-family: var(--font-headline); font-weight: 400; font-size: 1.5rem; text-transform: uppercase; margin: 0 0 1rem; }
+.comments-head { font-family: var(--font-headline); font-weight: 700; font-size: 1.5rem; text-transform: uppercase; margin: 0 0 1rem; }
 .comment-form { margin-bottom: 1.5rem; }
 .comment-form textarea { width: 100%; min-height: 90px; }
 .comment { display: flex; gap: 0.75rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
@@ -1003,7 +786,7 @@ button:active, .btn:active { transform: translateY(0); }
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.13em;
 }
 .stat-card .value {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.9rem; line-height: 0.95;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.9rem; line-height: 0.95;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1024,7 +807,7 @@ button:active, .btn:active { transform: translateY(0); }
 
 .club-hero-identity { display: flex; align-items: baseline; gap: 0.75rem; }
 #club-header h2 {
-  margin: 0; font-family: var(--font-headline); font-weight: 400;
+  margin: 0; font-family: var(--font-headline); font-weight: 700;
   font-size: 2rem; text-transform: uppercase; line-height: 1; letter-spacing: 0.005em;
 }
 .club-hero-id { color: var(--muted); font-size: 0.85rem; }
@@ -1147,7 +930,7 @@ pre {
 /* --- Player cards (Players tab, replaces the roster table) ---------------
    Deliberately not a copy of EA's Ultimate Team card, which is their own
    branded design -- this is the same job (identity, rating, three numbers)
-   done in this site's broadcast language. Every value shown maps to a
+   done in this site's own design language. Every value shown maps to a
    field EA's members/stats endpoint actually returns, which is why there's
    no pace/dribbling row: EA exposes no per-attribute ratings, and
    modelling them would make the card lie. */
@@ -1227,7 +1010,7 @@ pre {
 /* The block leans; the number inside it doesn't. */
 .pc-ovr > * { transform: skewX(calc(-1 * var(--skew))); }
 .pc-ovr b {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.85rem; line-height: 0.92;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.85rem; line-height: 0.92;
   color: var(--on-accent); font-variant-numeric: tabular-nums;
 }
 .pc-ovr small {
@@ -1241,7 +1024,7 @@ pre {
   background: rgba(5, 7, 14, 0.78); color: var(--tier); padding: 0.3rem 0.55rem;
 }
 
-/* The same lower-third used for the hero kicker and goal events. */
+/* The player's name bar under the OVR block. */
 .pc-name {
   display: flex; flex-direction: column; gap: 0.1rem;
   padding: 0.7rem 0.85rem;
@@ -1249,7 +1032,7 @@ pre {
   border-top: 2px solid var(--tier);
 }
 .pc-name b {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.05rem;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.05rem;
   line-height: 1.05; text-transform: uppercase;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -1272,7 +1055,7 @@ pre {
   min-height: 68px;
 }
 .pc-stat-value {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.25rem; line-height: 1;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.25rem; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .pc-stat-label {
@@ -1362,13 +1145,13 @@ pre {
 .league-table tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
 .league-table .lt-num { text-align: center; white-space: nowrap; }
 .league-table .lt-rating {
-  font-family: var(--font-headline); font-weight: 400; font-size: 1.15rem;
+  font-family: var(--font-headline); font-weight: 700; font-size: 1.15rem;
   color: var(--text); font-variant-numeric: tabular-nums;
 }
 .league-table .lt-num { font-variant-numeric: tabular-nums; }
 .league-table .lt-club { display: flex; align-items: center; gap: 0.65rem; }
 .lt-crest { width: 30px; height: 30px; font-size: 0.68rem; }
-.lt-name { font-family: var(--font-headline); font-weight: 400; font-size: 1rem; text-transform: uppercase; }
+.lt-name { font-family: var(--font-headline); font-weight: 700; font-size: 1rem; text-transform: uppercase; }
 /* Our own row. A flat tint rather than a gradient: with border-collapse
    each <td> is its own painting box, so a gradient restarts in every cell
    and bands across the row instead of fading along it. */
@@ -1413,18 +1196,17 @@ pre {
 
 /* --- Matches: team-vs-team totals comparison strip ------------------------ */
 .compare-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
-.compare-team { font-family: var(--font-headline); font-weight: 400; font-size: 1.15rem; text-transform: uppercase; }
+.compare-team { font-family: var(--font-headline); font-weight: 700; font-size: 1.15rem; text-transform: uppercase; }
 .compare-vs { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .team-compare { display: grid; gap: 0.6rem; margin-bottom: 1.15rem; }
 .compare-stat { display: grid; gap: 0.2rem; }
 .compare-label { font-size: 0.72rem; color: var(--muted); text-align: center; }
 .compare-row { display: grid; grid-template-columns: 2.6rem 1fr 2.6rem; align-items: center; gap: 0.65rem; }
-.compare-row .compare-value { font-family: var(--font-headline); font-weight: 400; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.compare-row .compare-value { font-family: var(--font-headline); font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .compare-row .compare-value:first-child { text-align: right; }
 .compare-bar { height: 8px; border-radius: 0; overflow: hidden; display: flex; gap: 2px; background: var(--panel-2); }
 .compare-bar span:first-child { background: var(--series-1); border-radius: 0; }
 .compare-bar span:last-child { background: var(--series-2); border-radius: 0; }
-
 
 /* --- Competition: head-to-head (rivals) table ------------------------------ */
 .rival-bar { display: flex; height: 8px; border-radius: 0; overflow: hidden; width: 96px; background: var(--panel-2); }
@@ -1508,13 +1290,13 @@ pre {
   .pitch { width: 100%; }
   .page { padding: 1.25rem; }
   .site-header { padding: 0.85rem 1.25rem; }
-  .hero-content { padding: 2rem 1.25rem 3rem; }
-  .match-center-inner { padding: 1rem 1.25rem; }
+  
+  
   .mc-matchup { order: 1; width: 100%; justify-content: space-between; }
-  .mc-kicker-label { order: 0; }
+  
   .mc-countdown { order: 2; }
   .mc-cta { order: 3; }
-  .section-band { padding: 1.25rem; }
+  
 }
 
 /* --- Events: sign-ups, squad roster ---------------------------------------- */
@@ -1754,9 +1536,8 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 
 /* --- Squad Moves (staff) --------------------------------------------------
    A picker of real people, so the avatar does the identifying and the name
-   confirms it. Square corners and the amber/green split carry over from the
-   rest of the broadcast system; the skew stays off -- this is a working
-   form, not a lower-third. */
+   confirms it. The amber/green split carries the same meaning here as
+   everywhere else on the site. */
 .roster-disclaimer {
   margin: 0 0 1rem; padding: 0.6rem 0.8rem;
   border-left: 3px solid var(--amber);
@@ -1953,9 +1734,8 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .contract-renew .field { margin-bottom: 0.7rem; }
 
 /* --- Squad Moves on the home page ----------------------------------------
-   Signings and departures as a compact grid of faces. The skew stays off:
-   these sit next to the Transfer Centre band and a dozen skewed tiles
-   would be texture, not signature. */
+   Signings and departures. On the home dashboard they're compact rows in
+   the side column (see the component layer at the end of this file). */
 .move-grid {
   display: grid; gap: 0.6rem;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -2000,7 +1780,6 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .move-pos { font-size: 0.8rem; color: var(--muted); }
 .move-date { font-size: 0.74rem; color: var(--faint); }
 
-
 /* --- Squad Moves panels -----------------------------------------------------
    One picker, three separate jobs. Each panel is its own bordered block
    with its own actions, so a staff appointment is visibly not a variant
@@ -2035,7 +1814,6 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .btn.staff:hover { filter: brightness(1.08); }
 .roster-move-staff_offer:not(.roster-move-declined) { border-left-color: var(--accent-2); }
 .roster-move-staff_offer .roster-move-kind { color: var(--accent-2); }
-
 
 /* --- Squad screen (/squad) ---------------------------------------------------
    Contracts against what EA says happened. Built on the league table's
@@ -2141,3 +1919,238 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .roster-confirm:has(.roster-confirm-gamertag) { align-items: flex-end; }
 .roster-confirm-gamertag { margin: 0; min-width: 14rem; }
 .roster-confirm-gamertag input { padding: 0.4rem 0.6rem; }
+
+/* ===========================================================================
+   Management UI -- components
+
+   Declared last on purpose: these restate the older components
+   in the panel language without rewriting each of them in place.
+   =========================================================================== */
+
+/* The sidebar column is painted the full height of the page, not just the
+   viewport the sticky sidebar occupies. */
+.app-shell {
+  background: linear-gradient(to right,
+    var(--sidebar) calc(var(--sidebar-w) - 1px),
+    var(--border-soft) calc(var(--sidebar-w) - 1px), var(--border-soft) var(--sidebar-w),
+    var(--bg) var(--sidebar-w));
+}
+
+.page-wide { max-width: 1320px; }
+.muted { color: var(--muted); }
+
+/* --- Panels: a title strip over a body ------------------------------------ */
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; min-width: 0;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.55rem 0.9rem; background: var(--panel-2); border-bottom: 1px solid var(--border);
+}
+.panel-head h2 {
+  margin: 0; display: flex; align-items: center; gap: 0.55rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.86rem;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--text);
+}
+/* A small marker carries the panel's meaning: green by default, amber for
+   standing, red only for something on air. */
+.panel-head h2::before { content: ""; width: 3px; height: 0.95em; background: var(--accent); flex: none; }
+.panel-amber h2::before { background: var(--amber); }
+.panel-live h2::before { background: var(--live); }
+.panel-head a { font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.panel-body { padding: 0.9rem; }
+.panel-body > :last-child { margin-bottom: 0; }
+.panel-empty { margin: 0 0 0.6rem; }
+
+/* --- Section titles: the same title strip, without the panel ------------- */
+.section-head {
+  margin: 1.75rem 0 0.75rem; padding: 0 0 0.45rem;
+  align-items: center; border-bottom: 1px solid var(--border);
+}
+.section-head h2 {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.95rem;
+  letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.2; gap: 0.55rem;
+}
+.section-head h2::before { width: 3px; height: 1em; transform: none; }
+.page-head + .section-head, .page-head + * > .section-head:first-child { margin-top: 0.5rem; }
+
+/* --- Cards and the shared surfaces --------------------------------------- */
+/* Radius only: padding stays as each card sets it -- a later padding
+   here would override every card that deliberately has none. */
+.card { border-radius: var(--radius); }
+.card-grid { gap: 0.9rem; }
+.empty-state { padding: 1.75rem 1rem; }
+
+/* The Explore cards on the stats page are <button>s, and inherited the
+   button's dark accent text and tracked capitals -- unreadable on a dark
+   card. Reset them to ordinary content. */
+.explore-card {
+  color: var(--text); font-family: var(--font-body); font-weight: 400;
+  text-transform: none; letter-spacing: 0; min-height: 0; display: block;
+  border-radius: var(--radius); padding: 1rem 1.1rem; background: var(--panel);
+}
+.explore-card:hover { transform: none; filter: none; border-color: var(--accent); }
+.explore-card h4 { color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; font-size: 1rem; }
+
+/* Tables read denser, with condensed column heads. */
+.league-table th, .league-table td { padding: 0.55rem 0.8rem; }
+.league-table thead th { background: var(--panel-2); letter-spacing: 0.1em; }
+.league-table tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
+.lt-name { text-transform: none; font-size: 0.98rem; }
+.league-table .lt-rating { font-size: 1.05rem; }
+
+/* --- Home dashboard ------------------------------------------------------ */
+.home-dash .page-head h1 { font-size: 1.6rem; }
+.dash-top {
+  display: grid; gap: 1rem; margin-bottom: 1rem;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+.dash-grid {
+  display: grid; gap: 1rem; align-items: start;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+.dash-main, .dash-side { display: grid; gap: 1rem; min-width: 0; }
+
+.mc-matchup { justify-content: space-between; gap: 0.75rem; min-width: 0; }
+.mc-team { flex: 1 1 0; min-width: 0; }
+.mc-team:last-child { flex-direction: row-reverse; text-align: right; }
+.mc-team-name { text-transform: none; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-vs { flex: none; }
+.mc-vs-text { font-size: 1.1rem; color: var(--faint); text-transform: uppercase; }
+.crest { width: 40px; height: 40px; border-radius: var(--radius); font-size: 0.85rem; }
+.mc-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--border-soft);
+}
+.cd-box { border-radius: var(--radius); background: var(--panel-2); min-width: 48px; }
+.cd-box span { font-size: 1.25rem; }
+.mc-empty { justify-content: space-between; }
+.mc-empty p { margin: 0; }
+
+/* Standing, as three figures in a row. */
+/* Columns sized to their figures: a record like "111W 16D 58L" is far
+   wider than a win rate, and equal thirds made it run into its neighbour. */
+.standing-band {
+  display: grid; grid-template-columns: auto auto auto; justify-content: space-between;
+  background: none; border: none; margin: 0; overflow: visible;
+}
+.standing-item { padding: 0.15rem 0 0.15rem 1rem; gap: 0.3rem; justify-content: center; }
+.standing-item:first-child { padding-left: 0; }
+.standing-value { font-size: 1.3rem; line-height: 1.05; white-space: nowrap; }
+.standing-value--hero { font-size: 2.4rem; line-height: 1; color: var(--amber); }
+
+/* The lead story, then the rest as a compact list. */
+.lead-story { display: grid; color: var(--text); border-bottom: 1px solid var(--border-soft); }
+.lead-story:hover { text-decoration: none; background: rgba(255, 255, 255, 0.02); }
+.lead-story.has-cover { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); }
+.lead-image { width: 100%; height: 100%; min-height: 190px; max-height: 260px; object-fit: cover; display: block; }
+.lead-body { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.45rem; align-items: flex-start; }
+.lead-body h3 { margin: 0; font-size: 1.35rem; line-height: 1.2; }
+.lead-story:hover h3 { color: var(--accent-text); }
+.lead-body p { margin: 0; color: var(--muted); }
+
+.news-list { list-style: none; margin: 0; padding: 0; }
+.news-list li + li { border-top: 1px solid var(--border-soft); }
+.news-row {
+  display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 0.9rem;
+  color: var(--text); position: relative;
+}
+.news-row:hover { text-decoration: none; background: rgba(255, 255, 255, 0.025); }
+.news-row:hover .news-row-title { color: var(--accent-text); }
+.news-thumb {
+  flex: none; width: 72px; height: 41px; border-radius: 3px; overflow: hidden;
+  background: linear-gradient(135deg, var(--panel-3), var(--panel-2));
+}
+.news-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.news-row-text { display: grid; gap: 0.15rem; min-width: 0; flex: 1; }
+.news-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.news-row .article-meta { display: flex; align-items: center; gap: 0.5rem; }
+/* The engagement badge was built to float over a thumbnail; in a row it
+   sits at the end instead. */
+.news-row .engagement-badge { position: static; flex: none; }
+
+/* Squad moves down the side: one compact row each. */
+.dash-side .move-grid { grid-template-columns: 1fr; gap: 0; margin: 0; }
+.dash-side .move-card {
+  border: none; border-left: 3px solid var(--border); border-radius: 0;
+  border-bottom: 1px solid var(--border-soft); padding: 0.55rem 0.9rem; gap: 0.65rem;
+}
+.dash-side .move-card:last-child { border-bottom: none; }
+.dash-side .move-in { border-left-color: var(--accent); }
+.dash-side .move-out { border-left-color: var(--amber); }
+.dash-side .move-staff { border-left-color: var(--accent-2); }
+.dash-side .move-avatar { width: 34px; height: 34px; font-size: 0.75rem; }
+.dash-side .move-body { flex: 1; }
+.dash-side .move-name { font-size: 0.95rem; }
+.dash-side .move-date { flex: none; font-size: 0.75rem; color: var(--faint); }
+
+.dash-side .band-list { list-style: none; margin: 0; padding: 0; gap: 0; }
+.dash-side .band-row { padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border-soft); }
+.dash-side .band-list li:last-child .band-row { border-bottom: none; }
+.dash-side .band-row:hover { background: rgba(255, 255, 255, 0.025); color: var(--text); }
+
+.connect-band { margin: 0; display: block; background: var(--panel); padding: 0; }
+.connect-band p { margin: 0 0 0.8rem; color: var(--muted); }
+.connect-band-cta { width: 100%; }
+
+/* Category badges: flatter and smaller in a dense layout. */
+.category-badge { border-radius: 3px; }
+
+/* --- Phone and small tablet ---------------------------------------------- */
+@media (max-width: 960px) {
+  .dash-top, .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  .lead-story.has-cover { grid-template-columns: minmax(0, 1fr); }
+  .lead-image { max-height: 220px; }
+}
+
+@media (max-width: 860px) {
+  /* The sidebar folds into a top bar: brand and account on one row, the
+     sections in a scrollable row beneath -- every section stays one tap
+     away, with no menu to open. */
+  .app-shell { grid-template-columns: minmax(0, 1fr); background: var(--bg); }
+  .sidebar {
+    position: static; height: auto; display: grid;
+    grid-template-columns: minmax(0, 1fr) auto; border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .sidebar-top { border-bottom: none; padding: 0.7rem 1rem; }
+  /* Placed explicitly: in the markup the account block comes after the
+     section links, so without this it drops to a row of its own between
+     the sections and the tabs. */
+  .sidebar-top { grid-row: 1; grid-column: 1; }
+  .side-account {
+    grid-row: 1; grid-column: 2;
+    border-top: none; padding: 0.7rem 1rem; display: flex; align-items: center; gap: 0.6rem;
+  }
+  .side-account .account-name, .side-account .staff-pill { display: none; }
+  .side-nav {
+    grid-row: 2; grid-column: 1 / -1; display: flex; gap: 0.25rem; overflow-x: auto;
+    padding: 0 0.6rem 0.5rem; scrollbar-width: none;
+  }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .side-link {
+    flex: none; padding: 0.45rem 0.7rem; border-left: none;
+    border-bottom: 2px solid transparent; border-radius: var(--radius) var(--radius) 0 0;
+    font-size: 0.92rem;
+  }
+  .side-link.active { border-bottom-color: var(--accent); }
+  .side-badge { display: none; }
+
+  .context-bar { padding: 0 1rem; gap: 0.75rem; min-height: 44px; }
+  .context-title { display: none; }
+  .page { padding: 1.1rem 1rem 1.5rem; }
+  .flash-stack { padding: 0 1rem; }
+  .discord-banner { margin: 0.75rem 1rem 0; }
+  .page-head h1 { font-size: 1.5rem; }
+}
+
+@media (max-width: 520px) {
+  .standing-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .standing-item { padding: 0.15rem 0.5rem; }
+  .standing-value { font-size: 1.15rem; }
+  .standing-value--hero { font-size: 1.8rem; }
+  .mc-team-name { font-size: 0.92rem; }
+  .crest { width: 34px; height: 34px; }
+  .news-thumb { display: none; }
+}

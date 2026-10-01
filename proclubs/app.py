@@ -28,6 +28,7 @@ import discord_announce
 import discord_roster
 import discord_rsvp
 import ea_client
+import navigation
 import services
 import squad
 import twitch_client
@@ -244,6 +245,25 @@ def _pop_flash(request: Request) -> list[dict]:
 
 
 templates.env.globals["pop_flash"] = _pop_flash
+# The sidebar and each section's tab bar (see navigation.py and base.html).
+templates.env.globals["nav_visible"] = navigation.visible
+templates.env.globals["nav_locate"] = navigation.locate
+
+
+def _section_shortcut(target: str):
+    def redirect():
+        return RedirectResponse(target, status_code=302)
+    return redirect
+
+
+# /matchday, /club, /media: short addresses for a section, landing on its
+# first tab. 302 rather than 301 -- which tab comes first is a design
+# choice that may change, and a permanent redirect would be cached by
+# browsers long after it did.
+for _section in navigation.SECTIONS:
+    if _section.shortcut:
+        app.add_api_route(_section.shortcut, _section_shortcut(_section.url),
+                          methods=["GET"], include_in_schema=False)
 
 
 def _announce_article(request: Request, session, article) -> None:

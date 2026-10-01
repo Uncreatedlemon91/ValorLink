@@ -681,9 +681,9 @@ def test_home_shows_most_recent_article_as_featured(client):
     # The most recently published article leads as the featured story...
     assert 'href="/news/second-post"' in home.text
     assert home.text.index("second-post") < home.text.index("first-post")
-    # ...linked twice within the hero itself (headline + CTA button), but
-    # not a third time from the "Latest news" rail below it.
-    assert home.text.count('href="/news/second-post"') == 2
+    # ...as one link (the whole lead story is the link), and it isn't
+    # repeated in the news list beneath it.
+    assert home.text.count('href="/news/second-post"') == 1
 
 
 def test_home_shows_engagement_badge_with_like_and_comment_counts(client):
@@ -758,11 +758,9 @@ def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeyp
     # EA's bestDivision is a stale legacy field; no division is shown at all.
     assert "Division" not in home.text
     assert ">9<" not in home.text
-    # The band's glow is tinted with the third-kit accent, not the crest
-    # red. The trim half of that duo went with the best-division marker it
-    # used to outline -- there's no division on the page any more.
-    assert '#6CACDE' in home.text
-    assert '#C91B1B' not in home.text
+    # (The kit-accent glow behind this band went with the broadcast look;
+    # the real crest colour still shows on the next-match panel -- see the
+    # crest test above.)
 
 
 def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatch):
@@ -1255,9 +1253,10 @@ def test_duplicate_streamer_is_rejected(client):
 
 
 def test_nav_says_live_not_streamers(client):
-    home = client.get("/")
-    assert ">Live</a>" in home.text
-    assert ">Streamers</a>" not in home.text
+    # "Live" is a tab in the Media section now, so it's on Media's pages.
+    page = client.get("/clips")
+    assert ">Live</a>" in page.text
+    assert ">Streamers</a>" not in page.text
 
 
 def test_featured_streamer_gets_embedded_player_on_live_page(client):
