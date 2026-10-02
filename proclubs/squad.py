@@ -288,3 +288,16 @@ def summarize(rows: list[dict]) -> dict:
 
 def form_label(form: float | None) -> str:
     return "—" if form is None else f"{form:.1f}"
+
+
+def current_usage() -> dict:
+    """Our club's usage from the stats history, or an empty one when no
+    club is configured."""
+    import config
+    import db
+
+    if not config.CLUB_ID:
+        return {"window": 0, "players": {}}
+    return db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
+                          window=USAGE_WINDOW, form_games=FORM_GAMES,
+                          min_form_apps=MIN_APPS_FOR_FORM)

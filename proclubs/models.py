@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import query_expression
 
 from database import Base
@@ -114,6 +114,25 @@ class Event(Base):
     # events mirrored in from Discord's Events tab get.
     formation = Column(String, nullable=True)
 
+    # --- The match-week loop (see matchweek.py) ---------------------------
+    # The team sheet: picked by staff (EventLineup rows), then published --
+    # posted to Discord and DMed to each player. Unset until then.
+    lineup_published_at = Column(DateTime, nullable=True)
+    lineup_message_id = Column(String, nullable=True)
+    # After the match: the score (prefilled from EA's record of it), what
+    # happened, and clips -- published as the match report.
+    us_score = Column(Integer, nullable=True)
+    opp_score = Column(Integer, nullable=True)
+    review_notes = Column(Text, nullable=True)
+    review_clips = Column(Text, nullable=True)          # one URL per line
+    review_published_at = Column(DateTime, nullable=True)
+    review_published_by = Column(String, nullable=True)
+    # The post-match vote: opened by the notifier after full time (or by
+    # staff), closed when the report is published or the window ends.
+    vote_opened_at = Column(DateTime, nullable=True)
+    vote_closes_at = Column(DateTime, nullable=True)
+    vote_message_id = Column(String, nullable=True)
+
 
 # How a player answers the sign-up question. Deliberately three states, not
 # a yes/no: "maybe" is the honest answer often enough that forcing it into
@@ -165,6 +184,13 @@ class EventSignup(Base):
     attendance = Column(String, nullable=True)                  # see ATTENDANCE_STATUSES
     attendance_marked_by = Column(String, nullable=True)
     attendance_marked_at = Column(DateTime, nullable=True)
+
+    # Where the player would like to play this match, best first -- pitch
+    # positions (discord_roster.PITCH_POSITIONS), not slots, so the coach
+    # sees "Striker, then Winger" rather than one claimed shirt.
+    pref_1 = Column(String, nullable=True)
+    pref_2 = Column(String, nullable=True)
+    pref_3 = Column(String, nullable=True)
 
 
 class EventTierInvite(Base):
@@ -511,3 +537,99 @@ class ClubSetting(Base):
     value = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
     updated_by_name = Column(String, nullable=True)
+
+
+
+# --- The match-week loop ----------------------------------------------------- #
+class AvailabilityPattern(Base):
+    """The nights a player can usually play, set once.
+
+    `days` is seven characters, Monday first: "1" free, "0" not -- e.g.
+    "1010100" is Monday, Wednesday and Friday. Evenings are implied: that's
+    when the club plays.
+    """
+
+    __tablename__ = "availability_patterns"
+
+    discord_id = Column(String, primary_key=True)
+    days = Column(String, nullable=False, default="0000000")
+    note = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class AvailabilityAway(Base):
+    """An exception to the usual pattern: away from these dates, inclusive."""
+
+    __tablename__ = "availability_away"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    starts_on = Column(Date, nullable=False)
+    ends_on = Column(Date, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class EventLineup(Base):
+    """Who staff picked for one slot of one event's team sheet."""
+
+    __tablename__ = "event_lineups"
+    __table_args__ = (UniqueConstraint("event_id", "slot_key", name="uq_lineup_event_slot"),)
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, nullable=False, index=True)
+    slot_key = Column(String, nullable=False)
+    discord_user_id = Column(BigInteger, nullable=False)
+    display_name = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class MatchRating(Base):
+    """One player's ratings for one match: their own, out of ten, and the
+    coach's. The coach's rating and comment are shown to that player and
+    to staff, nobody else."""
+
+    __tablename__ = "match_ratings"
+    __table_args__ = (UniqueConstraint("event_id", "discord_id", name="uq_rating_event_player"),)
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, nullable=False, index=True)
+    discord_id = Column(String, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    self_rating = Column(Integer, nullable=True)
+    coach_rating = Column(Integer, nullable=True)
+    coach_comment = Column(Text, nullable=True)
+    coach_name = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class MotmVote(Base):
+    """One player's Man of the Match vote. One per voter per match; voting
+    again changes it."""
+
+    __tablename__ = "motm_votes"
+    __table_args__ = (UniqueConstraint("event_id", "voter_id", name="uq_motm_event_voter"),)
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, nullable=False, index=True)
+    voter_id = Column(String, nullable=False)
+    nominee_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class Notification(Base):
+    """A message the bot has already sent, so the notifier sends each one
+    once however often it runs. `key` says what it was about, e.g.
+    "remind:12:4031" -- event 12's reminder to that player."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (UniqueConstraint("kind", "key", name="uq_notification_kind_key"),)
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)
+    key = Column(String, nullable=False)
+    sent_at = Column(DateTime, default=_utcnow)
+    ok = Column(Boolean, nullable=False, default=True)
+    detail = Column(String, nullable=True)
+

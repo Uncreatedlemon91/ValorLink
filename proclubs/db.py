@@ -550,6 +550,22 @@ def player_trend(platform, club_id, player_name):
     return [dict(r) for r in rows]
 
 
+def match_player_ratings(club_id, match_ids):
+    """[{match_id, player_name, rating, goals, assists, mom}] for the given
+    matches of our club -- for a match report's "top rated"."""
+    if not match_ids:
+        return []
+    conn = _connect()
+    marks = ",".join("?" * len(match_ids))
+    rows = conn.execute(
+        f"""SELECT match_id, player_name, rating, goals, assists, mom FROM match_players
+            WHERE club_id=? AND match_id IN ({marks})""",
+        [club_id, *match_ids],
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
     """Who has been playing, from the matches recorded for our club.
 

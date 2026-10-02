@@ -259,6 +259,17 @@ ROSTER_ROLE_GRANT_ENABLED = bool(ROSTER_MOVES_ENABLED and ROSTER_SQUAD_ROLE_ID)
 # report "http" even in production; explicit is more reliable than clever.
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "").rstrip("/")
 
+# --- Match-week notifications (see discord_notify.py / notify_poll.py) ------ #
+# Where the team sheet, the post-match vote and the match report go when a
+# fixture has no Discord thread of its own. Falls back to the events
+# channel, then the news channel, so an existing deployment needs nothing.
+MATCHDAY_CHANNEL_ID = (os.getenv("MATCHDAY_CHANNEL_ID", "") or EVENTS_ANNOUNCE_CHANNEL_ID
+                       or NEWS_ANNOUNCE_CHANNEL_ID)
+# Personal messages: your shirt, a reminder to answer, a nudge to set your
+# usual nights. "0" turns DMs off and keeps the channel posts.
+NOTIFY_DMS = os.getenv("NOTIFY_DMS", "1").strip() not in ("0", "false", "no", "")
+NOTIFY_ENABLED = bool(DISCORD_BOT_TOKEN)
+
 # --- Twitch (streamer showcase) -------------------------------------------- #
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")

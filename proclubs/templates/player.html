@@ -51,7 +51,8 @@
               <div class="tile"><span class="tile-value">{{ form_label(usage.form) }}</span><span class="tile-label">Form</span></div>
               <div class="tile"><span class="tile-value">{{ usage.goals }}</span><span class="tile-label">Goals</span></div>
               <div class="tile"><span class="tile-value">{{ usage.assists }}</span><span class="tile-label">Assists</span></div>
-              <div class="tile"><span class="tile-value">{{ usage.mom }}</span><span class="tile-label">MOTM</span></div>
+              <div class="tile"><span class="tile-value">{{ usage.mom }}</span><span class="tile-label">EA MOTM</span></div>
+              <div class="tile"><span class="tile-value">{{ motm_total }}</span><span class="tile-label">Squad's MOTM</span></div>
               <div class="tile"><span class="tile-value">{{ usage.apps_total }}</span><span class="tile-label">Apps</span></div>
             </div>
           {% elif gamertag %}
@@ -88,6 +89,29 @@
           </div>
         {% endif %}
       </section>
+
+      {% if match_ratings %}
+        <section class="panel">
+          <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
+          <div class="table-scroll">
+            <table class="league-table">
+              <thead><tr><th scope="col">Match</th><th scope="col" class="lt-num">Self</th>
+                <th scope="col" class="lt-num">Coach</th><th scope="col">Comment</th></tr></thead>
+              <tbody>
+                {% for m in match_ratings %}
+                  <tr>
+                    <td><a href="/events/{{ m.event.id }}/report">{{ m.event.title }}</a>
+                      <span class="squad-sub">{{ localtime(m.event.scheduled_at, 'date') }}{% if m.event.result %} · {{ m.event.result }}{% endif %}</span></td>
+                    <td class="lt-num">{{ m.rating.self_rating or '—' }}</td>
+                    <td class="lt-num"><span class="lt-rating">{{ m.rating.coach_rating or '—' }}</span></td>
+                    <td class="ts-prefs">{{ m.rating.coach_comment or '' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endif %}
 
       {# --- About: theirs to write ---------------------------------------- #}
       <section class="panel">

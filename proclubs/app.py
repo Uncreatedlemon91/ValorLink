@@ -30,12 +30,17 @@ import db
 import discord_announce
 import discord_roster
 import discord_rsvp
+import discord_notify
 import ea_client
+import matchweek_routes
 import navigation
 import roles
 import services
 import squad
 import twitch_client
+import web
+from web import check_csrf as _check_csrf, ctx as _ctx, flash as _flash, not_found as _not_found
+from web import pop_flash as _pop_flash, safe_redirect as _safe_redirect
 from database import get_session, init_db
 from formations import BENCH_SLOTS, FORMATIONS
 from models import ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_LABELS, SIGNUP_STATUSES, EventSignup
@@ -121,8 +126,9 @@ class _VersionedStatic(StaticFiles):
 
 app.mount("/static", _VersionedStatic(directory=BASE_DIR / "static"), name="static")
 app.include_router(auth.router)
+app.include_router(matchweek_routes.router)
 
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates = web.templates
 
 
 def _asset_version(rel_path: str = "css/site.css") -> str:
@@ -287,30 +293,6 @@ def _on_service_error(request: Request, exc: services.ServiceError):
     )
 
 
-def _ctx(request: Request, **extra) -> dict:
-    user = auth.current_user(request)
-    ctx = {
-        "request": request,
-        "user": user,
-        "is_staff": auth.is_staff(user),
-        "is_member": auth.is_member(user),
-        "is_management": auth.is_management(user),
-        "viewer_level": user["level"] if user else roles.GUEST,
-        "csrf_token": auth.get_csrf_token(request),
-        "DISCORD_INVITE_URL": config.DISCORD_INVITE_URL,
-    }
-    ctx.update(extra)
-    return ctx
-
-
-def _flash(request: Request, text: str, level: str = "ok"):
-    request.session.setdefault("flash", []).append({"level": level, "text": text})
-
-
-def _pop_flash(request: Request) -> list[dict]:
-    return request.session.pop("flash", [])
-
-
 templates.env.globals["pop_flash"] = _pop_flash
 # The sidebar and each section's tab bar (see navigation.py and base.html).
 templates.env.globals["nav_visible"] = navigation.visible
@@ -386,11 +368,6 @@ def _standing_teaser(overall: dict) -> dict:
         "winRate": round(wins / played * 100) if played else None,
         "played": played or None,
     }
-
-
-def _check_csrf(request: Request, token: str):
-    if not auth.verify_csrf(request, token):
-        raise services.ServiceError("Your session expired before that finished submitting. Please try again.")
 
 
 # --------------------------------------------------------------------------- #
@@ -899,6 +876,7 @@ def event_detail(request: Request, event_id: int):
             my_link=my_link, is_past=event.scheduled_at < datetime.utcnow(),
             rsvp_enabled=config.EVENT_RSVP_ENABLED,
             pitch=FORMATIONS.get(event.formation or "", {}), bench_slots=BENCH_SLOTS, **view,
+            **(matchweek_routes.event_page_extras(session, event, user) if user else {}),
         ))
 
 
@@ -1135,6 +1113,9 @@ async def discord_interactions(request: Request):
     # parse an id that isn't theirs.
     if custom_id.startswith(discord_roster.CUSTOM_ID_PREFIX + ":"):
         return _handle_offer_response(custom_id, presser)
+    # The post-match vote and self-rating pickers.
+    if custom_id.startswith((discord_notify.MOTM_PREFIX + ":", discord_notify.SELF_RATE_PREFIX + ":")):
+        return matchweek_routes.handle_picker(custom_id, data.get("values") or [], presser)
 
     try:
         # A position pick and a plain answer arrive through the same
@@ -1844,11 +1825,7 @@ def roster_release_contract(request: Request, contract_id: int,
 # Squad screen: contracts against what EA says actually happened
 # --------------------------------------------------------------------------- #
 def _squad_usage() -> dict:
-    if not config.CLUB_ID:
-        return {"window": 0, "players": {}}
-    return db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
-                          window=squad.USAGE_WINDOW, form_games=squad.FORM_GAMES,
-                          min_form_apps=squad.MIN_APPS_FOR_FORM)
+    return squad.current_usage()
 
 
 def _gamertag_options(history_names) -> list[str]:
@@ -1867,12 +1844,6 @@ def _gamertag_options(history_names) -> list[str]:
         except ea_client.EAApiError:
             pass
     return sorted(names, key=str.casefold)
-
-
-def _safe_redirect(target: str, default: str) -> str:
-    """Only same-site paths -- "//evil.example" is a protocol-relative URL
-    to somewhere else entirely."""
-    return target if target.startswith("/") and not target.startswith("//") else default
 
 
 @app.get("/squad", response_class=HTMLResponse)
@@ -1945,11 +1916,6 @@ def squad_link_gamertag(request: Request, discord_id: str = Form(""),
 RECENT_MATCHES = 10
 
 
-def _not_found(request: Request, message: str):
-    return templates.TemplateResponse(request, "error.html", _ctx(request, message=message),
-                                      status_code=404)
-
-
 def _usage_for(usage: dict, gamertag: str | None) -> dict | None:
     return usage["players"].get(gamertag.casefold()) if gamertag else None
 
@@ -2011,6 +1977,9 @@ def player_page(request: Request, discord_id: str):
         # doesn't read what the other coaches wrote about them.
         notes_visible = is_staff and not is_self
         notes = services.list_coach_notes(session, discord_id) if notes_visible else []
+        # Ratings: the coach's are the player's and the staff's alone.
+        match_ratings = matchweek_routes.mw.ratings_history(session, discord_id) if see_private else []
+        motm_total = matchweek_routes.mw.motm_wins(session).get(discord_id, 0)
     gamertag = link.player_name if link else None
     usage = _squad_usage()
     recent = []
@@ -2025,6 +1994,7 @@ def player_page(request: Request, discord_id: str):
         usage=_usage_for(usage, gamertag), window=usage["window"], recent=recent,
         history=history, moves=moves, attendance=attendance, notes=notes,
         is_self=is_self, see_private=see_private, notes_visible=notes_visible,
+        match_ratings=match_ratings, motm_total=motm_total,
         can_set_role=auth.is_management(user) and not is_self,
         contract_state=services.contract_state(contract, now) if contract else None,
         time_left=services.contract_time_left(contract, now) if contract else None,

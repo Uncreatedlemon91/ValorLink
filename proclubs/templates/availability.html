@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Availability{% endblock %}
+{% block content %}
+{% set marks = {'free': ('✓', 'Free'), 'going': ('✓', 'Going'), 'maybe': ('?', 'Maybe'),
+                'out': ('✕', "Can't make it"), 'away': ('—', 'Away'), 'busy': ('·', 'Not usually'),
+                'unknown': ('', 'No nights set')} %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Availability</h1>
+      <p class="page-lede">Who can play over the next two weeks. Set your usual nights once, and
+        add any dates you're away; a fixture's own answers override both.</p>
+    </div>
+  </div>
+
+  <div class="avail-layout">
+    <section class="panel">
+      <header class="panel-head"><h2>The squad, night by night</h2><span>Next {{ grid.days | length }} days</span></header>
+      {% if grid.rows %}
+        <div class="table-scroll">
+          <table class="avail-grid">
+            <thead>
+              <tr>
+                <th scope="col" class="avail-name">Player</th>
+                {% for d in grid.days %}
+                  {% set evs = grid.events_on.get(d, []) %}
+                  <th scope="col" class="{{ 'has-event' if evs }}{{ ' is-weekend' if d.weekday() >= 5 }}"
+                      {% if evs %}title="{{ evs | map(attribute='title') | join(', ') }}"{% endif %}>
+                    <span class="avail-dow">{{ weekdays[d.weekday()] }}</span>
+                    <span class="avail-date">{{ d.day }}</span>
+                    {% if evs %}<a class="avail-event" href="/events/{{ evs[0].id }}" aria-label="{{ evs[0].title }}">●</a>{% endif %}
+                  </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in grid.rows %}
+                <tr{% if user and r.id == user.id|string %} class="is-me"{% endif %}>
+                  <th scope="row" class="avail-name">
+                    <a href="/players/{{ r.id }}">{{ r.name }}</a>
+                    <span class="avail-sub">{{ r.status or r.club_role or '' }}{% if not r.pattern_set %} · <span class="avail-unset">no nights set</span>{% endif %}</span>
+                  </th>
+                  {% for c in r.cells %}
+                    {% set m = marks[c.state] %}
+                    <td class="avail-cell s-{{ c.state }}" title="{{ m[1] }}"><span aria-hidden="true">{{ m[0] }}</span><span class="visually-hidden">{{ m[1] }}</span></td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row" class="avail-name">Free or going</th>
+                {% for n in grid.counts %}
+                  <td class="avail-count{{ ' is-enough' if n >= 11 }}">{{ n }}</td>
+                {% endfor %}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <ul class="avail-key">
+          {% for state in ['free', 'going', 'maybe', 'out', 'away', 'busy', 'unknown'] %}
+            <li><span class="avail-cell s-{{ state }}">{{ marks[state][0] }}</span>{{ marks[state][1] }}</li>
+          {% endfor %}
+          <li><span class="avail-event">●</span>Fixture that night</li>
+        </ul>
+      {% else %}
+        <div class="panel-body"><p class="muted panel-empty">Nobody is under contract yet.</p></div>
+      {% endif %}
+    </section>
+
+    <div class="avail-side">
+      <section class="panel">
+        <header class="panel-head"><h2>Your usual nights</h2></header>
+        <form method="post" action="/availability/pattern" class="panel-body stack-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <fieldset class="day-picker">
+            <legend class="visually-hidden">Nights you can usually play</legend>
+            {% for d in weekdays %}
+              <label class="day-chip">
+                <input type="checkbox" name="day" value="{{ loop.index0 }}"
+                       {% if pattern and pattern.days[loop.index0] == '1' %}checked{% endif %} />
+                <span>{{ d }}</span>
+              </label>
+            {% endfor %}
+          </fieldset>
+          <div class="field">
+            <label for="avail-note">Note <span class="muted">(optional)</span></label>
+            <input id="avail-note" name="note" maxlength="140" value="{{ pattern.note if pattern and pattern.note else '' }}"
+                   placeholder="e.g. Not before 9pm ET on weekdays" />
+          </div>
+          <div class="form-actions"><button type="submit" class="btn">Save</button></div>
+          {% if not pattern %}<p class="field-hint">Until you set these, the bot asks you every Monday.</p>{% endif %}
+        </form>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head"><h2>Away</h2></header>
+        <div class="panel-body">
+          {% if away %}
+            <ul class="plain-list away-list">
+              {% for a in away %}
+                <li>
+                  <span>{{ a.starts_on.strftime('%a %-d %b') }}{% if a.ends_on != a.starts_on %} – {{ a.ends_on.strftime('%a %-d %b') }}{% endif %}
+                    {% if a.note %}<span class="muted"> · {{ a.note }}</span>{% endif %}</span>
+                  <form method="post" action="/availability/away/{{ a.id }}/delete">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" class="btn-link">Remove</button>
+                  </form>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          <form method="post" action="/availability/away" class="stack-form away-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="field-row">
+              <div class="field"><label for="away-from">From</label>
+                <input id="away-from" type="date" name="starts_on" min="{{ today.isoformat() }}" required /></div>
+              <div class="field"><label for="away-to">To</label>
+                <input id="away-to" type="date" name="ends_on" min="{{ today.isoformat() }}" /></div>
+            </div>
+            <div class="field"><label for="away-note">Note <span class="muted">(optional)</span></label>
+              <input id="away-note" name="note" maxlength="140" placeholder="e.g. Holiday" /></div>
+            <div class="form-actions"><button type="submit" class="btn secondary">Add away dates</button></div>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

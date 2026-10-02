@@ -478,6 +478,56 @@ way of getting an event in, not the only one.
   Discord's own list).
 - Synced events show a "Discord" pill next to the event type badge.
 
+## The match week
+
+One loop each week, for players and coaches alike (`matchweek.py` holds
+the rules, `matchweek_routes.py` the pages, `discord_notify.py` what the
+bot says, `notify_poll.py` when it says it):
+
+1. **Availability** (`/availability`, Matchday tab). Players tick their
+   usual nights once and add any dates they're away. Everyone sees the
+   squad's grid for the next two weeks; a fixture's own answers override
+   the pattern on its night, and the bottom row counts who's free or going.
+2. **Sign-up with positions.** Signing up for a match also asks for your
+   top three pitch positions, best first. Events created in Discord's
+   Events tab now take the Tactics board's formation, so they ask for a
+   position too (upcoming ones without one get it while nobody has
+   answered).
+3. **The team sheet** (`/events/<id>/teamsheet`, staff). Pick the XI and
+   bench from a list that shows each player's answer, preferences, natural
+   positions, form, appearances and whether they're free that night. The
+   shirts players claimed when signing up are filled in to start. Nobody
+   can be picked twice. **Publish** shows it on the event page ("You're
+   starting at LW"), posts it to Discord with each player mentioned, and
+   DMs every player their shirt.
+4. **After the match** (`/events/<id>/report`). Two hours after kick-off
+   the bot opens the vote and posts it: a Man of the Match picker and a
+   self-rating out of ten, answered privately. Only players in the squad
+   (the published sheet, else everyone who went) can vote, never for
+   themselves; votes can be changed until the vote closes, 48 hours later
+   or when the report is published. Coaches write the report: the score
+   (prefilled from EA's record of that night), key moments, clips, and a
+   coach rating and comment per player. **Each player sees their own coach
+   rating, on the report and on their file, and nobody else's.**
+   Publishing closes the vote and posts the report -- score, the
+   player-voted Man of the Match, EA's top ratings that night, and clips.
+
+**Scheduled messages** (`notify_poll.py`, every 10 minutes via
+`proclubs-notify-poll.timer`), each sent once and logged in
+`notifications`:
+
+| When | What |
+|---|---|
+| Mondays from 15:00 UTC | DM to contracted players who've never set their usual nights |
+| The 24 hours before a fixture | DM to contracted players who haven't answered it |
+| Two hours after kick-off | The vote, posted where the match was announced |
+
+Channel posts go in the fixture's own Discord thread when it has one,
+otherwise `MATCHDAY_CHANNEL_ID` (falling back to the events, then the
+news channel). `NOTIFY_DMS=0` turns the DMs off and keeps the posts. A
+player with DMs from server members turned off simply doesn't get one;
+that's counted, never retried in a loop.
+
 ## Clips are Discord-only
 
 `/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual

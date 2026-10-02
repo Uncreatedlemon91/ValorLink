@@ -12,8 +12,10 @@
         {% if event.result %} &middot; <strong>{{ event.result }}</strong>{% endif %}
       </p>
     </div>
+    <div class="head-actions">
+      {% if is_match and is_past %}<a class="btn secondary" href="/events/{{ event.id }}/report">Match report</a>{% endif %}
+      {% if is_staff and is_match %}<a class="btn secondary" href="/events/{{ event.id }}/teamsheet">Team sheet</a>{% endif %}
     {% if is_staff %}
-      <div class="head-actions">
         <a class="btn-ghost" href="/events/{{ event.id }}/edit">Edit</a>
         {% if rsvp_enabled and not event.discord_message_id %}
           <form method="post" action="/events/{{ event.id }}/announce" class="inline-form">
@@ -21,15 +23,23 @@
             <button type="submit">Post to Discord</button>
           </form>
         {% endif %}
-      </div>
     {% endif %}
+    </div>
   </div>
+
+  {% if my_shirt %}
+    {% set shirt = published_sheet | selectattr('key', 'equalto', my_shirt) | first %}
+    <div class="shirt-banner">
+      <span class="kicker">Team sheet</span>
+      <strong>You're {{ ('on the bench (' ~ shirt.label ~ ')') if shirt.bench else ('starting at ' ~ shirt.label) }}.</strong>
+    </div>
+  {% endif %}
 
   {% if event.image %}<img class="event-hero" src="{{ event.image }}" alt="" />{% endif %}
   {% if event.description %}<div class="card event-description">{{ event.description }}</div>{% endif %}
 
   {# ---- Your own sign-up ------------------------------------------------ #}
-  <div class="section-head"><h2>Your answer</h2></div>
+  <div class="section-head" id="your-answer"><h2>Your answer</h2></div>
   {% if not user %}
     <div class="card empty-state">
       <a href="/login">Sign in with Discord</a> to sign up -- or press the buttons on the Discord post.
@@ -37,6 +47,10 @@
   {% elif not is_member %}
     <div class="card empty-state">
       Join <a href="{{ DISCORD_INVITE_URL }}">our Discord</a> to sign up for events.
+    </div>
+  {% elif is_past %}
+    <div class="card empty-state">
+      This one has been played.{% if is_match %} See the <a href="/events/{{ event.id }}/report">match report</a> to vote and rate your game.{% endif %}
     </div>
   {% elif not event.signups_open %}
     <div class="card empty-state">Sign-ups are closed for this event.</div>
@@ -108,6 +122,27 @@
         {% endfor %}
       </form>
     {% endif %}
+    {% if my_signup and my_signup.status != 'out' and is_match %}
+      <form class="card prefs-form" method="post" action="/events/{{ event.id }}/preferences">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <div class="prefs-head">
+          <h3>Where would you like to play?</h3>
+          <p class="field-hint">Best first. The coaches see this when they pick the team sheet.</p>
+        </div>
+        <div class="field-row">
+          {% for i in range(3) %}
+            <div class="field">
+              <label for="pref-{{ i + 1 }}">{{ ['First choice', 'Second', 'Third'][i] }}</label>
+              <select id="pref-{{ i + 1 }}" name="pref_{{ i + 1 }}">
+                <option value="">—</option>
+                {% for pos in pitch_positions %}<option value="{{ pos }}"{% if my_prefs[i] == pos %} selected{% endif %}>{{ pos }}</option>{% endfor %}
+              </select>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions"><button type="submit" class="btn secondary">Save positions</button></div>
+      </form>
+    {% endif %}
     {% if not my_link %}
       {# Without a linked gamertag we can't show this person's position, so
          ask for it right where the consequence is visible. #}
@@ -127,6 +162,24 @@
         <button type="submit">Link</button>
       </form>
     {% endif %}
+  {% endif %}
+
+  {% if published_sheet %}
+    <div class="section-head"><h2>Team sheet</h2></div>
+    <div class="card sheet-list">
+      <ol class="sheet-xi">
+        {% for p in published_sheet if not p.bench %}
+          <li class="{{ 'is-me' if user and p.id == user.id|string }}"><span class="pitch-slot-pos">{{ p.label }}</span><a href="/players/{{ p.id }}">{{ p.name }}</a></li>
+        {% endfor %}
+      </ol>
+      {% set bench = published_sheet | selectattr('bench') | list %}
+      {% if bench %}
+        <p class="kicker kicker-dim">Bench</p>
+        <ol class="sheet-xi sheet-bench">
+          {% for p in bench %}<li class="{{ 'is-me' if user and p.id == user.id|string }}"><span class="pitch-slot-pos">{{ p.label }}</span><a href="/players/{{ p.id }}">{{ p.name }}</a></li>{% endfor %}
+        </ol>
+      {% endif %}
+    </div>
   {% endif %}
 
   {# ---- The roster ------------------------------------------------------ #}

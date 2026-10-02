@@ -5,7 +5,7 @@ Grouped by what people come to do rather than by data source:
 
   Home
   News
-  Matchday   Fixtures & sign-ups · Tactics      -- getting ready for a match
+  Matchday   Fixtures & sign-ups · Availability · Tactics   -- getting ready for a match
   Squad      Players · Overview · Moves & contracts   -- the people
   Club       Stats · League table · Club profile      -- how the club is doing
   Media      Clips · Live                       -- watching
@@ -73,6 +73,7 @@ SECTIONS: tuple[Section, ...] = (
     Section("news", "News", "news", href="/news", prefixes=("/news",)),
     Section("matchday", "Matchday", "matchday", shortcut="/matchday", tabs=(
         Tab("Fixtures & sign-ups", "/events", ("/events",)),
+        Tab("Availability", "/availability", ("/availability",)),
         Tab("Tactics", "/tactics", ("/tactics",)),
     )),
     Section("squad", "Squad", "squad", tabs=(

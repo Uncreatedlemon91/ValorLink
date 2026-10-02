@@ -34,7 +34,7 @@ def _login(client, *, staff):
 # --- The registry ------------------------------------------------------------ #
 def test_the_five_sections_group_what_they_should():
     tabs = {s.key: [t.href for t in s.tabs] for s in navigation.SECTIONS}
-    assert tabs["matchday"] == ["/events", "/tactics"]
+    assert tabs["matchday"] == ["/events", "/availability", "/tactics"]
     assert tabs["club"] == ["/stats", "/league", "/club-profile"]
     assert tabs["media"] == ["/clips", "/streamers"]
     assert tabs["squad"] == ["/players", "/squad", "/roster"]
@@ -83,13 +83,14 @@ def test_squad_tabs_follow_access_level(level, tabs):
     assert [t.href for t in squad.tabs_for(level)] == tabs
 
 
-def test_every_tab_route_exists():
+def test_every_tab_route_exists(client):
     """A tab pointing at a route that was renamed would be a dead link in
-    every page's header."""
-    routes = {getattr(r, "path", None) for r in appmod.app.routes}
+    every page's header. Requested rather than looked up in app.routes:
+    routes from an included router aren't listed there individually."""
+    _login(client, staff=True)
     for s in navigation.SECTIONS:
         for href in [s.url] + [t.href for t in s.tabs]:
-            assert href in routes, href
+            assert client.get(href, follow_redirects=False).status_code == 200, href
 
 
 # --- Rendered -------------------------------------------------------------- #

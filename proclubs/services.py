@@ -859,7 +859,14 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
     Events this function previously created that Discord no longer lists
     as upcoming (canceled, or the event itself deleted) are removed, so a
     canceled Discord event doesn't linger as a fixture on the site.
+
+    New ones take the Tactics board's formation, the same default as the
+    site's own event form, so signing up asks for a position whichever way
+    a fixture was scheduled. Upcoming mirrored events still without one
+    get it too -- but only while nobody has answered, so a sign-up sheet
+    never changes shape under the people already on it.
     """
+    formation = get_active_formation(session)
     seen_ids = set()
     created = updated = 0
     for de in discord_events:
@@ -879,7 +886,7 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
             session.add(Event(
                 discord_event_id=discord_id, title=title, event_type="Match",
                 description=description, scheduled_at=scheduled_at, image=image,
-                created_by_name="Discord sync",
+                created_by_name="Discord sync", formation=formation,
             ))
             created += 1
         else:
@@ -887,6 +894,8 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
             event.description = description
             event.image = image
             event.scheduled_at = scheduled_at
+            if not event.formation and not _has_signups(session, event.id):
+                event.formation = formation
             updated += 1
 
     removed = 0
@@ -901,6 +910,12 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
 
     session.commit()
     return {"created": created, "updated": updated, "removed": removed}
+
+
+def _has_signups(session: Session, event_id: int) -> bool:
+    return session.execute(
+        select(EventSignup.id).where(EventSignup.event_id == event_id).limit(1)
+    ).first() is not None
 
 
 # --- Clips ------------------------------------------------------------------ #

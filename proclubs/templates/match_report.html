@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Match report · {{ event.title }}{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Match report</h1>
+      <p class="page-lede">{{ event.title }}{% if event.opponent %} vs {{ event.opponent }}{% endif %} ·
+        {{ localtime(event.scheduled_at, 'short') }}</p>
+    </div>
+    <div class="head-actions">
+      {% if event.review_published_at %}<span class="contract-status">Published</span>
+      {% elif vote_state == 'open' %}<span class="contract-status">Voting open</span>{% endif %}
+      <a class="btn secondary" href="/events/{{ event.id }}">Back to the event</a>
+    </div>
+  </div>
+
+  {% if not is_match %}
+    <div class="card empty-state">Only matches, scrims and tournaments have a match report.</div>
+  {% elif not is_past %}
+    <div class="card empty-state">The report opens after kick-off. Voting for Man of the Match opens two hours in.</div>
+  {% else %}
+  <div class="dash-grid">
+    <div class="dash-main">
+      {# --- The report, as everyone sees it ---------------------------------- #}
+      <section class="panel report-panel">
+        <header class="panel-head"><h2>Full time</h2>
+          {% if event.review_published_by %}<span>by {{ event.review_published_by }}</span>{% endif %}</header>
+        <div class="panel-body">
+          <div class="report-score">
+            <span class="report-team">{{ SITE_NAME }}</span>
+            <span class="report-figure">{{ event.us_score if event.us_score is not none else '–' }}<span class="report-dash">:</span>{{ event.opp_score if event.opp_score is not none else '–' }}</span>
+            <span class="report-team">{{ event.opponent or 'Opponent' }}</span>
+          </div>
+
+          <div class="report-facts">
+            <div class="report-fact">
+              <span class="kicker kicker-dim">Man of the Match</span>
+              {% if vote_state == 'closed' and result.winners %}
+                <span class="report-motm">{% for w in result.winners %}{{ names.get(w, 'A teammate') }}{% if not loop.last %} &amp; {% endif %}{% endfor %}</span>
+                <span class="muted">{{ result.votes[result.winners[0]] }} of {{ result.total }} votes</span>
+              {% elif vote_state == 'open' %}
+                <span class="muted">Voting open · {{ result.total }} vote{{ 's' if result.total != 1 }} so far</span>
+              {% else %}
+                <span class="muted">{{ 'No votes cast' if vote_state == 'closed' else 'Voting opens two hours after kick-off' }}</span>
+              {% endif %}
+            </div>
+            <div class="report-fact">
+              <span class="kicker kicker-dim">Top rated (EA)</span>
+              {% if top %}
+                <ol class="report-top">{% for name, r in top %}<li>{{ name }} <span class="lt-rating">{{ '%.1f' % r }}</span></li>{% endfor %}</ol>
+              {% else %}<span class="muted">EA hasn't recorded this match night yet.</span>{% endif %}
+            </div>
+          </div>
+
+          {% if event.review_notes %}<div class="report-notes">{{ event.review_notes }}</div>
+          {% elif not can_edit %}<p class="muted">The coaches haven't written up this one yet.</p>{% endif %}
+          {% if clips %}
+            <ul class="plain-list report-clips">{% for c in clips %}<li><a href="{{ c }}" target="_blank" rel="noopener noreferrer">{{ c }}</a></li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+      </section>
+
+      {# --- Coaches: write it up ---------------------------------------------- #}
+      {% if can_edit %}
+        <section class="panel">
+          <header class="panel-head panel-staff"><h2>Write the report</h2><span>Staff</span></header>
+          <form method="post" action="/events/{{ event.id }}/report" class="panel-body stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="field-row">
+              <div class="field"><label for="us">{{ SITE_NAME }}</label>
+                <input id="us" name="us_score" type="number" min="0" max="99" inputmode="numeric"
+                       value="{{ event.us_score if event.us_score is not none else (near[0].us_score if near else '') }}" /></div>
+              <div class="field"><label for="opp">{{ event.opponent or 'Opponent' }}</label>
+                <input id="opp" name="opp_score" type="number" min="0" max="99" inputmode="numeric"
+                       value="{{ event.opp_score if event.opp_score is not none else (near[0].opp_score if near else '') }}" /></div>
+            </div>
+            {% if near %}
+              <p class="field-hint">EA recorded {{ near | length }} match{{ 'es' if near | length != 1 }} that night:
+                {% for m in near %}{{ m.us_score }}–{{ m.opp_score }} vs {{ m.opp_name or '?' }}{% if not loop.last %}; {% endif %}{% endfor %}.
+                The first is filled in.</p>
+            {% endif %}
+            <div class="field"><label for="notes">Key moments</label>
+              <textarea id="notes" name="notes" rows="5" maxlength="3000" placeholder="What decided it, what worked, what to fix.">{{ event.review_notes or '' }}</textarea></div>
+            <div class="field"><label for="clips">Clips <span class="muted">(links, one per line)</span></label>
+              <textarea id="clips" name="clips" rows="2" placeholder="https://…">{{ event.review_clips or '' }}</textarea></div>
+
+            {% if players %}
+              <h3 class="form-subhead">Coach ratings</h3>
+              <p class="field-hint">Each player sees their own rating and comment on their file; nobody else's.</p>
+              <div class="table-scroll">
+                <table class="league-table rating-table">
+                  <thead><tr><th scope="col">Player</th><th scope="col" class="lt-num">Self</th>
+                    <th scope="col">Coach</th><th scope="col">Comment</th></tr></thead>
+                  <tbody>
+                    {% for p in players %}
+                      {% set r = ratings.get(p.id) %}
+                      <tr>
+                        <td class="squad-name">{{ p.name }}</td>
+                        <td class="lt-num">{{ r.self_rating if r and r.self_rating else '—' }}</td>
+                        <td>
+                          <select name="rating__{{ p.id }}" aria-label="Coach rating for {{ p.name }}">
+                            <option value="">—</option>
+                            {% for n in range(10, 0, -1) %}<option value="{{ n }}"{% if r and r.coach_rating == n %} selected{% endif %}>{{ n }}</option>{% endfor %}
+                          </select>
+                        </td>
+                        <td><input name="comment__{{ p.id }}" maxlength="500" value="{{ r.coach_comment if r and r.coach_comment else '' }}"
+                                   aria-label="Comment for {{ p.name }}" placeholder="One line they'll read" /></td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+            <div class="form-actions">
+              <button type="submit" name="action" value="save" class="btn secondary">Save</button>
+              <button type="submit" name="action" value="publish" class="btn">{{ 'Publish again' if event.review_published_at else 'Publish report' }}</button>
+            </div>
+            <p class="field-hint">Publishing closes the vote{% if notify_enabled %} and posts the report to Discord{% endif %}.</p>
+          </form>
+        </section>
+      {% endif %}
+    </div>
+
+    <div class="dash-side">
+      {# --- Your part ----------------------------------------------------- #}
+      {% if is_participant %}
+        <section class="panel">
+          <header class="panel-head"><h2>Your vote</h2></header>
+          <div class="panel-body">
+            {% if vote_state == 'open' %}
+              <form method="post" action="/events/{{ event.id }}/report/mine" class="stack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <div class="field"><label for="nominee">Man of the Match</label>
+                  <select id="nominee" name="nominee_id">
+                    <option value="">Choose a teammate…</option>
+                    {% for p in players if p.id != me %}<option value="{{ p.id }}"{% if my_vote == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+                  </select></div>
+                <div class="field"><label for="self">Rate your own game</label>
+                  <select id="self" name="self_rating">
+                    <option value="">—</option>
+                    {% for n in range(10, 0, -1) %}<option value="{{ n }}"{% if mine and mine.self_rating == n %} selected{% endif %}>{{ n }} — {{ rating_words[n] }}</option>{% endfor %}
+                  </select></div>
+                <div class="form-actions"><button type="submit" class="btn">Submit</button></div>
+                <p class="field-hint">You can change both until voting closes{% if event.vote_closes_at %}, {{ localtime(event.vote_closes_at, 'short') }}{% endif %}.</p>
+              </form>
+            {% elif vote_state == 'not_yet' %}
+              <p class="muted panel-empty">Voting opens two hours after kick-off. The bot posts it in Discord too.</p>
+            {% else %}
+              <p class="muted panel-empty">Voting has closed.{% if my_vote %} You voted for {{ names.get(my_vote, 'a teammate') }}.{% endif %}</p>
+            {% endif %}
+          </div>
+        </section>
+      {% endif %}
+
+      {% if mine and (mine.coach_rating or mine.coach_comment) %}
+        <section class="panel">
+          <header class="panel-head panel-staff"><h2>Your coach rating</h2><span>Only you</span></header>
+          <div class="panel-body">
+            {% if mine.coach_rating %}<p class="report-rating">{{ mine.coach_rating }}<small>/10</small> <span class="muted">{{ rating_words[mine.coach_rating] }}</span></p>{% endif %}
+            {% if mine.coach_comment %}<p>{{ mine.coach_comment }}</p>{% endif %}
+            {% if mine.coach_name %}<p class="field-hint">— {{ mine.coach_name }}</p>{% endif %}
+          </div>
+        </section>
+      {% endif %}
+
+      {% if can_edit %}
+        <section class="panel">
+          <header class="panel-head panel-staff"><h2>The vote</h2><span>Staff</span></header>
+          <div class="panel-body">
+            {% if vote_state == 'not_yet' %}
+              <p class="muted">Opens automatically two hours after kick-off{% if notify_enabled %}, with a post in Discord{% endif %}.</p>
+              <form method="post" action="/events/{{ event.id }}/vote/open">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn secondary btn-sm">Open voting now</button>
+              </form>
+            {% else %}
+              {% if result.votes %}
+                <ul class="plain-list">
+                  {% for uid, n in result.votes | dictsort(by='value', reverse=true) %}<li>{{ names.get(uid, 'Unknown') }} · {{ n }}</li>{% endfor %}
+                </ul>
+              {% else %}<p class="muted panel-empty">No votes yet.</p>{% endif %}
+              <p class="field-hint">{{ 'Open' if vote_state == 'open' else 'Closed' }} · {{ result.total }} of {{ players | length }} voted.</p>
+            {% endif %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Pro Clubs match-week notifications (reminders, votes, nudges)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (DISCORD_BOT_TOKEN, SITE_BASE_URL, and optionally
+# MATCHDAY_CHANNEL_ID / NOTIFY_DMS) -- config.py loads it itself.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 notify_poll.py

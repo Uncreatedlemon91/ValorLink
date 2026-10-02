@@ -502,6 +502,26 @@ def test_sync_discord_events_creates_new_events():
         assert events[0].event_type == "Match"  # sensible default, not from Discord
 
 
+def test_mirrored_events_ask_for_a_position():
+    """They take the Tactics board's formation, like the site's own form."""
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1")])
+        assert services.list_events(session)[0].formation == services.get_active_formation(session)
+
+
+def test_a_formation_is_backfilled_only_while_nobody_has_answered():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
+        first, second = services.list_events(session)
+        first.formation = second.formation = None
+        session.commit()
+        services.set_signup(session, second, discord_user_id=1, discord_name="A",
+                            discord_avatar=None, status="going", source="site")
+        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
+        session.refresh(first); session.refresh(second)
+        assert first.formation and second.formation is None
+
+
 def test_sync_discord_events_sets_cover_image_when_discord_event_has_one():
     with database.get_session() as session:
         services.sync_discord_events(session, [_discord_event("d1", image="somehash")])
