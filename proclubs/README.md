@@ -552,6 +552,27 @@ formation, attendance and Discord thread as a match. On top:
 Sessions get the 24-hour reminder like any fixture, but no team-sheet
 DMs, vote or match report.
 
+## Recognition
+
+`recognition.py`, announced by the bot from `notify_poll.py`:
+
+- **Milestones** -- a debut, 10/25/50/100/200 appearances, a first goal
+  and 10/25/50/100 goals, 10/25/50 assists, 5/10/25 clean sheets (all from
+  EA, through the player's linked gamertag), and 1/5/10/25 Man of the
+  Match awards from the squad's votes. Each is awarded once and posted in
+  the matchday channel with the players mentioned. The first evaluation
+  ever records what players had already reached without posting it --
+  history from before the feature isn't news -- and after that every new
+  one is announced, a club's very first debut included.
+- **Player of the Month** -- most Man of the Match *votes* across the
+  month's matches (so three second places can beat one lucky win); level
+  on votes, more wins takes it; still level, they share it. Awarded and
+  posted from the 1st of the next month.
+- **Leaderboards** on the Players page: form, goals, assists, squad Man of
+  the Match awards and attendance, top five each, with the latest Player
+  of the Month above them.
+- **Honours** on each player file: their milestones and months won.
+
 ## Clips are Discord-only
 
 `/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual

@@ -3036,3 +3036,25 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 .session-review-block { margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--border-soft); }
 .plan-form { padding: 1.2rem; margin-bottom: 1rem; }
 .brief-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 0.9rem; }
+
+/* --- Recognition ------------------------------------------------------------------ */
+.potm-banner {
+  display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin: 0 0 1rem;
+  padding: 1rem 1.2rem; border: 1px solid rgba(var(--accent-rgb), 0.5);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.16), rgba(var(--accent-rgb), 0.02));
+}
+.potm-banner strong { font-size: 1.35rem; font-weight: 500; }
+.board-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+.board-list { margin: 0; padding: 0.4rem 1.2rem 0.8rem 2.4rem; display: grid; gap: 0.3rem; }
+.board-list li { padding: 0.15rem 0; }
+.board-list li a { color: var(--text); }
+.board-list li::marker { color: var(--faint); font-family: var(--font-mono); font-size: 0.8rem; }
+.board-list li:first-child a { font-weight: 600; }
+.board-value { float: right; font-family: var(--font-mono); color: var(--accent-2); }
+.honours { list-style: none; margin: 0; padding: 0.9rem 1.2rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.honour {
+  display: grid; gap: 0.15rem; padding: 0.55rem 0.8rem; border: 1px solid var(--border);
+  border-top: 2px solid var(--accent-2); background: rgba(255, 255, 255, 0.02); font-weight: 500;
+}
+.honour .kicker { font-size: 0.64rem; }
+.honour.is-potm { border-top-color: var(--accent); }

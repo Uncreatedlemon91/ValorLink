@@ -33,6 +33,7 @@ import discord_rsvp
 import discord_notify
 import ea_client
 import matchweek_routes
+import recognition
 import training
 import training_routes
 import navigation
@@ -1947,9 +1948,16 @@ def players_page(request: Request):
         })
     for rows in groups.values():
         rows.sort(key=lambda r: r["contract"].display_name.casefold())
+    with get_session() as session:
+        people = [{"id": c.discord_id, "name": c.display_name} for c in contracts]
+        boards = recognition.leaderboards(
+            people, usage, links, matchweek_routes.mw.motm_wins(session),
+            services.attendance_records_for(session, [int(p["id"]) for p in people if p["id"].isdigit()]))
+        potm = recognition.latest_award(session)
     return templates.TemplateResponse(request, "players.html", _ctx(
         request, staff=staff, groups=groups, window=usage["window"],
-        squad_size=len(contracts), form_label=squad.form_label,
+        squad_size=len(contracts), form_label=squad.form_label, boards=boards,
+        potm=potm, potm_label=recognition.month_label(potm.month) if potm else None,
     ))
 
 
@@ -1987,6 +1995,9 @@ def player_page(request: Request, discord_id: str):
         # Ratings: the coach's are the player's and the staff's alone.
         match_ratings = matchweek_routes.mw.ratings_history(session, discord_id) if see_private else []
         motm_total = matchweek_routes.mw.motm_wins(session).get(discord_id, 0)
+        honours = recognition.milestones_for(session, discord_id)
+        potm_months = [recognition.month_label(a.month)
+                       for a in recognition.months_won(session, discord_id)]
     gamertag = link.player_name if link else None
     usage = _squad_usage()
     recent = []
@@ -2001,7 +2012,8 @@ def player_page(request: Request, discord_id: str):
         usage=_usage_for(usage, gamertag), window=usage["window"], recent=recent,
         history=history, moves=moves, attendance=attendance, notes=notes,
         is_self=is_self, see_private=see_private, notes_visible=notes_visible,
-        match_ratings=match_ratings, motm_total=motm_total,
+        match_ratings=match_ratings, motm_total=motm_total, honours=honours,
+        potm_months=potm_months,
         can_set_role=auth.is_management(user) and not is_self,
         contract_state=services.contract_state(contract, now) if contract else None,
         time_left=services.contract_time_left(contract, now) if contract else None,

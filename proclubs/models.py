@@ -659,3 +659,36 @@ class TrainingSuggestion(Base):
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
+
+
+# --- Recognition (see recognition.py) ------------------------------------------ #
+class Milestone(Base):
+    """A milestone a player has reached -- 25 appearances, first goal, five
+    Man of the Match awards. Awarded once, announced once."""
+
+    __tablename__ = "milestones"
+    __table_args__ = (UniqueConstraint("discord_id", "key", name="uq_milestone_player_key"),)
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    key = Column(String, nullable=False)
+    label = Column(String, nullable=False)
+    achieved_at = Column(DateTime, default=_utcnow)
+    # Unset until the bot has posted it. Milestones found on the very first
+    # run are recorded as already announced: history from before this
+    # feature existed isn't news.
+    announced_at = Column(DateTime, nullable=True)
+
+
+class PlayerOfTheMonth(Base):
+    """The month's award, from the squad's post-match votes. A tie names
+    everyone level (comma-separated Discord IDs)."""
+
+    __tablename__ = "player_of_the_month"
+
+    month = Column(String, primary_key=True)          # "2026-10"
+    discord_ids = Column(String, nullable=False)
+    names = Column(String, nullable=False)
+    votes = Column(Integer, nullable=False, default=0)
+    awarded_at = Column(DateTime, default=_utcnow)
+    announced_at = Column(DateTime, nullable=True)

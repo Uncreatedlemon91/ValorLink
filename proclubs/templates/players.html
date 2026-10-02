@@ -13,6 +13,30 @@
     {% if user %}<a class="btn secondary" href="/players/me">My file</a>{% endif %}
   </div>
 
+  {% if potm %}
+    <div class="potm-banner">
+      <span class="kicker">Player of the Month · {{ potm_label }}</span>
+      <strong>{{ potm.names }}</strong>
+      <span class="muted">{{ potm.votes }} Man of the Match vote{{ 's' if potm.votes != 1 }} from the squad</span>
+    </div>
+  {% endif %}
+
+  {% if boards | selectattr('rows') | list %}
+    <div class="board-grid">
+      {% for b in boards if b.rows %}
+        <section class="panel board">
+          <header class="panel-head"><h2>{{ b.title }}</h2><span>{{ b.unit }}</span></header>
+          <ol class="board-list">
+            {% for r in b.rows %}
+              <li><a href="/players/{{ r.id }}">{{ r.name }}</a>
+                <span class="board-value">{{ ('%.1f' % r.value) if b.title == 'Form' else (r.value ~ ('%' if b.title == 'Turns up' else '')) }}</span></li>
+            {% endfor %}
+          </ol>
+        </section>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   {% if staff %}
     <section class="panel people-panel">
       <header class="panel-head panel-staff"><h2>Staff</h2></header>

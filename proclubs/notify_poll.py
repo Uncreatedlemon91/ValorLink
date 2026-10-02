@@ -10,8 +10,9 @@ Jobs:
   votes          Two hours after kick-off: open the Man of the Match vote
                  and post it where the match was announced.
 
-Later phases add their own (milestones, Player of the Month, development
-goals) by appending to JOBS.
+  milestones     Award milestones newly reached (recognition.py) and post
+                 them together.
+  player_of_the_month   From the 1st: award last month and post it.
 
 Run on a schedule via systemd (deploy/proclubs-notify-poll.service +
 .timer), like the other pollers. Run it manually to test:
@@ -81,10 +82,68 @@ def open_votes(session, now: datetime) -> int:
     return opened
 
 
+def _names(session) -> dict[str, str]:
+    from models import Player
+    from sqlalchemy import select
+    return {p.discord_id: p.display_name for p in session.execute(select(Player)).scalars()}
+
+
+def milestones(session, now: datetime) -> int:
+    """Awards milestones reached since the last run and posts the new ones
+    together. Unposted ones stay unposted until a post succeeds."""
+    import db
+    import recognition
+    import services
+    from models import Player
+    from sqlalchemy import select
+
+    people = [p.discord_id for p in session.execute(select(Player)).scalars()]
+    totals = db.player_totals(config.CLUB_PLATFORM, str(config.CLUB_ID)) if config.CLUB_ID else {}
+    links = services.player_links_for(session, [int(p) for p in people if p.isdigit()])
+    metrics = recognition.player_metrics(totals, links, mw.motm_wins(session), people)
+    recognition.evaluate(session, metrics, now)
+    pending = recognition.unannounced(session)
+    if not pending:
+        return 0
+    names = _names(session)
+    items = [(m.discord_id, names.get(m.discord_id, "A teammate"), m.label) for m in pending]
+    try:
+        discord_notify.post(config.MATCHDAY_CHANNEL_ID, embeds=[discord_notify.milestones_embed(items)],
+                            content=" ".join(f"<@{i}>" for i in {i for i, _, _ in items}),
+                            mention_ids=[i for i, _, _ in items])
+    except discord_notify.DiscordApiError as exc:
+        print(f"milestones: post failed: {exc}")
+        return 0
+    recognition.mark_announced(session, pending, now)
+    return len(pending)
+
+
+def player_of_the_month(session, now: datetime) -> int:
+    """On or after the 1st, awards last month and posts it, once."""
+    import recognition
+
+    award = recognition.award_month(session, recognition.previous_month(now), _names(session), now)
+    if award is None or award.announced_at:
+        return 0
+    ids = award.discord_ids.split(",")
+    try:
+        discord_notify.post(config.MATCHDAY_CHANNEL_ID, content=" ".join(f"<@{i}>" for i in ids),
+                            embeds=[discord_notify.potm_embed(award.names, recognition.month_label(award.month),
+                                                              award.votes)], mention_ids=ids)
+    except discord_notify.DiscordApiError as exc:
+        print(f"player of the month: post failed: {exc}")
+        return 0
+    award.announced_at = now
+    session.commit()
+    return 1
+
+
 JOBS = [
     ("availability", availability_nudges),
     ("reminders", event_reminders),
     ("votes", open_votes),
+    ("milestones", milestones),
+    ("player_of_the_month", player_of_the_month),
 ]
 
 

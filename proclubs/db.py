@@ -550,6 +550,33 @@ def player_trend(platform, club_id, player_name):
     return [dict(r) for r in rows]
 
 
+def player_totals(platform, club_id):
+    """Career totals per player for our club, keyed by casefolded gamertag:
+    {name, apps, goals, assists, mom, clean_sheets} -- what milestones are
+    judged against."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT mp.player_name AS name, COUNT(*) AS apps,
+                  COALESCE(SUM(mp.goals), 0) AS goals, COALESCE(SUM(mp.assists), 0) AS assists,
+                  COALESCE(SUM(mp.mom), 0) AS mom, COALESCE(SUM(mp.clean_sheet), 0) AS clean_sheets
+           FROM match_players mp
+           JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
+           WHERE m.platform=? AND m.club_id=?
+           GROUP BY mp.player_name""",
+        (platform, club_id),
+    ).fetchall()
+    conn.close()
+    totals = {}
+    for r in rows:
+        key = r["name"].casefold()
+        if key in totals:  # same gamertag in different casing
+            for k in ("apps", "goals", "assists", "mom", "clean_sheets"):
+                totals[key][k] += r[k]
+        else:
+            totals[key] = dict(r)
+    return totals
+
+
 def match_player_ratings(club_id, match_ids):
     """[{match_id, player_name, rating, goals, assists, mom}] for the given
     matches of our club -- for a match report's "top rated"."""

@@ -90,6 +90,16 @@
         {% endif %}
       </section>
 
+      {% if honours or potm_months %}
+        <section class="panel">
+          <header class="panel-head"><h2>Honours</h2></header>
+          <ul class="honours">
+            {% for m in potm_months %}<li class="honour is-potm"><span class="kicker">Player of the Month</span>{{ m }}</li>{% endfor %}
+            {% for h in honours %}<li class="honour"><span class="kicker kicker-dim">{{ localtime(h.achieved_at, 'date') }}</span>{{ h.label }}</li>{% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
       {% if match_ratings %}
         <section class="panel">
           <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>

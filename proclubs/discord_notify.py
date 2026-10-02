@@ -191,3 +191,19 @@ def report_embed(event, *, motm_names: list[str], motm_votes: int, top_rated: li
     if event.review_published_by:
         embed["footer"] = {"text": f"Report by {event.review_published_by}"}
     return embed
+
+
+# --------------------------------------------------------------------------- #
+# Recognition
+# --------------------------------------------------------------------------- #
+def milestones_embed(items: list[tuple[str, str, str]]) -> dict:
+    """items: (discord id, name, milestone label)."""
+    lines = [f"**{name}** — {label}" for _, name, label in items]
+    return {"title": "Milestones", "color": _BLUE, "url": _site("/players"),
+            "description": "\n".join(lines)[:4000]}
+
+
+def potm_embed(names: str, month: str, votes: int) -> dict:
+    return {"title": f"Player of the Month — {month}", "color": _RED, "url": _site("/players"),
+            "description": (f"**{names}**, with {votes} Man of the Match vote{'s' if votes != 1 else ''} "
+                            f"from the squad this month.")}
