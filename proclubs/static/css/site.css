@@ -2266,40 +2266,40 @@ a.squad-player:hover .squad-name { color: var(--accent-text); }
 /* ===========================================================================
    Club file theme
 
-   A club's own records office rather than a broadcast: dark olive panels on
-   a floodlit pitch, chalk markings and mown stripes behind everything, a
-   brass-rimmed crest, and two voices of type -- Inter for reading and for
+   A club's own records office rather than a broadcast, in FC Dallas
+   colours: navy panels on a floodlit pitch, chalk markings and mown
+   stripes behind everything, a red-hooped crest, and two voices of type -- Inter for reading and for
    every figure, IBM Plex Mono for the labels ("YFC / SQUAD", table heads,
    chips). Declared last so it restyles every component above without
    rewriting each one in place.
 
    Colour still means one thing each:
-     --accent   khaki   the main action, where you are
-     --accent-2 brass   staff and club roles
+     --accent   red     the main action, where you are
+     --accent-2 blue    staff and club roles
      --amber    orange  needs attention
      --live     red     on air, and destructive actions
    =========================================================================== */
 :root {
-  --bg: #11150F;
-  --sidebar: #0C0F0A;
-  --panel: #161B13;
-  --panel-2: #1C2318;
-  --panel-3: #262F21;
-  --panel-glass: rgba(22, 27, 19, 0.9);
-  --text: #E8EBE0;
-  --muted: #A4AB97;
-  --faint: #767E6A;
-  --border: #323C2B;
-  --border-soft: #232B1E;
-  --border-strong: #4A5641;
+  --bg: #0A1427;
+  --sidebar: #081021;
+  --panel: #0F1B33;
+  --panel-2: #14233F;
+  --panel-3: #1C2D50;
+  --panel-glass: rgba(15, 27, 51, 0.9);
+  --text: #EEF2F8;
+  --muted: #9EAAC0;
+  --faint: #6F7D98;
+  --border: #253A62;
+  --border-soft: #192845;
+  --border-strong: #3A5486;
 
-  --accent: #C2D095;
-  --accent-strong: #C2D095;
-  --accent-text: #CEDBA5;
-  --accent-deep: #8E9E62;
-  --accent-rgb: 194, 208, 149;
-  --on-accent: #141A0F;
-  --accent-2: #D3B572;
+  --accent: #E31937;
+  --accent-strong: #E31937;
+  --accent-text: #FF5E72;
+  --accent-deep: #A90F2B;
+  --accent-rgb: 227, 25, 55;
+  --on-accent: #FFFFFF;
+  --accent-2: #79AEF7;
   --amber: #E39A3B;
   --live: #E5484D;
   --danger-strong: #C4362F;
@@ -2318,11 +2318,11 @@ a.squad-player:hover .squad-name { color: var(--accent-text); }
   --status-good: #9CCB64;
   --status-warning: #E39A3B;
   --status-critical: #E5484D;
-  --status-neutral: #8C9580;
+  --status-neutral: #8592A8;
 }
 
 /* Only the weights loaded are used; no faux bold on the mono labels. */
-html { font-size: 15px; font-synthesis: none; background: #0D110B; }
+html { font-size: 15px; font-synthesis: none; background: #060B17; }
 
 /* The ground: grain over chalk pitch markings over mown stripes, all fixed
    so the pitch stays put while the panels scroll over it. */
@@ -2343,7 +2343,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 /* --- Sidebar ---------------------------------------------------------------- */
 .app-shell { background: none; }
 .sidebar {
-  background: linear-gradient(180deg, rgba(16, 20, 13, 0.97), rgba(10, 13, 8, 0.98));
+  background: linear-gradient(180deg, rgba(9, 17, 34, 0.97), rgba(5, 10, 22, 0.98));
   border-right: 1px solid var(--border);
 }
 .sidebar-top {
@@ -2374,7 +2374,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 }
 .side-link {
   padding: 0.72rem 0.85rem; border-radius: 0; border-left: 2px solid transparent;
-  color: #D3D8C8; font-weight: 400; font-size: 1rem;
+  color: #D6DDE9; font-weight: 400; font-size: 1rem;
 }
 .side-link .icon { color: var(--muted); }
 .side-link:hover { background: rgba(var(--accent-rgb), 0.05); }
@@ -2403,7 +2403,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 .topbar {
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; gap: 1rem; min-height: 62px; padding: 0 2rem;
-  background: rgba(12, 15, 10, 0.86); border-bottom: 1px solid var(--border);
+  background: rgba(6, 12, 26, 0.86); border-bottom: 1px solid var(--border);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .topbar-toggle {
@@ -2429,7 +2429,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 
 .app-main > .tab-bar {
   display: flex; gap: 0.15rem; padding: 0 2rem; overflow-x: auto;
-  background: rgba(12, 15, 10, 0.55); border-bottom: 1px solid var(--border);
+  background: rgba(6, 12, 26, 0.55); border-bottom: 1px solid var(--border);
 }
 .tab {
   padding: 0.95rem 1rem; color: var(--muted);
@@ -2442,7 +2442,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 .page { padding-top: 2rem; }
 .page-head {
   align-items: flex-end; margin-bottom: 1.6rem; padding: 1.5rem 1.6rem 1.6rem;
-  background: rgba(20, 25, 17, 0.88); border: 1px solid var(--border);
+  background: rgba(14, 25, 48, 0.88); border: 1px solid var(--border);
   border-left: 3px solid var(--accent); border-radius: var(--radius);
 }
 .page-head > :first-child::before {
@@ -2486,7 +2486,7 @@ h1, h2, h3 { letter-spacing: -0.015em; }
 
 /* --- Tables -------------------------------------------------------------------- */
 .league-table thead th {
-  background: rgba(12, 15, 10, 0.45); color: var(--faint);
+  background: rgba(6, 12, 26, 0.45); color: var(--faint);
   font-family: var(--font-mono); font-weight: 400; font-size: 0.7rem; letter-spacing: 0.12em;
 }
 .league-table td { border-color: var(--border-soft); }
@@ -2509,7 +2509,7 @@ button, .btn {
 .btn-link { font-family: var(--font-body); }
 #tabs button { font-family: var(--font-body); text-transform: none; letter-spacing: 0; }
 
-input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(--radius); }
+input, select, textarea { background: rgba(5, 10, 22, 0.65); border-radius: var(--radius); }
 .field label {
   font-family: var(--font-body); font-weight: 500; font-size: 0.88rem;
   text-transform: none; letter-spacing: 0; color: var(--muted);
@@ -2539,8 +2539,8 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .tile, .squad-stat {
   display: flex; flex-direction: column; align-items: flex-start; text-align: left;
   gap: 0.55rem; padding: 0.95rem 1.05rem 1.1rem;
-  background: rgba(28, 35, 24, 0.55); border: 1px solid var(--border);
-  border-top: 2px solid #56633F; border-radius: var(--radius);
+  background: rgba(20, 34, 63, 0.55); border: 1px solid var(--border);
+  border-top: 2px solid #C8102E; border-radius: var(--radius);
 }
 .tile-label, .squad-stat-label {
   order: -1; font-family: var(--font-body); font-weight: 400; font-size: 0.88rem;
@@ -2558,14 +2558,14 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .site-footer {
   display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.12em;
-  background: rgba(10, 13, 8, 0.6); border-top: 1px solid var(--border);
+  background: rgba(5, 10, 22, 0.6); border-top: 1px solid var(--border);
 }
 
 /* --- Player file ------------------------------------------------------------------- */
 .file-hero {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.6rem; align-items: center;
   margin-bottom: 1.4rem; padding: 1.6rem;
-  background: linear-gradient(120deg, rgba(36, 46, 30, 0.95), rgba(20, 25, 17, 0.92) 60%);
+  background: linear-gradient(120deg, rgba(22, 40, 80, 0.95), rgba(14, 25, 48, 0.92) 60%);
   border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: var(--radius);
 }
 .file-photo {
@@ -2585,7 +2585,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
   margin: 0; font-weight: 500; font-size: clamp(2.2rem, 4.4vw, 3.6rem);
   line-height: 1; letter-spacing: -0.04em; overflow-wrap: anywhere;
 }
-.file-role { margin: 0; font-size: 1.1rem; color: #D3D8C8; }
+.file-role { margin: 0; font-size: 1.1rem; color: #D6DDE9; }
 .file-role .sep { color: var(--faint); margin: 0 0.45rem; }
 .file-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .file-state { color: var(--text); font-size: 0.95rem; }
@@ -2649,7 +2649,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
     radial-gradient(ellipse at 50% 0%, rgba(var(--accent-rgb), 0.16), transparent 62%),
     url("../img/pitch.svg") center / cover no-repeat,
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 64px, transparent 64px 128px),
-    linear-gradient(180deg, #1D2617, #10150D);
+    linear-gradient(180deg, #122449, #091327);
 }
 .welcome-banner::after {
   content: ""; position: absolute; inset: auto 0 0; height: 3px;
@@ -2674,7 +2674,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
   margin: 0.7rem 0 0.9rem; display: grid; font-weight: 500;
   font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -0.035em;
 }
-.welcome-intro-text p { margin: 0 0 1rem; color: #C4C9B8; font-size: 1.05rem; line-height: 1.65; }
+.welcome-intro-text p { margin: 0 0 1rem; color: #C3CCDC; font-size: 1.05rem; line-height: 1.65; }
 
 .welcome-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 3rem; }
 .link-card {
@@ -2682,14 +2682,14 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
   background: var(--panel-glass); border: 1px solid var(--border); border-radius: var(--radius);
   color: var(--text); transition: border-color 0.15s ease, background 0.15s ease;
 }
-.link-card:hover { text-decoration: none; border-color: var(--accent-deep); background: rgba(34, 43, 28, 0.95); }
+.link-card:hover { text-decoration: none; border-color: var(--accent-deep); background: rgba(22, 37, 70, 0.95); }
 .link-card > .icon { flex: none; color: var(--muted); width: 22px; height: 22px; }
 .link-card > .icon:last-child { margin-left: auto; width: 18px; height: 18px; }
 .link-card-text { display: grid; gap: 0.25rem; min-width: 0; }
 .link-card-text .kicker { font-size: 0.66rem; color: var(--muted); }
 .link-card-title { font-size: 1.15rem; font-weight: 500; }
 .link-card-sub { color: var(--muted); font-size: 0.92rem; }
-.link-card-primary { background: linear-gradient(135deg, rgba(56, 70, 40, 0.95), rgba(28, 35, 22, 0.95)); border-color: #55663E; }
+.link-card-primary { background: linear-gradient(135deg, rgba(126, 13, 35, 0.95), rgba(18, 30, 58, 0.95)); border-color: #B5122F; }
 
 .welcome-section-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
@@ -2703,7 +2703,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .line-card {
   position: relative; display: flex; flex-direction: column; overflow: hidden;
   border: 1px solid var(--border); border-radius: var(--radius);
-  background: linear-gradient(180deg, #1C2617, #10150D);
+  background: linear-gradient(180deg, #122249, #091327);
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 .line-card:hover { border-color: var(--accent-deep); transform: translateY(-2px); }
@@ -2715,16 +2715,16 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .line-card-num { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
 .line-pitch { display: block; width: 100%; height: auto; aspect-ratio: 100 / 140; padding: 2.4rem 1rem 0.4rem; }
 .lp-grass { fill: rgba(255, 255, 255, 0.015); }
-.lp-chalk { fill: none; stroke: rgba(232, 235, 224, 0.2); stroke-width: 0.7; }
+.lp-chalk { fill: none; stroke: rgba(238, 242, 248, 0.2); stroke-width: 0.7; }
 .lp-band { fill: rgba(var(--accent-rgb), 0.1); }
-.lp-dot { fill: rgba(232, 235, 224, 0.22); }
+.lp-dot { fill: rgba(238, 242, 248, 0.22); }
 .lp-dot.mine { fill: var(--accent); stroke: rgba(0, 0, 0, 0.45); stroke-width: 0.8; }
 .lp-dot.mine.open { fill: none; stroke: var(--amber); stroke-width: 1.4; stroke-dasharray: 2.2 1.6; }
 .lp-plan { fill: none; stroke: var(--accent); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
 .lp-x { fill: none; stroke: var(--accent-2); stroke-width: 1.3; stroke-linecap: round; }
 .line-card-body {
   display: grid; gap: 0.3rem; padding: 0.9rem 1rem 1.1rem;
-  background: linear-gradient(180deg, transparent, rgba(8, 10, 7, 0.65));
+  background: linear-gradient(180deg, transparent, rgba(4, 8, 18, 0.65));
 }
 .line-card-body h3 { margin: 0; font-weight: 500; font-size: 1.2rem; }
 .line-card-body p { margin: 0; color: var(--muted); }
@@ -2752,7 +2752,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .ops-figures > div:first-child { padding-left: 0; }
 .ops-value { font-size: 2.1rem; font-weight: 400; color: var(--accent-2); line-height: 1; }
 .ops-label { color: var(--muted); font-size: 0.9rem; }
-.ops-feature { padding: 1.1rem 1.2rem; background: rgba(10, 13, 8, 0.55); border: 1px solid var(--border); }
+.ops-feature { padding: 1.1rem 1.2rem; background: rgba(5, 10, 22, 0.55); border: 1px solid var(--border); }
 .ops-feature-head { display: flex; justify-content: space-between; gap: 1rem; }
 .ops-feature h3 { margin: 0.6rem 0 0.3rem; font-weight: 500; font-size: 1.3rem; }
 .ops-feature p { margin: 0; }
@@ -2762,7 +2762,7 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .meter { height: 6px; background: rgba(255, 255, 255, 0.06); }
 .meter span { display: block; height: 100%; background: var(--accent-2); }
 .meter-quiet span { background: var(--accent); }
-.ops-row p { margin: 0.45rem 0 0; color: #C4C9B8; }
+.ops-row p { margin: 0.45rem 0 0; color: #C3CCDC; }
 .ops-line, .ops-foot {
   display: flex; justify-content: space-between; align-items: center; gap: 1rem;
   padding-top: 1rem; border-top: 1px solid var(--border-soft);
@@ -2830,14 +2830,14 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
 .form-chips .form-chip { width: 24px; height: 24px; font-size: 0.75rem; border-radius: var(--radius); }
 /* The sidebar column is painted the full height of a long page, not just
    the viewport the sticky sidebar covers. */
-.app-shell { background: linear-gradient(to right, #0B0E09 calc(var(--sidebar-w) - 1px), var(--border) calc(var(--sidebar-w) - 1px), var(--border) var(--sidebar-w), transparent var(--sidebar-w)); }
+.app-shell { background: linear-gradient(to right, #060C19 calc(var(--sidebar-w) - 1px), var(--border) calc(var(--sidebar-w) - 1px), var(--border) var(--sidebar-w), transparent var(--sidebar-w)); }
 .nav-collapsed { --sidebar-w: 76px; }
 .nav-collapsed .app-shell { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
 @media (max-width: 860px) {
   .app-shell, .nav-collapsed .app-shell { background: none; grid-template-columns: minmax(0, 1fr); }
 }
 /* Still grass (see .pitch above), but under floodlights: a deeper green
-   that sits with the olive panels instead of glowing beside them. */
+   that sits with the navy panels instead of glowing beside them. */
 .pitch {
   background:
     repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 10%, transparent 10% 20%),
@@ -2845,3 +2845,10 @@ input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(-
     linear-gradient(180deg, #2A5532, #18361F);
   border: 1px solid var(--border-strong);
 }
+
+/* Text on a light fill (a win chip, a "going" sign-up, a staff button) is
+   navy ink; white is only for text on the red. */
+:root { --on-light: #06122A; }
+.form-chip, .badge-good, .signup-btn.is-current.going, .signup-btn.is-current.maybe,
+.btn.staff { color: var(--on-light); }
+.form-chip.L { color: #FFFFFF; }

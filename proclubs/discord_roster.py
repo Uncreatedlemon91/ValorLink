@@ -97,18 +97,16 @@ SQUAD_STATUSES = roles.SQUAD_STATUSES
 CONTRACT_MIN_WEEKS = 1
 CONTRACT_MAX_WEEKS = 52
 
-# Broadcast palette (see static/css/site.css): green for the performance
-# side of the brand, amber for the sober one. A departure is news, not an
-# alarm, so it gets amber rather than the red reserved for destructive
-# actions.
-_OFFER_COLOR = 0x00E27A
+# The site's palette (see static/css/site.css), in FC Dallas colours: club
+# red for a signing, amber for a departure -- news, not an alarm.
+_OFFER_COLOR = 0xE31937
 _RELEASE_COLOR = 0xFFB020
 # A declined offer is neither good news nor bad news; it's closed. Grey
-# rather than red, which on this site means "on air" and nothing else.
+# rather than red, which is the club's colour for a signing.
 _DECLINED_COLOR = 0x8A93A5
-# Staff appointments get the palette's secondary accent, so a new coach
-# never reads as a new signing at a glance in the channel.
-_STAFF_COLOR = 0x6E8CFF
+# Staff appointments get the palette's blue, so a new coach never reads
+# as a new signing at a glance in the channel.
+_STAFF_COLOR = 0x79AEF7
 
 # How the player answers their own offer. Persisted on RosterMove.response
 # and parsed back out of a button's custom_id, so the two must agree.

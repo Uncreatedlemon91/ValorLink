@@ -44,8 +44,9 @@ if a tab points at a route that doesn't exist.
 
 ## The design system
 
-The site is styled as the **club's own records office**: dark olive panels
-over a floodlit pitch, a brass-rimmed crest, and every page a "file" with
+The site is styled as the **club's own records office**, in **FC Dallas
+colours** (red, navy, white): navy panels over a floodlit pitch, a
+red-hooped crest, and every page a "file" with
 a short code above its title (`YFC / FIXTURES & SIGN-UPS`). The layout is
 still a management tool -- a sidebar of sections, a strip of tabs, panels
 and compact tables -- built to be scanned before a match rather than to
@@ -72,8 +73,9 @@ anything:
   from the current section and tab, and `.page-head` draws it above the
   title, so no template repeats it. `.kicker` is the same style for
   anywhere else.
-- **The crest** is an inline SVG macro (`templates/_crest.html`) with the
-  club's initials, so it needs no artwork and scales from the sidebar to
+- **The crest** is an inline SVG macro (`templates/_crest.html`): a
+  silver-rimmed navy shield with red hoops, a red chief with three stars,
+  a ball and the club's initials -- FC Dallas's colours, not its badge -- so it needs no artwork and scales from the sidebar to
   the splash page. Replace the macro's body to use a real badge.
 - **The shell.** A sidebar (crest, motto, sections, your account) that
   collapses to icons with the button in the top bar (remembered per
