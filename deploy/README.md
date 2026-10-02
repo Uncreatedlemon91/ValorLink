@@ -13,6 +13,7 @@ feature runs over REST and a signed interactions webhook.
 | `proclubs-clips-poll.*` | Discord video posts → Clips page, every 30 min |
 | `proclubs-reactions-poll.*` | reaction counts on article announcements, every 30 min |
 | `proclubs-event-invites-poll.*` | staged event-thread invites, every 10 min |
+| `proclubs-notify-poll.*` | match-week messages every 10 min: reminders, the post-match vote, availability nudges, milestones, Player of the Month |
 | `Caddyfile` | reverse proxy + automatic HTTPS |
 | `install.sh` | copies the units in, enables and starts them |
 | `backup.sh` / `restore.sh` | database snapshot and restore |

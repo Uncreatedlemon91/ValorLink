@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Set pieces{% endblock %}
+{% block content %}
+{% macro piece_form(piece=None) %}
+  <form method="post" action="/set-pieces{{ '/' ~ piece.id if piece else '' }}" class="stack-form piece-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="field-row">
+      <div class="field"><label>Name</label><input name="name" aria-label="Routine name" maxlength="60" required value="{{ piece.name if piece else '' }}" placeholder="e.g. Near-post flick" /></div>
+      <div class="field"><label>Kind</label>
+        <select name="kind" aria-label="Kind">{% for k in kinds %}<option{% if piece and piece.kind == k %} selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Side</label>
+        <select name="side" aria-label="Side"><option value="">—</option>{% for s in sides %}<option{% if piece and piece.side == s %} selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Taker</label>
+        <select name="taker_id" aria-label="Taker"><option value="">—</option>{% for p in people %}<option value="{{ p.id }}"{% if piece and piece.taker_id == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field"><label>The routine</label>
+      <textarea name="routine" aria-label="The routine" rows="3" maxlength="1500" placeholder="Who goes where, the signal, the delivery.">{{ piece.routine if piece and piece.routine else '' }}</textarea></div>
+    <div class="field"><label>Targets <span class="muted">(optional)</span></label>
+      <input name="targets" aria-label="Targets" maxlength="200" value="{{ piece.targets if piece and piece.targets else '' }}" placeholder="e.g. CB1 near post, ST far post" /></div>
+    <div class="form-actions"><button type="submit" class="btn staff btn-sm">{{ 'Save' if piece else 'Add routine' }}</button></div>
+  </form>
+{% endmacro %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Set pieces</h1>
+      <p class="page-lede">The club's routines: who takes them, what happens, and where everyone goes.</p>
+    </div>
+  </div>
+
+  {% if not total %}
+    <div class="card empty-state">No routines yet.{% if is_staff %} Add the first one below.{% endif %}</div>
+  {% endif %}
+
+  {% for kind in kinds if book[kind] %}
+    <div class="section-head"><h2>{{ kind }}s</h2></div>
+    <div class="piece-grid">
+      {% for piece in book[kind] %}
+        <article class="panel piece">
+          <header class="panel-head"><h2>{{ piece.name }}</h2>{% if piece.side %}<span>{{ piece.side }}</span>{% endif %}</header>
+          <div class="panel-body">
+            <p class="piece-taker"><span class="kicker kicker-dim">Taker</span> {% if piece.taker_id %}<a href="/players/{{ piece.taker_id }}">{{ piece.taker_name }}</a>{% else %}—{% endif %}</p>
+            {% if piece.routine %}<p class="piece-routine">{{ piece.routine }}</p>{% endif %}
+            {% if piece.targets %}<p class="piece-targets"><span class="kicker kicker-dim">Targets</span> {{ piece.targets }}</p>{% endif %}
+            {% if is_staff %}
+              <details class="piece-edit"><summary>Edit</summary>
+                {{ piece_form(piece) }}
+                <form method="post" action="/set-pieces/{{ piece.id }}/delete" onsubmit="return confirm('Delete this routine?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                  <button type="submit" class="btn-link">Delete routine</button>
+                </form>
+              </details>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% endfor %}
+
+  {% if is_staff %}
+    <section class="panel piece-new">
+      <header class="panel-head panel-staff"><h2>Add a routine</h2></header>
+      <div class="panel-body">{{ piece_form() }}</div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

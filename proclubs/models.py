@@ -731,3 +731,56 @@ class DevReview(Base):
     by_name = Column(String, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+# --- Staff tools: recruitment and set pieces ---------------------------------------- #
+class Prospect(Base):
+    """Somebody the club is looking at: Prospect -> Trial -> Offered ->
+    Signed (or Not for us). Staff only."""
+
+    __tablename__ = "prospects"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    discord_id = Column(String, nullable=True, index=True)
+    gamertag = Column(String, nullable=True)
+    position = Column(String, nullable=True)
+    secondary_position = Column(String, nullable=True)
+    stage = Column(String, nullable=False, default="prospect")   # see recruitment.STAGES
+    source = Column(String, nullable=True)
+    added_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class ProspectNote(Base):
+    """An assessment: from a trial match (event_id), or general."""
+
+    __tablename__ = "prospect_notes"
+
+    id = Column(Integer, primary_key=True)
+    prospect_id = Column(Integer, nullable=False, index=True)
+    event_id = Column(Integer, nullable=True)
+    rating = Column(Integer, nullable=True)
+    body = Column(Text, nullable=False)
+    author = Column(String, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class SetPiece(Base):
+    """One routine in the set-piece book."""
+
+    __tablename__ = "set_pieces"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False)          # see setpieces.KINDS
+    side = Column(String, nullable=True)
+    taker_id = Column(String, nullable=True)
+    taker_name = Column(String, nullable=True)
+    routine = Column(Text, nullable=True)
+    targets = Column(String, nullable=True)
+    position = Column(Integer, nullable=False, default=0)
+    updated_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

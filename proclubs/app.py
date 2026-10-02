@@ -36,6 +36,8 @@ import matchweek_routes
 import development
 import development_routes
 import recognition
+import staff_routes
+import staff_tools
 import training
 import training_routes
 import navigation
@@ -134,6 +136,7 @@ app.include_router(auth.router)
 app.include_router(matchweek_routes.router)
 app.include_router(training_routes.router)
 app.include_router(development_routes.router)
+app.include_router(staff_routes.router)
 
 templates = web.templates
 
@@ -475,6 +478,9 @@ def home(request: Request):
             s for s in streamers if s.twitch_login in live and (not featured_streamer or s.id != featured_streamer.id)
         ]
         stats_teaser, crest_colors = _club_standing()
+        user = auth.current_user(request)
+        inbox = (staff_tools.action_items(session, management=auth.is_management(user))
+                 if auth.is_staff(user) else None)
         return templates.TemplateResponse(request, "home.html", _ctx(
             request,
             featured=featured,
@@ -491,6 +497,7 @@ def home(request: Request):
             crest_colors=crest_colors,
             like_counts=like_counts,
             comment_counts=comment_counts,
+            inbox=inbox,
         ))
 
 

@@ -24,8 +24,8 @@ URLs and the tests all read that one list:
 |---|---|---|
 | Home | -- | `/` |
 | News | -- | `/news` |
-| Matchday | Fixtures & sign-ups (`/events`) · Tactics (`/tactics`) | `/matchday` |
-| Squad | Players (`/players`) · Overview (`/squad`, staff) · Moves & contracts (`/roster`, management) | -- |
+| Matchday | Fixtures & sign-ups (`/events`) · Training (`/training`) · Availability (`/availability`) · Tactics (`/tactics`) · Set pieces (`/set-pieces`) | `/matchday` |
+| Squad | Players (`/players`) · Overview (`/squad`, staff) · Planner (`/squad/planner`, staff) · Recruitment (`/recruitment`, staff) · Moves & contracts (`/roster`, management) | -- |
 | Club | Stats (`/stats`) · League table (`/league`) · Club profile (`/club-profile`, management) | `/club` |
 | Media | Clips (`/clips`) · Live (`/streamers`) | `/media` |
 
@@ -586,6 +586,35 @@ player's development they're meant to see and work on:
   mark it achieved or drop it, and can reopen it.
 - **Monthly reviews.** A short write-up of a one-to-one, against the
   goals. One per player per month; saving again replaces it.
+
+## Staff tools
+
+`staff_tools.py`, `recruitment.py`, `setpieces.py`, pages in
+`staff_routes.py`:
+
+- **Action inbox** -- "Needs a decision" at the top of the dashboard's
+  side column, for staff. Worked out from the data each time, so it
+  can't go stale: contracts run out or running out and accepted offers
+  waiting to be confirmed (management only), matches in the next 72
+  hours without a team sheet, players who haven't answered a fixture in
+  the next 48 hours, last week's matches without a report, players with
+  no gamertag linked or no usual nights set, unanswered training
+  suggestions, and players with no development goal. Orange items need
+  doing soon; grey ones are housekeeping. Each links to where it's done.
+- **Squad planner** (`/squad/planner`) -- a what-if: change statuses,
+  release players, add up to four signings you're considering, and see
+  the status balance, whether the starters alone can field the
+  formation, and the depth chart that would leave. It saves nothing;
+  contracts still change through offers and renewals.
+- **Recruitment** (`/recruitment`) -- the trials pipeline: Prospect, On
+  trial, Offered, Signed, Not for us. Each prospect has a file of notes
+  with an optional rating out of ten, tied to the match or session they
+  trialled in (a note from a match moves a prospect to "On trial"), and
+  an average. Offers themselves still go out from Moves & contracts.
+- **Set pieces** (`/set-pieces`, Matchday tab) -- the club's routines by
+  kind (corner, free kick, penalty, throw-in, kick-off): name, side,
+  taker, the routine and its targets. Every member reads it; staff write
+  it.
 
 ## Clips are Discord-only
 

@@ -34,10 +34,10 @@ def _login(client, *, staff):
 # --- The registry ------------------------------------------------------------ #
 def test_the_five_sections_group_what_they_should():
     tabs = {s.key: [t.href for t in s.tabs] for s in navigation.SECTIONS}
-    assert tabs["matchday"] == ["/events", "/training", "/availability", "/tactics"]
+    assert tabs["matchday"] == ["/events", "/training", "/availability", "/tactics", "/set-pieces"]
     assert tabs["club"] == ["/stats", "/league", "/club-profile"]
     assert tabs["media"] == ["/clips", "/streamers"]
-    assert tabs["squad"] == ["/players", "/squad", "/roster"]
+    assert tabs["squad"] == ["/players", "/squad", "/squad/planner", "/recruitment", "/roster"]
 
 
 @pytest.mark.parametrize("path, section, tab", [
@@ -55,6 +55,9 @@ def test_the_five_sections_group_what_they_should():
     ("/players", "squad", "/players"),
     ("/players/42", "squad", "/players"),
     ("/squad", "squad", "/squad"),
+    ("/squad/planner", "squad", "/squad/planner"),
+    ("/recruitment/3", "squad", "/recruitment"),
+    ("/set-pieces", "matchday", "/set-pieces"),
     ("/roster", "squad", "/roster"),
 ])
 def test_every_page_belongs_to_its_section_and_tab(path, section, tab):
@@ -75,8 +78,8 @@ def test_guests_see_only_home_in_the_sidebar():
 
 @pytest.mark.parametrize("level, tabs", [
     (roles.MEMBER, ["/players"]),
-    (roles.STAFF, ["/players", "/squad"]),
-    (roles.MANAGEMENT, ["/players", "/squad", "/roster"]),
+    (roles.STAFF, ["/players", "/squad", "/squad/planner", "/recruitment"]),
+    (roles.MANAGEMENT, ["/players", "/squad", "/squad/planner", "/recruitment", "/roster"]),
 ])
 def test_squad_tabs_follow_access_level(level, tabs):
     squad = next(s for s in navigation.SECTIONS if s.key == "squad")

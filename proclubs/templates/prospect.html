@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }} · Recruitment{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>{{ p.name }}</h1>
+      <p class="page-lede">{{ p.position or 'Position not set' }}{% if p.secondary_position %} / {{ p.secondary_position }}{% endif %}
+        {% if p.gamertag %} · {{ p.gamertag }}{% endif %}{% if p.source %} · {{ p.source }}{% endif %}</p>
+    </div>
+    <div class="head-actions">
+      <span class="contract-status">{{ labels[p.stage] }}</span>
+      <a class="btn secondary" href="/recruitment">Back to the pipeline</a>
+    </div>
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-main">
+      <section class="panel">
+        <header class="panel-head"><h2>Trial notes</h2>{% if avg %}<span>Average {{ avg }}/10</span>{% endif %}</header>
+        <div class="panel-body">
+          <form method="post" action="/recruitment/{{ p.id }}/notes" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="field-row">
+              <div class="field"><label for="pn-event">From</label>
+                <select id="pn-event" name="event_id"><option value="">General note</option>
+                  {% for m in matches %}<option value="{{ m.id }}">{{ m.title }} · {{ m.scheduled_at.strftime('%a %-d %b') }}</option>{% endfor %}
+                </select></div>
+              <div class="field"><label for="pn-rating">Rating <span class="muted">(optional)</span></label>
+                <select id="pn-rating" name="rating"><option value="">—</option>{% for n in range(10, 0, -1) %}<option>{{ n }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="field"><label for="pn-body">Note</label>
+              <textarea id="pn-body" name="body" rows="3" maxlength="2000" required placeholder="What they did well, what worried you."></textarea></div>
+            <div class="form-actions"><button type="submit" class="btn staff">Add note</button></div>
+            <p class="field-hint">A note from a match moves a prospect to "On trial".</p>
+          </form>
+          {% if notes %}
+            <ul class="note-list">
+              {% for n, ev in notes %}
+                <li class="note">
+                  <p>{% if n.rating %}<strong>{{ n.rating }}/10</strong> · {% endif %}{{ n.body }}</p>
+                  <div class="note-meta"><span>{{ n.author }} · {{ localtime(n.created_at, 'date') }}{% if ev %} · <a href="/events/{{ ev.id }}">{{ ev.title }}</a>{% endif %}</span></div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+    <div class="dash-side">
+      <section class="panel">
+        <header class="panel-head panel-staff"><h2>Stage</h2></header>
+        <form method="post" action="/recruitment/{{ p.id }}/stage" class="panel-body stage-buttons">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          {% for s in stages %}
+            <button type="submit" name="stage" value="{{ s }}" class="btn {{ 'staff' if s == p.stage else 'secondary' }} btn-sm"{% if s == p.stage %} aria-pressed="true"{% endif %}>{{ labels[s] }}</button>
+          {% endfor %}
+        </form>
+        {% if is_management and p.stage in ('trial', 'offered') %}
+          <div class="panel-body"><p class="field-hint">Ready to offer? Send a contract from <a href="/roster">Moves &amp; contracts</a> — pick them from the Discord member list there.</p></div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

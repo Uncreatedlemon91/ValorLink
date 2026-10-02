@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Recruitment{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Recruitment</h1>
+      <p class="page-lede">Prospect → trial → offer. Notes from each trial build up on the prospect's file.
+        Staff only.</p>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    {% for stage in stages %}
+      <section class="panel pipeline-col stage-{{ stage }}">
+        <header class="panel-head"><h2>{{ labels[stage] }}</h2><span>{{ board[stage] | length }}</span></header>
+        <ul class="pipeline-list">
+          {% for p in board[stage] %}
+            <li><a href="/recruitment/{{ p.id }}">
+              <span class="squad-name">{{ p.name }}</span>
+              <span class="squad-sub">{{ p.position or 'Position not set' }}{% if p.secondary_position %} / {{ p.secondary_position }}{% endif %}</span>
+            </a></li>
+          {% else %}
+            <li class="muted pipeline-empty">—</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  </div>
+
+  <section class="panel">
+    <header class="panel-head panel-staff"><h2>Add a prospect</h2></header>
+    <form method="post" action="/recruitment" class="panel-body stack-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <div class="field-row">
+        <div class="field"><label for="pr-name">Name</label><input id="pr-name" name="name" maxlength="60" required /></div>
+        <div class="field"><label for="pr-gt">Gamertag <span class="muted">(optional)</span></label><input id="pr-gt" name="gamertag" maxlength="64" /></div>
+        <div class="field"><label for="pr-did">Discord ID <span class="muted">(optional)</span></label><input id="pr-did" name="discord_id" inputmode="numeric" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="pr-pos">Position</label>
+          <select id="pr-pos" name="position"><option value="">—</option>{% for p in positions %}<option>{{ p }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="pr-sec">Also plays</label>
+          <select id="pr-sec" name="secondary"><option value="">—</option>{% for p in positions %}<option>{{ p }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="pr-src">Where from <span class="muted">(optional)</span></label><input id="pr-src" name="source" maxlength="120" placeholder="e.g. LFG post, a friend of Bo's" /></div>
+      </div>
+      <div class="form-actions"><button type="submit" class="btn staff">Add to the pipeline</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

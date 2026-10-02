@@ -76,10 +76,13 @@ SECTIONS: tuple[Section, ...] = (
         Tab("Training", "/training", ("/training",)),
         Tab("Availability", "/availability", ("/availability",)),
         Tab("Tactics", "/tactics", ("/tactics",)),
+        Tab("Set pieces", "/set-pieces", ("/set-pieces",)),
     )),
     Section("squad", "Squad", "squad", tabs=(
         Tab("Players", "/players", ("/players",)),
         Tab("Overview", "/squad", ("/squad",), level=roles.STAFF),
+        Tab("Planner", "/squad/planner", ("/squad/planner",), level=roles.STAFF),
+        Tab("Recruitment", "/recruitment", ("/recruitment",), level=roles.STAFF),
         Tab("Moves & contracts", "/roster", ("/roster",), level=roles.MANAGEMENT),
     )),
     Section("club", "Club", "club", shortcut="/club", tabs=(
@@ -105,13 +108,19 @@ def _matches(path: str, prefix: str) -> bool:
 def locate(path: str) -> tuple[Section | None, Tab | None]:
     """The section and tab a path belongs to, or (None, None) for pages
     outside every section (sign-in, errors)."""
+    # The longest matching prefix wins, so /squad/planner is the Planner
+    # tab rather than the Overview tab that /squad also covers.
+    best, best_len = (None, None), -1
     for section in SECTIONS:
         for tab in section.tabs:
-            if any(_matches(path, p) for p in tab.prefixes):
-                return section, tab
-        if section.href and any(_matches(path, p) for p in (section.href, *section.prefixes)):
-            return section, None
-    return None, None
+            for p in tab.prefixes:
+                if _matches(path, p) and len(p) > best_len:
+                    best, best_len = (section, tab), len(p)
+        if section.href:
+            for p in (section.href, *section.prefixes):
+                if _matches(path, p) and len(p) > best_len:
+                    best, best_len = (section, None), len(p)
+    return best
 
 
 def visible(level: int) -> tuple[Section, ...]:

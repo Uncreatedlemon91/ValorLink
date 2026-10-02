@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Squad planner{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Squad planner</h1>
+      <p class="page-lede">What if? Change statuses, release players, add the signings you're considering,
+        and see the depth that would leave in the {{ formation }}. Nothing here is saved or announced.</p>
+    </div>
+    {% if is_what_if %}<a class="btn secondary" href="/squad/planner">Reset to the real squad</a>{% endif %}
+  </div>
+
+  <div class="ts-layout planner-layout">
+    <form method="get" action="/squad/planner" class="panel">
+      <header class="panel-head"><h2>The squad</h2><span>{{ contracts | length }} under contract</span></header>
+      <div class="table-scroll">
+        <table class="league-table">
+          <thead><tr><th scope="col">Player</th><th scope="col">Plays</th><th scope="col">Status</th></tr></thead>
+          <tbody>
+            {% for c in contracts %}
+              {% set planned = changes.get(c.discord_id) or c.squad_status %}
+              <tr class="{{ 'is-changed' if c.discord_id in changes }}{{ ' is-released' if planned == 'Release' }}">
+                <td class="squad-name">{{ c.display_name }}</td>
+                <td class="ts-prefs">{{ c.position or '—' }}{% if c.secondary_position %} / {{ c.secondary_position }}{% endif %}</td>
+                <td>
+                  <select name="status__{{ c.discord_id }}" aria-label="Planned status for {{ c.display_name }}">
+                    {% for st in statuses %}<option value="{{ st }}"{% if planned == st %} selected{% endif %}>{{ st }}{% if st == c.squad_status %} (now){% endif %}</option>{% endfor %}
+                  </select>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="muted">Nobody is under contract yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-body">
+        <h3 class="form-subhead">Signings you're considering</h3>
+        {% for i in range(max_signings) %}
+          {% set s = signings[i] if i < signings | length else {} %}
+          <div class="planner-signing">
+            <input name="new_name__{{ i }}" maxlength="40" value="{{ s.name or '' }}" placeholder="Name" aria-label="Signing {{ i + 1 }} name" />
+            <select name="new_position__{{ i }}" aria-label="Signing {{ i + 1 }} position">
+              <option value="">Position…</option>
+              {% for p in positions %}<option value="{{ p }}"{% if s.position == p %} selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+            <select name="new_secondary__{{ i }}" aria-label="Signing {{ i + 1 }} secondary position">
+              <option value="">Also plays…</option>
+              {% for p in positions %}<option value="{{ p }}"{% if s.secondary == p %} selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+            <select name="new_status__{{ i }}" aria-label="Signing {{ i + 1 }} status">
+              {% for st in squad_statuses %}<option value="{{ st }}"{% if (s.status or 'Rotation') == st %} selected{% endif %}>{{ st }}</option>{% endfor %}
+            </select>
+          </div>
+        {% endfor %}
+        {% if prospects %}
+          <p class="field-hint">On trial or offered: {% for p in prospects %}<a href="/recruitment/{{ p.id }}">{{ p.name }}</a> ({{ p.position }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>
+        {% endif %}
+        <div class="form-actions"><button type="submit" class="btn">Show the effect</button></div>
+      </div>
+    </form>
+
+    <div class="planner-results">
+      <section class="panel">
+        <header class="panel-head"><h2>{{ 'With your changes' if is_what_if else 'As things stand' }}</h2><span>{{ plan.size }} players</span></header>
+        <div class="panel-body">
+          <div class="tile-row">
+            {% for st in squad_statuses %}
+              <div class="tile"><span class="tile-label">{{ {'Starter': 'Starters', 'Rotation': 'Rotation', 'Substitute': 'Substitutes'}[st] }}</span>
+                <span class="tile-value">{{ plan.by_status[st] }}{% if is_what_if and plan.by_status[st] != now_plan.by_status[st] %}<small> was {{ now_plan.by_status[st] }}</small>{% endif %}</span></div>
+            {% endfor %}
+            <div class="tile{{ ' is-warn' if plan.depth.gaps }}"><span class="tile-label">Uncovered</span>
+              <span class="tile-value">{{ plan.depth.gaps }}{% if is_what_if and plan.depth.gaps != now_plan.depth.gaps %}<small> was {{ now_plan.depth.gaps }}</small>{% endif %}</span></div>
+          </div>
+          <p class="planner-verdict {{ 'is-ok' if not plan.starter_depth.gaps else 'is-warn' }}">
+            {% if plan.by_status['Starter'] < plan.slots %}
+              {{ plan.by_status['Starter'] }} starters for {{ plan.slots }} shirts —
+            {% endif %}
+            {% if not plan.starter_depth.gaps %}the starters alone can field the {{ formation }}.
+            {% else %}the starters alone leave {{ plan.starter_depth.gaps }} position{{ 's' if plan.starter_depth.gaps != 1 }} uncovered:
+              {{ plan.starter_depth.rows | selectattr('state', 'equalto', 'gap') | map(attribute='position') | join(', ') }}.{% endif %}
+          </p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head"><h2>Depth · {{ formation }}</h2></header>
+        <div class="panel-body">
+          <div class="depth-grid">
+            {% for d in plan.depth.rows %}
+              <div class="depth-card depth-{{ d.state }}">
+                <div class="depth-head">
+                  <span class="depth-pos">{{ d.position }}</span><span class="depth-need">×{{ d.needed }}</span>
+                  <span class="depth-state">{{ {'gap': 'Uncovered', 'thin': 'No backup', 'ok': 'Covered'}[d.state] }}</span>
+                </div>
+                {% if d.naturals %}<div class="depth-names">{{ d.naturals | join(', ') }}</div>{% endif %}
+                {% if d.cover %}<div class="depth-cover">Cover: {{ d.cover | join(', ') }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

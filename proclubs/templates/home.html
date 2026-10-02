@@ -233,6 +233,20 @@
     </div>
 
     <aside class="dash-side">
+      {% if inbox is not none %}
+        <section class="panel inbox">
+          <header class="panel-head panel-staff"><h2>Needs a decision</h2><span>{{ inbox | length or 'All clear' }}</span></header>
+          {% if inbox %}
+            <ul class="inbox-list">
+              {% for item in inbox %}
+                <li class="inbox-item i-{{ item.level }}"><a href="{{ item.href }}">{{ item.text }}</a></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="panel-body"><p class="muted panel-empty">Nothing waiting on you.</p></div>
+          {% endif %}
+        </section>
+      {% endif %}
       {# Signings and departures. Only moves that are genuinely public reach
          here -- see services.public_roster_moves. #}
       {% if squad_moves %}
