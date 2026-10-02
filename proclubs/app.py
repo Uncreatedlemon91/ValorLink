@@ -33,6 +33,8 @@ import discord_rsvp
 import discord_notify
 import ea_client
 import matchweek_routes
+import training
+import training_routes
 import navigation
 import roles
 import services
@@ -127,6 +129,7 @@ class _VersionedStatic(StaticFiles):
 app.mount("/static", _VersionedStatic(directory=BASE_DIR / "static"), name="static")
 app.include_router(auth.router)
 app.include_router(matchweek_routes.router)
+app.include_router(training_routes.router)
 
 templates = web.templates
 
@@ -823,14 +826,15 @@ def _refresh_announcement(request: Request, session, event) -> None:
 
 
 @app.get("/events/new", response_class=HTMLResponse)
-def event_new_form(request: Request, _staff=Depends(auth.require_staff)):
+def event_new_form(request: Request, type: str = "", _staff=Depends(auth.require_staff)):
     with get_session() as session:
         # Default to whatever the Tactics board is currently set to -- that's
         # the shape the squad is actually drilled in.
         suggested = services.get_active_formation(session)
     return templates.TemplateResponse(request, "event_form.html", _ctx(
         request, event=None, event_types=services.EVENT_TYPES,
-        formations=list(FORMATIONS), suggested_formation=suggested))
+        formations=list(FORMATIONS), suggested_formation=suggested,
+        preset_type=type if type in services.EVENT_TYPES else ""))
 
 
 @app.post("/events/new")
@@ -877,6 +881,9 @@ def event_detail(request: Request, event_id: int):
             rsvp_enabled=config.EVENT_RSVP_ENABLED,
             pitch=FORMATIONS.get(event.formation or "", {}), bench_slots=BENCH_SLOTS, **view,
             **(matchweek_routes.event_page_extras(session, event, user) if user else {}),
+            is_session=training.is_session(event),
+            session_plan=training.plan_view(session, event, user["id"] if user else None)
+            if training.is_session(event) else None,
         ))
 
 

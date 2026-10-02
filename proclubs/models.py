@@ -133,6 +133,14 @@ class Event(Base):
     vote_closes_at = Column(DateTime, nullable=True)
     vote_message_id = Column(String, nullable=True)
 
+    # --- Training sessions (see training.py) -------------------------------
+    session_objective = Column(String, nullable=True)
+    session_plan = Column(Text, nullable=True)
+    # JSON: slot_key -> what that position does in this session.
+    role_briefs = Column(Text, nullable=True)
+    session_review = Column(Text, nullable=True)
+    session_reviewed_by = Column(String, nullable=True)
+
 
 # How a player answers the sign-up question. Deliberately three states, not
 # a yes/no: "maybe" is the honest answer often enough that forcing it into
@@ -632,4 +640,22 @@ class Notification(Base):
     sent_at = Column(DateTime, default=_utcnow)
     ok = Column(Boolean, nullable=False, default=True)
     detail = Column(String, nullable=True)
+
+
+
+class TrainingSuggestion(Base):
+    """A player's suggestion for what training should work on next. Seen
+    by staff and by the player who made it, nobody else."""
+
+    __tablename__ = "training_suggestions"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    display_name = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="open")   # see training.SUGGESTION_STATUSES
+    staff_note = Column(String, nullable=True)
+    handled_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 

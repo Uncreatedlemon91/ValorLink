@@ -38,6 +38,45 @@
   {% if event.image %}<img class="event-hero" src="{{ event.image }}" alt="" />{% endif %}
   {% if event.description %}<div class="card event-description">{{ event.description }}</div>{% endif %}
 
+  {% if is_session %}
+    <section class="panel session-panel" id="session-plan">
+      <header class="panel-head"><h2>Session plan</h2>
+        {% if is_staff %}<a href="/events/{{ event.id }}/plan">{{ 'Edit plan' if session_plan.objective or session_plan.plan else 'Write the plan' }} →</a>{% endif %}</header>
+      <div class="panel-body">
+        {% if session_plan.my_brief %}
+          <div class="my-brief">
+            <span class="kicker">Your brief · {{ session_plan.my_brief.label }}</span>
+            <p>{{ session_plan.my_brief.text }}</p>
+          </div>
+        {% elif session_plan.my_slot_label %}
+          <p class="field-hint">You're down as {{ session_plan.my_slot_label }}; there's no brief for it yet.</p>
+        {% endif %}
+        {% if session_plan.objective %}
+          <p class="kicker kicker-dim">Objective</p>
+          <p class="session-objective-big">{{ session_plan.objective }}</p>
+        {% endif %}
+        {% if session_plan.plan %}<div class="session-plan-text">{{ session_plan.plan }}</div>{% endif %}
+        {% if not session_plan.objective and not session_plan.plan %}
+          <p class="muted panel-empty">The coaches haven't written the plan yet.</p>
+        {% endif %}
+        {% if session_plan.briefs %}
+          <p class="kicker kicker-dim brief-head">Role briefs</p>
+          <ul class="brief-list">
+            {% for b in session_plan.briefs %}
+              <li class="{{ 'is-me' if b.mine }}"><span class="pitch-slot-pos">{{ b.label }}</span><span>{{ b.text }}</span></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if session_plan.review %}
+          <div class="session-review-block">
+            <p class="kicker kicker-dim">How it went{% if session_plan.reviewed_by %} · {{ session_plan.reviewed_by }}{% endif %}</p>
+            <div class="session-plan-text">{{ session_plan.review }}</div>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
   {# ---- Your own sign-up ------------------------------------------------ #}
   <div class="section-head" id="your-answer"><h2>Your answer</h2></div>
   {% if not user %}

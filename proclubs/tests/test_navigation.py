@@ -34,7 +34,7 @@ def _login(client, *, staff):
 # --- The registry ------------------------------------------------------------ #
 def test_the_five_sections_group_what_they_should():
     tabs = {s.key: [t.href for t in s.tabs] for s in navigation.SECTIONS}
-    assert tabs["matchday"] == ["/events", "/availability", "/tactics"]
+    assert tabs["matchday"] == ["/events", "/training", "/availability", "/tactics"]
     assert tabs["club"] == ["/stats", "/league", "/club-profile"]
     assert tabs["media"] == ["/clips", "/streamers"]
     assert tabs["squad"] == ["/players", "/squad", "/roster"]

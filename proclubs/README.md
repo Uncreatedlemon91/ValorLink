@@ -528,6 +528,30 @@ news channel). `NOTIFY_DMS=0` turns the DMs off and keeps the posts. A
 player with DMs from server members turned off simply doesn't get one;
 that's counted, never retried in a loop.
 
+## Training sessions
+
+In-game practice and theory are events of type **Training** or **Theory**
+(`training.py`, `training_routes.py`), so they have the same sign-ups,
+formation, attendance and Discord thread as a match. On top:
+
+- **A plan** (`/events/<id>/plan`, staff): a one-line objective, the plan
+  in order, and a **role brief per position** of the session's formation.
+  The event page shows each player their own brief first ("Your brief ·
+  ST"), from their place on a published team sheet or the shirt they
+  claimed. The Discord announcement carries the objective, plan and
+  briefs, so the theory talk in the thread starts from them; saving the
+  plan updates an already-posted announcement.
+- **A review** after the session: what worked, written by staff and shown
+  on the session page and the Training tab.
+- **The Training tab** (`/training`): upcoming sessions with their
+  objectives, recent ones with their reviews, and **"What should we work
+  on?"** -- players' suggestions, seen by staff and by their author only.
+  Staff mark each New / Planned / Worked on / Not now with a reply the
+  player sees.
+
+Sessions get the 24-hour reminder like any fixture, but no team-sheet
+DMs, vote or match report.
+
 ## Clips are Discord-only
 
 `/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual

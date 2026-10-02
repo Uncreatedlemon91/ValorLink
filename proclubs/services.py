@@ -31,7 +31,7 @@ from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Ar
                     ClubSetting, CoachNote, Comment, Contract, Event, EventSignup, EventTierInvite, Like,
                     Player, PlayerLink, RosterMove, Streamer, TacticsBoard, TacticsSlot)
 
-EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
+EVENT_TYPES = ["Match", "Scrim", "Tournament", "Training", "Theory", "Community"]
 
 # Below this many marked events, a reliability percentage is noise dressed
 # up as data -- two events is a 50% swing per event. The UI shows the raw

@@ -149,11 +149,19 @@ def build_embed(event, signups: list, roles: dict[int, str], site_url: str,
     if event.description:
         lines.append("")
         lines.append(event.description)
+    # A training session's plan, so the thread opens with it.
+    if getattr(event, "session_objective", None):
+        lines += ["", f"**Objective:** {event.session_objective}"]
+    if getattr(event, "session_plan", None):
+        lines += ["", event.session_plan]
 
     if slots:
         fields = _team_sheet_fields(event, signups, slots)
     else:
         fields = _flat_rsvp_fields(signups, roles)
+    briefs = _role_brief_lines(event, slots)
+    if briefs:
+        fields = fields + [{"name": "Role briefs", "value": briefs[:1024], "inline": False}]
 
     embed = {
         "title": f"{event.event_type}: {event.title}",
@@ -166,6 +174,17 @@ def build_embed(event, signups: list, roles: dict[int, str], site_url: str,
     elif slots:
         embed["footer"] = {"text": "Pick a position below to sign up"}
     return embed
+
+
+def _role_brief_lines(event, slots: dict[str, str]) -> str:
+    import json
+    try:
+        data = json.loads(getattr(event, "role_briefs", None) or "{}")
+    except ValueError:
+        return ""
+    order = list(slots)
+    keys = sorted(data, key=lambda k: order.index(k) if k in order else 99)
+    return "\n".join(f"**{slots.get(k, k)}** — {data[k]}" for k in keys if data[k])
 
 
 def _flat_rsvp_fields(signups: list, roles: dict[int, str]) -> list[dict]:

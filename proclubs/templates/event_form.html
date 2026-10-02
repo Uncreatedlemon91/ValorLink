@@ -19,7 +19,7 @@
         <label for="event_type">Type</label>
         <select id="event_type" name="event_type">
           {% for t in event_types %}
-            <option value="{{ t }}" {% if event and event.event_type == t %}selected{% endif %}>{{ t }}</option>
+            <option value="{{ t }}" {% if (event and event.event_type == t) or (not event and preset_type == t) %}selected{% endif %}>{{ t }}</option>
           {% endfor %}
         </select>
       </div>
