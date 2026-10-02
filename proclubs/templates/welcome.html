@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block body_attrs %} class="welcome-body"{% endblock %}
+{% block body %}
+{# The one public page. Everything else on the site is for members of the
+   club's Discord server, so this is the club's shop window: who we are,
+   how we're doing, and how to join. Facts the site knows (standing,
+   results, squad, staff, positions we're short of) are live; the words
+   come from the Club profile that management edits. #}
+<div class="welcome"{% if crest_colors and crest_colors.crest %} style="--crest: {{ crest_colors.crest }};"{% endif %}>
+  <header class="welcome-top">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">{{ initials(SITE_NAME, 2) }}</span>
+      <span class="brand-text">
+        <span class="brand-name">{{ SITE_NAME }}</span>
+        <span class="brand-tagline">{{ SITE_TAGLINE }}</span>
+      </span>
+    </a>
+    {% if is_member %}
+      <a class="btn secondary btn-sm" href="/">Go to the club</a>
+    {% else %}
+      <a class="btn secondary btn-sm" href="/login">Member sign in</a>
+    {% endif %}
+  </header>
+
+  <section class="welcome-hero">
+    <span class="welcome-crest" aria-hidden="true">{{ initials(SITE_NAME, 2) }}</span>
+    <p class="welcome-kicker">EA FC Pro Clubs{% if profile.platform %} · {{ profile.platform }}{% endif %}{% if profile.region %} · {{ profile.region }}{% endif %}</p>
+    <h1>{{ SITE_NAME }}</h1>
+    {% if profile.headline %}<p class="welcome-headline">{{ profile.headline }}</p>{% endif %}
+    {% if profile.about %}<p class="welcome-about">{{ profile.about }}</p>{% endif %}
+    <div class="welcome-cta">
+      {% if DISCORD_INVITE_URL %}
+        <a class="btn discord" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>
+      {% endif %}
+      {% if not user %}<a class="btn secondary" href="/login">I'm a member</a>{% endif %}
+    </div>
+  </section>
+
+  {# --- Key characteristics: the numbers ---------------------------------- #}
+  <section class="welcome-stats" aria-label="The club at a glance">
+    {% if stats_teaser and stats_teaser.skillRating %}
+      <div class="welcome-stat"><span class="welcome-stat-value">{{ stats_teaser.skillRating }}</span><span class="welcome-stat-label">Skill rating</span></div>
+    {% endif %}
+    {% if stats_teaser and stats_teaser.record %}
+      <div class="welcome-stat"><span class="welcome-stat-value">{{ stats_teaser.record }}</span><span class="welcome-stat-label">This season</span></div>
+    {% endif %}
+    {% if stats_teaser and stats_teaser.winRate is not none %}
+      <div class="welcome-stat"><span class="welcome-stat-value">{{ stats_teaser.winRate }}%</span><span class="welcome-stat-label">Win rate</span></div>
+    {% endif %}
+    <div class="welcome-stat"><span class="welcome-stat-value">{{ squad_size }}</span><span class="welcome-stat-label">Players signed</span></div>
+    <div class="welcome-stat"><span class="welcome-stat-value">{{ formation }}</span><span class="welcome-stat-label">Formation</span></div>
+    {% if form %}
+      <div class="welcome-stat">
+        <span class="welcome-stat-value form-chips">
+          {% for r in form %}<span class="form-chip {{ r }}">{{ r }}</span>{% endfor %}
+        </span>
+        <span class="welcome-stat-label">Last {{ form | length }}</span>
+      </div>
+    {% endif %}
+  </section>
+
+  <div class="welcome-grid">
+    {% set facts = [('When we play', profile.match_nights), ('How we play', profile.play_style),
+                    ('Region', profile.region), ('Platform', profile.platform)] %}
+    {% if facts | selectattr(1) | list %}
+      <section class="panel">
+        <header class="panel-head"><h2>The club</h2></header>
+        <div class="panel-body">
+          <dl class="kv">
+            {% for label, value in facts if value %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+            {% if next_event %}<div><dt>Next fixture</dt><dd>{{ localtime(next_event.scheduled_at, 'short') }}</dd></div>{% endif %}
+          </dl>
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="panel">
+      <header class="panel-head panel-amber"><h2>We're recruiting</h2></header>
+      <div class="panel-body">
+        {% if looking_for %}
+          <p class="field-hint">Nobody covers these in our {{ formation }} yet:</p>
+          <ul class="position-chips">
+            {% for p in looking_for %}<li>{{ p }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">Every position in our {{ formation }} is covered, but good players always get a look.</p>
+        {% endif %}
+        {% if profile.recruiting %}<p>{{ profile.recruiting }}</p>{% endif %}
+        {% if DISCORD_INVITE_URL %}
+          <a class="btn discord" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Say hello on Discord</a>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if staff %}
+      <section class="panel">
+        <header class="panel-head panel-staff"><h2>Staff</h2></header>
+        <ul class="welcome-staff">
+          {% for p in staff %}
+            <li>
+              {% if p.avatar_url %}
+                <img class="roster-avatar" src="{{ p.avatar_url }}" alt="" width="36" height="36" loading="lazy" decoding="async" />
+              {% else %}
+                <span class="roster-avatar move-avatar-fallback">{{ initials(p.display_name) }}</span>
+              {% endif %}
+              <span class="person-text"><span class="squad-name">{{ p.display_name }}</span><span class="muted">{{ p.club_role }}</span></span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+  </div>
+
+  <footer class="site-footer">
+    {{ SITE_NAME }} &middot; unofficial fan-run site, not affiliated with EA
+  </footer>
+</div>
+{% endblock %}

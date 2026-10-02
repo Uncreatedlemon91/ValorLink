@@ -4,7 +4,14 @@
 <div class="page narrow">
   <div class="card empty-state">
     <p>{{ message }}</p>
-    <a class="btn secondary" href="/">Back to home</a>
+    {% if show_invite and DISCORD_INVITE_URL %}
+      <div class="form-actions">
+        <a class="btn discord" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>
+        <a class="btn secondary" href="/logout">Sign out</a>
+      </div>
+    {% else %}
+      <a class="btn secondary" href="/">Back to home</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

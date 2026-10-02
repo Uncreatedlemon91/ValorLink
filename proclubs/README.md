@@ -25,9 +25,9 @@ URLs and the tests all read that one list:
 | Home | -- | `/` |
 | News | -- | `/news` |
 | Matchday | Fixtures & sign-ups (`/events`) · Tactics (`/tactics`) | `/matchday` |
-| Club | Stats (`/stats`) · League table (`/league`) | `/club` |
+| Squad | Players (`/players`) · Overview (`/squad`, staff) · Moves & contracts (`/roster`, management) | -- |
+| Club | Stats (`/stats`) · League table (`/league`) · Club profile (`/club-profile`, management) | `/club` |
 | Media | Clips (`/clips`) · Live (`/streamers`) | `/media` |
-| Squad (staff) | Overview (`/squad`) · Moves & contracts (`/roster`) | -- |
 
 A section is one place in the navigation, with the same header and tab bar
 on every tab, but **each tab keeps its own URL**. Links people have saved
@@ -35,8 +35,9 @@ keep working, the back button behaves, and a page loads only its own
 scripts: the tactics board and the stats dashboard are both script-heavy
 and have nothing to share. The shortcuts redirect (302, not 301, since
 which tab comes first is a choice that may change) to a section's first
-tab. Staff-only sections are left out of the sidebar for everybody else;
-the routes are gated regardless.
+tab. Each tab names the access level it needs (see "Permissions"); a
+viewer sees only the tabs they can open, and a section disappears when
+that's none of them. The routes are gated regardless.
 
 To add a page to a section, add a `Tab` in `navigation.py`; a test fails
 if a tab points at a route that doesn't exist.
@@ -159,23 +160,85 @@ home page is **11.6 KB of HTML**, 11 requests, ~473 KB total, FCP under
 
 ## Permissions
 
-Three tiers, all derived live from Discord at sign-in time (never stored):
-everyone -- including signed-out visitors -- can read the site. Anyone
-signed in with Discord **and a member of `DISCORD_GUILD_ID`** can comment
-on and like news articles, staff or not -- see "Comments and likes" below.
-**Staff** -- holders of `DISCORD_STAFF_ROLE_ID` in `DISCORD_GUILD_ID` -- can
-write articles, create and edit events, mark attendance, and manage the
-streamer list (and are always members too, since holding a guild role
-requires being in the guild). A role change in Discord takes effect on that
-person's next sign-in. Members who aren't staff can still sign up for
-events -- see "Events and sign-ups" below.
+The site is for the club. **Only the splash page is public** -- `/` for
+anybody who isn't a member, and `/welcome` for everybody (so members can
+preview it). Everything else needs signing in with Discord as a member of
+`DISCORD_GUILD_ID`. The gate is a middleware in `app.py` (`_login_gate`)
+and it's **default-deny**: a new route is members-only unless it's added
+to the public list, not public until somebody remembers to protect it.
+The public list is the splash page, sign-in/out, static files, Discord's
+button presses (`/discord/interactions`, which checks its own signature)
+and article cover images (Discord fetches those to show in an
+announcement, and can't sign in). A guest asking for a page is sent to
+sign in and then returned to it; the JSON API answers 401 instead.
+
+Access levels, lowest first (`roles.py`):
+
+| Level | Who | Can |
+|---|---|---|
+| Guest | signed out, or not in the Discord server | the splash page |
+| Member | in the Discord server | the whole site: every player's profile and match stats, fixtures and sign-ups, tactics, news, comments |
+| Staff | **Coach** | matchday: events, tactics, attendance, news, streamers, the squad overview, coach notes |
+| Management | **Club President**, **Head Coach**, or `DISCORD_STAFF_ROLE_ID` in Discord | everything: offers, contracts, releases, who holds which club role, the club profile |
+
+**Club roles are assigned on the site**, stored on the player's record
+(`Player.club_role`), and read on every request, so a promotion takes
+effect on the next page load rather than the next sign-in. Two ways in:
+a staff offer the person accepts and management confirms (see "Staff
+roles"), or management picking the role on the player's file. Nobody can
+change their own role. A departure ("Let Go") ends any club role.
+
+**The Discord staff role counts as management.** That's how the site
+worked before club roles existed, and it means the club can't lock itself
+out: whoever holds that role in Discord can always fix the roles here.
+Being in the Discord server and holding that role are checked at sign-in,
+so a change *in Discord* still takes effect at the next sign-in.
 
 Signing in with Discord doesn't by itself mean membership: OAuth just
 proves "this is a real Discord account," and anyone can authorize the
-app's login regardless of what servers they're in. Guild membership -- the
-comment/like gate -- is a second, separate check against
-`DISCORD_GUILD_ID` made during sign-in (`auth.py`'s OAuth callback already
-had to fetch this to determine staff roles; it's the same lookup).
+app's login regardless of what servers they're in. Guild membership is a
+second, separate check against `DISCORD_GUILD_ID` made during sign-in.
+
+## Player files
+
+Every person has one record (`Player`, keyed on their Discord ID) that
+the rest of the site hangs off: contracts, squad moves, sign-ups and the
+gamertag link all store the same Discord ID. A member gets a record the
+first time they sign in; anybody put under contract gets one then; and
+at startup every existing contract is given one (`services.backfill_players`),
+so a squad carried over from last season appears with no manual step.
+
+`/players` is the squad list: staff by role, then the players under
+contract grouped as **Starting**, **Rotation** and **Substitute** players,
+each with appearances, form, goals, assists and MOTM. `/players/<id>` is a
+player's file and `/players/me` is your own.
+
+| On a player's file | Them | Other members | Staff |
+|---|---|---|---|
+| Profile, positions, gamertag, foot, build, bio | yes | yes | yes |
+| Match stats and last 10 matches | yes | yes | yes |
+| Contract, past contracts, attendance, squad-move history | yes | -- | yes |
+| Coach notes | **never** | -- | yes (not on their own file) |
+
+Players write their own preferred foot, build and bio, and link their own
+gamertag. **Coach notes** are kept by staff, deleted by their author or
+management, and never shown to the player they're about -- including a
+coach who also plays, on their own file.
+
+Squad statuses are **Starter**, **Rotation** and **Substitute**, shown as
+Starting / Rotation / Substitute Player. Contracts stored with the old
+"Reserve" are renamed to "Substitute" at startup.
+
+## The public splash page
+
+`welcome.html` is the club's shop window. The words come from the **Club
+profile** (`/club-profile`, management): headline, about, when we play,
+region, platform, how we play, and a recruiting note; a blank field is
+left off the page. The rest is live: skill rating, record and win rate
+from EA, the last five results, how many players are signed, the
+formation, the staff, and the positions **nobody** in the squad covers in
+that formation (from the same depth rules as the squad screen), shown as
+"We're recruiting".
 
 ## Local dev
 
@@ -550,7 +613,7 @@ and "Comments and likes" below for what that total does and doesn't mean.
 
 ## Squad moves: contracts, staff roles, departures
 
-`/roster` (nav label "Squad", staff only) lists everyone in the Discord
+`/roster` (Squad → Moves & contracts, management only) lists everyone in the Discord
 server with their Discord avatar. Below the picker are three separate
 panels, one per kind of move. Each posts its own fields and only the
 pressed panel's are read, so a half-filled contract can't leak into a
@@ -588,7 +651,7 @@ staff picks a member  ->  OFFER posted to Discord with Accept / Decline
 
 Every contract offer asks staff for a **primary position**, an optional
 **secondary position**, a **contract length** (1-52 whole weeks) and a
-**squad status** -- *Starter*, *Rotation* or *Reserve*, after Football
+**squad status** -- *Starter*, *Rotation* or *Substitute*, after Football
 Manager's squad statuses. All of them show on the offer in Discord so the
 player sees the terms before pressing, and on the signing announcement.
 
@@ -633,19 +696,18 @@ player sees the terms before pressing, and on the signing announcement.
 
 A staff appointment is its own kind of move (`staff_offer`), not a
 "position" on a playing contract. It's offered from the Staff role panel
-with a role name (free text, with Manager / Assistant Manager / Coach as
-suggestions, since clubs invent titles), answered with the same Accept /
-Decline buttons, and confirmed by staff with **Confirm appointment**,
-which publishes an appointment announcement in the palette's blue rather
-than the signing green.
+for one of the three club roles -- Club President, Head Coach, Coach --
+answered with the same Accept / Decline buttons, and confirmed by
+management with **Confirm appointment**, which publishes an appointment
+announcement in the palette's blue rather than the signing green, and
+**gives the person that club role on the site** (see "Permissions").
 
 - **No contract.** Squad status and contract length mean nothing for a
   coach.
-- **No role on Accept, even with `ROSTER_SQUAD_ROLE_ID` set.** The squad
-  role isn't theirs by default, since a coach needn't be a player. The
-  staff role is what gives somebody control of this site, which is exactly
-  the kind of access that must never be handed out by a button press. The
-  page and the confirmation both remind staff to give it by hand.
+- **No Discord role on Accept, even with `ROSTER_SQUAD_ROLE_ID` set.**
+  The squad role isn't theirs by default, since a coach needn't be a
+  player. The site access comes from the club role, and only when
+  management confirm -- never from the person's own button press.
 - **A player under contract can still be offered a staff role.** A
   player-coach is normal, and "already under contract" only guards against
   a second *playing* contract.
@@ -766,7 +828,7 @@ and the Interactions Endpoint URL that those already require.
 
 ## The squad screen
 
-`/squad` (nav label "Squad", staff only; Squad Moves is linked from it) is
+`/squad` (Squad → Overview, staff only) is
 Football Manager's squad view built from data the site already has. It
 joins each contract to what EA recorded through the player's linked
 gamertag. See `squad.py` for the rules and `db.squad_usage` for the query.
@@ -780,9 +842,9 @@ evidence it's based on:
 
 - **Playing time against squad status.** A *Starter* who has played in
   fewer than half of the last 10, or a *Rotation* player in fewer than 2.
-  A *Reserve* is promised nothing. Not judged until the club has 5
+  A *Substitute* is promised nothing. Not judged until the club has 5
   recorded matches.
-- **Promotion candidates.** A Rotation or Reserve player averaging 7.5 or
+- **Promotion candidates.** A Rotation or Substitute player averaging 7.5 or
   better.
 - **Contracts** expiring or expired, louder when the player is in form.
 - **Attendance** under 60%, once there are enough marked events for a rate

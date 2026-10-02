@@ -142,7 +142,7 @@ def test_rotation_expects_less_than_a_starter():
 
 
 def test_a_reserve_is_promised_nothing():
-    assert _flags(status="Reserve", usage={"apps_window": 0, "form": None}) == []
+    assert _flags(status="Substitute", usage={"apps_window": 0, "form": None}) == []
 
 
 def test_a_linked_player_with_no_appearances_counts_as_zero():
@@ -155,8 +155,8 @@ def test_playing_time_is_not_judged_on_too_few_matches():
 
 
 def test_a_squad_player_in_form_is_suggested_for_promotion():
-    flags = _flags(status="Reserve", usage={"apps_window": 3, "form": 7.8})
-    assert "Reserve, averaging 7.8 — worth a promotion?" in flags
+    flags = _flags(status="Substitute", usage={"apps_window": 3, "form": 7.8})
+    assert "Substitute, averaging 7.8 — worth a promotion?" in flags
 
 
 def test_a_starter_in_form_is_not_offered_a_promotion():
@@ -208,7 +208,7 @@ def test_rows_join_contract_to_usage_through_the_gamertag_case_insensitively():
 
 def test_rows_sort_by_status_then_position_then_name():
     contracts = [
-        _c("Zed", "Striker", status="Reserve", discord_id=1),
+        _c("Zed", "Striker", status="Substitute", discord_id=1),
         _c("Amy", "Striker", status="Starter", discord_id=2),
         _c("Bob", "Goalkeeper", status="Starter", discord_id=3),
         _c("Cal", "Striker", status="Rotation", discord_id=4),

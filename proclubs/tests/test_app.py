@@ -98,14 +98,11 @@ def test_public_pages_load_signed_out(client):
 
 
 def test_tactics_page_hides_editing_ui_from_non_staff(client):
-    anon = client.get("/tactics")
-    assert "Save Lineup" not in anon.text
-    assert "tactics-roster" not in anon.text
-    assert "Substitutes Bench" in anon.text  # read-only for everyone, like the pitch
-
     _login_fan(client)
     fan = client.get("/tactics")
     assert "Save Lineup" not in fan.text
+    assert "tactics-roster" not in fan.text
+    assert "Substitutes Bench" in fan.text  # read-only for members, like the pitch
 
 
 def test_tactics_page_shows_editing_ui_to_staff(client):
@@ -233,6 +230,7 @@ def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch
 
 
 def test_league_page_shows_empty_state_when_no_data_yet(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [])
     monkeypatch.setattr(appmod.db, "latest_snapshot", lambda platform, club_id: None)
@@ -243,6 +241,7 @@ def test_league_page_shows_empty_state_when_no_data_yet(client, monkeypatch):
 
 
 def test_league_page_renders_table_rows(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
         {"club_id": "c2", "label": "Rivals FC", "is_us": False, "division": "3", "points": 15,
@@ -272,6 +271,7 @@ def test_league_page_renders_table_rows(client, monkeypatch):
 
 
 def test_league_page_explains_roster_members_hidden_by_division(client, monkeypatch):
+    _login_fan(client)
     # A club can be in the roster (we've played them) without appearing in
     # the main table (different division right now) -- the page must say
     # so explicitly rather than the club just silently not being there.
@@ -304,6 +304,7 @@ def test_league_page_explains_roster_members_hidden_by_division(client, monkeypa
 
 
 def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
         {"club_id": "8481799", "label": "YeeHaw FC", "is_us": True, "division": "8", "points": 10,
@@ -328,6 +329,7 @@ def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch)
 
 
 def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: 1700000000)
     monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [
         {"name": "Rivals FC", "played": 3, "wins": 2, "draws": 1, "losses": 0,
@@ -342,6 +344,7 @@ def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatc
 
 
 def test_api_history_rivals_empty_when_untracked(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: None)
     monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [])
     r = client.get("/api/history/rivals")
@@ -409,6 +412,7 @@ def test_focal_point_out_of_range_is_clamped_on_save(client):
 
 
 def test_article_cover_image_renders_with_its_focal_position(client):
+    _login_fan(client)
     slug = _seed_article(cover_image="data:image/png;base64,x", cover_focal_x=30, cover_focal_y=70)
     detail = client.get(f"/news/{slug}")
     assert 'style="object-position: 30.0% 70.0%;"' in detail.text
@@ -513,6 +517,7 @@ def test_failed_announcement_does_not_save_a_message_id(client, monkeypatch):
 def test_article_page_folds_discord_reactions_into_the_like_count(client):
     """One figure, not two: the Discord announcement's reactions are added
     to the site's own likes rather than shown as a separate badge."""
+    _login_fan(client)
     slug = _seed_article(title="Popular Post")
     with database.get_session() as session:
         article = services.get_article(session, slug)
@@ -533,6 +538,7 @@ def test_article_page_folds_discord_reactions_into_the_like_count(client):
 
 
 def test_article_like_count_is_site_only_when_no_discord_reactions(client):
+    _login_fan(client)
     slug = _seed_article(title="Quiet Post")
     detail = client.get(f"/news/{slug}")
     assert "0 Likes" in detail.text
@@ -687,6 +693,7 @@ def test_home_shows_most_recent_article_as_featured(client):
 
 
 def test_home_shows_engagement_badge_with_like_and_comment_counts(client):
+    _login_fan(client)
     # Must not be the single most-recent article -- that one is the hero
     # "featured" story, which doesn't render through the news-rail badge.
     slug = _seed_article(title="Big Win", cover_image="/static/img/cover.jpg")
@@ -723,6 +730,7 @@ def test_home_hides_engagement_badge_without_cover_image(client):
 
 
 def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
+    _login_fan(client)
     _seed_event()
 
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
@@ -740,6 +748,7 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
 
 
 def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {
         "skillRating": "1450", "wins": "111", "ties": "16", "losses": "58",
@@ -764,6 +773,7 @@ def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeyp
 
 
 def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {})
     monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
@@ -778,6 +788,7 @@ def test_site_never_shows_a_division_anywhere(client, monkeypatch):
     no live one, and it can't be derived from skill rating. So the site
     reports no division at all rather than a wrong or hand-maintained one
     -- see ea_client.division_stats and app._standing_teaser."""
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: {
         "currentDivision": "10", "bestDivision": "4", "points": "54",
@@ -804,6 +815,7 @@ def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):
 
 
 def test_home_shows_connect_with_us_button_to_the_discord_invite(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     home = client.get("/")
     assert "Connect with us" in home.text
@@ -816,20 +828,25 @@ def test_home_hides_connect_band_when_invite_not_configured(client, monkeypatch)
     assert "Connect with us" not in home.text
 
 
-def test_discord_banner_shows_for_signed_out_visitors(client, monkeypatch):
+def test_signed_out_visitors_get_the_splash_page_with_the_invite(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     home = client.get("/")
-    assert "discord-banner" in home.text
+    assert "welcome-hero" in home.text
     assert 'href="https://discord.gg/J4d7D5kDX8"' in home.text
-    assert "Sign in with Discord" in home.text
+    assert 'href="/login"' in home.text
+    # None of the members' pages are linked from it.
+    assert 'href="/events"' not in home.text and 'href="/news"' not in home.text
 
 
-def test_discord_banner_shows_for_signed_in_non_members(client, monkeypatch):
+def test_signed_in_non_members_are_shown_the_way_in(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     _login_non_member(client)
-    home = client.get("/")
-    assert "discord-banner" in home.text
-    assert "not in our Discord server" in home.text
+    assert "welcome-hero" in client.get("/").text
+    r = client.get("/news")
+    assert r.status_code == 403
+    assert "for members of our Discord server" in r.text
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in r.text
+    assert 'href="/logout"' in r.text
 
 
 def test_discord_banner_hidden_for_guild_members(client, monkeypatch):
@@ -908,6 +925,7 @@ def test_news_list_filters_by_category(client):
 
 
 def test_news_list_shows_engagement_badge_with_counts(client):
+    _login_fan(client)
     slug = _seed_article(title="Popular Post", cover_image="/static/img/cover.jpg")
     with database.get_session() as session:
         article = services.get_article(session, slug)
@@ -926,19 +944,17 @@ def test_news_list_hides_engagement_badge_when_no_engagement(client):
     assert "engagement-badge" not in listing
 
 
-def test_comments_section_prompts_sign_in_when_signed_out(client):
+def test_articles_need_signing_in(client):
     slug = _seed_article()
-    detail = client.get(f"/news/{slug}")
-    assert "Sign in with Discord" in detail.text
-    assert 'like-btn static' in detail.text
+    r = client.get(f"/news/{slug}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
-def test_comments_section_explains_membership_requirement_when_not_in_guild(client):
+def test_signing_in_returns_you_to_the_page_you_asked_for(client):
     slug = _seed_article()
-    _login_non_member(client)
-    detail = client.get(f"/news/{slug}")
-    assert "need to be a member of our Discord server to comment" in detail.text
-    assert 'like-btn static' in detail.text
+    client.get(f"/news/{slug}", follow_redirects=False)
+    r = client.post("/auth/dev", data={"name": "Fan", "member": "1"}, follow_redirects=False)
+    assert r.headers["location"] == f"/news/{slug}"
 
 
 def test_comment_route_rejects_signed_out_visitor(client):
@@ -1083,6 +1099,7 @@ def test_events_page_offers_editing_to_staff_only(client):
 
 
 def test_events_page_shows_the_event_cover_image_when_present(client):
+    _login_fan(client)
     _seed_event(title="With A Cover", image="https://cdn.discordapp.com/guild-events/1/hash.png")
     _seed_event(title="No Cover", opponent="")
 
@@ -1155,6 +1172,7 @@ def test_clips_page_shows_not_configured_message_when_sync_disabled(client, monk
 
 
 def test_clips_page_shows_empty_state_when_enabled_but_no_clips(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
     r = client.get("/clips")
     assert r.status_code == 200
@@ -1162,6 +1180,7 @@ def test_clips_page_shows_empty_state_when_enabled_but_no_clips(client, monkeypa
 
 
 def test_clips_page_lists_synced_clips(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
     _seed_clip(title="Nice goal", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
                jump_url="https://discord.com/channels/1/2/m1")
@@ -1203,6 +1222,7 @@ def test_api_clips_lists_synced_clips_without_video_url(client):
 
 
 def test_article_resolves_clip_embed_to_live_video(client):
+    _login_fan(client)
     clip_id = _seed_clip(title="Golazo", video_url="https://cdn.discordapp.com/attachments/1/2/golazo.mp4",
                           jump_url="https://discord.com/channels/1/2/m1")
     slug = _seed_article(body_html=f'<p>Check this out:</p><clip-embed data-clip-id="{clip_id}"></clip-embed>')
@@ -1215,6 +1235,7 @@ def test_article_resolves_clip_embed_to_live_video(client):
 
 
 def test_article_clip_embed_falls_back_when_clip_gone(client):
+    _login_fan(client)
     slug = _seed_article(body_html='<p>Old clip:</p><clip-embed data-clip-id="99999"></clip-embed>')
 
     detail = client.get(f"/news/{slug}")
@@ -1253,6 +1274,7 @@ def test_duplicate_streamer_is_rejected(client):
 
 
 def test_nav_says_live_not_streamers(client):
+    _login_fan(client)
     # "Live" is a tab in the Media section now, so it's on Media's pages.
     page = client.get("/clips")
     assert ">Live</a>" in page.text
@@ -1400,13 +1422,16 @@ def test_roster_page_lists_members_with_their_discord_avatars(client, roster_rea
     assert "cdn.discordapp.com/embed/avatars/" in html
 
 
-def test_squad_link_is_only_in_the_nav_for_staff(client, roster_ready):
-    # The nav's "Squad" lands on the overview (/squad), which links on to
-    # Squad Moves (/roster).
+def test_squad_tabs_follow_the_viewers_access(client, roster_ready):
+    """Every member sees the players; the overview is for staff, and
+    contracts for management."""
     _login_fan(client)
-    assert 'href="/squad"' not in client.get("/news").text
+    page = client.get("/players").text
+    assert 'href="/players"' in page
+    assert 'href="/squad"' not in page and 'href="/roster"' not in page
     _login_staff(client)
-    assert 'href="/squad"' in client.get("/news").text
+    page = client.get("/players").text
+    assert 'href="/squad"' in page and 'href="/roster"' in page
 
 
 def test_offering_a_position_posts_the_announcement_and_records_it(client, roster_ready):
@@ -2028,12 +2053,12 @@ def test_recording_a_contract_for_an_existing_player_posts_nothing(client, roste
     announcing a signing of somebody who's been here all along would be
     wrong, and so would touching their roles."""
     _login_staff(client, name="Coach")
-    r = _record(client, weeks="12", status="Reserve")
+    r = _record(client, weeks="12", status="Substitute")
     assert r.status_code == 303
     assert roster_ready == [] and role_grant == []
     with database.get_session() as session:
         contract = services.live_contract_for(session, "42")
-    assert (contract.weeks, contract.squad_status, contract.source) == (12, "Reserve", "recorded")
+    assert (contract.weeks, contract.squad_status, contract.source) == (12, "Substitute", "recorded")
     assert contract.display_name == "Cap"
     assert contract.created_by_name == "Coach"
 
@@ -2315,6 +2340,7 @@ def _seed_move(*, kind="offer", name="Bo", response=None, confirmed=False,
 
 
 def test_a_confirmed_signing_and_a_departure_show_on_the_home_page(client):
+    _login_fan(client)
     _seed_move(kind="offer", name="Bo Nakamura", response="accepted", confirmed=True)
     _seed_move(kind="release", name="Eli Strand", position="Centre Back")
     html = client.get("/").text
@@ -2355,6 +2381,7 @@ def test_the_section_is_absent_entirely_when_there_is_nothing_public(client):
 def test_moves_are_ordered_by_when_they_became_public(client):
     """A signing confirmed today leads, even if the offer went out last
     week -- the confirmation is the news, not the offer."""
+    _login_fan(client)
     old = datetime.utcnow() - timedelta(days=7)
     _seed_move(kind="release", name="Departed Yesterday",
                announced_at=datetime.utcnow() - timedelta(days=1))
@@ -2365,6 +2392,7 @@ def test_moves_are_ordered_by_when_they_became_public(client):
 
 
 def test_the_home_page_shows_a_bounded_number_of_moves(client):
+    _login_fan(client)
     for i in range(10):
         _seed_move(kind="release", name=f"Player {i}")
     html = client.get("/").text
@@ -2373,6 +2401,7 @@ def test_the_home_page_shows_a_bounded_number_of_moves(client):
 
 def test_a_move_with_no_stored_avatar_falls_back_to_initials(client):
     """Rather than a broken image on the front page."""
+    _login_fan(client)
     with database.get_session() as session:
         services.record_roster_move(
             session, discord_id="1", display_name="No Avatar", avatar_url=None,
@@ -2396,7 +2425,7 @@ def _contract_offer(client, *, position="Striker", secondary="Winger", follow=Fa
     }, follow_redirects=follow)
 
 
-def _staff_offer(client, *, role="Assistant Manager", discord_id="42"):
+def _staff_offer(client, *, role="Head Coach", discord_id="42"):
     token = _csrf(client, "/roster")
     return client.post("/roster/announce", data={
         "discord_id": discord_id, "kind": "staff_offer", "staff_role": role,
@@ -2418,7 +2447,7 @@ def test_the_page_has_separate_contract_staff_and_departure_panels(client, roste
     assert 'value="staff_offer"' in html
     # Staff roles are offered in the staff panel, not as contract positions.
     contract_panel = html.split("move-panel-staff")[0]
-    assert "Assistant Manager" not in contract_panel
+    assert "Head Coach" not in contract_panel
 
 
 def test_a_contract_offer_carries_both_positions(client, roster_ready):
@@ -2470,7 +2499,7 @@ def test_recording_a_contract_takes_a_secondary_position(client, roster_ready):
     token = _csrf(client, "/roster")
     client.post("/roster/contracts", data={
         "discord_id": "42", "position": "Goalkeeper", "secondary_position": "Centre Back",
-        "contract_weeks": "8", "squad_status": "Reserve", "csrf_token": token,
+        "contract_weeks": "8", "squad_status": "Substitute", "csrf_token": token,
     }, follow_redirects=False)
     with database.get_session() as session:
         assert services.live_contract_for(session, "42").secondary_position == "Centre Back"
@@ -2516,18 +2545,18 @@ def test_a_staff_offer_is_posted_as_a_role_with_buttons(client, roster_ready):
     body = roster_ready[0][1]
     embed = body["embeds"][0]
     assert embed["title"] == "Cap — Staff Role Offered"
-    assert embed["fields"][0] == {"name": "Role", "value": "Assistant Manager", "inline": True}
+    assert embed["fields"][0] == {"name": "Role", "value": "Head Coach", "inline": True}
     assert "Contract" not in {f["name"] for f in embed["fields"]}
     assert len(body["components"][0]["components"]) == 2   # Accept / Decline
     move = _latest_move()
-    assert (move.kind, move.position, move.contract_weeks) == ("staff_offer", "Assistant Manager", None)
+    assert (move.kind, move.position, move.contract_weeks) == ("staff_offer", "Head Coach", None)
     assert move.note == "Runs set pieces."
 
 
 def test_a_staff_offer_needs_a_role(client, roster_ready):
     _login_staff(client)
     r = _staff_offer(client, role="  ")
-    assert r.status_code == 400 and "Name the staff role" in r.text
+    assert r.status_code == 400 and "Pick the staff role" in r.text
     assert roster_ready == []
 
 
@@ -2581,13 +2610,15 @@ def test_confirming_a_staff_offer_announces_an_appointment_not_a_signing(
     r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
                     follow_redirects=True)
     embed = roster_ready[0][1]["embeds"][0]
-    assert embed["title"] == "Cap appointed Assistant Manager"
+    assert embed["title"] == "Cap appointed Head Coach"
     assert embed["author"]["name"] == "Staff Announcement · Appointment"
-    # The reminder that the role is still theirs to give.
-    assert "give them the staff role in Discord" in r.text
+    # The appointment gives the club role, and with it site access --
+    # but no Discord role.
+    assert "They now have Head Coach access on the site." in r.text
     assert role_grant == []
     with database.get_session() as session:
         assert services.live_contract_for(session, "42") is None, "no contract for staff"
+        assert services.get_player(session, "42").club_role == "Head Coach"
     assert ">Appointed<" in client.get("/roster").text
 
 
@@ -2600,7 +2631,7 @@ def test_a_confirmed_appointment_shows_on_the_home_page(client, roster_ready, di
     client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=False)
     html = client.get("/").text
     assert "move-staff" in html and ">Appointed<" in html
-    assert "Assistant Manager" in html
+    assert "Head Coach" in html
 
 
 def test_a_departure_reads_its_own_panel(client, roster_ready):
@@ -2692,10 +2723,10 @@ def test_a_starter_who_isnt_playing_is_flagged_on_the_squad_page(client, roster_
 
 def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
     _login_staff(client)
-    _record_contract(client, discord_id="43", status="Reserve")
+    _record_contract(client, discord_id="43", status="Substitute")
     _link(client, "43", "Sam_GT")
     history_db(6, {"Sam_GT": 8.1})
-    assert "Reserve, averaging 8.1 — worth a promotion?" in client.get("/squad").text
+    assert "Substitute, averaging 8.1 — worth a promotion?" in client.get("/squad").text
 
 
 def test_depth_follows_the_formation_on_the_tactics_board(client, roster_ready):

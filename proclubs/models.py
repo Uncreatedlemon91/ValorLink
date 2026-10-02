@@ -451,3 +451,63 @@ class TacticsSlot(Base):
     slot_key = Column(String, nullable=False)
     player_name = Column(String, nullable=True)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class Player(Base):
+    """One row per person: the personnel file everything else hangs off.
+
+    Keyed on the Discord ID, which contracts, squad moves, sign-ups and
+    gamertag links already store -- so those tables point here without a
+    migration that rewrites them. Created the first time a guild member
+    signs in, or when somebody is put under contract (see
+    services.ensure_player), and backfilled from existing contracts at
+    startup, so a squad carried over from FC 26 appears on day one.
+
+    Squad status and positions are NOT here: they're terms of the
+    contract and live on it. This holds who the person is, what they hold
+    at the club, and what they've told us about themselves.
+    """
+
+    __tablename__ = "players"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, unique=True, index=True)
+    display_name = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    # Club President / Head Coach / Coach (roles.CLUB_ROLES), or null.
+    # Carries site permissions, so only management can set it.
+    club_role = Column(String, nullable=True)
+    club_role_since = Column(DateTime, nullable=True)
+    # Filled in by the player themselves.
+    preferred_foot = Column(String, nullable=True)
+    archetype = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    last_seen_at = Column(DateTime, nullable=True)
+
+
+class CoachNote(Base):
+    """A note staff keep about a player. Staff-only, including from the
+    player it's about: the one thing in a player's file they don't see."""
+
+    __tablename__ = "coach_notes"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    body = Column(Text, nullable=False)
+    author_name = Column(String, nullable=False)
+    author_discord_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class ClubSetting(Base):
+    """Key/value text the club edits about itself -- what the public
+    splash page says (see services.CLUB_PROFILE_FIELDS)."""
+
+    __tablename__ = "club_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    updated_by_name = Column(String, nullable=True)

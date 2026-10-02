@@ -58,6 +58,7 @@ from datetime import datetime, timezone
 import cache
 import config
 import discord_api
+import roles
 
 DiscordApiError = discord_api.DiscordApiError
 
@@ -86,10 +87,9 @@ CONFIRMABLE_KINDS = (MOVE_OFFER, MOVE_STAFF_OFFER)
 
 # Squad status, as in Football Manager: what the player can expect of
 # their playing time. Persisted (Contract.squad_status) and posted back
-# from a select, so the stored value is the label itself -- there is
-# nothing to translate, and a typo fails validation rather than
-# rendering.
-SQUAD_STATUSES = ("Starter", "Rotation", "Reserve")
+# from a select, so a typo fails validation rather than rendering. See
+# roles.py for the list and its long labels.
+SQUAD_STATUSES = roles.SQUAD_STATUSES
 
 # Contract length, in weeks. A whole-weeks number rather than an end date
 # because that's how staff talk about it ("eight weeks"), and a year is
@@ -132,10 +132,10 @@ PITCH_POSITIONS = (
     "Winger", "Striker", "Any Outfield",
 )
 
-# Staff roles offered as suggestions. A datalist, not a closed select --
-# clubs invent roles ("Set Piece Coach"), and a fixed list would just push
-# people into picking the nearest wrong one.
-STAFF_ROLE_SUGGESTIONS = ("Manager", "Assistant Manager", "Coach")
+# The staff roles an appointment can be for. A closed list now that each
+# one carries permissions on the site (see roles.py): confirming the
+# appointment gives the person that club role.
+STAFF_ROLES = roles.CLUB_ROLES
 
 _CDN = "https://cdn.discordapp.com"
 

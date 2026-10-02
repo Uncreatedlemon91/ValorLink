@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 import auth
@@ -29,6 +32,7 @@ import discord_roster
 import discord_rsvp
 import ea_client
 import navigation
+import roles
 import services
 import squad
 import twitch_client
@@ -40,6 +44,51 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title=config.SITE_NAME)
 
+
+# --------------------------------------------------------------------------- #
+# The login gate
+# --------------------------------------------------------------------------- #
+# Everything is for members of the club's Discord server, except these:
+# the public splash page, signing in and out, the stylesheet and scripts,
+# Discord's own calls into the site (button presses), and article cover
+# images, which Discord fetches unauthenticated to show in an announcement.
+_PUBLIC_PATHS = {"/", "/welcome", "/login", "/logout", "/discord/interactions"}
+_PUBLIC_PREFIXES = ("/static/", "/auth/")
+_PUBLIC_PATTERNS = (re.compile(r"^/news/[^/]+/cover-image$"),)
+
+
+def _is_public(path: str) -> bool:
+    return (path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES)
+            or any(p.match(path) for p in _PUBLIC_PATTERNS))
+
+
+async def _login_gate(request: Request, call_next):
+    """Default-deny: a new route is members-only unless it's added above,
+    rather than public until somebody remembers to protect it."""
+    path = request.url.path
+    if _is_public(path):
+        return await call_next(request)
+    user = await run_in_threadpool(auth.current_user, request)
+    if not user:
+        if path.startswith("/api/"):
+            return JSONResponse({"error": "Sign in to see this."}, status_code=401)
+        if request.method == "GET":
+            auth.remember_login_next(request, path + (f"?{request.url.query}" if request.url.query else ""))
+        return RedirectResponse("/login", status_code=303)
+    if not auth.is_member(user):
+        if path.startswith("/api/"):
+            return JSONResponse({"error": "Members only."}, status_code=403)
+        return templates.TemplateResponse(request, "error.html", _ctx(
+            request, message="The site is for members of our Discord server. Join it, then "
+                             "sign out and back in so we can see you're there.",
+            show_invite=True), status_code=403)
+    return await call_next(request)
+
+
+# Added before the session middleware so it runs inside it: Starlette
+# wraps each new middleware around the ones already added, and the gate
+# needs the session.
+app.add_middleware(BaseHTTPMiddleware, dispatch=_login_gate)
 app.add_middleware(
     SessionMiddleware,
     secret_key=config.SESSION_SECRET or "proclubs-dev-secret-change-me",
@@ -163,6 +212,7 @@ templates.env.globals["focal_position"] = _focal_position
 templates.env.globals["localtime"] = _localtime
 templates.env.globals["media_url"] = _media_url
 templates.env.globals["CLIPS_SYNC_ENABLED"] = config.CLIPS_SYNC_ENABLED
+templates.env.globals["status_label"] = roles.status_label
 
 
 def _warm_home_caches():
@@ -189,6 +239,10 @@ def _warm_home_caches():
 @app.on_event("startup")
 def _startup():
     init_db()
+    # Contracts carried over from last season, or recorded before player
+    # records existed, get one now.
+    with get_session() as session:
+        services.backfill_players(session)
     _warm_home_caches()
 
 
@@ -201,7 +255,16 @@ def _on_unauthenticated(request: Request, exc: auth.NotAuthenticated):
 def _on_not_staff(request: Request, exc: auth.NotStaff):
     return templates.TemplateResponse(
         request, "error.html",
-        _ctx(request, message="That needs staff standing in Discord. You're signed in, but without the role for it."),
+        _ctx(request, message="That's for club staff: the Club President, Head Coach and Coaches."),
+        status_code=403,
+    )
+
+
+@app.exception_handler(auth.NotManagement)
+def _on_not_management(request: Request, exc: auth.NotManagement):
+    return templates.TemplateResponse(
+        request, "error.html",
+        _ctx(request, message="That's for club management: the Club President and Head Coach."),
         status_code=403,
     )
 
@@ -229,6 +292,8 @@ def _ctx(request: Request, **extra) -> dict:
         "user": user,
         "is_staff": auth.is_staff(user),
         "is_member": auth.is_member(user),
+        "is_management": auth.is_management(user),
+        "viewer_level": user["level"] if user else roles.GUEST,
         "csrf_token": auth.get_csrf_token(request),
         "DISCORD_INVITE_URL": config.DISCORD_INVITE_URL,
     }
@@ -329,8 +394,67 @@ def _check_csrf(request: Request, token: str):
 # --------------------------------------------------------------------------- #
 # Home
 # --------------------------------------------------------------------------- #
+def _club_standing() -> tuple[dict | None, dict | None]:
+    """(standing teaser, crest colours) from EA, both non-blocking: these
+    are decoration and a page must not inherit EA's latency to render. On
+    a cold cache they're None and fill in behind the request."""
+    stats_teaser = crest_colors = None
+    if not config.CLUB_ID:
+        return None, None
+    # Two independent calls, so one failing doesn't blank the other -- the
+    # crest is club identity and shouldn't disappear because a stats
+    # endpoint had a bad minute. overallStats, not division_stats: the
+    # latter is an all-time leaderboard snapshot whose division can be a
+    # hundred matches out of date. Skill rating here is live.
+    try:
+        overall = ea_client.overall_stats(config.CLUB_PLATFORM, config.CLUB_ID, blocking=False) or {}
+        stats_teaser = _standing_teaser(overall)
+    except ea_client.EAApiError:
+        pass
+    try:
+        crest_colors = ea_client.crest_colors(config.CLUB_PLATFORM, config.CLUB_ID, blocking=False)
+    except ea_client.EAApiError:
+        pass
+    return stats_teaser, crest_colors
+
+
+def _welcome(request: Request):
+    """The public splash page: the one page anybody can see. Promotes the
+    club with what it says about itself (the Club profile, edited by
+    management) and what the site already knows -- standing, recent
+    results, the size of the squad, the staff, and the positions the
+    squad is short of for the current formation."""
+    with get_session() as session:
+        profile = services.get_club_profile(session)
+        contracts = services.live_contracts(session)
+        staff = services.club_staff(session)
+        formation = services.get_active_formation(session)
+        upcoming = services.list_events(session, upcoming_only=True, limit=1)
+    depth = squad.squad_depth(FORMATIONS.get(formation) or FORMATIONS["4-3-3"], contracts)
+    # Only positions nobody covers: "no backup" is a staff concern, and on
+    # a squad of 11-20 it would list nearly every position.
+    looking_for = [r["position"] for r in depth["rows"] if r["state"] == squad.DEPTH_GAP]
+    stats_teaser, crest_colors = _club_standing()
+    form = (db.recent_form(config.CLUB_PLATFORM, str(config.CLUB_ID), limit=5)
+            if config.CLUB_ID else [])
+    return templates.TemplateResponse(request, "welcome.html", _ctx(
+        request, profile=profile, squad_size=len(contracts), staff=staff,
+        looking_for=looking_for, formation=formation, stats_teaser=stats_teaser,
+        crest_colors=crest_colors, form=form,
+        next_event=upcoming[0] if upcoming else None,
+    ))
+
+
+@app.get("/welcome", response_class=HTMLResponse)
+def welcome(request: Request):
+    return _welcome(request)
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
+    """Members get the club dashboard; everybody else the splash page."""
+    if not auth.is_member(auth.current_user(request)):
+        return _welcome(request)
     with get_session() as session:
         latest = services.list_articles(session, limit=9)
         featured, rest = (latest[0], latest[1:]) if latest else (None, [])
@@ -352,33 +476,7 @@ def home(request: Request):
         other_live_streamers = [
             s for s in streamers if s.twitch_login in live and (not featured_streamer or s.id != featured_streamer.id)
         ]
-        stats_teaser = None
-        crest_colors = None
-        if config.CLUB_ID:
-            # Two independent calls, so one failing doesn't blank the
-            # other -- the crest is club identity and shouldn't disappear
-            # because a stats endpoint had a bad minute.
-            #
-            # Both non-blocking: the standing band is decoration and the
-            # home page must not inherit EA's latency to render. On a cold
-            # cache these return None and fill in behind the request, so
-            # the band is missing for a few seconds after a restart instead
-            # of every visitor waiting out a 10-second timeout.
-            try:
-                # overallStats, not division_stats: the latter is an
-                # all-time leaderboard snapshot whose division and points
-                # can be a hundred matches out of date. Skill rating here
-                # is live -- see _standing_teaser.
-                overall = ea_client.overall_stats(
-                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False) or {}
-                stats_teaser = _standing_teaser(overall)
-            except ea_client.EAApiError:
-                pass
-            try:
-                crest_colors = ea_client.crest_colors(
-                    config.CLUB_PLATFORM, config.CLUB_ID, blocking=False)
-            except ea_client.EAApiError:
-                pass
+        stats_teaser, crest_colors = _club_standing()
         return templates.TemplateResponse(request, "home.html", _ctx(
             request,
             featured=featured,
@@ -399,7 +497,10 @@ def home(request: Request):
 
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
+def login_page(request: Request, next: str = ""):
+    auth.remember_login_next(request, next)
+    if auth.is_member(auth.current_user(request)):
+        return RedirectResponse(auth.pop_login_next(request), status_code=303)
     error = request.session.pop("login_error", None)
     return templates.TemplateResponse(request, "login.html", _ctx(request, error=error))
 
@@ -1167,8 +1268,7 @@ def set_gamertag(request: Request, player_name: str = Form(""), csrf_token: str 
                 _flash(request, "Gamertag unlinked.")
         except services.ServiceError as exc:
             _flash(request, str(exc), "warn")
-    return RedirectResponse(redirect_to if redirect_to.startswith("/") else "/events",
-                            status_code=303)
+    return RedirectResponse(_safe_redirect(redirect_to, "/events"), status_code=303)
 
 
 # --------------------------------------------------------------------------- #
@@ -1296,7 +1396,7 @@ def _handle_renewal_response(session, move, response: str) -> dict:
 # Squad moves: pick somebody out of Discord, announce an offer or a departure
 # --------------------------------------------------------------------------- #
 @app.get("/roster", response_class=HTMLResponse)
-def roster_page(request: Request, _staff=Depends(auth.require_staff)):
+def roster_page(request: Request, _staff=Depends(auth.require_management)):
     """The picker. Reads the Discord member list live (cached briefly) so
     the only people who can be announced are people actually in the
     server.
@@ -1330,7 +1430,7 @@ def roster_page(request: Request, _staff=Depends(auth.require_staff)):
         roster_enabled=config.ROSTER_MOVES_ENABLED,
         roster_missing=config.roster_moves_missing(),
         pitch_positions=discord_roster.PITCH_POSITIONS,
-        staff_roles=discord_roster.STAFF_ROLE_SUGGESTIONS,
+        staff_roles=discord_roster.STAFF_ROLES,
         squad_statuses=discord_roster.SQUAD_STATUSES,
         min_weeks=discord_roster.CONTRACT_MIN_WEEKS,
         max_weeks=discord_roster.CONTRACT_MAX_WEEKS,
@@ -1425,7 +1525,7 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
                     contract_weeks: str = Form(""), squad_status: str = Form(""),
                     staff_role: str = Form(""), staff_note: str = Form(""),
                     release_position: str = Form(""), release_note: str = Form(""),
-                    csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+                    csrf_token: str = Form(...), staff=Depends(auth.require_management)):
     """Publishes one squad announcement.
 
     The page has three separate panels -- a player contract, a staff role,
@@ -1473,6 +1573,10 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
             contract = services.live_contract_for(session, member["id"])
             if contract is not None:
                 services.end_contract(session, contract, ended_by_name=staff.get("name"))
+            # Leaving the club ends a club role too, and its access here.
+            player = services.get_player(session, member["id"])
+            if player is not None and player.club_role:
+                services.set_club_role(session, player, "")
 
     if failure:
         _flash(request, f"The announcement didn't send: {failure}", level="error")
@@ -1491,7 +1595,7 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
 
 @app.post("/roster/{move_id}/confirm")
 def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
-                   player_name: str = Form(""), staff=Depends(auth.require_staff)):
+                   player_name: str = Form(""), staff=Depends(auth.require_management)):
     """Publishes the signing announcement for an offer the player accepted
     -- or, for a staff offer, the appointment announcement.
 
@@ -1572,6 +1676,15 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                 source="signing", signing_move_id=move.id,
                 created_by_name=staff.get("name"), starts_at=move.confirmed_at,
             )
+        # An appointment to a club role gives the person that role's
+        # permissions here, from the moment the club announces it.
+        role_given = False
+        if appointment and move.position in roles.CLUB_ROLES:
+            player = services.ensure_player(session, discord_id=move.discord_id,
+                                            display_name=move.display_name,
+                                            avatar_url=move.avatar_url)
+            services.set_club_role(session, player, move.position)
+            role_given = True
         name, role = move.display_name, move.position
         unlinked = (not appointment and linked_as is None
                     and services.get_player_link(session, int(move.discord_id)) is None)
@@ -1582,8 +1695,8 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
         _flash(request, f"The {what} is recorded, but the announcement didn't send: {failure}"
                         + linked_note, level="error")
     elif appointment:
-        _flash(request, f"{name}'s appointment{' as ' + role if role else ''} is announced. "
-                        f"Remember to give them the staff role in Discord.")
+        _flash(request, f"{name}'s appointment{' as ' + role if role else ''} is announced."
+                        + (f" They now have {role} access on the site." if role_given else ""))
     else:
         _flash(request, f"{name}'s signing is announced. Welcome to the squad." + linked_note)
     if unlinked:
@@ -1600,7 +1713,7 @@ def roster_record_contract(request: Request, discord_id: str = Form(""),
                            position: str = Form(""), secondary_position: str = Form(""),
                            contract_weeks: str = Form(""),
                            squad_status: str = Form(""), csrf_token: str = Form(...),
-                           staff=Depends(auth.require_staff)):
+                           staff=Depends(auth.require_management)):
     """Records a contract for somebody who is already in the squad.
 
     For players who joined before the site tracked contracts: they never
@@ -1633,7 +1746,7 @@ def roster_renew_contract(request: Request, contract_id: int,
                           contract_weeks: str = Form(""), squad_status: str = Form(""),
                           position: str = Form(""), secondary_position: str = Form(""),
                           note: str = Form(""),
-                          csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+                          csrf_token: str = Form(...), staff=Depends(auth.require_management)):
     """Offers the player a new contract, which they accept or decline in
     Discord exactly like the original offer.
 
@@ -1684,7 +1797,7 @@ def roster_renew_contract(request: Request, contract_id: int,
 @app.post("/roster/contracts/{contract_id}/release")
 def roster_release_contract(request: Request, contract_id: int,
                             note: str = Form(""), csrf_token: str = Form(...),
-                            staff=Depends(auth.require_staff)):
+                            staff=Depends(auth.require_management)):
     """Ends a contract and announces the departure -- Let Go, started
     from the contract rather than the member picker, so it works for
     somebody who has already left the server too.
@@ -1809,6 +1922,194 @@ def squad_link_gamertag(request: Request, discord_id: str = Form(""),
         except services.ServiceError as exc:
             _flash(request, str(exc), "warn")
     return RedirectResponse(back, status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Players: the personnel file
+# --------------------------------------------------------------------------- #
+# How many of a player's latest matches their file lists.
+RECENT_MATCHES = 10
+
+
+def _not_found(request: Request, message: str):
+    return templates.TemplateResponse(request, "error.html", _ctx(request, message=message),
+                                      status_code=404)
+
+
+def _usage_for(usage: dict, gamertag: str | None) -> dict | None:
+    return usage["players"].get(gamertag.casefold()) if gamertag else None
+
+
+@app.get("/players", response_class=HTMLResponse)
+def players_page(request: Request):
+    """The squad list every member sees: who's on the staff, who's under
+    contract at which status, and how each player is doing."""
+    with get_session() as session:
+        staff = services.club_staff(session)
+        contracts = services.live_contracts(session)
+        ids = {c.discord_id for c in contracts} | {p.discord_id for p in staff}
+        people = services.players_by_id(session, list(ids))
+        links = services.player_links_for(session, [int(i) for i in ids if i.isdigit()])
+    usage = _squad_usage()
+    groups = {status: [] for status in roles.SQUAD_STATUSES}
+    for c in contracts:
+        gamertag = links.get(int(c.discord_id)) if c.discord_id.isdigit() else None
+        groups.setdefault(c.squad_status, []).append({
+            "contract": c, "player": people.get(c.discord_id), "gamertag": gamertag,
+            "usage": _usage_for(usage, gamertag),
+        })
+    for rows in groups.values():
+        rows.sort(key=lambda r: r["contract"].display_name.casefold())
+    return templates.TemplateResponse(request, "players.html", _ctx(
+        request, staff=staff, groups=groups, window=usage["window"],
+        squad_size=len(contracts), form_label=squad.form_label,
+    ))
+
+
+@app.get("/players/me")
+def my_file(request: Request, user=Depends(auth.require_member)):
+    return RedirectResponse(f"/players/{user['id']}", status_code=303)
+
+
+@app.get("/players/{discord_id}", response_class=HTMLResponse)
+def player_page(request: Request, discord_id: str):
+    """One person's file. Every member sees anybody's profile and match
+    stats. Their contract, attendance and squad-move history are for
+    them and the staff. Coach notes are for the staff only -- including
+    from the player they're about."""
+    user = auth.current_user(request)
+    if not discord_id.isdigit():
+        return _not_found(request, "There's no player file at that address.")
+    is_self = str(user["id"]) == discord_id
+    is_staff = auth.is_staff(user)
+    see_private = is_self or is_staff
+    now = datetime.utcnow()
+    with get_session() as session:
+        player = services.get_player(session, discord_id)
+        if player is None:
+            return _not_found(request, "There's no player file for that person yet.")
+        contract = services.live_contract_for(session, discord_id)
+        link = services.get_player_link(session, int(discord_id))
+        history = services.contract_history(session, discord_id) if see_private else []
+        moves = services.moves_for(session, discord_id) if see_private else []
+        attendance = services.attendance_record(session, int(discord_id)) if see_private else None
+        # Never on your own file, even for staff: a coach who also plays
+        # doesn't read what the other coaches wrote about them.
+        notes_visible = is_staff and not is_self
+        notes = services.list_coach_notes(session, discord_id) if notes_visible else []
+    gamertag = link.player_name if link else None
+    usage = _squad_usage()
+    recent = []
+    if gamertag and config.CLUB_ID:
+        trend = db.player_trend(config.CLUB_PLATFORM, str(config.CLUB_ID), gamertag)
+        for m in reversed(trend[-RECENT_MATCHES:]):
+            m["played"] = (datetime.fromtimestamp(m["played_at"], tz=timezone.utc).replace(tzinfo=None)
+                           if m.get("played_at") else None)
+            recent.append(m)
+    return templates.TemplateResponse(request, "player.html", _ctx(
+        request, player=player, contract=contract, gamertag=gamertag,
+        usage=_usage_for(usage, gamertag), window=usage["window"], recent=recent,
+        history=history, moves=moves, attendance=attendance, notes=notes,
+        is_self=is_self, see_private=see_private, notes_visible=notes_visible,
+        can_set_role=auth.is_management(user) and not is_self,
+        contract_state=services.contract_state(contract, now) if contract else None,
+        time_left=services.contract_time_left(contract, now) if contract else None,
+        club_roles=roles.CLUB_ROLES, preferred_feet=services.PREFERRED_FEET,
+        form_label=squad.form_label, weeks_label=discord_roster.weeks_label,
+        gamertag_options=_gamertag_options(u["name"] for u in usage["players"].values())
+        if is_self and not gamertag else [],
+    ))
+
+
+@app.post("/players/{discord_id}/profile")
+def player_update_profile(request: Request, discord_id: str, preferred_foot: str = Form(""),
+                          archetype: str = Form(""), bio: str = Form(""),
+                          csrf_token: str = Form(...), user=Depends(auth.require_member)):
+    """A player's own details. Nobody else's: this is what they say about
+    themselves."""
+    _check_csrf(request, csrf_token)
+    if str(user["id"]) != discord_id:
+        raise services.ServiceError("You can only edit your own profile.")
+    with get_session() as session:
+        player = services.get_player(session, discord_id)
+        if player is None:
+            raise services.ServiceError("There's no player file for you yet.")
+        services.update_player_profile(session, player, preferred_foot=preferred_foot,
+                                       archetype=archetype, bio=bio)
+    _flash(request, "Profile saved.")
+    return RedirectResponse(f"/players/{discord_id}", status_code=303)
+
+
+@app.post("/players/{discord_id}/role")
+def player_set_role(request: Request, discord_id: str, club_role: str = Form(""),
+                    csrf_token: str = Form(...), staff=Depends(auth.require_management)):
+    """Gives or clears a club role directly, without an offer -- for
+    setting the club up, or correcting it. Not your own: nobody promotes
+    themselves, and nobody locks themselves out by mistake."""
+    _check_csrf(request, csrf_token)
+    if str(staff["id"]) == discord_id:
+        raise services.ServiceError("You can't change your own club role.")
+    with get_session() as session:
+        player = services.get_player(session, discord_id)
+        if player is None:
+            raise services.ServiceError("There's no player file for that person.")
+        services.set_club_role(session, player, club_role)
+        name, role = player.display_name, player.club_role
+    _flash(request, f"{name} is now {role}." if role else f"{name} no longer holds a club role.")
+    return RedirectResponse(f"/players/{discord_id}", status_code=303)
+
+
+@app.post("/players/{discord_id}/notes")
+def player_add_note(request: Request, discord_id: str, body: str = Form(""),
+                    csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    _check_csrf(request, csrf_token)
+    if str(staff["id"]) == discord_id:
+        raise services.ServiceError("Coach notes are about other people -- you can't see notes on yourself.")
+    with get_session() as session:
+        if services.get_player(session, discord_id) is None:
+            raise services.ServiceError("There's no player file for that person.")
+        services.add_coach_note(session, discord_id=discord_id, body=body, author=staff)
+    _flash(request, "Note added. Only staff can see it.")
+    return RedirectResponse(f"/players/{discord_id}#coach-notes", status_code=303)
+
+
+@app.post("/players/{discord_id}/notes/{note_id}/delete")
+def player_delete_note(request: Request, discord_id: str, note_id: int,
+                       csrf_token: str = Form(...), staff=Depends(auth.require_staff)):
+    """The note's author, or management, can remove it."""
+    _check_csrf(request, csrf_token)
+    with get_session() as session:
+        note = services.get_coach_note(session, note_id)
+        if note is None or note.discord_id != discord_id:
+            raise services.ServiceError("That note no longer exists.")
+        if not (auth.is_management(staff) or note.author_discord_id == str(staff["id"])):
+            raise services.ServiceError("Only the note's author or management can delete it.")
+        services.delete_coach_note(session, note)
+    _flash(request, "Note deleted.")
+    return RedirectResponse(f"/players/{discord_id}#coach-notes", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Club profile: what the public splash page says
+# --------------------------------------------------------------------------- #
+@app.get("/club-profile", response_class=HTMLResponse)
+def club_profile_page(request: Request, _staff=Depends(auth.require_management)):
+    with get_session() as session:
+        profile = services.get_club_profile(session)
+    return templates.TemplateResponse(request, "club_profile.html", _ctx(
+        request, profile=profile, fields=services.CLUB_PROFILE_FIELDS,
+    ))
+
+
+@app.post("/club-profile")
+async def club_profile_save(request: Request, staff=Depends(auth.require_management)):
+    form = await request.form()
+    _check_csrf(request, str(form.get("csrf_token") or ""))
+    values = {key: str(form.get(key) or "") for key in services.CLUB_PROFILE_FIELDS}
+    with get_session() as session:
+        services.save_club_profile(session, values, by_name=staff.get("name"))
+    _flash(request, "Club profile saved. It's live on the public page.")
+    return RedirectResponse("/club-profile", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

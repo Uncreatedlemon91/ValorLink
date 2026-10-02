@@ -856,7 +856,7 @@ def test_contract_terms_are_validated(weeks, status):
 
 
 def test_contract_terms_accept_the_bounds():
-    assert services.parse_contract_terms("1", "Reserve") == (1, "Reserve")
+    assert services.parse_contract_terms("1", "Substitute") == (1, "Substitute")
     assert services.parse_contract_terms(" 52 ", "Starter") == (52, "Starter")
 
 
@@ -892,7 +892,7 @@ def test_live_contracts_put_the_soonest_to_run_out_first():
         later = _contract(session, weeks=20)
         sooner = services.create_contract(
             session, discord_id="43", display_name="Sam", avatar_url=None, position=None,
-            squad_status="Reserve", weeks=2, source="recorded", created_by_name=None,
+            squad_status="Substitute", weeks=2, source="recorded", created_by_name=None,
         )
         assert [c.id for c in services.live_contracts(session)] == [sooner.id, later.id]
 
@@ -922,12 +922,14 @@ def test_a_renewal_may_keep_a_primary_from_before_the_fixed_list():
         services.parse_positions("Sweeper", "", keep="Libero")
 
 
-def test_a_staff_role_is_required_and_bounded():
-    assert services.parse_staff_role("  Set Piece Coach ") == "Set Piece Coach"
-    with pytest.raises(services.ServiceError, match="Name the staff role"):
+def test_a_staff_role_must_be_a_club_role():
+    """Confirming an appointment grants that role's access on the site, so
+    it's one of the three club roles and nothing invented."""
+    assert services.parse_staff_role("  Head Coach ") == "Head Coach"
+    with pytest.raises(services.ServiceError, match="Pick the staff role"):
         services.parse_staff_role("   ")
-    with pytest.raises(services.ServiceError, match="80 characters"):
-        services.parse_staff_role("x" * 81)
+    with pytest.raises(services.ServiceError, match="Club President, Head Coach, Coach"):
+        services.parse_staff_role("Set Piece Coach")
 
 
 def test_a_renewal_restates_both_positions():

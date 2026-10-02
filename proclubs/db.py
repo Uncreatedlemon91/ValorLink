@@ -538,7 +538,8 @@ def player_names(platform, club_id):
 def player_trend(platform, club_id, player_name):
     conn = _connect()
     rows = conn.execute(
-        """SELECT mp.*, m.played_at, m.match_type, m.opp_name
+        """SELECT mp.*, m.played_at, m.match_type, m.opp_name, m.us_score, m.opp_score,
+                  m.outcome
            FROM match_players mp
            JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
            WHERE m.platform=? AND m.club_id=? AND mp.player_name=?

@@ -153,11 +153,10 @@
             <label for="staff-role">Role</label>
             {# Not `required`: this form's other buttons would then demand it.
                The server insists on it for a staff offer. #}
-            <input id="staff-role" name="staff_role" list="staff-roles" maxlength="80"
-                   autocomplete="off" placeholder="e.g. Assistant Manager" />
-            <datalist id="staff-roles">
-              {% for r in staff_roles %}<option value="{{ r }}"></option>{% endfor %}
-            </datalist>
+            <select id="staff-role" name="staff_role">
+              <option value="">Choose a role…</option>
+              {% for r in staff_roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+            </select>
           </div>
           <div class="field">
             <label for="staff-note">Note from the staff <span class="muted">(optional)</span></label>
@@ -172,9 +171,9 @@
             </button>
           </div>
           <p class="field-hint">
-            No contract, and accepting sets <strong>no</strong> Discord role — the staff role
-            controls this site, so give it to them yourself once you've confirmed the
-            appointment.
+            No contract. Once they accept and you confirm, they get that role's access on
+            this site: the Club President and Head Coach run contracts and the squad, and
+            Coaches run matchday and coach notes. No Discord role is changed.
           </p>
         </fieldset>
 

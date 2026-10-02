@@ -30,6 +30,7 @@ def init_db():
     Base.metadata.create_all(engine)
     _add_missing_columns()
     _drop_legacy_columns()
+    _rename_legacy_values()
 
 
 def _add_missing_columns():
@@ -81,6 +82,18 @@ def _drop_legacy_columns():
             for column_name in columns:
                 if column_name in existing_columns:
                     conn.execute(text(f'ALTER TABLE {table_name} DROP COLUMN "{column_name}"'))
+
+
+def _rename_legacy_values():
+    """Stored values a later version renamed -- squad status "Reserve"
+    became "Substitute". A no-op once nothing old is left."""
+    import roles
+
+    with engine.begin() as conn:
+        for old, new in roles.LEGACY_SQUAD_STATUSES.items():
+            for table in ("contracts", "roster_moves"):
+                conn.execute(text(f"UPDATE {table} SET squad_status = :new WHERE squad_status = :old"),
+                             {"new": new, "old": old})
 
 
 @contextmanager

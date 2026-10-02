@@ -25,10 +25,11 @@ import discord_events as discord_events_mod
 import discord_roster
 import html_sanitize
 import images
+import roles
 from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
-                    Comment, Contract, Event, EventSignup, EventTierInvite, Like, PlayerLink, RosterMove,
-                    Streamer, TacticsBoard, TacticsSlot)
+                    ClubSetting, CoachNote, Comment, Contract, Event, EventSignup, EventTierInvite, Like,
+                    Player, PlayerLink, RosterMove, Streamer, TacticsBoard, TacticsSlot)
 
 EVENT_TYPES = ["Match", "Scrim", "Tournament", "Community"]
 
@@ -1220,13 +1221,13 @@ def parse_positions(primary: str, secondary: str, *,
 
 
 def parse_staff_role(role: str) -> str:
-    """The staff role on offer. Free text with suggestions, so this only
-    insists there is one and that it fits in an embed field."""
+    """The club role an appointment is for: one of roles.CLUB_ROLES, since
+    confirming it gives the person that role's permissions on the site."""
     role = (role or "").strip()
     if not role:
-        raise ServiceError("Name the staff role you're offering.")
-    if len(role) > 80:
-        raise ServiceError("Keep the staff role under 80 characters.")
+        raise ServiceError("Pick the staff role you're offering.")
+    if role not in roles.CLUB_ROLES:
+        raise ServiceError("Pick a staff role: " + ", ".join(roles.CLUB_ROLES) + ".")
     return role
 
 
@@ -1268,6 +1269,8 @@ def create_contract(session: Session, *, discord_id: str, display_name: str,
         source=source, signing_move_id=signing_move_id, created_by_name=created_by_name,
     )
     session.add(contract)
+    ensure_player(session, discord_id=str(discord_id), display_name=display_name,
+                  avatar_url=avatar_url, commit=False)
     session.commit()
     session.refresh(contract)
     return contract
@@ -1362,6 +1365,203 @@ def open_renewals(session: Session) -> dict[int, RosterMove]:
         )
     ).scalars()
     return {move.contract_id: move for move in rows}
+
+
+# --- Players: the personnel file ------------------------------------------- #
+PREFERRED_FEET = ("Right", "Left", "Both")
+_MAX_ARCHETYPE = 40
+_MAX_BIO = 500
+_MAX_COACH_NOTE = 2000
+
+
+def get_player(session: Session, discord_id: str) -> Player | None:
+    return session.execute(
+        select(Player).where(Player.discord_id == str(discord_id))
+    ).scalar_one_or_none()
+
+
+def ensure_player(session: Session, *, discord_id: str, display_name: str,
+                  avatar_url: str | None = None, commit: bool = True) -> Player:
+    """This person's record, created if it's their first. Refreshes the
+    name and avatar when given new ones, so the file shows them as they
+    are in Discord now rather than as they were on day one."""
+    player = get_player(session, discord_id)
+    if player is None:
+        player = Player(discord_id=str(discord_id), display_name=display_name,
+                        avatar_url=avatar_url)
+        session.add(player)
+    else:
+        if display_name and player.display_name != display_name:
+            player.display_name = display_name
+        if avatar_url and player.avatar_url != avatar_url:
+            player.avatar_url = avatar_url
+    if commit:
+        session.commit()
+        session.refresh(player)
+    return player
+
+
+def backfill_players(session: Session) -> int:
+    """Gives everyone with a contract a player record. Run at startup, so
+    a squad carried over from a previous season, or contracts recorded
+    before player records existed, need no manual step. Returns how many
+    were created; a no-op once everybody has one."""
+    known = set(session.execute(select(Player.discord_id)).scalars())
+    created = 0
+    # Newest contract first, so a person with several gets their latest
+    # name and avatar.
+    for contract in session.execute(select(Contract).order_by(Contract.id.desc())).scalars():
+        if contract.discord_id in known:
+            continue
+        session.add(Player(discord_id=contract.discord_id, display_name=contract.display_name,
+                           avatar_url=contract.avatar_url))
+        known.add(contract.discord_id)
+        created += 1
+    if created:
+        session.commit()
+    return created
+
+
+def club_role_for(session: Session, discord_id) -> str | None:
+    return session.execute(
+        select(Player.club_role).where(Player.discord_id == str(discord_id))
+    ).scalar_one_or_none()
+
+
+def set_club_role(session: Session, player: Player, role: str) -> Player:
+    """Gives or clears a club role. Blank clears it."""
+    role = (role or "").strip()
+    if role and role not in roles.CLUB_ROLES:
+        raise ServiceError("Pick a club role: " + ", ".join(roles.CLUB_ROLES) + ".")
+    new = role or None
+    if new != player.club_role:
+        player.club_role = new
+        player.club_role_since = datetime.utcnow() if new else None
+        session.commit()
+        session.refresh(player)
+    return player
+
+
+def update_player_profile(session: Session, player: Player, *, preferred_foot: str,
+                          archetype: str, bio: str) -> Player:
+    """What a player says about themselves. Each field optional."""
+    foot = (preferred_foot or "").strip()
+    if foot and foot not in PREFERRED_FEET:
+        raise ServiceError("Pick a preferred foot: " + ", ".join(PREFERRED_FEET) + ".")
+    archetype = (archetype or "").strip()
+    if len(archetype) > _MAX_ARCHETYPE:
+        raise ServiceError(f"Keep your build under {_MAX_ARCHETYPE} characters.")
+    bio = (bio or "").strip()
+    if len(bio) > _MAX_BIO:
+        raise ServiceError(f"Keep your bio under {_MAX_BIO} characters.")
+    player.preferred_foot = foot or None
+    player.archetype = archetype or None
+    player.bio = bio or None
+    session.commit()
+    session.refresh(player)
+    return player
+
+
+def club_staff(session: Session) -> list[Player]:
+    """Everyone holding a club role, most senior first."""
+    rank = {r: i for i, r in enumerate(roles.CLUB_ROLES)}
+    staff = session.execute(select(Player).where(Player.club_role.is_not(None))).scalars()
+    return sorted(staff, key=lambda p: (rank.get(p.club_role, len(rank)), p.display_name.casefold()))
+
+
+def players_by_id(session: Session, discord_ids: list[str]) -> dict[str, Player]:
+    if not discord_ids:
+        return {}
+    rows = session.execute(
+        select(Player).where(Player.discord_id.in_([str(i) for i in discord_ids]))
+    ).scalars()
+    return {p.discord_id: p for p in rows}
+
+
+def contract_history(session: Session, discord_id: str) -> list[Contract]:
+    """Every contract this person has had, newest first."""
+    return list(session.execute(
+        select(Contract).where(Contract.discord_id == str(discord_id))
+        .order_by(Contract.id.desc())
+    ).scalars())
+
+
+def moves_for(session: Session, discord_id: str, limit: int = 20) -> list[RosterMove]:
+    return list(session.execute(
+        select(RosterMove).where(RosterMove.discord_id == str(discord_id))
+        .order_by(RosterMove.announced_at.desc(), RosterMove.id.desc()).limit(limit)
+    ).scalars())
+
+
+def list_coach_notes(session: Session, discord_id: str) -> list[CoachNote]:
+    return list(session.execute(
+        select(CoachNote).where(CoachNote.discord_id == str(discord_id))
+        .order_by(CoachNote.created_at.desc(), CoachNote.id.desc())
+    ).scalars())
+
+
+def get_coach_note(session: Session, note_id: int) -> CoachNote | None:
+    return session.get(CoachNote, note_id)
+
+
+def add_coach_note(session: Session, *, discord_id: str, body: str, author: dict) -> CoachNote:
+    body = (body or "").strip()
+    if not body:
+        raise ServiceError("The note is empty.")
+    if len(body) > _MAX_COACH_NOTE:
+        raise ServiceError(f"Keep a note under {_MAX_COACH_NOTE} characters.")
+    note = CoachNote(discord_id=str(discord_id), body=body,
+                     author_name=author.get("name") or "Staff",
+                     author_discord_id=str(author.get("id") or "") or None)
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+    return note
+
+
+def delete_coach_note(session: Session, note: CoachNote) -> None:
+    session.delete(note)
+    session.commit()
+
+
+# --- Club profile (the public splash page) --------------------------------- #
+# key -> (label, default, max length). Everything the club says about
+# itself to people who haven't joined yet. Facts the site already knows
+# (record, squad size, staff, open positions) are filled in live instead.
+CLUB_PROFILE_FIELDS = {
+    "headline": ("Headline", "Pro Clubs, done properly.", 80),
+    "about": ("About the club",
+              "A competitive EA FC Pro Clubs side that plays as a team: set positions, "
+              "a real tactic, and a squad that turns up.", 600),
+    "match_nights": ("When we play", "", 120),
+    "region": ("Region", "", 60),
+    "platform": ("Platform", "", 60),
+    "play_style": ("How we play", "", 120),
+    "recruiting": ("Recruiting note",
+                   "Think you'd fit? Join the Discord and say hello.", 200),
+}
+
+
+def get_club_profile(session: Session) -> dict[str, str]:
+    stored = {row.key: row.value for row in session.execute(select(ClubSetting)).scalars()}
+    return {key: (stored.get(key) if stored.get(key) is not None else default)
+            for key, (_label, default, _limit) in CLUB_PROFILE_FIELDS.items()}
+
+
+def save_club_profile(session: Session, values: dict[str, str], *, by_name: str | None) -> None:
+    for key, (label, _default, limit) in CLUB_PROFILE_FIELDS.items():
+        value = (values.get(key) or "").strip()
+        if len(value) > limit:
+            raise ServiceError(f"Keep “{label}” under {limit} characters.")
+    for key in CLUB_PROFILE_FIELDS:
+        value = (values.get(key) or "").strip()
+        row = session.get(ClubSetting, key)
+        if row is None:
+            session.add(ClubSetting(key=key, value=value, updated_by_name=by_name))
+        else:
+            row.value = value
+            row.updated_by_name = by_name
+    session.commit()
 
 
 # --- Streamers ------------------------------------------------------------ #

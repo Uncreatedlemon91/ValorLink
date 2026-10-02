@@ -24,7 +24,8 @@
   </noscript>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body{% block body_attrs %}{% endblock %}>
+  {% block body %}
   {% from "_icons.html" import icon %}
   {% set here_section, here_tab = nav_locate(request.url.path) %}
   <div class="app-shell">
@@ -42,11 +43,10 @@
         </a>
       </div>
       <nav class="side-nav" aria-label="Sections">
-        {% for s in nav_visible(is_staff) %}
+        {% for s in nav_visible(viewer_level) %}
           {% set on = here_section and here_section.key == s.key %}
-          <a href="{{ s.url }}" class="side-link{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>
+          <a href="{{ s.url_for(viewer_level) }}" class="side-link{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>
             {{ icon(s.icon) }}<span class="side-label">{{ s.label }}</span>
-            {% if s.staff_only %}<span class="side-badge">Staff</span>{% endif %}
           </a>
         {% endfor %}
       </nav>
@@ -58,8 +58,11 @@
             {% else %}
               <span class="nav-avatar nav-avatar-fallback" aria-hidden="true">{{ initials(user.name, 2) }}</span>
             {% endif %}
-            <span class="account-name">{{ user.name }}</span>
-            {% if is_staff %}<span class="staff-pill">Staff</span>{% endif %}
+            <span class="account-text">
+              <a class="account-name" href="/players/me">{{ user.name }}</a>
+              {% if user.club_role %}<span class="staff-pill">{{ user.club_role }}</span>
+              {% elif is_staff %}<span class="staff-pill">Staff</span>{% endif %}
+            </span>
           </div>
           <a class="btn secondary btn-sm" href="/logout">Sign out</a>
         {% else %}
@@ -73,7 +76,7 @@
         <header class="context-bar">
           <span class="context-title">{{ here_section.label }}</span>
           <nav class="tab-bar" aria-label="{{ here_section.label }} pages">
-            {% for t in here_section.tabs %}
+            {% for t in here_section.tabs_for(viewer_level) %}
               {% set on = here_tab and here_tab.href == t.href %}
               <a href="{{ t.href }}" class="tab{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>{{ t.label }}</a>
             {% endfor %}
@@ -83,7 +86,7 @@
 
       {% if not is_member and DISCORD_INVITE_URL %}
         <div class="discord-banner">
-          <span>{{ 'Sign in with Discord and join our server' if not user else "You're signed in, but not in our Discord server" }} to comment, like posts, and get event pings.</span>
+          <span>{{ 'Sign in with Discord as a member of our server' if not user else "You're signed in, but not in our Discord server" }} to see the squad, fixtures and stats.</span>
           <a class="btn discord btn-sm" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>
         </div>
       {% endif %}
@@ -104,6 +107,7 @@
       </footer>
     </div>
   </div>
+  {% endblock %}
   {# Rewrites every <time data-localtime> into the reader's own zone, and
      wires the event form's local-time entry. Site-wide because times show
      up on the home page, the events list and the event page alike. #}

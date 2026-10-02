@@ -34,12 +34,12 @@ USAGE_WINDOW = 10
 # all -- "played 1 of 2" says nothing about whether a promise is being kept.
 MIN_WINDOW_TO_JUDGE = 5
 # Share of the window each squad status should expect to play in, after
-# FM's playing-time expectations. A Reserve is promised nothing.
-EXPECTED_SHARE = {"Starter": 0.5, "Rotation": 0.2, "Reserve": 0.0}
+# FM's playing-time expectations. A Substitute is promised nothing.
+EXPECTED_SHARE = {"Starter": 0.5, "Rotation": 0.2, "Substitute": 0.0}
 # Form is the average match rating over a player's last few appearances.
 FORM_GAMES = 5
 MIN_APPS_FOR_FORM = 3
-# A Rotation or Reserve player averaging this or better is flagged as
+# A Rotation or Substitute player averaging this or better is flagged as
 # worth promoting; an expiring contract is flagged louder at it too.
 IN_FORM_RATING = 7.5
 # Attendance below this (once there's enough history to be a rate at all,
@@ -164,7 +164,7 @@ def player_flags(*, status: str, linked: bool, usage: dict | None, window: int,
         if expected and apps / window < expected:
             flags.append(_flag(
                 "warn", f"{status}, but has {_apps_phrase(apps, window)} matches."))
-        if status in ("Rotation", "Reserve") and form is not None and form >= IN_FORM_RATING:
+        if status in ("Rotation", "Substitute") and form is not None and form >= IN_FORM_RATING:
             flags.append(_flag(
                 "good", f"{status}, averaging {form:.1f} — worth a promotion?"))
 
@@ -187,7 +187,7 @@ def player_flags(*, status: str, linked: bool, usage: dict | None, window: int,
 def squad_rows(*, contracts: list, links: dict[int, str], usage: dict,
                attendance: dict[int, dict], contract_states: dict[int, str],
                time_left) -> list[dict]:
-    """One row per contracted player, sorted Starter -> Reserve, then by
+    """One row per contracted player, sorted Starter -> Substitute, then by
     position down the pitch, then name.
 
     links: discord_user_id -> gamertag. usage: db.squad_usage()'s result.

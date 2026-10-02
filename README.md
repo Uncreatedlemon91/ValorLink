@@ -20,6 +20,13 @@ design-fc27/   the earlier broadcast design canvas (superseded by the
 
 ## What it does
 
+- **Members only** — a public splash page promotes the club; everything
+  else needs signing in with Discord as a member of the club's server.
+- **Player files** — one record per person: profile, positions, match
+  stats, contract, attendance and squad-move history, plus coach notes
+  only staff see. Every member sees everyone's stats.
+- **Club roles** — Club President and Head Coach run contracts and the
+  squad; Coaches run matchday and coach notes. Assigned on the site.
 - **News** — rich-text articles with cover images, comments and likes,
   announced to Discord on publish; reactions there count toward the
   article's like total.
@@ -29,7 +36,7 @@ design-fc27/   the earlier broadcast design canvas (superseded by the
   step. Times render in each viewer's own timezone.
 - **Squad moves** — pick a member out of the Discord server, offer them a
   position or announce a departure. An offer carries a contract length in
-  weeks and a squad status (Starter / Rotation / Reserve), with Accept /
+  weeks and a squad status (Starter / Rotation / Substitute), with Accept /
   Decline buttons only that player can press; accepting adds the squad
   role, and staff then confirm the signing to publish the announcement and
   start the contract. Expired contracts are flagged for staff to renew

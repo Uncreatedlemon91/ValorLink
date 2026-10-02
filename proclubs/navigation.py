@@ -6,9 +6,14 @@ Grouped by what people come to do rather than by data source:
   Home
   News
   Matchday   Fixtures & sign-ups · Tactics      -- getting ready for a match
-  Club       Stats · League table               -- how the club is doing
+  Squad      Players · Overview · Moves & contracts   -- the people
+  Club       Stats · League table · Club profile      -- how the club is doing
   Media      Clips · Live                       -- watching
-  Squad      Overview · Moves & contracts       -- running the club (staff)
+
+Each tab says the access level it needs (roles.py): every member sees the
+players and their stats, staff see the squad overview, management see
+contracts and the club profile. A section shows only the tabs its viewer
+can open, and disappears when that's none of them.
 
 Every tab keeps its own URL (/events, /tactics, /stats, ...). The section
 is one place in the navigation, with the same header and tab bar on every
@@ -22,6 +27,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import roles
+
 
 @dataclass(frozen=True)
 class Tab:
@@ -29,6 +36,7 @@ class Tab:
     href: str
     # Paths that count as this tab, so /events/12 lights up "Fixtures".
     prefixes: tuple[str, ...]
+    level: int = roles.MEMBER
 
 
 @dataclass(frozen=True)
@@ -40,7 +48,8 @@ class Section:
     # For sections without tabs.
     href: str = ""
     prefixes: tuple[str, ...] = ()
-    staff_only: bool = False
+    # For sections without tabs; a section with tabs goes by theirs.
+    level: int = roles.MEMBER
     # A short URL for the section itself, redirecting to its first tab.
     shortcut: str = ""
 
@@ -48,28 +57,37 @@ class Section:
     def url(self) -> str:
         return self.tabs[0].href if self.tabs else self.href
 
+    def tabs_for(self, level: int) -> tuple[Tab, ...]:
+        return tuple(t for t in self.tabs if level >= t.level)
+
+    def url_for(self, level: int) -> str:
+        tabs = self.tabs_for(level)
+        return tabs[0].href if tabs else self.href
+
     def all_prefixes(self) -> tuple[str, ...]:
         return self.prefixes + tuple(p for t in self.tabs for p in t.prefixes)
 
 
 SECTIONS: tuple[Section, ...] = (
-    Section("home", "Home", "home", href="/"),
+    Section("home", "Home", "home", href="/", level=roles.GUEST),
     Section("news", "News", "news", href="/news", prefixes=("/news",)),
     Section("matchday", "Matchday", "matchday", shortcut="/matchday", tabs=(
         Tab("Fixtures & sign-ups", "/events", ("/events",)),
         Tab("Tactics", "/tactics", ("/tactics",)),
     )),
+    Section("squad", "Squad", "squad", tabs=(
+        Tab("Players", "/players", ("/players",)),
+        Tab("Overview", "/squad", ("/squad",), level=roles.STAFF),
+        Tab("Moves & contracts", "/roster", ("/roster",), level=roles.MANAGEMENT),
+    )),
     Section("club", "Club", "club", shortcut="/club", tabs=(
         Tab("Stats", "/stats", ("/stats",)),
         Tab("League table", "/league", ("/league",)),
+        Tab("Club profile", "/club-profile", ("/club-profile",), level=roles.MANAGEMENT),
     )),
     Section("media", "Media", "media", shortcut="/media", tabs=(
         Tab("Clips", "/clips", ("/clips",)),
         Tab("Live", "/streamers", ("/streamers",)),
-    )),
-    Section("squad", "Squad", "squad", staff_only=True, tabs=(
-        Tab("Overview", "/squad", ("/squad",)),
-        Tab("Moves & contracts", "/roster", ("/roster",)),
     )),
 )
 
@@ -94,8 +112,9 @@ def locate(path: str) -> tuple[Section | None, Tab | None]:
     return None, None
 
 
-def visible(is_staff: bool) -> tuple[Section, ...]:
-    """The sections this viewer sees in the sidebar. Staff-only sections
-    are hidden from everybody else -- the routes are gated regardless;
-    this only stops a dead link showing up."""
-    return tuple(s for s in SECTIONS if is_staff or not s.staff_only)
+def visible(level: int) -> tuple[Section, ...]:
+    """The sections this viewer sees in the sidebar: those with at least
+    one tab they can open. The routes are gated regardless; this only
+    stops a dead link showing up."""
+    return tuple(s for s in SECTIONS
+                 if (s.tabs_for(level) if s.tabs else level >= s.level))

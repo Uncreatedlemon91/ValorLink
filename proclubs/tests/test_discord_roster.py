@@ -442,10 +442,10 @@ def test_an_embed_omits_the_thumbnail_rather_than_sending_an_empty_url():
 def test_terms_are_shown_as_their_own_fields_only_when_there_are_some():
     with_terms = discord_roster.build_move_embed(
         kind="offer", member=_choice(), position="Striker", note=None,
-        announced_by=None, contract_weeks=1, squad_status="Reserve",
+        announced_by=None, contract_weeks=1, squad_status="Substitute",
     )
     fields = {f["name"]: f["value"] for f in with_terms["fields"]}
-    assert fields == {"Position": "Striker", "Contract": "1 week", "Squad status": "Reserve"}
+    assert fields == {"Position": "Striker", "Contract": "1 week", "Squad status": "Substitute"}
 
     # An offer made before contracts existed re-renders as it was posted.
     legacy = discord_roster.build_move_embed(
@@ -539,7 +539,7 @@ def test_the_signing_announcement_carries_the_secondary_position():
 
 def test_staff_roles_are_not_pitch_positions():
     """The whole point of the split: a contract can't name "Manager"."""
-    assert not set(discord_roster.STAFF_ROLE_SUGGESTIONS) & set(discord_roster.PITCH_POSITIONS)
+    assert not set(discord_roster.STAFF_ROLES) & set(discord_roster.PITCH_POSITIONS)
 
 
 # --- Staff offers ------------------------------------------------------------ #
