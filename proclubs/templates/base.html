@@ -12,40 +12,45 @@
        a slow third-party round trip delays the webfont swap rather than
        first paint -- the families already carry display=swap, so text is
        painted in the fallback stack either way.
-       Two families: Barlow to read, Barlow Condensed to label (tabs,
-       table headers, kickers). Weights are only those the stylesheet
-       sets, so no font file is fetched that nothing selects. -->
+       Two families: Inter to read and for every figure, IBM Plex Mono for
+       the labels (kickers, table heads, chips). -->
   <link rel="stylesheet" href="/static/css/site.css?v={{ css_v }}" />
   <link rel="stylesheet" media="print" onload="this.media='all'"
-        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@600;700&display=swap" />
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" />
   <noscript>
     <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@600;700&display=swap" />
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" />
   </noscript>
+  {# Before first paint, so a collapsed sidebar doesn't flash open. #}
+  <script>try{if(localStorage.getItem("yfc-nav-collapsed")==="1")document.documentElement.classList.add("nav-collapsed")}catch(e){}</script>
   {% block head %}{% endblock %}
 </head>
 <body{% block body_attrs %}{% endblock %}>
   {% block body %}
   {% from "_icons.html" import icon %}
+  {% from "_crest.html" import crest %}
   {% set here_section, here_tab = nav_locate(request.url.path) %}
+  {% set here_label = (here_tab.label if here_tab else (here_section.label if here_section else '')) %}
   <div class="app-shell">
     {# The sidebar: sections, not pages. A section with tabs shows them in
-       the bar above the content (see navigation.py). On a phone it folds
+       the strip above the content (see navigation.py). On a phone it folds
        into a top bar with the sections in a scrollable row. #}
     <aside class="sidebar">
       <div class="sidebar-top">
         <a class="brand" href="/">
-          <span class="brand-mark" aria-hidden="true">{{ initials(SITE_NAME, 2) }}</span>
+          <span class="brand-crest">{{ crest(initials(SITE_NAME, 3), 96, "side") }}</span>
           <span class="brand-text">
             <span class="brand-name">{{ SITE_NAME }}</span>
             <span class="brand-tagline">{{ SITE_TAGLINE }}</span>
           </span>
         </a>
+        {% if SITE_MOTTO %}<p class="brand-motto">{{ SITE_MOTTO }}</p>{% endif %}
       </div>
       <nav class="side-nav" aria-label="Sections">
+        <span class="side-heading">Club network</span>
         {% for s in nav_visible(viewer_level) %}
           {% set on = here_section and here_section.key == s.key %}
-          <a href="{{ s.url_for(viewer_level) }}" class="side-link{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>
+          <a href="{{ s.url_for(viewer_level) }}" class="side-link{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %} title="{{ s.label }}">
             {{ icon(s.icon) }}<span class="side-label">{{ s.label }}</span>
           </a>
         {% endfor %}
@@ -61,27 +66,54 @@
             <span class="account-text">
               <a class="account-name" href="/players/me">{{ user.name }}</a>
               {% if user.club_role %}<span class="staff-pill">{{ user.club_role }}</span>
-              {% elif is_staff %}<span class="staff-pill">Staff</span>{% endif %}
+              {% elif is_staff %}<span class="staff-pill">Staff</span>
+              {% else %}<span class="account-sub">Squad member</span>{% endif %}
             </span>
           </div>
-          <a class="btn secondary btn-sm" href="/logout">Sign out</a>
         {% else %}
           <a class="btn secondary btn-sm" href="/login">Sign in</a>
         {% endif %}
+        <p class="side-foot">{{ SITE_SHORT }} / Pro Clubs · EA FC</p>
       </div>
     </aside>
 
     <div class="app-main">
+      {# The top bar: where you are, the time every fixture is kept in, and
+         your own file. #}
+      <header class="topbar">
+        <button type="button" class="topbar-toggle" data-nav-toggle aria-label="Collapse the sidebar" aria-pressed="false">
+          {{ icon('panel') }}
+        </button>
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="/">{{ SITE_SHORT }}</a>
+          {% if here_section and here_section.key != 'home' %}
+            <span aria-hidden="true">/</span>
+            {% if here_tab %}
+              <a href="{{ here_section.url_for(viewer_level) }}">{{ here_section.label }}</a>
+              <span aria-hidden="true">/</span><span>{{ here_tab.label }}</span>
+            {% else %}
+              <span>{{ here_section.label }}</span>
+            {% endif %}
+          {% endif %}
+        </nav>
+        <div class="topbar-end">
+          <span class="topbar-clock" data-utc-clock>{{ icon('clock') }}<span class="clock-text">UTC</span></span>
+          {% if user %}
+            <a class="topbar-link" href="/logout">Sign out</a>
+            <a class="btn secondary btn-sm" href="/players/me">Player file</a>
+          {% else %}
+            <a class="btn secondary btn-sm" href="/login">Sign in</a>
+          {% endif %}
+        </div>
+      </header>
+
       {% if here_section and here_section.tabs %}
-        <header class="context-bar">
-          <span class="context-title">{{ here_section.label }}</span>
-          <nav class="tab-bar" aria-label="{{ here_section.label }} pages">
-            {% for t in here_section.tabs_for(viewer_level) %}
-              {% set on = here_tab and here_tab.href == t.href %}
-              <a href="{{ t.href }}" class="tab{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>{{ t.label }}</a>
-            {% endfor %}
-          </nav>
-        </header>
+        <nav class="tab-bar" aria-label="{{ here_section.label }} pages">
+          {% for t in here_section.tabs_for(viewer_level) %}
+            {% set on = here_tab and here_tab.href == t.href %}
+            <a href="{{ t.href }}" class="tab{{ ' active' if on }}"{% if on %} aria-current="page"{% endif %}>{{ t.label }}</a>
+          {% endfor %}
+        </nav>
       {% endif %}
 
       {% if not is_member and DISCORD_INVITE_URL %}
@@ -98,12 +130,16 @@
         </div>
       {% endif %}
 
-      <main>
+      {# Every page title wears a kicker -- "YFC / FIXTURES & SIGN-UPS" --
+         drawn by CSS from this variable, so no template has to repeat it. #}
+      {% set kicker = (SITE_SHORT ~ (' / ' ~ here_label if here_label else '')) | replace("'", "") | replace('\\', '') %}
+      <main style="--kicker: '{{ kicker }}';">
         {% block content %}{% endblock %}
       </main>
 
       <footer class="site-footer">
-        {{ SITE_NAME }} &middot; unofficial fan-run site, not affiliated with EA
+        <span>{{ SITE_NAME }} &middot; unofficial fan-run site, not affiliated with EA</span>
+        <span>{{ SITE_SHORT }} / club file</span>
       </footer>
     </div>
   </div>
@@ -112,6 +148,7 @@
      wires the event form's local-time entry. Site-wide because times show
      up on the home page, the events list and the event page alike. #}
   <script src="/static/js/localtime.js?v={{ asset_version('js/localtime.js') }}" defer></script>
+  <script src="/static/js/shell.js?v={{ asset_version('js/shell.js') }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

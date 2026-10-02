@@ -44,43 +44,49 @@ if a tab points at a route that doesn't exist.
 
 ## The design system
 
-The site is styled as a **management tool**, after Football Manager's
-screens: a fixed sidebar of sections, a context bar with the section's
-tabs, and content laid out as panels with title strips and compact tables.
-Staff run the club from it and players check it before a match, so it's
-built to be scanned rather than to put on a show. The tokens live in
-`static/css/site.css`'s `:root`; the component layer is the last block in
-that file. The rules worth knowing before adding anything:
+The site is styled as the **club's own records office**: dark olive panels
+over a floodlit pitch, a brass-rimmed crest, and every page a "file" with
+a short code above its title (`YFC / FIXTURES & SIGN-UPS`). The layout is
+still a management tool -- a sidebar of sections, a strip of tabs, panels
+and compact tables -- built to be scanned before a match rather than to
+put on a show. The tokens live in `static/css/site.css`'s `:root`; the
+theme layer ("Club file theme") is the last block in that file and
+restyles the components above it. The rules worth knowing before adding
+anything:
 
-- **One accent.** `--accent` (pitch green) marks the primary action and
-  where you are (active section, active tab, panel markers). Every other
-  colour has a meaning: amber is "needs attention" or standing, `--live`
-  red is a stream on air right now and nothing else, `--danger-strong` is
-  destructive, `--accent-2` blue is staff. If a colour isn't saying one of
-  those things, it should be grey.
-- **Slate surfaces in three steps.** `--bg` is the app, `--panel` is
-  content, `--panel-2` is title strips, inputs and table heads. Borders do
-  the separating; there are no drop shadows.
-- **Panels.** `.panel` > `.panel-head` (`h2` + an optional link) >
-  `.panel-body`. The small marker before a panel title is green by
-  default, `.panel-amber` for standing, `.panel-live` only for live
-  streams. `.section-head` is the same title strip without a panel around
-  it.
-- **Small, consistent radius** (`--radius`, 4px). No skew, no diagonal
-  motifs.
-- **Two faces, both Barlow.** Barlow is for reading: body text, headings,
-  numbers. Barlow Condensed is for labels (tabs, table headers, panel
-  titles, badges), always uppercase and tracked. Numeric columns get
-  `tabular-nums`.
-- **Dense by default.** 14.5px body and compact rows, but real actions keep
-  a 40px hit target. The reading is tight; the tapping isn't.
-- **On a phone** the sidebar folds into a top bar: club and account on one
-  row, the sections in a scrollable row beneath. Every section stays one
-  tap away with no menu to open, and tables scroll inside their panel
-  rather than pushing the page sideways.
+- **One accent.** `--accent` (khaki) marks the primary action and where
+  you are. Every other colour has a meaning: `--accent-2` brass is staff
+  and club roles, `--amber` orange needs attention, `--live` red is a
+  stream on air or a destructive action. If a colour isn't saying one of
+  those things, it should be grey-olive.
+- **The ground.** The page background is fixed chalk pitch markings
+  (`static/img/pitch.svg`) over mown stripes and a fine grain
+  (`static/img/grain.svg`); panels are slightly translucent over it.
+  Borders do the separating, and a panel's meaning is a 2px line across
+  its top (`.panel-amber`, `.panel-staff`, `.panel-live`).
+- **Two voices of type.** Inter is for reading and for every figure.
+  IBM Plex Mono is for labels: kickers, table heads, chips, the
+  breadcrumb, always small and tracked. Buttons and tabs are sentence
+  case in Inter.
+- **Kickers come from the shell.** `base.html` sets `--kicker` on `<main>`
+  from the current section and tab, and `.page-head` draws it above the
+  title, so no template repeats it. `.kicker` is the same style for
+  anywhere else.
+- **The crest** is an inline SVG macro (`templates/_crest.html`) with the
+  club's initials, so it needs no artwork and scales from the sidebar to
+  the splash page. Replace the macro's body to use a real badge.
+- **The shell.** A sidebar (crest, motto, sections, your account) that
+  collapses to icons with the button in the top bar (remembered per
+  browser, `static/js/shell.js`), and a top bar with the breadcrumb, a
+  UTC clock -- fixture times are stored in UTC -- and your player file.
+  `SITE_SHORT` (default `YFC`) and `SITE_MOTTO` set the code and the line
+  under the crest.
+- **On a phone** the sidebar folds into a top bar with the sections in a
+  scrollable row, and tables scroll inside their panel rather than
+  pushing the page sideways.
 - **`--series-*` is the validated categorical chart palette**, read
   directly by `charts.js`; the `--status-*` colours are for win/draw/loss
-  and health states only.
+  and health states only. The tactics pitch stays grass green.
 
 The home page is a dashboard of panels: next match and club standing
 across the top, the news down the main column (a lead story, then a
@@ -231,7 +237,12 @@ Starting / Rotation / Substitute Player. Contracts stored with the old
 
 ## The public splash page
 
-`welcome.html` is the club's shop window. The words come from the **Club
+`welcome.html` is the club's shop window: a crest banner, the motto
+and the club's own words, three ways in (join, the player portal, how we
+play), a card per line of the team -- each drawing the current formation
+with that line lit and any shirt nobody covers hollow -- then club
+operations (squad, staff, how the next fixture is filling) beside the
+live standing from EA. The words come from the **Club
 profile** (`/club-profile`, management): headline, about, when we play,
 region, platform, how we play, and a recruiting note; a blank field is
 left off the page. The rest is live: skill rating, record and win rate

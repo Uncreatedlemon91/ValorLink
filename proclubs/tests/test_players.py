@@ -103,9 +103,9 @@ def test_the_next_page_is_only_ever_on_this_site(client):
 def test_members_get_the_dashboard_not_the_splash(client):
     _login(client, "Fan")
     html = client.get("/").text
-    assert "home-dash" in html and "welcome-hero" not in html
+    assert "home-dash" in html and "welcome-banner" not in html
     # ...and can still preview the public page.
-    assert "welcome-hero" in client.get("/welcome").text
+    assert "welcome-banner" in client.get("/welcome").text
 
 
 # --- Access levels ----------------------------------------------------------- #
@@ -321,12 +321,15 @@ def test_the_splash_page_shows_the_club_and_what_it_needs(client):
     _contract("1", "Keeper", position="Goalkeeper")
     _player("2", "Gaffer", club_role="Head Coach")
     html = client.get("/").text
-    assert "Players signed" in html and ">1<" in html
+    assert "Players signed" in html
     assert "Gaffer" in html and "Head Coach" in html
     # Short of strikers for the default 4-3-3, not of keepers.
-    looking = html[html.index("position-chips"):]
-    looking = looking[:looking.index("</ul>")]
-    assert "Striker" in looking and "Goalkeeper" not in looking
+    open_shirts = html[html.index("Open shirts"):]
+    open_shirts = open_shirts[:open_shirts.index("</div>")]
+    assert "Striker" in open_shirts and "Goalkeeper" not in open_shirts
+    # Each line of the team gets its card, and only the uncovered ones recruit.
+    assert "Recruiting · Centre Back" in html
+    assert "Covered · trials welcome" in html       # the goalkeeper line
 
 
 def test_management_edits_what_the_splash_page_says(client):

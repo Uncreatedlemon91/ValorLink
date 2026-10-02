@@ -2,30 +2,42 @@
 {% block title %}{{ player.display_name }}{% endblock %}
 {% block content %}
 <div class="page page-wide">
-  {# --- Who they are ------------------------------------------------------ #}
-  <div class="profile-head">
-    {% if player.avatar_url %}
-      <img class="profile-avatar" src="{{ player.avatar_url }}" alt="" width="72" height="72" decoding="async" />
+  {# --- Who they are: the file's cover sheet --------------------------------- #}
+  {% set photo = (player.avatar_url or '') | replace('size=128', 'size=512') %}
+  <section class="file-hero">
+    {% if photo %}
+      <img class="file-photo" src="{{ photo }}" alt="" width="168" height="196" decoding="async" />
     {% else %}
-      <span class="profile-avatar move-avatar-fallback">{{ initials(player.display_name) }}</span>
+      <span class="file-photo move-avatar-fallback" aria-hidden="true">{{ initials(player.display_name) }}</span>
     {% endif %}
-    <div class="profile-id">
+    <div class="file-id">
+      <p class="kicker">{{ SITE_NAME }} / player file</p>
       <h1>{{ player.display_name }}</h1>
-      <div class="profile-pills">
+      <p class="file-role">
+        {% if contract %}{{ status_label(contract.squad_status) }}{% if contract.position %}<span class="sep">/</span>{{ contract.position }}{% endif %}
+        {% elif player.club_role %}{{ player.club_role }}
+        {% else %}Not under contract{% endif %}
+      </p>
+      <div class="file-chips">
         {% if player.club_role %}<span class="role-pill">{{ player.club_role }}</span>{% endif %}
-        {% if contract %}<span class="contract-status">{{ status_label(contract.squad_status) }}</span>{% endif %}
-        {% if not contract and not player.club_role %}<span class="muted">Not under contract</span>{% endif %}
+        {% if contract %}<span class="contract-status">Signed</span>
+          <span class="file-state">{{ 'Active' if contract_state in ('active', 'expiring') else 'Contract expired' }}</span>
+        {% endif %}
       </div>
       <dl class="profile-facts">
-        {% if contract and contract.position %}
-          <div><dt>Position</dt><dd>{{ contract.position }}{% if contract.secondary_position %} <span class="muted">/ {{ contract.secondary_position }}</span>{% endif %}</dd></div>
-        {% endif %}
+        {% if contract and contract.secondary_position %}<div><dt>Also plays</dt><dd>{{ contract.secondary_position }}</dd></div>{% endif %}
         <div><dt>Gamertag</dt><dd>{{ gamertag or '—' }}</dd></div>
         {% if player.preferred_foot %}<div><dt>Foot</dt><dd>{{ player.preferred_foot }}</dd></div>{% endif %}
         {% if player.archetype %}<div><dt>Build</dt><dd>{{ player.archetype }}</dd></div>{% endif %}
       </dl>
     </div>
-  </div>
+    <div class="file-side">
+      <p class="kicker">Squad status</p>
+      <span class="file-side-value">{{ status_label(contract.squad_status) if contract else (player.club_role or 'Free agent') }}</span>
+      {% if contract and contract.position %}<span class="file-side-sub">{{ contract.position }}{% if contract.secondary_position %} · {{ contract.secondary_position }}{% endif %}</span>{% endif %}
+      {% if player.created_at %}<span class="file-side-sub">On file since {{ localtime(player.created_at, 'date') }}</span>{% endif %}
+    </div>
+  </section>
 
   <div class="dash-grid">
     <div class="dash-main">

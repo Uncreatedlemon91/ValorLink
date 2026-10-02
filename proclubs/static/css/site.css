@@ -2258,62 +2258,590 @@ a.squad-player:hover .squad-name { color: var(--accent-text); }
 
 .club-profile-form { padding: 1.1rem; }
 
-/* --- The public splash page ---------------------------------------------- */
-.welcome-body { background: var(--bg); }
-.welcome { --crest: var(--accent); max-width: 1100px; margin: 0 auto; padding: 0 1rem; }
-.welcome-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; }
-.welcome-hero {
-  position: relative; overflow: hidden; text-align: center; padding: 3.5rem 1.25rem 3rem;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background:
-    radial-gradient(ellipse at 50% -10%, color-mix(in srgb, var(--crest) 28%, transparent), transparent 60%),
-    linear-gradient(180deg, var(--panel-2), var(--panel));
-}
-.welcome-crest {
-  display: inline-grid; place-items: center; width: 84px; height: 84px; border-radius: 50%;
-  background: var(--crest); color: var(--on-accent); font-family: var(--font-display);
-  font-weight: 700; font-size: 1.9rem; letter-spacing: 0.04em; margin-bottom: 1rem;
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--crest) 22%, transparent);
-}
-.welcome-kicker {
-  margin: 0 0 0.4rem; color: var(--muted); font-family: var(--font-display); font-weight: 700;
-  font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase;
-}
-.welcome-hero h1 { margin: 0; font-size: clamp(2.4rem, 7vw, 4.2rem); line-height: 1; letter-spacing: -0.01em; }
-.welcome-headline { margin: 0.6rem 0 0; font-size: 1.25rem; font-weight: 600; color: var(--accent-text); }
-.welcome-about { max-width: 60ch; margin: 0.9rem auto 0; color: var(--muted); font-size: 1.05rem; }
-.welcome-cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.6rem; }
-
-.welcome-stats {
-  display: grid; gap: 1px; margin: 1rem 0; background: var(--border);
-  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-}
-.welcome-stat { display: grid; gap: 0.3rem; justify-items: center; padding: 1rem 0.75rem; background: var(--panel); text-align: center; }
-.welcome-stat-value { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; line-height: 1.1; white-space: nowrap; }
-.welcome-stat-label {
-  color: var(--muted); font-family: var(--font-display); font-weight: 700;
-  font-size: 0.72rem; letter-spacing: 0.13em; text-transform: uppercase;
-}
-.form-chips { display: flex; gap: 0.25rem; }
-.form-chips .form-chip { width: 24px; height: 24px; font-size: 0.75rem; border-radius: 3px; }
-
-.welcome-grid {
-  display: grid; gap: 1rem; align-items: start; margin-bottom: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-.position-chips { list-style: none; margin: 0 0 0.9rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.position-chips li {
-  padding: 0.25rem 0.6rem; border: 1px solid var(--amber); border-radius: 3px;
-  color: var(--amber); font-weight: 600; font-size: 0.88rem;
-}
-.welcome-staff { list-style: none; margin: 0; padding: 0.5rem 0.9rem; display: grid; }
-.welcome-staff li { display: flex; align-items: center; gap: 0.65rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-soft); }
-.welcome-staff li:last-child { border-bottom: none; }
-.welcome .site-footer { text-align: center; }
-
 @media (max-width: 600px) {
   .profile-head { flex-direction: column; align-items: flex-start; }
-  .welcome-hero { padding: 2.5rem 1rem 2.25rem; }
-  .welcome-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+
+/* ===========================================================================
+   Club file theme
+
+   A club's own records office rather than a broadcast: dark olive panels on
+   a floodlit pitch, chalk markings and mown stripes behind everything, a
+   brass-rimmed crest, and two voices of type -- Inter for reading and for
+   every figure, IBM Plex Mono for the labels ("YFC / SQUAD", table heads,
+   chips). Declared last so it restyles every component above without
+   rewriting each one in place.
+
+   Colour still means one thing each:
+     --accent   khaki   the main action, where you are
+     --accent-2 brass   staff and club roles
+     --amber    orange  needs attention
+     --live     red     on air, and destructive actions
+   =========================================================================== */
+:root {
+  --bg: #11150F;
+  --sidebar: #0C0F0A;
+  --panel: #161B13;
+  --panel-2: #1C2318;
+  --panel-3: #262F21;
+  --panel-glass: rgba(22, 27, 19, 0.9);
+  --text: #E8EBE0;
+  --muted: #A4AB97;
+  --faint: #767E6A;
+  --border: #323C2B;
+  --border-soft: #232B1E;
+  --border-strong: #4A5641;
+
+  --accent: #C2D095;
+  --accent-strong: #C2D095;
+  --accent-text: #CEDBA5;
+  --accent-deep: #8E9E62;
+  --accent-rgb: 194, 208, 149;
+  --on-accent: #141A0F;
+  --accent-2: #D3B572;
+  --amber: #E39A3B;
+  --live: #E5484D;
+  --danger-strong: #C4362F;
+  --danger-rgb: 196, 54, 47;
+
+  --radius: 2px;
+  --sidebar-w: 248px;
+
+  --font-headline: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Every label in the older rules asks for --font-display: they become
+     the mono kickers. Figures that used it are moved back to Inter below. */
+  --font-display: var(--font-mono);
+
+  --status-good: #9CCB64;
+  --status-warning: #E39A3B;
+  --status-critical: #E5484D;
+  --status-neutral: #8C9580;
+}
+
+/* Only the weights loaded are used; no faux bold on the mono labels. */
+html { font-size: 15px; font-synthesis: none; background: #0D110B; }
+
+/* The ground: grain over chalk pitch markings over mown stripes, all fixed
+   so the pitch stays put while the panels scroll over it. */
+body {
+  background-color: var(--bg);
+  background-image:
+    url("../img/grain.svg"),
+    url("../img/pitch.svg"),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.013) 0 96px, transparent 96px 192px),
+    radial-gradient(ellipse at 60% -10%, rgba(var(--accent-rgb), 0.07), transparent 55%);
+  background-size: 220px 220px, cover, auto, auto;
+  background-attachment: scroll, fixed, fixed, fixed;
+  font-feature-settings: "cv11", "ss01";
+}
+a { color: var(--accent-text); }
+h1, h2, h3 { letter-spacing: -0.015em; }
+
+/* --- Sidebar ---------------------------------------------------------------- */
+.app-shell { background: none; }
+.sidebar {
+  background: linear-gradient(180deg, rgba(16, 20, 13, 0.97), rgba(10, 13, 8, 0.98));
+  border-right: 1px solid var(--border);
+}
+.sidebar-top {
+  display: grid; justify-items: center; text-align: center;
+  padding: 1.6rem 1rem 1.3rem; border-bottom: 1px solid var(--border);
+}
+.brand { flex-direction: column; gap: 0.85rem; }
+.brand-crest { display: block; line-height: 0; }
+.brand-crest svg { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55)); }
+.brand-text { justify-items: center; gap: 0.35rem; }
+.brand-name {
+  font-size: 1.12rem; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase;
+  margin-right: -0.3em;
+}
+.brand-tagline {
+  font-family: var(--font-mono); font-weight: 400; font-size: 0.7rem;
+  letter-spacing: 0.3em; color: var(--muted); margin-right: -0.3em;
+}
+.brand-motto {
+  margin: 1rem 0 0; max-width: 20ch; color: var(--faint);
+  font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.75;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.side-nav { padding: 1.1rem 0.75rem; gap: 2px; }
+.side-heading {
+  padding: 0.2rem 0.8rem 0.75rem; color: var(--faint);
+  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
+}
+.side-link {
+  padding: 0.72rem 0.85rem; border-radius: 0; border-left: 2px solid transparent;
+  color: #D3D8C8; font-weight: 400; font-size: 1rem;
+}
+.side-link .icon { color: var(--muted); }
+.side-link:hover { background: rgba(var(--accent-rgb), 0.05); }
+.side-link.active {
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.13), rgba(var(--accent-rgb), 0.02));
+  border-left-color: var(--accent); color: var(--text); font-weight: 500;
+}
+.side-account { padding: 1rem 1.1rem 1.15rem; border-top: 1px solid var(--border); gap: 0.75rem; }
+.account-sub { color: var(--muted); font-size: 0.8rem; }
+.side-foot {
+  margin: 0; color: var(--faint); font-family: var(--font-mono);
+  font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+/* Collapsed: icons only, for more room on the tactics board and stats. */
+.nav-collapsed .app-shell { grid-template-columns: 76px minmax(0, 1fr); }
+.nav-collapsed .sidebar-top { padding: 1rem 0.5rem; }
+.nav-collapsed .brand-crest svg { width: 46px; height: auto; }
+.nav-collapsed .brand-text, .nav-collapsed .brand-motto, .nav-collapsed .side-heading,
+.nav-collapsed .side-label, .nav-collapsed .account-text, .nav-collapsed .side-foot { display: none; }
+.nav-collapsed .side-nav { padding: 0.9rem 0.5rem; }
+.nav-collapsed .side-link { justify-content: center; padding: 0.75rem 0; }
+.nav-collapsed .side-account { justify-items: center; padding: 0.9rem 0.5rem; }
+
+/* --- Top bar and section tabs ------------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 1rem; min-height: 62px; padding: 0 2rem;
+  background: rgba(12, 15, 10, 0.86); border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.topbar-toggle {
+  background: none; border: none; color: var(--muted); padding: 0.35rem;
+  min-height: 0; text-transform: none; letter-spacing: 0;
+}
+.topbar-toggle:hover { color: var(--text); filter: none; }
+.crumbs {
+  display: flex; align-items: center; gap: 0.7rem; min-width: 0; overflow: hidden; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted);
+}
+.crumbs a { color: var(--muted); }
+.crumbs a:first-child { color: var(--text); letter-spacing: 0.08em; }
+.crumbs a:hover { color: var(--accent-text); text-decoration: none; }
+.crumbs span[aria-hidden] { color: var(--faint); }
+.topbar-end { margin-left: auto; display: flex; align-items: center; gap: 1.3rem; flex: none; }
+.topbar-clock {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted);
+}
+.topbar-clock .icon { width: 16px; height: 16px; }
+.topbar-link { color: var(--text); font-size: 0.92rem; font-weight: 500; }
+
+.app-main > .tab-bar {
+  display: flex; gap: 0.15rem; padding: 0 2rem; overflow-x: auto;
+  background: rgba(12, 15, 10, 0.55); border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 0.95rem 1rem; color: var(--muted);
+  font-family: var(--font-body); font-weight: 500; font-size: 0.95rem;
+  letter-spacing: 0; text-transform: none; border-bottom: 2px solid transparent;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); background: rgba(var(--accent-rgb), 0.06); }
+
+/* --- Page heads: every title on a panel, with its kicker ----------------------- */
+.page { padding-top: 2rem; }
+.page-head {
+  align-items: flex-end; margin-bottom: 1.6rem; padding: 1.5rem 1.6rem 1.6rem;
+  background: rgba(20, 25, 17, 0.88); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: var(--radius);
+}
+.page-head > :first-child::before {
+  content: var(--kicker, ""); display: block; margin-bottom: 0.6rem;
+  font-family: var(--font-mono); font-weight: 400; font-size: 0.74rem; line-height: 1.3;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-text);
+}
+.page-head h1 {
+  font-weight: 500; font-size: clamp(1.9rem, 3.2vw, 2.85rem);
+  letter-spacing: -0.035em; line-height: 1.03;
+}
+.home-dash .page-head h1 { font-size: clamp(1.9rem, 3.2vw, 2.85rem); }
+.page-lede { margin-top: 0.6rem; font-size: 1rem; }
+.page-head .btn { min-height: 42px; }
+
+/* --- Panels -------------------------------------------------------------------- */
+.panel, .card {
+  background: var(--panel-glass); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.panel-head { background: none; padding: 1rem 1.2rem 0.85rem; border-bottom: 1px solid var(--border-soft); }
+.panel-head h2 {
+  font-family: var(--font-headline); font-weight: 500; font-size: 1.12rem;
+  letter-spacing: -0.01em; text-transform: none;
+}
+.panel-head h2::before { display: none; }
+.panel-head > .muted, .panel-head > span {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.panel-head a { font-weight: 500; }
+/* A panel's meaning is a line across its top. */
+.panel-amber { box-shadow: inset 0 2px 0 var(--amber); }
+.panel-live { box-shadow: inset 0 2px 0 var(--live); }
+.panel-staff { box-shadow: inset 0 2px 0 var(--accent-2); }
+.panel-body { padding: 1.1rem 1.2rem; }
+
+.section-head h2 {
+  font-family: var(--font-headline); font-weight: 500; font-size: 1.2rem;
+  letter-spacing: -0.01em; text-transform: none;
+}
+.section-head h2::before { width: 2px; }
+
+/* --- Tables -------------------------------------------------------------------- */
+.league-table thead th {
+  background: rgba(12, 15, 10, 0.45); color: var(--faint);
+  font-family: var(--font-mono); font-weight: 400; font-size: 0.7rem; letter-spacing: 0.12em;
+}
+.league-table td { border-color: var(--border-soft); }
+.league-table tbody tr:hover td { background: rgba(var(--accent-rgb), 0.035); }
+
+/* --- Buttons and forms ----------------------------------------------------------- */
+button, .btn {
+  font-family: var(--font-body); font-weight: 500; font-size: 0.92rem;
+  text-transform: none; letter-spacing: 0; border-radius: var(--radius);
+  padding: 0.55rem 1.05rem;
+}
+.btn.secondary { background: rgba(255, 255, 255, 0.015); border-color: var(--border-strong); }
+.btn.secondary:hover { border-color: var(--accent-deep); background: rgba(var(--accent-rgb), 0.06); }
+.btn.staff { background: var(--accent-2); border-color: var(--accent-2); color: var(--on-accent); }
+/* The club's way in is its main action everywhere it appears, so it wears
+   the accent rather than Discord's own blue. */
+.btn.discord { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.danger { color: var(--live); border-color: rgba(229, 72, 77, 0.5); }
+.btn-sm { min-height: 34px; padding: 0.35rem 0.8rem; font-size: 0.86rem; }
+.btn-link { font-family: var(--font-body); }
+#tabs button { font-family: var(--font-body); text-transform: none; letter-spacing: 0; }
+
+input, select, textarea { background: rgba(9, 12, 8, 0.65); border-radius: var(--radius); }
+.field label {
+  font-family: var(--font-body); font-weight: 500; font-size: 0.88rem;
+  text-transform: none; letter-spacing: 0; color: var(--muted);
+}
+
+/* --- Chips --------------------------------------------------------------------- */
+.staff-pill, .role-pill, .contract-status, .side-badge, .roster-state, .move-tag, .chip {
+  font-family: var(--font-mono); font-weight: 400; font-size: 0.72rem;
+  letter-spacing: 0.04em; text-transform: none; border-radius: var(--radius);
+}
+.role-pill, .staff-pill { color: var(--accent-2); padding: 0.12rem 0.5rem; }
+.contract-status {
+  color: var(--accent-text); border: 1px solid rgba(var(--accent-rgb), 0.45);
+  padding: 0.12rem 0.5rem; background: rgba(var(--accent-rgb), 0.05);
+}
+.category-badge { font-weight: 400; letter-spacing: 0.06em; }
+
+/* --- Figures back in Inter ---------------------------------------------------------- */
+.standing-value, .cd-box span, .squad-stat-value, .event-signup-count strong,
+.player-figure .value, .player-identity h3, .explore-card h4, .move-avatar-fallback,
+.lt-rating, .welcome-stat-value, .tile-value, .stat-card .value, .depth-pos, .lead-body h3 {
+  font-family: var(--font-headline);
+}
+.standing-value--hero { color: var(--accent-2); font-weight: 500; }
+
+/* Stat tiles: label over a big figure, a line across the top. */
+.tile, .squad-stat {
+  display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+  gap: 0.55rem; padding: 0.95rem 1.05rem 1.1rem;
+  background: rgba(28, 35, 24, 0.55); border: 1px solid var(--border);
+  border-top: 2px solid #56633F; border-radius: var(--radius);
+}
+.tile-label, .squad-stat-label {
+  order: -1; font-family: var(--font-body); font-weight: 400; font-size: 0.88rem;
+  letter-spacing: 0; text-transform: none; color: var(--muted);
+}
+.tile-value { font-weight: 400; font-size: 1.85rem; letter-spacing: -0.02em; }
+.tile-row { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0.65rem; }
+
+/* --- Flash, banner, footer -------------------------------------------------------- */
+.flash { background: var(--panel-glass); border-radius: var(--radius); }
+.discord-banner {
+  background: rgba(var(--accent-rgb), 0.07); border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius);
+}
+.site-footer {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.12em;
+  background: rgba(10, 13, 8, 0.6); border-top: 1px solid var(--border);
+}
+
+/* --- Player file ------------------------------------------------------------------- */
+.file-hero {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.6rem; align-items: center;
+  margin-bottom: 1.4rem; padding: 1.6rem;
+  background: linear-gradient(120deg, rgba(36, 46, 30, 0.95), rgba(20, 25, 17, 0.92) 60%);
+  border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: var(--radius);
+}
+.file-photo {
+  width: 168px; height: 196px; object-fit: cover; display: block;
+  border: 1px solid var(--border-strong); background: var(--panel-3);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.file-photo.move-avatar-fallback {
+  display: grid; place-items: center; font-size: 2.6rem; color: var(--muted); border-radius: 0;
+}
+.file-id { min-width: 0; display: grid; gap: 0.55rem; }
+.kicker {
+  margin: 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent-text);
+}
+.file-id h1 {
+  margin: 0; font-weight: 500; font-size: clamp(2.2rem, 4.4vw, 3.6rem);
+  line-height: 1; letter-spacing: -0.04em; overflow-wrap: anywhere;
+}
+.file-role { margin: 0; font-size: 1.1rem; color: #D3D8C8; }
+.file-role .sep { color: var(--faint); margin: 0 0.45rem; }
+.file-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.file-state { color: var(--text); font-size: 0.95rem; }
+.file-side {
+  align-self: stretch; display: grid; align-content: center; gap: 0.45rem;
+  padding-left: 1.6rem; border-left: 1px solid var(--border); min-width: 200px;
+}
+.file-side .kicker { color: var(--muted); }
+.file-side-value { font-size: 1.25rem; font-weight: 500; color: var(--text); }
+.file-side-sub { color: var(--muted); font-size: 0.92rem; }
+.profile-facts { margin-top: 0.15rem; }
+
+/* --- Phone ------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .nav-collapsed .app-shell { grid-template-columns: minmax(0, 1fr); }
+  .sidebar-top {
+    display: flex; justify-content: flex-start; text-align: left; padding: 0.6rem 1rem;
+    border-bottom: none;
+  }
+  .brand { flex-direction: row; gap: 0.6rem; }
+  .brand-crest svg, .nav-collapsed .brand-crest svg { width: 34px; height: auto; }
+  .brand-text { justify-items: start; gap: 0.1rem; }
+  .brand-name { font-size: 0.95rem; letter-spacing: 0.18em; margin-right: 0; }
+  .brand-tagline, .brand-motto, .side-heading, .side-foot { display: none; }
+  .nav-collapsed .brand-text, .nav-collapsed .side-label { display: revert; }
+  .side-account { border-top: none; padding: 0.6rem 1rem; }
+  .side-link { font-size: 0.92rem; padding: 0.5rem 0.75rem; border-bottom: 2px solid transparent; }
+  .side-link.active { background: none; }
+  .side-nav { padding: 0 0.5rem 0.4rem; }
+
+  .topbar { padding: 0 1rem; min-height: 50px; position: static; }
+  .topbar-toggle, .topbar-clock, .topbar-link { display: none; }
+  .app-main > .tab-bar { padding: 0 0.5rem; }
+  .tab { padding: 0.75rem 0.8rem; font-size: 0.9rem; }
+  .page { padding-top: 1.1rem; }
+  .page-head { padding: 1.1rem 1.1rem 1.2rem; }
+
+  .file-hero { grid-template-columns: auto minmax(0, 1fr); gap: 1rem; padding: 1.1rem; }
+  .file-photo { width: 96px; height: 112px; }
+  .file-side { grid-column: 1 / -1; padding: 0.9rem 0 0; border-left: none; border-top: 1px solid var(--border); }
+}
+
+/* --- The public splash page ---------------------------------------------------- */
+.welcome { max-width: 1240px; margin: 0 auto; padding: 0 1.5rem; }
+.kicker-dim { color: var(--faint); }
+.kicker .icon { width: 15px; height: 15px; vertical-align: -3px; margin-right: 0.3rem; }
+
+.welcome-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 0; }
+.welcome-brand { display: flex; align-items: center; gap: 0.75rem; color: var(--text); }
+.welcome-brand:hover { text-decoration: none; }
+.welcome-brand .brand-text { display: grid; gap: 0.15rem; }
+.welcome-brand .brand-name { letter-spacing: 0.24em; font-size: 1rem; margin: 0; }
+.welcome-brand .brand-tagline { letter-spacing: 0.24em; margin: 0; }
+.welcome-top-links { display: flex; align-items: center; gap: 1.2rem; }
+
+/* The banner: the crest over a floodlit pitch. */
+.welcome-banner {
+  position: relative; overflow: hidden; display: grid; justify-items: center; text-align: center;
+  padding: 3.2rem 1.25rem 2.8rem; border: 1px solid var(--border); border-radius: var(--radius);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(var(--accent-rgb), 0.16), transparent 62%),
+    url("../img/pitch.svg") center / cover no-repeat,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 64px, transparent 64px 128px),
+    linear-gradient(180deg, #1D2617, #10150D);
+}
+.welcome-banner::after {
+  content: ""; position: absolute; inset: auto 0 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent-2), transparent); opacity: 0.6;
+}
+.welcome-banner-crest svg { filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.6)); }
+.welcome-name {
+  margin: 1.1rem 0 0; font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 700;
+  letter-spacing: 0.24em; text-transform: uppercase; margin-right: -0.24em; line-height: 1.05;
+}
+.welcome-sub {
+  margin: 0.55rem 0 0; font-family: var(--font-mono); font-size: 0.8rem;
+  letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); margin-right: -0.3em;
+}
+.welcome-headline { margin: 1rem 0 0; font-size: 1.15rem; color: var(--accent-text); }
+
+.welcome-intro {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem;
+  align-items: start; padding: 3rem 0 2rem;
+}
+.welcome-motto {
+  margin: 0.7rem 0 0.9rem; display: grid; font-weight: 500;
+  font-size: clamp(2rem, 4vw, 3rem); line-height: 1.08; letter-spacing: -0.035em;
+}
+.welcome-intro-text p { margin: 0 0 1rem; color: #C4C9B8; font-size: 1.05rem; line-height: 1.65; }
+
+.welcome-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 3rem; }
+.link-card {
+  display: flex; align-items: center; gap: 1rem; padding: 1.4rem 1.3rem;
+  background: var(--panel-glass); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); transition: border-color 0.15s ease, background 0.15s ease;
+}
+.link-card:hover { text-decoration: none; border-color: var(--accent-deep); background: rgba(34, 43, 28, 0.95); }
+.link-card > .icon { flex: none; color: var(--muted); width: 22px; height: 22px; }
+.link-card > .icon:last-child { margin-left: auto; width: 18px; height: 18px; }
+.link-card-text { display: grid; gap: 0.25rem; min-width: 0; }
+.link-card-text .kicker { font-size: 0.66rem; color: var(--muted); }
+.link-card-title { font-size: 1.15rem; font-weight: 500; }
+.link-card-sub { color: var(--muted); font-size: 0.92rem; }
+.link-card-primary { background: linear-gradient(135deg, rgba(56, 70, 40, 0.95), rgba(28, 35, 22, 0.95)); border-color: #55663E; }
+
+.welcome-section-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+  margin: 0 0 1rem;
+}
+.welcome-section-head h2 { margin: 0; font-weight: 500; font-size: 1.35rem; letter-spacing: -0.01em; }
+.section-num { font-family: var(--font-mono); font-size: 0.8rem; color: var(--faint); margin-right: 0.6rem; }
+
+/* Where you'd play: each line of the team on its own pitch. */
+.line-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.9rem; margin-bottom: 3rem; }
+.line-card {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: linear-gradient(180deg, #1C2617, #10150D);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.line-card:hover { border-color: var(--accent-deep); transform: translateY(-2px); }
+.line-card.is-open { border-color: rgba(227, 154, 59, 0.55); }
+.line-card-top {
+  position: absolute; inset: 0 0 auto; z-index: 1; display: flex; justify-content: space-between;
+  align-items: center; padding: 0.85rem 0.9rem; color: var(--text);
+}
+.line-card-num { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.line-pitch { display: block; width: 100%; height: auto; aspect-ratio: 100 / 140; padding: 2.4rem 1rem 0.4rem; }
+.lp-grass { fill: rgba(255, 255, 255, 0.015); }
+.lp-chalk { fill: none; stroke: rgba(232, 235, 224, 0.2); stroke-width: 0.7; }
+.lp-band { fill: rgba(var(--accent-rgb), 0.1); }
+.lp-dot { fill: rgba(232, 235, 224, 0.22); }
+.lp-dot.mine { fill: var(--accent); stroke: rgba(0, 0, 0, 0.45); stroke-width: 0.8; }
+.lp-dot.mine.open { fill: none; stroke: var(--amber); stroke-width: 1.4; stroke-dasharray: 2.2 1.6; }
+.lp-plan { fill: none; stroke: var(--accent); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+.lp-x { fill: none; stroke: var(--accent-2); stroke-width: 1.3; stroke-linecap: round; }
+.line-card-body {
+  display: grid; gap: 0.3rem; padding: 0.9rem 1rem 1.1rem;
+  background: linear-gradient(180deg, transparent, rgba(8, 10, 7, 0.65));
+}
+.line-card-body h3 { margin: 0; font-weight: 500; font-size: 1.2rem; }
+.line-card-body p { margin: 0; color: var(--muted); }
+.line-status {
+  margin-top: 0.55rem; font-family: var(--font-mono); font-size: 0.68rem;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+}
+.line-status.open { color: var(--amber); }
+
+/* Club operations and the live standing, side by side. */
+.ops-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 3rem; }
+.ops-panel, .standing-panel {
+  padding: 1.6rem; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--panel-glass); display: grid; gap: 1.2rem; align-content: start;
+}
+.ops-panel { border-top: 2px solid var(--accent-2); border-left: 2px solid rgba(229, 72, 77, 0.6); }
+.ops-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.ops-head h2, .standing-panel h2 { margin: 0.45rem 0 0; font-weight: 500; font-size: 1.85rem; letter-spacing: -0.03em; }
+.ops-figures {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 1rem 0;
+}
+.ops-figures > div { display: grid; gap: 0.3rem; padding: 0 1rem; }
+.ops-figures > div + div { border-left: 1px solid var(--border); }
+.ops-figures > div:first-child { padding-left: 0; }
+.ops-value { font-size: 2.1rem; font-weight: 400; color: var(--accent-2); line-height: 1; }
+.ops-label { color: var(--muted); font-size: 0.9rem; }
+.ops-feature { padding: 1.1rem 1.2rem; background: rgba(10, 13, 8, 0.55); border: 1px solid var(--border); }
+.ops-feature-head { display: flex; justify-content: space-between; gap: 1rem; }
+.ops-feature h3 { margin: 0.6rem 0 0.3rem; font-weight: 500; font-size: 1.3rem; }
+.ops-feature p { margin: 0; }
+.ops-meter { display: flex; justify-content: space-between; align-items: baseline; margin: 1rem 0 0.45rem; }
+.ops-meter-figure { color: var(--muted); }
+.ops-meter-figure strong { font-size: 1.35rem; font-weight: 500; color: var(--accent-2); }
+.meter { height: 6px; background: rgba(255, 255, 255, 0.06); }
+.meter span { display: block; height: 100%; background: var(--accent-2); }
+.meter-quiet span { background: var(--accent); }
+.ops-row p { margin: 0.45rem 0 0; color: #C4C9B8; }
+.ops-line, .ops-foot {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding-top: 1rem; border-top: 1px solid var(--border-soft);
+}
+.ops-open { color: var(--amber); font-weight: 500; text-align: right; }
+.ops-actions { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.ops-actions .icon, .ops-link .icon { width: 16px; height: 16px; }
+.ops-link { color: var(--text); font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem; }
+
+.standing-panel-head { display: flex; justify-content: space-between; align-items: center; }
+.standing-panel-head h2 { margin: 0; font-size: 1.4rem; }
+.live-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(var(--accent-rgb), 0.6); color: var(--accent-text);
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.standing-club { display: flex; gap: 0.8rem; align-items: flex-start; padding-bottom: 1.1rem; border-bottom: 1px solid var(--border); }
+.standing-club > .icon { color: var(--muted); margin-top: 0.15rem; }
+.standing-club > div { display: grid; gap: 0.3rem; }
+.standing-club-name { font-size: 1.1rem; font-weight: 500; }
+.standing-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.standing-figures > div { display: grid; gap: 0.35rem; }
+.standing-big { font-size: 2.4rem; font-weight: 400; line-height: 1; letter-spacing: -0.02em; }
+.standing-rows { display: grid; }
+.standing-rows > div {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: 0.7rem 0; border-bottom: 1px solid var(--border-soft);
+}
+.standing-facts { padding-top: 0.2rem; }
+.standing-foot { margin: 0; }
+
+.staff-strip {
+  list-style: none; margin: 0 0 3rem; padding: 0; display: grid; gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.staff-strip li {
+  display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem 1rem;
+  background: var(--panel-glass); border: 1px solid var(--border); border-top: 2px solid var(--accent-2);
+}
+.staff-strip .person-text .kicker { font-size: 0.66rem; }
+
+.welcome-footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 1.3rem 0 2rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.92rem;
+}
+.welcome-footer > span:first-child { display: inline-flex; align-items: center; gap: 0.5rem; }
+
+@media (max-width: 1100px) {
+  .line-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .welcome { padding: 0 1rem; }
+  .welcome-top .topbar-clock { display: none; }
+  .welcome-intro, .ops-grid { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .welcome-intro { padding: 2rem 0 1.5rem; }
+  .welcome-links { grid-template-columns: minmax(0, 1fr); margin-bottom: 2.2rem; }
+  .line-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ops-panel, .standing-panel { padding: 1.15rem; }
+  .ops-figures > div { padding: 0 0.6rem; }
+  .ops-value { font-size: 1.6rem; }
+  .welcome-name { letter-spacing: 0.14em; margin-right: -0.14em; }
+}
+.form-chips { display: inline-flex; gap: 0.25rem; }
+.form-chips .form-chip { width: 24px; height: 24px; font-size: 0.75rem; border-radius: var(--radius); }
+/* The sidebar column is painted the full height of a long page, not just
+   the viewport the sticky sidebar covers. */
+.app-shell { background: linear-gradient(to right, #0B0E09 calc(var(--sidebar-w) - 1px), var(--border) calc(var(--sidebar-w) - 1px), var(--border) var(--sidebar-w), transparent var(--sidebar-w)); }
+.nav-collapsed { --sidebar-w: 76px; }
+.nav-collapsed .app-shell { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .app-shell, .nav-collapsed .app-shell { background: none; grid-template-columns: minmax(0, 1fr); }
+}
+/* Still grass (see .pitch above), but under floodlights: a deeper green
+   that sits with the olive panels instead of glowing beside them. */
+.pitch {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 10%, transparent 10% 20%),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.07), transparent 65%),
+    linear-gradient(180deg, #2A5532, #18361F);
+  border: 1px solid var(--border-strong);
 }

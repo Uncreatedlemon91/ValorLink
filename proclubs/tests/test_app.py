@@ -831,7 +831,7 @@ def test_home_hides_connect_band_when_invite_not_configured(client, monkeypatch)
 def test_signed_out_visitors_get_the_splash_page_with_the_invite(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     home = client.get("/")
-    assert "welcome-hero" in home.text
+    assert "welcome-banner" in home.text
     assert 'href="https://discord.gg/J4d7D5kDX8"' in home.text
     assert 'href="/login"' in home.text
     # None of the members' pages are linked from it.
@@ -841,7 +841,7 @@ def test_signed_out_visitors_get_the_splash_page_with_the_invite(client, monkeyp
 def test_signed_in_non_members_are_shown_the_way_in(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     _login_non_member(client)
-    assert "welcome-hero" in client.get("/").text
+    assert "welcome-banner" in client.get("/").text
     r = client.get("/news")
     assert r.status_code == 403
     assert "for members of our Discord server" in r.text

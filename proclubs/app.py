@@ -204,6 +204,8 @@ templates.env.globals["css_v"] = _asset_version()
 templates.env.globals["asset_version"] = _asset_version
 templates.env.globals["SITE_NAME"] = config.SITE_NAME
 templates.env.globals["SITE_TAGLINE"] = config.SITE_TAGLINE
+templates.env.globals["SITE_SHORT"] = config.SITE_SHORT
+templates.env.globals["SITE_MOTTO"] = config.SITE_MOTTO
 templates.env.globals["OAUTH_ENABLED"] = config.OAUTH_ENABLED
 templates.env.globals["DEV_LOGIN_ENABLED"] = config.DEV_LOGIN_ENABLED
 templates.env.globals["ARTICLE_CATEGORIES"] = ARTICLE_CATEGORIES
@@ -422,27 +424,39 @@ def _welcome(request: Request):
     """The public splash page: the one page anybody can see. Promotes the
     club with what it says about itself (the Club profile, edited by
     management) and what the site already knows -- standing, recent
-    results, the size of the squad, the staff, and the positions the
-    squad is short of for the current formation."""
+    results, the squad, the staff, how the next fixture is filling, and
+    the positions nobody covers in the current formation."""
     with get_session() as session:
         profile = services.get_club_profile(session)
         contracts = services.live_contracts(session)
         staff = services.club_staff(session)
         formation = services.get_active_formation(session)
         upcoming = services.list_events(session, upcoming_only=True, limit=1)
-    depth = squad.squad_depth(FORMATIONS.get(formation) or FORMATIONS["4-3-3"], contracts)
+        next_event = upcoming[0] if upcoming else None
+        going = services.signup_counts(session, next_event.id).get("going", 0) if next_event else 0
+    slots = FORMATIONS.get(formation) or FORMATIONS["4-3-3"]
+    depth = squad.squad_depth(slots, contracts)
     # Only positions nobody covers: "no backup" is a staff concern, and on
     # a squad of 11-20 it would list nearly every position.
     looking_for = [r["position"] for r in depth["rows"] if r["state"] == squad.DEPTH_GAP]
     stats_teaser, crest_colors = _club_standing()
-    form = (db.recent_form(config.CLUB_PLATFORM, str(config.CLUB_ID), limit=5)
-            if config.CLUB_ID else [])
+    form, matches_recorded = [], 0
+    if config.CLUB_ID:
+        form = db.recent_form(config.CLUB_PLATFORM, str(config.CLUB_ID), limit=5)
+        matches_recorded = len(db.match_history(config.CLUB_PLATFORM, str(config.CLUB_ID)))
+    president = next((p for p in staff if p.club_role == roles.CLUB_PRESIDENT), None)
     return templates.TemplateResponse(request, "welcome.html", _ctx(
-        request, profile=profile, squad_size=len(contracts), staff=staff,
-        looking_for=looking_for, formation=formation, stats_teaser=stats_teaser,
-        crest_colors=crest_colors, form=form,
-        next_event=upcoming[0] if upcoming else None,
+        request, profile=profile, squad_size=len(contracts), staff=staff, president=president,
+        looking_for=looking_for, lines=squad.line_cards(slots, depth), formation=formation,
+        shirts=len(slots), stats_teaser=stats_teaser, crest_colors=crest_colors, form=form,
+        matches_recorded=matches_recorded, next_event=next_event, going=going,
+        club_name=config.CLUB_NAME, platform_label=_platform_label(config.CLUB_PLATFORM),
     ))
+
+
+def _platform_label(platform: str) -> str:
+    return {"common-gen5": "PS5 · Xbox Series X|S · PC", "common-gen4": "PS4 · Xbox One",
+            "nx": "Switch"}.get(platform, platform)
 
 
 @app.get("/welcome", response_class=HTMLResponse)

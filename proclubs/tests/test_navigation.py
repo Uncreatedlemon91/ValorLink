@@ -129,3 +129,11 @@ def test_squad_is_in_the_sidebar_for_members(client):
     assert 'href="/players" class="side-link' not in client.get("/login").text
     _login(client, staff=False)
     assert 'href="/players" class="side-link' in client.get("/").text
+
+
+def test_every_page_title_wears_its_kicker(client):
+    """The "YFC / FIXTURES & SIGN-UPS" line above each title comes from
+    the shell, so no template has to repeat it."""
+    _login(client, staff=False)
+    assert "--kicker: 'YFC / Fixtures &amp; sign-ups';" in client.get("/events").text
+    assert "--kicker: 'YFC / News';" in client.get("/news").text

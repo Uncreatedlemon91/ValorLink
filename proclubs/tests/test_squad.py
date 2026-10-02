@@ -300,3 +300,26 @@ def test_a_short_season_reports_the_real_window(history):
 
 def test_no_history_is_empty_not_an_error(history):
     assert db.squad_usage("common-gen5", "c1") == {"window": 0, "players": {}}
+
+
+# --- The public page's position cards -------------------------------------- #
+def test_each_line_gets_a_card_with_its_open_shirts_hollow():
+    from formations import FORMATIONS
+    slots = FORMATIONS["4-3-3"]
+    depth = squad.squad_depth(slots, [_c("Keeper", "Goalkeeper")])
+    cards = {c["key"]: c for c in squad.line_cards(slots, depth)}
+    assert list(cards) == ["goalkeeping", "defence", "midfield", "attack"]
+    assert cards["goalkeeping"]["open"] == []
+    assert cards["defence"]["open"] == ["Centre Back", "Full Back"]
+    # Eleven dots on every card; only the line's own are lit.
+    assert all(len(c["dots"]) == 11 for c in cards.values())
+    assert sum(d["mine"] for d in cards["midfield"]["dots"]) == 3
+    # The 4-3-3 has no wing backs, so defence doesn't recruit one.
+    assert "Wing Back" not in cards["defence"]["open"]
+
+
+def test_a_line_the_formation_doesnt_use_is_said_so():
+    slots = {"GK": {"label": "GK", "top": 92, "left": 50}}
+    cards = {c["key"]: c for c in squad.line_cards(slots, squad.squad_depth(slots, []))}
+    assert cards["goalkeeping"]["used"] and cards["goalkeeping"]["open"] == ["Goalkeeper"]
+    assert not cards["attack"]["used"] and cards["attack"]["band"] is None

@@ -16,6 +16,10 @@ load_dotenv()
 # --- Site identity --------------------------------------------------------- #
 SITE_NAME = os.getenv("SITE_NAME", "YeeHaw FC")
 SITE_TAGLINE = os.getenv("SITE_TAGLINE", "Pro Clubs")
+# The short code that prefixes every page's kicker ("YFC / SQUAD") and the
+# line under the crest in the sidebar.
+SITE_SHORT = os.getenv("SITE_SHORT", "YFC")
+SITE_MOTTO = os.getenv("SITE_MOTTO", "Earn the shirt. Play the system.")
 
 # --- Our team, for the locked-in stats dashboard --------------------------- #
 # No more "search any club" -- this site is one team's home, so its own EA

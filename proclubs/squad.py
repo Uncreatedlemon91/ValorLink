@@ -73,6 +73,16 @@ SLOT_POSITION = {
 }
 ANY_OUTFIELD = "Any Outfield"
 
+# The four lines of a team, as the public page presents them to somebody
+# deciding where they'd play: (key, label, tagline, icon, positions).
+LINES = (
+    ("goalkeeping", "Goalkeeper", "The last line.", "gloves", ("Goalkeeper",)),
+    ("defence", "Defence", "Win it back.", "shield", ("Centre Back", "Full Back", "Wing Back")),
+    ("midfield", "Midfield", "Run the game.", "ball",
+     ("Defensive Midfield", "Centre Midfield", "Attacking Midfield")),
+    ("attack", "Attack", "Finish it.", "target", ("Winger", "Striker")),
+)
+
 DEPTH_GAP = "gap"            # can't field this position from contracted players
 DEPTH_THIN = "thin"          # can field it, with nobody spare
 DEPTH_OK = "ok"              # fielded, with at least one spare
@@ -130,6 +140,40 @@ def squad_depth(slots: dict, contracts: list) -> dict:
         "gaps": sum(1 for r in rows if r["state"] == DEPTH_GAP),
         "thin": sum(1 for r in rows if r["state"] == DEPTH_THIN),
     }
+
+
+def line_cards(slots: dict, depth: dict) -> list[dict]:
+    """One card per line for the public page: the formation drawn as dots
+    (this line's lit, the rest dim, shirts nobody covers hollow), and
+    which of the line's positions are open.
+
+    Coordinates map the tactics board's percentages onto a 100x140 pitch.
+    """
+    state = {r["position"]: r["state"] for r in depth["rows"]}
+    cards = []
+    for key, label, tagline, icon, positions in LINES:
+        dots, tops = [], []
+        for meta in slots.values():
+            position = SLOT_POSITION[meta["label"]]
+            mine = position in positions
+            if mine:
+                tops.append(meta["top"])
+            dots.append({
+                "x": round(4 + meta["left"] * 0.92, 1),
+                "y": round(4 + meta["top"] * 1.32, 1),
+                "mine": mine,
+                "open": state.get(position) == DEPTH_GAP,
+            })
+        band = None
+        if tops:
+            y1 = 4 + max(min(tops) - 9, 0) * 1.32
+            y2 = 4 + min(max(tops) + 9, 100) * 1.32
+            band = {"y": round(y1, 1), "h": round(y2 - y1, 1)}
+        open_positions = [p for p in positions if state.get(p) == DEPTH_GAP]
+        cards.append({"key": key, "label": label, "tagline": tagline, "icon": icon,
+                      "dots": dots, "band": band, "open": open_positions,
+                      "used": any(p in state for p in positions)})
+    return cards
 
 
 # --------------------------------------------------------------------------- #
