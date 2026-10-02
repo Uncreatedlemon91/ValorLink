@@ -207,3 +207,9 @@ def potm_embed(names: str, month: str, votes: int) -> dict:
     return {"title": f"Player of the Month — {month}", "color": _RED, "url": _site("/players"),
             "description": (f"**{names}**, with {votes} Man of the Match vote{'s' if votes != 1 else ''} "
                             f"from the squad this month.")}
+
+
+
+def goal_dm(text: str, coach: str | None) -> str:
+    return (f"{coach or 'Your coach'} set you a new goal: **{text}**\n"
+            f"Track your progress on your player file: {_site('/players/me')}")

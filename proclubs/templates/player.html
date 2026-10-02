@@ -170,6 +170,8 @@
         </div>
       </section>
 
+      {% if see_private %}{% include "_development.html" %}{% endif %}
+
       {# --- Coach notes: staff only, never the player ---------------------- #}
       {% if notes_visible %}
         <section class="panel" id="coach-notes">

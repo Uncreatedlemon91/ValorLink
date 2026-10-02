@@ -573,6 +573,20 @@ DMs, vote or match report.
   of the Month above them.
 - **Honours** on each player file: their milestones and months won.
 
+## Development goals and reviews
+
+On each player file, for the player and the staff only (`development.py`,
+`development_routes.py`) -- unlike coach notes, this is the part of a
+player's development they're meant to see and work on:
+
+- **Goals.** A coach sets one -- text, an area (Attacking, Defending,
+  Positioning, Teamwork, Technique, Mentality) and an optional target
+  date -- and the player gets a DM. Up to three open at once. The player
+  updates their progress (0/25/50/75/100%) and a note as they go; staff
+  mark it achieved or drop it, and can reopen it.
+- **Monthly reviews.** A short write-up of a one-to-one, against the
+  goals. One per player per month; saving again replaces it.
+
 ## Clips are Discord-only
 
 `/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual

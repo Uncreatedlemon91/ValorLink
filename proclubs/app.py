@@ -33,6 +33,8 @@ import discord_rsvp
 import discord_notify
 import ea_client
 import matchweek_routes
+import development
+import development_routes
 import recognition
 import training
 import training_routes
@@ -131,6 +133,7 @@ app.mount("/static", _VersionedStatic(directory=BASE_DIR / "static"), name="stat
 app.include_router(auth.router)
 app.include_router(matchweek_routes.router)
 app.include_router(training_routes.router)
+app.include_router(development_routes.router)
 
 templates = web.templates
 
@@ -1996,6 +1999,8 @@ def player_page(request: Request, discord_id: str):
         match_ratings = matchweek_routes.mw.ratings_history(session, discord_id) if see_private else []
         motm_total = matchweek_routes.mw.motm_wins(session).get(discord_id, 0)
         honours = recognition.milestones_for(session, discord_id)
+        goals = development.goals_for(session, discord_id) if see_private else []
+        dev_reviews = development.reviews_for(session, discord_id) if see_private else []
         potm_months = [recognition.month_label(a.month)
                        for a in recognition.months_won(session, discord_id)]
     gamertag = link.player_name if link else None
@@ -2013,7 +2018,10 @@ def player_page(request: Request, discord_id: str):
         history=history, moves=moves, attendance=attendance, notes=notes,
         is_self=is_self, see_private=see_private, notes_visible=notes_visible,
         match_ratings=match_ratings, motm_total=motm_total, honours=honours,
-        potm_months=potm_months,
+        potm_months=potm_months, goals=goals, reviews=dev_reviews,
+        progress_steps=development.PROGRESS_STEPS, goal_areas=development.GOAL_AREAS,
+        max_open_goals=development.MAX_OPEN_GOALS, review_label=development.month_label,
+        this_month=datetime.utcnow().strftime("%Y-%m"), notify_enabled=config.NOTIFY_ENABLED,
         can_set_role=auth.is_management(user) and not is_self,
         contract_state=services.contract_state(contract, now) if contract else None,
         time_left=services.contract_time_left(contract, now) if contract else None,

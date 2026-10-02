@@ -3058,3 +3058,29 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 }
 .honour .kicker { font-size: 0.64rem; }
 .honour.is-potm { border-top-color: var(--accent); }
+
+/* --- Development ------------------------------------------------------------------ */
+.goal { padding: 0.85rem 0; border-bottom: 1px solid var(--border-soft); }
+.goal:first-child { padding-top: 0; }
+.goal-head { display: flex; justify-content: space-between; gap: 1rem; }
+.goal-by { color: var(--faint); font-size: 0.8rem; }
+.goal-text { margin: 0.35rem 0 0.6rem; font-size: 1.05rem; font-weight: 500; }
+.goal-progress { height: 6px; background: rgba(255, 255, 255, 0.06); }
+.goal-progress span { display: block; height: 100%; background: var(--accent-2); }
+.goal-meta { margin: 0.4rem 0 0; color: var(--muted); font-size: 0.86rem; }
+.goal-note { color: var(--text); }
+.goal-form { display: grid; grid-template-columns: auto 1fr auto; gap: 0.4rem; margin-top: 0.6rem; }
+.goal-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.6rem; }
+.goal-new { margin-top: 0.9rem; }
+.goal-new summary { cursor: pointer; color: var(--accent-2); font-weight: 600; margin-bottom: 0.7rem; }
+.goal-closed-head { margin-top: 1.1rem; }
+.goal-closed li { color: var(--muted); }
+.goal-status { font-family: var(--font-mono); font-size: 0.72rem; margin-right: 0.35rem; }
+.g-achieved .goal-status { color: var(--status-good); }
+.g-dropped .goal-status { color: var(--faint); }
+.goal-closed .inline-form { margin-left: 0.4rem; }
+.reviews { margin-top: 1.3rem; padding-top: 1rem; border-top: 1px solid var(--border-soft); }
+.review { padding: 0.7rem 0; border-bottom: 1px solid var(--border-soft); }
+.review-month { font-weight: 600; }
+.review p { margin: 0.3rem 0; white-space: pre-line; }
+@media (max-width: 600px) { .goal-form { grid-template-columns: 1fr; } }

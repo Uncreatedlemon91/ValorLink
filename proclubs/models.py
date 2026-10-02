@@ -692,3 +692,42 @@ class PlayerOfTheMonth(Base):
     votes = Column(Integer, nullable=False, default=0)
     awarded_at = Column(DateTime, default=_utcnow)
     announced_at = Column(DateTime, nullable=True)
+
+
+
+# --- Development (see development.py) -------------------------------------------- #
+class DevGoal(Base):
+    """A goal a coach sets a player. The player updates progress and a
+    note; staff close it. Seen by the player and staff only."""
+
+    __tablename__ = "dev_goals"
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    text = Column(String, nullable=False)
+    area = Column(String, nullable=True)                 # see development.GOAL_AREAS
+    due_on = Column(Date, nullable=True)
+    status = Column(String, nullable=False, default="open")   # open | achieved | dropped
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    player_note = Column(String, nullable=True)
+    set_by_name = Column(String, nullable=False)
+    set_by_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    closed_at = Column(DateTime, nullable=True)
+    closed_by_name = Column(String, nullable=True)
+
+
+class DevReview(Base):
+    """A monthly one-to-one, written up. One per player per month."""
+
+    __tablename__ = "dev_reviews"
+    __table_args__ = (UniqueConstraint("discord_id", "month", name="uq_review_player_month"),)
+
+    id = Column(Integer, primary_key=True)
+    discord_id = Column(String, nullable=False, index=True)
+    month = Column(String, nullable=False)              # "2026-10"
+    summary = Column(Text, nullable=False)
+    by_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
