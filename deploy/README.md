@@ -293,9 +293,11 @@ the site is deployed and reachable.
 
 ### Staged event threads
 
-An announced event can open its own **private thread** and widen who can
-see it as kick-off approaches (see
-`proclubs/README.md#staged-thread-invites`):
+An announced event can open its own thread. With `EVENT_INVITE_TIERS` it's
+**private** and widens who can see it as kick-off approaches; without, it's
+public in the parent channel (see `proclubs/README.md#staged-thread-invites`).
+If an event's thread can't be found in Discord, **Push to Discord** on the
+event page reopens or re-posts it:
 
 ```ini
 EVENT_THREAD_CHANNEL_ID=<the parent channel's ID>

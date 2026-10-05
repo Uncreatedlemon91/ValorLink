@@ -409,9 +409,12 @@ neither end of the site shows UTC to a person any more.
 
 ### Staged thread invites
 
-With `EVENT_THREAD_CHANNEL_ID` set, announcing an event opens a **private
-thread** for that fixture instead of posting loose in a channel, and
-`EVENT_INVITE_TIERS` widens who can see it as kick-off approaches:
+With `EVENT_THREAD_CHANNEL_ID` set, announcing an event opens a **thread**
+for that fixture instead of posting loose in a channel. With
+`EVENT_INVITE_TIERS` set the thread is **private** and the ladder widens who
+can see it as kick-off approaches; without a ladder it's **public** (anyone
+who can see the parent channel), because a private thread nobody is added
+to is invisible to everyone but the bot.
 
 ```
 EVENT_INVITE_TIERS=create:<role>,48:<role>,24:<role>
@@ -448,6 +451,23 @@ thread, so the notification is one tap from the position picker.
   is not.
 - **Adding somebody already in the thread is a no-op success**, so re-runs
   and overlapping tiers cost API calls and change nothing.
+
+### Push to Discord
+
+Staff always have a Discord button on an event page. Before the event is
+posted it's **Post to Discord** (and, if Discord isn't configured, says
+which setting is missing). After, it's **Push to Discord**, for when the
+post can't be found (`discord_rsvp.push`):
+
+- the thread was **archived** (Discord hides one after 7 quiet days): it's
+  reopened and the post refreshed;
+- the **post** was deleted: it's posted again in the same thread;
+- the **thread or channel** was deleted, or it's a **private thread with no
+  invite ladder** (from before threads went public without one): it's
+  posted afresh in a new thread, the ladder starts again from its first
+  rung, and the old hidden thread is deleted if the bot may.
+
+The **Discord ↗** badge on the event links straight to the post.
 
 `EVENT_THREAD_CHANNEL_ID` is enough on its own -- sign-ups need a bot
 token, a public key, and *a* channel to post in, and either setting
