@@ -308,13 +308,24 @@ def _button_row(event, statuses: list[str]) -> dict:
     }
 
 
-def create_event_thread(event) -> str:
-    """Opens a private thread for one fixture and returns its id.
+PUBLIC_THREAD, PRIVATE_THREAD = 11, 12
 
-    Private (type 12) rather than public because the audience is meant to
-    widen on a schedule -- see invite_role_to_thread. A public thread is
-    visible to anyone who can see the parent channel, which would hand the
-    whole ladder its access on day one.
+
+def threads_are_private() -> bool:
+    """Private only when there's an invite ladder to widen it. A private
+    thread nobody is added to is invisible to everyone but the bot -- which
+    is what happened before this check, with EVENT_INVITE_TIERS unset."""
+    return config.EVENT_STAGED_INVITES_ENABLED
+
+
+def create_event_thread(event) -> str:
+    """Opens a thread for one fixture and returns its id.
+
+    Private (type 12) when the staged invite ladder is set up, because the
+    audience is meant to widen on a schedule -- see invite_role_to_thread.
+    A public thread is visible to anyone who can see the parent channel,
+    which would hand the whole ladder its access on day one. Without a
+    ladder, nobody would ever be added to a private one, so it's public.
 
     A thread id IS a channel id as far as the rest of Discord's API is
     concerned, so the caller stores it in Event.discord_channel_id and
@@ -322,7 +333,7 @@ def create_event_thread(event) -> str:
     """
     resp = discord_api.post(f"/channels/{config.EVENT_THREAD_CHANNEL_ID}/threads", {
         "name": _thread_name(event),
-        "type": 12,               # PRIVATE_THREAD
+        "type": PRIVATE_THREAD if threads_are_private() else PUBLIC_THREAD,
         "invitable": False,       # only staff/this bot widen the audience
         "auto_archive_duration": 10080,   # 7 days, the longest Discord allows
     })
@@ -422,6 +433,61 @@ def announce(event, signups: list, roles: dict[int, str], site_url: str,
     })
     message_id = str(resp.json()["id"])
     return str(channel_id), message_id
+
+
+def _is_gone(exc: DiscordApiError) -> bool:
+    return "404" in str(exc)
+
+
+def push(event, signups: list, roles: dict[int, str], site_url: str,
+         slots: dict[str, str] | None = None) -> tuple[str, str, str]:
+    """Makes an already-posted event visible and current in Discord again.
+    Returns (channel_id, message_id, what happened), where what happened is
+
+      "updated"   the post was there; it's been refreshed (and its thread
+                  unarchived -- Discord hides a thread after 7 quiet days)
+      "reposted"  the thread was there but the post wasn't; posted again
+      "new"       the thread or channel was gone, or it was a private thread
+                  nobody can be invited to; posted afresh, as for a new event
+
+    Raises DiscordApiError for anything else (no access, Discord down)."""
+    channel_id, message_id = event.discord_channel_id, event.discord_message_id
+    try:
+        channel = discord_api.get(f"/channels/{channel_id}").json()
+    except DiscordApiError as exc:
+        if not _is_gone(exc):
+            raise
+        return (*announce(event, signups, roles, site_url, slots), "new")
+    kind = channel.get("type")
+    if kind == PRIVATE_THREAD and not threads_are_private():
+        # Made before threads went public without a ladder: nobody can see
+        # it, and a private thread can't be made public, so start again.
+        new = announce(event, signups, roles, site_url, slots)
+        try:
+            discord_api.delete(f"/channels/{channel_id}")
+        except DiscordApiError:
+            pass  # the bot may lack Manage Threads; an unseen thread is harmless
+        return (*new, "new")
+    if kind in (PUBLIC_THREAD, PRIVATE_THREAD) and (channel.get("thread_metadata") or {}).get("archived"):
+        discord_api.patch(f"/channels/{channel_id}", {"archived": False})
+    payload = {"embeds": [build_embed(event, signups, roles, site_url, slots)],
+               "components": build_components(event, signups, slots)}
+    try:
+        discord_api.patch(f"/channels/{channel_id}/messages/{message_id}", payload)
+        return str(channel_id), str(message_id), "updated"
+    except DiscordApiError as exc:
+        if not _is_gone(exc):
+            raise
+    resp = discord_api.post(f"/channels/{channel_id}/messages", payload)
+    return str(channel_id), str(resp.json()["id"]), "reposted"
+
+
+def message_url(event) -> str:
+    """A link straight to the event's Discord post, or "" if it has none."""
+    if not (config.DISCORD_GUILD_ID and event.discord_channel_id and event.discord_message_id):
+        return ""
+    return (f"https://discord.com/channels/{config.DISCORD_GUILD_ID}/"
+            f"{event.discord_channel_id}/{event.discord_message_id}")
 
 
 def refresh(event, signups: list, roles: dict[int, str], site_url: str,

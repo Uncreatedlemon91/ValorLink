@@ -896,6 +896,7 @@ def event_detail(request: Request, event_id: int):
             attendance_statuses=ATTENDANCE_STATUSES,
             my_link=my_link, is_past=event.scheduled_at < datetime.utcnow(),
             rsvp_enabled=config.EVENT_RSVP_ENABLED,
+            discord_url=discord_rsvp.message_url(event),
             pitch=FORMATIONS.get(event.formation or "", {}), bench_slots=BENCH_SLOTS, **view,
             **(matchweek_routes.event_page_extras(session, event, user) if user else {}),
             is_session=training.is_session(event),
@@ -1040,8 +1041,37 @@ def event_announce(request: Request, event_id: int, csrf_token: str = Form(...),
         event = services.get_event(session, event_id)
         if event is None:
             raise HTTPException(status_code=404)
-        _announce_event(request, session, event)
+        if event.discord_message_id and config.EVENT_RSVP_ENABLED:
+            _push_event(request, session, event)
+        else:
+            _announce_event(request, session, event)
     return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+def _push_event(request: Request, session, event) -> None:
+    """The Push to Discord button on an event that was already posted:
+    brings the post back into view, or posts it again if it's gone (see
+    discord_rsvp.push)."""
+    signups = services.list_signups(session, event.id)
+    roles = services.tactics_roles_for(
+        session, [s.discord_user_id for s in signups], _slot_labels())
+    try:
+        channel_id, message_id, outcome = discord_rsvp.push(
+            event, signups, roles, _event_url(request, event), services.event_slots(event))
+    except discord_rsvp.DiscordApiError as exc:
+        _flash(request, f"Couldn't push to Discord: {exc}", "warn")
+        return
+    services.set_event_announcement(session, event, channel_id=channel_id, message_id=message_id)
+    if outcome == "new":
+        # A new thread has nobody in it: the ladder starts again.
+        services.reset_tier_invites(session, event)
+        _flash(request, "The old Discord post was gone or hidden, so it's been posted again "
+                        "with sign-up buttons.")
+        _invite_first_tier(request, session, event)
+    elif outcome == "reposted":
+        _flash(request, "The Discord post was missing, so it's been posted again in its thread.")
+    else:
+        _flash(request, "Discord post brought up to date.")
 
 
 def _announce_event(request: Request, session, event) -> None:

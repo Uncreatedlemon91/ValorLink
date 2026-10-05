@@ -5,7 +5,7 @@
   <div class="page-head">
     <div>
       <span class="event-type-badge">{{ event.event_type }}</span>
-      {% if event.discord_message_id %}<span class="discord-sync-badge" title="Posted to Discord with sign-up buttons">Discord</span>{% endif %}
+      {% if event.discord_message_id %}{% if discord_url %}<a class="discord-sync-badge" href="{{ discord_url }}" target="_blank" rel="noopener" title="Open the post in Discord">Discord ↗</a>{% else %}<span class="discord-sync-badge" title="Posted to Discord with sign-up buttons">Discord</span>{% endif %}{% endif %}
       <h1>{{ event.title }}{% if event.opponent %} vs {{ event.opponent }}{% endif %}</h1>
       <p class="page-lede">
         {{ localtime(event.scheduled_at, 'full') }}
@@ -17,12 +17,14 @@
       {% if is_staff and is_match %}<a class="btn secondary" href="/events/{{ event.id }}/teamsheet">Team sheet</a>{% endif %}
     {% if is_staff %}
         <a class="btn-ghost" href="/events/{{ event.id }}/edit">Edit</a>
-        {% if rsvp_enabled and not event.discord_message_id %}
-          <form method="post" action="/events/{{ event.id }}/announce" class="inline-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <form method="post" action="/events/{{ event.id }}/announce" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          {% if event.discord_message_id and rsvp_enabled %}
+            <button type="submit" title="Can't see it in Discord? This refreshes the post, reopens an archived thread, or posts it again if it's gone.">Push to Discord</button>
+          {% else %}
             <button type="submit">Post to Discord</button>
-          </form>
-        {% endif %}
+          {% endif %}
+        </form>
     {% endif %}
     </div>
   </div>

@@ -3148,3 +3148,4 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 .managed-roles li.is-off .squad-name { color: var(--faint); }
 .managed-roles select, .managed-roles input { margin-top: 0.3rem; }
 .managed-roles .squad-sub.is-warn, .field-hint.is-warn { color: var(--amber); }
+a.discord-sync-badge { text-decoration: none; }

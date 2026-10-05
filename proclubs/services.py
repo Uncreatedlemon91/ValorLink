@@ -602,6 +602,13 @@ def due_invite_tiers(session: Session, event: Event, tiers: list[dict],
     return due
 
 
+def reset_tier_invites(session: Session, event: Event) -> None:
+    """Forgets which tiers were invited -- for an event posted afresh in a
+    new thread, which starts with nobody in it."""
+    session.execute(delete(EventTierInvite).where(EventTierInvite.event_id == event.id))
+    session.commit()
+
+
 def record_tier_invite(session: Session, event: Event, tier: dict, member_count: int) -> None:
     """Marks a tier as fired for this event. The unique constraint makes a
     concurrent double-fire an error rather than a second ping."""
