@@ -1,8 +1,8 @@
 [Unit]
-Description=Pro Clubs weekly AI-written article
+Description=Pro Clubs AI-written roundup
 After=network-online.target
 # Restart=on-failure below retries when Claude couldn't be reached (e.g. a
-# subscription usage limit) -- hourly, at most 6 tries per Saturday.
+# subscription usage limit) -- hourly, at most 6 tries per roundup.
 StartLimitIntervalSec=8h
 StartLimitBurst=6
 

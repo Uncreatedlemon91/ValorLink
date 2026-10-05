@@ -284,8 +284,8 @@ MANAGED_ROLE_IDS = managed_role_ids(MANAGED_ROLE_SETTINGS, DISCORD_STAFF_ROLE_ID
 ROLE_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID and MANAGED_ROLE_IDS)
 
 # --- Weekly AI-written article ------------------------------------------------
-# weekly_article.py (run Saturdays by proclubs-weekly-article.timer) has
-# Claude write up the week from the stats poll.py collected and publishes
+# weekly_article.py (every ROUNDUP_DAYS days, via proclubs-weekly-article.timer)
+# has Claude write up the period from the stats poll.py collected and publishes
 # it straight to the site. It runs the Claude Code CLI headless, billed to a
 # Claude subscription rather than API credits: CLAUDE_CODE_OAUTH_TOKEN (from
 # `claude setup-token`) is read by the CLI itself from the environment,
@@ -300,6 +300,14 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "")
 # The byline these articles carry -- also how weekly_article.py recognizes
 # its own previous posts, so a re-run in the same week doesn't post twice.
 WEEKLY_ARTICLE_AUTHOR = os.getenv("WEEKLY_ARTICLE_AUTHOR") or f"{SITE_NAME} Desk"
+# How often the roundup goes out, in days -- and so how far back each one
+# looks. The timer fires daily; weekly_article.py skips the days between.
+# (The "weekly" in the names above predates this and is kept so existing
+# .env files and installed timers keep working.)
+try:
+    ROUNDUP_DAYS = max(1, int(os.getenv("ROUNDUP_DAYS", "2") or 2))
+except ValueError:
+    ROUNDUP_DAYS = 2
 
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an

@@ -1,7 +1,10 @@
-"""One-shot job: have Claude write up the past week and publish it.
+"""One-shot job: have Claude write up the last few days and publish it.
 
-Run every Saturday via systemd (see deploy/proclubs-weekly-article.service
-+ .timer). Gathers the week's facts from data/history.db -- results, player
+The roundup goes out every config.ROUNDUP_DAYS days (2 by default). The
+systemd timer (deploy/proclubs-weekly-article.service + .timer) fires every
+morning and this skips the days in between, which keeps the rhythm through
+month ends and downtime where a calendar rule wouldn't. Gathers the
+period's facts from data/history.db -- results, player
 totals, division/points movement, league position, signings and departures
 (see db.record_squad) -- hands them to the Claude Code CLI in headless mode,
 and publishes what comes back as a live article, announced to Discord the
@@ -16,8 +19,8 @@ staff article (services.create_article -> html_sanitize).
 
 Exits non-zero when Claude can't be reached or returns something unusable,
 so systemd's Restart=on-failure retries later -- e.g. after a subscription
-usage limit resets. A week with nothing to report is a clean skip, not a
-failure.
+usage limit resets. A period with nothing to report is a clean skip, not
+a failure.
 
 Run it manually to test: python weekly_article.py [--dry-run]
 """
@@ -40,24 +43,33 @@ import services
 from database import get_session, init_db
 from models import Article
 
-WEEK_SECONDS = 7 * 24 * 3600
 CLAUDE_TIMEOUT_SECONDS = 600
-# A timer that fires late (Persistent=true after downtime) or a manual
-# re-run shouldn't publish a second roundup for the same week.
-REPOST_GUARD = timedelta(days=6)
+# The daily timer can fire a little early or late (RandomizedDelaySec, a
+# retry after a usage limit), so "posted within the period" allows a few
+# hours' slack: a roundup at 09:20 Monday still lets Wednesday's 09:10 one
+# through, and still stops Tuesday's.
+REPOST_SLACK = timedelta(hours=6)
+
+
+def period_seconds() -> int:
+    return config.ROUNDUP_DAYS * 24 * 3600
+
+
+def repost_guard() -> timedelta:
+    return timedelta(days=config.ROUNDUP_DAYS) - REPOST_SLACK
 
 SYSTEM_PROMPT = """You are the staff writer for {site}, an EA Sports FC Pro Clubs team. \
-You write the club's weekly roundup for its website: energetic, broadcast-style \
-football journalism, written for the squad and its fans.
+You write the club's regular roundup for its website, covering the last {days} days: \
+energetic, broadcast-style football journalism, written for the squad and its fans.
 
 Rules:
 - Use ONLY the facts in the JSON you are given. Never invent scores, scorers, \
 quotes, opponents, fixtures or events. If a number isn't there, don't state one.
 - Player and club names are gamertags; reproduce them exactly.
-- Cover, where the data has them: the results and the story of the week, \
+- Cover, where the data has them: the results and the story of those days, \
 standout players, league/division standing and how it moved, and squad news \
 (signings and departures). Skip any section the data has nothing for.
-- 300-600 words.
+- 250-500 words. Don't call it a weekly roundup.
 
 Reply with a single JSON object and nothing else -- no code fences, no commentary:
 {{"title": "...", "summary": "one-sentence dek, under 160 characters", \
@@ -74,21 +86,22 @@ def _iso(ts):
     return datetime.fromtimestamp(ts, timezone.utc).strftime("%a %d %b %Y") if ts else None
 
 
-def gather_week(platform: str, club_id: str, now: int) -> dict:
-    """Everything the article may say, as plain JSON-able data."""
-    since = now - WEEK_SECONDS
+def gather_period(platform: str, club_id: str, now: int) -> dict:
+    """Everything the article may say about the last ROUNDUP_DAYS days, as
+    plain JSON-able data."""
+    since = now - period_seconds()
     matches = [m for m in db.match_history(platform, club_id) if (m["played_at"] or 0) >= since]
     counted = [m for m in matches if not m["forfeit"]]
 
     latest = db.latest_snapshot(platform, club_id)
-    week_start = db.snapshot_at(platform, club_id, since)
+    period_start = db.snapshot_at(platform, club_id, since)
     standing = None
     if latest:
         standing = {"division": latest["division"], "points": db._num(latest["points"]),
                     "skill_rating": db._num(latest["skill_rating"])}
-        if week_start:
-            standing["division_a_week_ago"] = week_start["division"]
-            standing["points_a_week_ago"] = db._num(week_start["points"])
+        if period_start:
+            standing["division_at_start"] = period_start["division"]
+            standing["points_at_start"] = db._num(period_start["points"])
 
     table = db.league_table(platform, club_id)
     league_position = next(
@@ -98,7 +111,7 @@ def gather_week(platform: str, club_id: str, now: int) -> dict:
     moves = db.squad_moves(platform, club_id, since)
     return {
         "club": config.SITE_NAME,
-        "week": {"from": _iso(since), "to": _iso(now)},
+        "period": {"from": _iso(since), "to": _iso(now), "days": config.ROUNDUP_DAYS},
         "record": {
             "played": len(counted),
             "won": sum(m["outcome"] == "W" for m in counted),
@@ -137,7 +150,7 @@ def build_command() -> list[str]:
         "--tools", "",
         "--strict-mcp-config",
         "--no-session-persistence",
-        "--system-prompt", SYSTEM_PROMPT.format(site=config.SITE_NAME),
+        "--system-prompt", SYSTEM_PROMPT.format(site=config.SITE_NAME, days=config.ROUNDUP_DAYS),
     ]
     if config.CLAUDE_MODEL:
         cmd += ["--model", config.CLAUDE_MODEL]
@@ -147,7 +160,7 @@ def build_command() -> list[str]:
 def ask_claude(facts: dict) -> dict:
     """Runs the CLI with the facts on stdin and returns the parsed
     {title, summary, body_html}. Raises ArticleError on any failure."""
-    prompt = "Write this week's roundup from these facts:\n\n" + json.dumps(facts, indent=2)
+    prompt = "Write the roundup from these facts:\n\n" + json.dumps(facts, indent=2)
     try:
         # A scratch cwd so the CLI never picks up this repo's CLAUDE.md or settings.
         with tempfile.TemporaryDirectory() as cwd:
@@ -184,8 +197,8 @@ def parse_article(text: str) -> dict:
             "body_html": data["body_html"]}
 
 
-def already_posted_this_week(session) -> bool:
-    cutoff = datetime.utcnow() - REPOST_GUARD
+def already_posted_this_period(session) -> bool:
+    cutoff = datetime.utcnow() - repost_guard()
     return session.scalar(
         select(Article.id).where(
             Article.author_name == config.WEEKLY_ARTICLE_AUTHOR, Article.published_at >= cutoff,
@@ -215,7 +228,7 @@ def announce(session, article) -> None:
 def main(argv: list[str] | None = None) -> int:
     dry_run = "--dry-run" in (argv if argv is not None else sys.argv[1:])
     if not config.WEEKLY_ARTICLE_ENABLED:
-        print("CLAUDE_CODE_OAUTH_TOKEN not set -- weekly article disabled")
+        print("CLAUDE_CODE_OAUTH_TOKEN not set -- the roundup is disabled")
         return 0
     if not config.CLUB_ID:
         print("CLUB_ID not set -- nothing to write about")
@@ -223,13 +236,13 @@ def main(argv: list[str] | None = None) -> int:
 
     init_db()
     with get_session() as session:
-        if not dry_run and already_posted_this_week(session):
-            print("this week's article is already up -- skipping")
+        if not dry_run and already_posted_this_period(session):
+            print(f"a roundup went out in the last {config.ROUNDUP_DAYS} days -- skipping")
             return 0
 
-    facts = gather_week(config.CLUB_PLATFORM, str(config.CLUB_ID), int(time.time()))
+    facts = gather_period(config.CLUB_PLATFORM, str(config.CLUB_ID), int(time.time()))
     if not has_news(facts):
-        print("no matches or squad changes this week -- skipping")
+        print(f"no matches or squad changes in the last {config.ROUNDUP_DAYS} days -- skipping")
         return 0
 
     try:
