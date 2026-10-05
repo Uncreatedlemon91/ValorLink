@@ -26,9 +26,13 @@
       signing here to publish the announcement.
     {% endif %}
     The contract starts when you confirm. A <strong>staff role</strong> is offered the same
-    way but sets no Discord role on acceptance. <strong>Let Go</strong> ends their contract
-    and publishes a departure announcement — it never removes a role, so revoke
-    access in Discord yourself.
+    way. <strong>Let Go</strong> ends their contract and publishes a departure announcement.
+    {% if role_sync_enabled %}
+      Their managed Discord roles follow every change here — squad status, club role and
+      trial — added and removed to match. See <a href="/discord-roles">Discord roles</a>.
+    {% else %}
+      No managed Discord roles are configured, so roles are moved by hand.
+    {% endif %}
   </p>
 
   {% if not roster_enabled %}
@@ -173,7 +177,7 @@
           <p class="field-hint">
             No contract. Once they accept and you confirm, they get that role's access on
             this site: the Club President and Head Coach run contracts and the squad, and
-            Coaches run matchday and coach notes. No Discord role is changed.
+            Coaches run matchday and coach notes. Their Discord role follows if it's managed.
           </p>
         </fieldset>
 

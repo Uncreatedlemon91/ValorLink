@@ -37,7 +37,7 @@ def test_the_five_sections_group_what_they_should():
     assert tabs["matchday"] == ["/events", "/training", "/availability", "/tactics", "/set-pieces"]
     assert tabs["club"] == ["/stats", "/league", "/club-profile"]
     assert tabs["media"] == ["/clips", "/streamers"]
-    assert tabs["squad"] == ["/players", "/squad", "/squad/planner", "/recruitment", "/roster"]
+    assert tabs["squad"] == ["/players", "/squad", "/squad/planner", "/recruitment", "/roster", "/discord-roles"]
 
 
 @pytest.mark.parametrize("path, section, tab", [
@@ -79,7 +79,7 @@ def test_guests_see_only_home_in_the_sidebar():
 @pytest.mark.parametrize("level, tabs", [
     (roles.MEMBER, ["/players"]),
     (roles.STAFF, ["/players", "/squad", "/squad/planner", "/recruitment"]),
-    (roles.MANAGEMENT, ["/players", "/squad", "/squad/planner", "/recruitment", "/roster"]),
+    (roles.MANAGEMENT, ["/players", "/squad", "/squad/planner", "/recruitment", "/roster", "/discord-roles"]),
 ])
 def test_squad_tabs_follow_access_level(level, tabs):
     squad = next(s for s in navigation.SECTIONS if s.key == "squad")

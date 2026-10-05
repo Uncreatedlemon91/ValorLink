@@ -275,15 +275,10 @@ def _module_source() -> str:
 
 
 def test_this_module_never_removes_a_role():
-    """The guardrail the feature rests on, checked against the source
-    rather than trusted.
-
-    Granting one named role on the player's own Accept is deliberate (see
-    grant_squad_role). Taking a role away is not, and never was: removing
-    access is the irreversible half, and it stays a human action in
-    Discord. A change that adds a removal has to come here and argue with
-    this test first.
-    """
+    """Squad moves only ever grant, on the player's own Accept. Taking a
+    role away lives in exactly one place, role_sync.py, and only for the
+    roles named in config (see test_role_sync.py) -- not here, where a
+    form or a button press could reach it."""
     source = _module_source()
     assert "discord_api.delete" not in source
     assert "DELETE" not in source

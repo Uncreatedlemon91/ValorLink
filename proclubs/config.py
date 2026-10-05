@@ -250,6 +250,39 @@ ROSTER_MOVES_ENABLED = not roster_moves_missing()
 ROSTER_SQUAD_ROLE_ID = os.getenv("ROSTER_SQUAD_ROLE_ID", "")
 ROSTER_ROLE_GRANT_ENABLED = bool(ROSTER_MOVES_ENABLED and ROSTER_SQUAD_ROLE_ID)
 
+# --- Discord roles the site manages (see role_sync.py) ---------------------- #
+# The site is the source of truth for these: when somebody's squad status,
+# club role or trial changes here, their Discord role follows -- added
+# when they should have it, removed when they no longer should. Only the
+# roles named here are ever touched, and never DISCORD_STAFF_ROLE_ID (the
+# way into the site's management), whatever is configured.
+#
+# Blank leaves that role alone. Needs Manage Roles, and the bot's own
+# highest role ABOVE every role listed (Server Settings -> Roles).
+MANAGED_ROLE_SETTINGS = {
+    "Starter": os.getenv("ROLE_STARTER_ID", "1548912106928087091"),
+    "Rotation": os.getenv("ROLE_ROTATION_ID", ""),
+    "Substitute": os.getenv("ROLE_SUBSTITUTE_ID", ""),
+    "Club President": os.getenv("ROLE_CLUB_PRESIDENT_ID", ""),
+    "Head Coach": os.getenv("ROLE_HEAD_COACH_ID", ""),
+    "Coach": os.getenv("ROLE_COACH_ID", ""),
+    "Trialist": os.getenv("ROLE_TRIALIST_ID", "1535705667925446706"),
+    # Everyone under contract, whatever their status -- the role the
+    # player's own Accept has always granted.
+    "Squad": ROSTER_SQUAD_ROLE_ID,
+}
+def managed_role_ids(settings: dict[str, str], staff_role_id: int) -> dict[str, str]:
+    """The configured roles, minus blanks, junk and the staff role -- the
+    way into the site's management is never something the site removes."""
+    return {
+        key: value.strip() for key, value in settings.items()
+        if value and value.strip().isdigit() and int(value.strip()) != staff_role_id
+    }
+
+
+MANAGED_ROLE_IDS = managed_role_ids(MANAGED_ROLE_SETTINGS, DISCORD_STAFF_ROLE_ID)
+ROLE_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID and MANAGED_ROLE_IDS)
+
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an
 # absolute link is required rather than a relative one -- currently just the

@@ -616,6 +616,43 @@ player's development they're meant to see and work on:
   taker, the routine and its targets. Every member reads it; staff write
   it.
 
+## Managed Discord roles
+
+The site manages these Discord roles (`role_sync.py`): when someone's
+record changes here, their role follows -- added when they should hold
+it, removed when they no longer should.
+
+| Role | Held by | Setting |
+|---|---|---|
+| Starting players | a live contract at **Starter** | `ROLE_STARTER_ID` (default `1548912106928087091`) |
+| Rotation players | a live contract at **Rotation** | `ROLE_ROTATION_ID` |
+| Substitute players | a live contract at **Substitute** | `ROLE_SUBSTITUTE_ID` |
+| Squad | any live contract, or an accepted offer awaiting confirmation | `ROSTER_SQUAD_ROLE_ID` |
+| Club President / Head Coach / Coach | that club role on their player file | `ROLE_CLUB_PRESIDENT_ID` / `ROLE_HEAD_COACH_ID` / `ROLE_COACH_ID` |
+| Trialists | a prospect **On trial** or **Offered**, not yet under contract | `ROLE_TRIALIST_ID` (default `1535705667925446706`) |
+
+A blank setting leaves that role alone. Changes that trigger a sync:
+confirming a signing or an appointment, recording, renewing (when the
+player accepts) or releasing a contract, Let Go, giving or clearing a
+club role, and moving a prospect through the pipeline. If Discord refuses,
+the change on the site still stands and the reason is flashed.
+
+**The guardrails.** Only the roles in that table are ever added or
+removed; any other role a member holds is never touched.
+`DISCORD_STAFF_ROLE_ID` -- the way into the site's management -- is
+excluded even if it's listed, so the site can never lock anyone out.
+Somebody who holds a managed role in Discord but has no record here is
+only ever changed from **Squad → Discord roles** (`/discord-roles`,
+management), which lists every member out of step and what they'd gain or
+lose, and changes nothing until **Apply all** is pressed. Run it once
+after deploying, to bring the server in line with the contracts already
+recorded -- and record contracts for anyone who should keep their role
+first.
+
+The bot needs **Manage Roles**, and its own highest role must sit **above**
+every managed role in Server Settings -> Roles; the server page also needs
+the Server Members Intent to list members.
+
 ## Clips are Discord-only
 
 `/clips` is **read-only** -- no upload UI on the site. Post a video directly in the configured Discord channel (an actual
@@ -866,23 +903,13 @@ announcement in the palette's blue rather than the signing green, and
   unconfirmed and declined staff offers stay private, the same rule as
   player offers.
 
-**The role rule.** Roles are how this app decides who is staff and who is
-a member (`auth.py`), so what this app may do to them is deliberately
-narrow:
-
-- **It never removes a role.** Not on "Let Go", not on "Decline", not
-  anywhere. Removing access is the irreversible half, and it stays a
-  human action taken in Discord, where it's in the audit log and undoable.
-- **It adds exactly one role, `ROSTER_SQUAD_ROLE_ID`, and only when the
-  player presses Accept on their own *contract* offer** -- never on a
-  staff offer or a renewal. Grant-only, self-triggered,
-  and to one role named in `.env` rather than whatever a form posts.
-  `grant_squad_role` is the only role write in the codebase and there is
-  no remove to pair with it -- `test_discord_roster.py` asserts that
-  against the module's source, so a change that adds one has to come and
-  argue with the test first.
-- Leave `ROSTER_SQUAD_ROLE_ID` blank and the flow still works; accepting
-  is recorded on the site and you move the role by hand.
+**The role rule.** Squad moves themselves only ever *grant*:
+`ROSTER_SQUAD_ROLE_ID`, when the player presses Accept on their own
+contract offer (`grant_squad_role`, the only role write in
+`discord_roster.py`, asserted against its source). Every other role
+change -- including every removal -- goes through `role_sync.py`, which
+keeps the managed roles in step with the site (see "Managed Discord
+roles" below).
 
 **The acceptance and the role grant are recorded separately**, because
 they can disagree. If Discord refuses the role write -- the bot lacking

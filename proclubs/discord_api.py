@@ -192,6 +192,41 @@ def put(path: str) -> httpx.Response:
     return resp
 
 
+def _request_delete(path: str) -> httpx.Response:
+    try:
+        return httpx.delete(
+            f"{_API}{path}",
+            headers={"Authorization": f"Bot {config.DISCORD_BOT_TOKEN}"},
+            timeout=_TIMEOUT,
+        )
+    except httpx.HTTPError as exc:
+        raise DiscordApiError(f"could not reach Discord's API: {exc}") from exc
+
+
+def delete(path: str) -> httpx.Response:
+    """DELETE path with no body, retrying once on a 429. Same failure
+    semantics as get(). Used only by role_sync.py to take a managed role
+    off a member -- removing a role somebody doesn't have is a success,
+    so it's idempotent like put()."""
+    resp = _request_delete(path)
+
+    if resp.status_code == 429:
+        time.sleep(min(_MAX_RETRY_WAIT, _retry_after_seconds(resp)))
+        resp = _request_delete(path)
+
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if resp.status_code == 429:
+            raise DiscordApiError(
+                "still rate-limited after retrying -- Discord is throttling this bot; "
+                "the next attempt will likely succeed"
+            ) from exc
+        raise DiscordApiError(f"could not reach Discord's API: {exc}{_discord_error_detail(resp)}") from exc
+
+    return resp
+
+
 def get(path: str, params: dict | None = None) -> httpx.Response:
     """GET path (e.g. "/guilds/123/scheduled-events") against Discord's API
     with the shared bot token, retrying once on a 429. Returns the raw

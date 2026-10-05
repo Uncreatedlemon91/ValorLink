@@ -36,6 +36,7 @@ import matchweek_routes
 import development
 import development_routes
 import recognition
+import role_sync
 import staff_routes
 import staff_tools
 import training
@@ -323,6 +324,15 @@ for _section in navigation.SECTIONS:
     if _section.shortcut:
         app.add_api_route(_section.shortcut, _section_shortcut(_section.url),
                           methods=["GET"], include_in_schema=False)
+
+
+def _sync_roles(request: Request, *discord_ids: str) -> None:
+    """Brings these members' managed Discord roles in line with the site
+    (role_sync.py), after the change has been saved. A failure is flashed,
+    never raised: the change on the site stands either way."""
+    problem = role_sync.sync_quietly(*discord_ids)
+    if problem:
+        _flash(request, problem, "warn")
 
 
 def _announce_article(request: Request, session, article) -> None:
@@ -1392,6 +1402,8 @@ def _handle_renewal_response(session, move, response: str) -> dict:
         session, move, response=response, role_granted=False, role_error=None)
     if response == discord_roster.RESPONSE_ACCEPTED:
         services.apply_renewal(session, contract, move)
+        # A renewal can change squad status, and with it the Discord role.
+        role_sync.sync_quietly(move.discord_id)
     embed = discord_roster.build_move_embed(
         kind=move.kind, member=discord_roster.member_from_move(move),
         position=move.position, note=move.note, announced_by=move.announced_by_name,
@@ -1448,6 +1460,7 @@ def roster_page(request: Request, _staff=Depends(auth.require_management)):
         min_weeks=discord_roster.CONTRACT_MIN_WEEKS,
         max_weeks=discord_roster.CONTRACT_MAX_WEEKS,
         role_grant_enabled=config.ROSTER_ROLE_GRANT_ENABLED,
+        role_sync_enabled=config.ROLE_SYNC_ENABLED,
         offer_is_open=services.offer_is_open,
         awaits_confirmation=services.offer_awaits_confirmation,
         contracts=contracts, contract_states=states, renewals=renewals,
@@ -1600,9 +1613,8 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
                         f"answer in Discord.")
     else:
         _flash(request, f"Departure announced for {member['name']}.")
-        # A departure is usually followed by a role change made by hand in
-        # Discord; don't serve a minute-old member list over the top of it.
         discord_roster.invalidate_members_cache()
+    _sync_roles(request, member["id"])
     return RedirectResponse("/roster", status_code=303)
 
 
@@ -1698,7 +1710,7 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                                             avatar_url=move.avatar_url)
             services.set_club_role(session, player, move.position)
             role_given = True
-        name, role = move.display_name, move.position
+        name, role, confirmed_id = move.display_name, move.position, move.discord_id
         unlinked = (not appointment and linked_as is None
                     and services.get_player_link(session, int(move.discord_id)) is None)
 
@@ -1715,6 +1727,7 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
     if unlinked:
         _flash(request, f"{name} has no gamertag linked yet — link it on the Squad page "
                         f"so their playing time is tracked.", "warn")
+    _sync_roles(request, confirmed_id)
     return RedirectResponse("/roster", status_code=303)
 
 
@@ -1733,7 +1746,8 @@ def roster_record_contract(request: Request, discord_id: str = Form(""),
     had an offer to accept, and sending them one now would announce a
     signing of somebody who has been here all along. So nothing is posted
     and no role is touched -- this only writes down terms staff have
-    already agreed with the player.
+    already agreed with the player. Their managed Discord roles are
+    brought in line with the contract, like any other change.
     """
     _check_csrf(request, csrf_token)
     _require_roster_configured()
@@ -1751,6 +1765,7 @@ def roster_record_contract(request: Request, discord_id: str = Form(""),
     _flash(request, f"Contract recorded for {member['name']}: "
                     f"{discord_roster.weeks_label(weeks)}, {status}, "
                     f"until {until.strftime('%b %-d, %Y')}.")
+    _sync_roles(request, member["id"])
     return RedirectResponse("/roster", status_code=303)
 
 
@@ -1813,9 +1828,8 @@ def roster_release_contract(request: Request, contract_id: int,
                             staff=Depends(auth.require_management)):
     """Ends a contract and announces the departure -- Let Go, started
     from the contract rather than the member picker, so it works for
-    somebody who has already left the server too.
-
-    Like Let Go, it never removes a role; see discord_roster.py.
+    somebody who has already left the server too. Their managed Discord
+    roles follow (role_sync.py): the squad status and squad roles go.
     """
     _check_csrf(request, csrf_token)
     _require_roster_configured()
@@ -1835,7 +1849,7 @@ def roster_release_contract(request: Request, contract_id: int,
                level="error")
     else:
         _flash(request, f"{member['name']} released — departure announced.")
-    discord_roster.invalidate_members_cache()
+    _sync_roles(request, member["id"])
     return RedirectResponse("/roster", status_code=303)
 
 
@@ -2074,6 +2088,7 @@ def player_set_role(request: Request, discord_id: str, club_role: str = Form("")
         services.set_club_role(session, player, club_role)
         name, role = player.display_name, player.club_role
     _flash(request, f"{name} is now {role}." if role else f"{name} no longer holds a club role.")
+    _sync_roles(request, discord_id)
     return RedirectResponse(f"/players/{discord_id}", status_code=303)
 
 

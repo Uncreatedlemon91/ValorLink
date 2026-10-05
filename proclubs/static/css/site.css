@@ -3137,3 +3137,12 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
   .pipeline { grid-template-columns: minmax(0, 1fr); }
   .planner-signing { grid-template-columns: 1fr 1fr; }
 }
+
+/* --- Discord roles -------------------------------------------------------------- */
+.role-chip { display: inline-block; margin: 0.1rem 0.3rem 0.1rem 0; padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono); font-size: 0.74rem; border: 1px solid; border-radius: var(--radius); }
+.role-chip.add { color: var(--status-good); border-color: rgba(156, 203, 100, 0.45); }
+.role-chip.remove { color: var(--status-critical); border-color: rgba(229, 72, 77, 0.45); }
+.managed-roles { padding: 0.9rem 1.2rem 0; gap: 0.6rem; }
+.managed-roles li { display: grid; gap: 0.1rem; }
+.managed-roles li.is-off .squad-name { color: var(--faint); }

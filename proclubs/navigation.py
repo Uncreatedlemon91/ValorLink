@@ -84,6 +84,7 @@ SECTIONS: tuple[Section, ...] = (
         Tab("Planner", "/squad/planner", ("/squad/planner",), level=roles.STAFF),
         Tab("Recruitment", "/recruitment", ("/recruitment",), level=roles.STAFF),
         Tab("Moves & contracts", "/roster", ("/roster",), level=roles.MANAGEMENT),
+        Tab("Discord roles", "/discord-roles", ("/discord-roles",), level=roles.MANAGEMENT),
     )),
     Section("club", "Club", "club", shortcut="/club", tabs=(
         Tab("Stats", "/stats", ("/stats",)),

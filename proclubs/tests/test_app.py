@@ -1569,11 +1569,14 @@ def test_the_page_names_the_settings_it_is_missing_when_unconfigured(client, mon
     assert "DISCORD_BOT_TOKEN" in html
 
 
-def test_the_page_says_out_loud_that_let_go_never_removes_a_role(client, roster_ready):
-    """Staff have to know revoking access is still theirs to do, or
-    somebody will be 'let go' and keep their access for a week."""
+def test_the_page_says_whether_discord_roles_follow(client, roster_ready, monkeypatch):
+    """Staff have to know whether a Let Go takes the roles too, or somebody
+    will be 'let go' and keep their access for a week."""
     _login_staff(client)
-    assert "never removes" in client.get("/roster").text
+    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", False)
+    assert "roles are moved by hand" in client.get("/roster").text
+    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", True)
+    assert "managed Discord roles follow every change" in client.get("/roster").text
 
 
 def test_the_page_says_whether_accepting_will_set_the_role(client, roster_ready, monkeypatch):

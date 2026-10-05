@@ -12,6 +12,7 @@ import auth
 import discord_roster
 import matchweek as mw
 import recruitment
+import role_sync
 import roles
 import services
 import setpieces
@@ -47,6 +48,14 @@ def planner_page(request: Request, _staff=Depends(auth.require_staff)):
                   squad_statuses=roles.SQUAD_STATUSES, positions=discord_roster.PITCH_POSITIONS,
                   max_signings=staff_tools.MAX_PLANNED_SIGNINGS, prospects=prospects,
                   is_what_if=bool(changes or signings))
+
+
+def _sync(request: Request, discord_id: str | None) -> None:
+    """The Trialist role follows the pipeline (role_sync.py)."""
+    if discord_id:
+        problem = role_sync.sync_quietly(discord_id)
+        if problem:
+            flash(request, problem, "warn")
 
 
 # --------------------------------------------------------------------------- #
@@ -100,7 +109,9 @@ def prospect_stage(request: Request, prospect_id: int, stage: str = Form(""),
         if p is None:
             return not_found(request, "That prospect is no longer in the pipeline.")
         recruitment.set_stage(session, p, stage)
+        did = p.discord_id
     flash(request, f"Moved to {recruitment.STAGE_LABELS[stage]}.")
+    _sync(request, did)
     return RedirectResponse(f"/recruitment/{prospect_id}", status_code=303)
 
 
@@ -115,7 +126,9 @@ def prospect_note(request: Request, prospect_id: int, body: str = Form(""), rati
             return not_found(request, "That prospect is no longer in the pipeline.")
         recruitment.add_note(session, p, body=body, rating=rating, event_id=event_id,
                              author=staff.get("name") or "Staff")
+        did = p.discord_id
     flash(request, "Note added.")
+    _sync(request, did)  # a trial note can move them onto trial
     return RedirectResponse(f"/recruitment/{prospect_id}", status_code=303)
 
 
@@ -168,3 +181,53 @@ def setpieces_delete(request: Request, piece_id: int, csrf_token: str = Form(...
             setpieces.delete(session, piece)
     flash(request, "Routine deleted.")
     return RedirectResponse("/set-pieces", status_code=303)
+
+
+# --------------------------------------------------------------------------- #
+# Discord roles: the whole server against the site
+# --------------------------------------------------------------------------- #
+def _members() -> tuple[list[dict], str | None]:
+    try:
+        return discord_roster.fetch_guild_members(), None
+    except discord_roster.DiscordApiError as exc:
+        return [], str(exc)
+
+
+@router.get("/discord-roles")
+def discord_roles_page(request: Request, _staff=Depends(auth.require_management)):
+    import config
+
+    members, error = ([], None)
+    if config.ROLE_SYNC_ENABLED:
+        members, error = _members()
+    with get_session() as session:
+        plan = role_sync.server_plan(session, members) if members else []
+    return render(request, "discord_roles.html", enabled=config.ROLE_SYNC_ENABLED, error=error,
+                  managed=role_sync.managed(), labels=role_sync.LABELS,
+                  settings=config.MANAGED_ROLE_SETTINGS, holders=role_sync.holders(members),
+                  plan=plan, member_count=len(members))
+
+
+@router.post("/discord-roles/apply")
+def discord_roles_apply(request: Request, csrf_token: str = Form(...),
+                        _staff=Depends(auth.require_management)):
+    import config
+
+    check_csrf(request, csrf_token)
+    if not config.ROLE_SYNC_ENABLED:
+        raise services.ServiceError("No managed Discord roles are configured.")
+    members, error = _members()
+    if error:
+        raise services.ServiceError(f"Couldn't read the server's members: {error}")
+    # Worked out again here rather than trusted from the page, so what's
+    # applied is what's true now.
+    with get_session() as session:
+        plan = role_sync.server_plan(session, members)
+    changed, errors = role_sync.apply_plan(plan)
+    discord_roster.invalidate_members_cache()
+    if errors:
+        flash(request, f"Updated {changed} member(s); {len(errors)} failed — first: {errors[0]}", "warn")
+    else:
+        flash(request, f"Discord roles brought in line for {changed} member(s)." if changed
+              else "Discord already matches the site.")
+    return RedirectResponse("/discord-roles", status_code=303)
