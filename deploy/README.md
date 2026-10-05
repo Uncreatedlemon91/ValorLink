@@ -260,6 +260,40 @@ interactions, which needs `DISCORD_PUBLIC_KEY` (Developer Portal → General
 Information → Public Key) and either `EVENTS_ANNOUNCE_CHANNEL_ID` or
 `EVENT_THREAD_CHANNEL_ID`.
 
+**Weekly AI-written article (optional).** Every Saturday at about 09:15
+(server time), `proclubs-weekly-article.timer` (already installed by
+`install.sh`) fires `weekly_article.py`: it gathers the past seven days from
+`data/history.db` -- results, player totals, division/points movement,
+league position, and signings/departures (the hourly poll diffs EA's member
+list to spot those) -- has Claude write it up, and **publishes it live**
+under the byline `WEEKLY_ARTICLE_AUTHOR`, announcing it to Discord like any
+other article. A week with no matches and no squad changes is skipped.
+
+It runs the Claude Code CLI on your Claude subscription rather than API
+credits. One-time setup on the droplet:
+
+```bash
+# Install the CLI for the valorlink user (lands in /opt/valorlink/.local/bin)
+sudo -u valorlink -H bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
+# Create a long-lived token for your Claude account (opens a sign-in link)
+sudo -u valorlink -H /opt/valorlink/.local/bin/claude setup-token
+```
+
+Put the printed token in `proclubs/.env` as `CLAUDE_CODE_OAUTH_TOKEN`, and
+check `CLAUDE_BIN` points at the CLI. Then preview an article without
+publishing anything:
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/weekly_article.py --dry-run
+```
+
+If Claude can't be reached (say, the subscription's usage limit is hit),
+the service retries hourly, up to six times. The token lasts about a year;
+when it expires, `journalctl -u proclubs-weekly-article` shows the failure
+and re-running `claude setup-token` fixes it. Signings only start being
+tracked from the first poll after this ships -- that first poll records the
+current squad as a baseline, so nobody already in it shows up as "new".
+
 In the same portal, set **Interactions Endpoint URL** to
 `https://yeehaw-fc.club/discord/interactions`. Discord verifies the URL as
 you save it — it sends a signed PING and some deliberately-invalid ones,

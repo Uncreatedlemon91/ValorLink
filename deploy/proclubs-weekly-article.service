@@ -1,0 +1,18 @@
+[Unit]
+Description=Pro Clubs weekly AI-written article
+After=network-online.target
+# Restart=on-failure below retries when Claude couldn't be reached (e.g. a
+# subscription usage limit) -- hourly, at most 6 tries per Saturday.
+StartLimitIntervalSec=8h
+StartLimitBurst=6
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (CLAUDE_CODE_OAUTH_TOKEN, CLAUDE_BIN) -- config.py
+# loads it itself via python-dotenv, same as yeehaw-fc.service.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 weekly_article.py
+Restart=on-failure
+RestartSec=1h

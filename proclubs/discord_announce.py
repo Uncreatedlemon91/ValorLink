@@ -61,6 +61,21 @@ def announce(channel_id: str, embed: dict) -> str:
     return resp.json()["id"]
 
 
+def announce_article(article, *, channel_id: str, base_url: str) -> str:
+    """Builds and posts the announcement for a just-published article,
+    returning the new message's id. Shared by app.py's publish routes and
+    weekly_article.py, which publishes with no request to flash on --
+    error handling stays with the caller, as with announce()."""
+    url = f"{base_url}/news/{article.slug}"
+    cover_image_url = f"{base_url}/news/{article.slug}/cover-image" if article.cover_image else None
+    embed = build_embed(
+        title=article.title, url=url, summary=article.summary, category=article.category,
+        author_name=article.author_name, cover_image_url=cover_image_url,
+        published_at=article.published_at,
+    )
+    return announce(channel_id, embed)
+
+
 def fetch_reaction_count(channel_id: str, message_id: str) -> int:
     """Total reactions on a message, every emoji summed together -- not
     just one specific emoji, so it doesn't matter whether someone reacted

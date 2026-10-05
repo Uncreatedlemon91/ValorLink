@@ -42,7 +42,8 @@ cp "$DIR/yeehaw-fc.service" \
    "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" \
    "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" \
    "$DIR/proclubs-event-invites-poll.service" "$DIR/proclubs-event-invites-poll.timer" \
-   "$DIR/proclubs-notify-poll.service" "$DIR/proclubs-notify-poll.timer" /etc/systemd/system/
+   "$DIR/proclubs-notify-poll.service" "$DIR/proclubs-notify-poll.timer" \
+   "$DIR/proclubs-weekly-article.service" "$DIR/proclubs-weekly-article.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now yeehaw-fc
 systemctl restart yeehaw-fc
@@ -68,6 +69,9 @@ systemctl enable --now proclubs-event-invites-poll.timer
 # Match-week notifications every 10 minutes: reminders, the post-match
 # vote, availability nudges (needs DISCORD_BOT_TOKEN; a no-op without it).
 systemctl enable --now proclubs-notify-poll.timer
+# Weekly AI-written roundup, Saturdays (optional -- only does anything if
+# CLAUDE_CODE_OAUTH_TOKEN is set in proclubs/.env, see deploy/README.md).
+systemctl enable --now proclubs-weekly-article.timer
 systemctl --no-pager --lines=0 status yeehaw-fc
 
 VENV=/opt/valorlink/proclubs/.venv/bin/python3
@@ -104,3 +108,7 @@ echo ""
 echo "Match-week notifications run every 10 minutes. Check with:"
 echo "  systemctl list-timers proclubs-notify-poll.timer"
 echo "  sudo -u valorlink $VENV $APP/notify_poll.py    # run one now"
+echo ""
+echo "Weekly AI-written article publishes Saturdays. Check with:"
+echo "  systemctl list-timers proclubs-weekly-article.timer"
+echo "  sudo -u valorlink $VENV $APP/weekly_article.py --dry-run    # preview one now"

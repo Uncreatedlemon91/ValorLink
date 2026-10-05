@@ -346,15 +346,10 @@ def _announce_article(request: Request, session, article) -> None:
     if not config.SITE_BASE_URL:
         _flash(request, "Published, but SITE_BASE_URL isn't configured -- skipped the Discord announcement.", level="error")
         return
-    url = f"{config.SITE_BASE_URL}/news/{article.slug}"
-    cover_image_url = f"{config.SITE_BASE_URL}/news/{article.slug}/cover-image" if article.cover_image else None
-    embed = discord_announce.build_embed(
-        title=article.title, url=url, summary=article.summary, category=article.category,
-        author_name=article.author_name, cover_image_url=cover_image_url,
-        published_at=article.published_at,
-    )
     try:
-        message_id = discord_announce.announce(config.NEWS_ANNOUNCE_CHANNEL_ID, embed)
+        message_id = discord_announce.announce_article(
+            article, channel_id=config.NEWS_ANNOUNCE_CHANNEL_ID, base_url=config.SITE_BASE_URL,
+        )
     except discord_announce.DiscordApiError as exc:
         # The specific reason (bad token, bot not in that channel/guild,
         # missing Send Messages/Embed Links permission, etc.) matters for

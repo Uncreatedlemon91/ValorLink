@@ -283,6 +283,24 @@ def managed_role_ids(settings: dict[str, str], staff_role_id: int) -> dict[str, 
 MANAGED_ROLE_IDS = managed_role_ids(MANAGED_ROLE_SETTINGS, DISCORD_STAFF_ROLE_ID)
 ROLE_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID and MANAGED_ROLE_IDS)
 
+# --- Weekly AI-written article ------------------------------------------------
+# weekly_article.py (run Saturdays by proclubs-weekly-article.timer) has
+# Claude write up the week from the stats poll.py collected and publishes
+# it straight to the site. It runs the Claude Code CLI headless, billed to a
+# Claude subscription rather than API credits: CLAUDE_CODE_OAUTH_TOKEN (from
+# `claude setup-token`) is read by the CLI itself from the environment,
+# which load_dotenv() above has already populated from .env.
+CLAUDE_CODE_OAUTH_TOKEN = os.getenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+WEEKLY_ARTICLE_ENABLED = bool(CLAUDE_CODE_OAUTH_TOKEN)
+# systemd's PATH won't include the per-user install dir, so production sets
+# the absolute path (see deploy/README.md).
+CLAUDE_BIN = os.getenv("CLAUDE_BIN", "claude")
+# Blank = the CLI's own default model.
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "")
+# The byline these articles carry -- also how weekly_article.py recognizes
+# its own previous posts, so a re-run in the same week doesn't post twice.
+WEEKLY_ARTICLE_AUTHOR = os.getenv("WEEKLY_ARTICLE_AUTHOR") or f"{SITE_NAME} Desk"
+
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an
 # absolute link is required rather than a relative one -- currently just the

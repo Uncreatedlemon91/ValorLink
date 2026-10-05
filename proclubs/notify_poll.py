@@ -98,7 +98,7 @@ def milestones(session, now: datetime) -> int:
     from sqlalchemy import select
 
     people = [p.discord_id for p in session.execute(select(Player)).scalars()]
-    totals = db.player_totals(config.CLUB_PLATFORM, str(config.CLUB_ID)) if config.CLUB_ID else {}
+    totals = db.career_totals(config.CLUB_PLATFORM, str(config.CLUB_ID)) if config.CLUB_ID else {}
     links = services.player_links_for(session, [int(p) for p in people if p.isdigit()])
     metrics = recognition.player_metrics(totals, links, mw.motm_wins(session), people)
     recognition.evaluate(session, metrics, now)
