@@ -3,8 +3,8 @@ live on the site, linking back to it -- see config.NEWS_ANNOUNCE_CHANNEL_ID
 and app.py's news_new/news_edit routes.
 
 The announcement itself is one-directional and synchronous (site ->
-Discord, sent the moment an article is published), unlike the events/clips
-sync in discord_events.py/discord_clips.py -- this app is the source of
+Discord, sent the moment an article is published), unlike the clips
+sync in discord_clips.py -- this app is the source of
 truth for articles, there's no "did Discord change" to notice about the
 post itself. Reactions on that message are the one thing that DOES need
 polling afterward, since people react on their own time -- see

@@ -2,10 +2,9 @@
 
 Events are created and edited on the site by staff, and players sign up
 from either surface -- the site or the Discord announcement's buttons (see
-discord_rsvp.py). The older Discord Scheduled Events mirror still runs
-alongside that (sync_discord_events below), so an event someone makes in
-Discord's own Events tab still appears here; it just isn't the only way in
-any more.
+discord_rsvp.py). Discord's own Events tab is deliberately not read: an
+event made there is Discord's business, and its "Interested" list has
+nothing to do with our sign-up sheets.
 
 Kept separate from app.py so the routes stay thin: parse request -> call
 service -> render/redirect.
@@ -21,15 +20,15 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, defer, with_expression
 
 import discord_clips as discord_clips_mod
-import discord_events as discord_events_mod
 import discord_roster
 import html_sanitize
 import images
 import roles
 from formations import BENCH_SLOTS, FORMATIONS
 from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
-                    ClubSetting, CoachNote, Comment, Contract, Event, EventSignup, EventTierInvite, Like,
-                    Player, PlayerLink, RosterMove, Streamer, TacticsBoard, TacticsSlot)
+                    ClubSetting, CoachNote, Comment, Contract, Event, EventLineup, EventSignup,
+                    EventTierInvite, Like, MatchRating, MotmVote, Notification, Player, PlayerLink,
+                    ProspectNote, RosterMove, Streamer, TacticsBoard, TacticsSlot)
 
 EVENT_TYPES = ["Match", "Scrim", "Tournament", "Training", "Theory", "Community"]
 
@@ -438,6 +437,36 @@ def claimed_slots(session: Session, event_id: int) -> dict[str, EventSignup]:
     }
 
 
+# Every model that hangs rows off an event by its id (with no foreign key --
+# see delete_event). Listed once so deletion and id allocation agree.
+EVENT_CHILD_MODELS = (EventSignup, EventTierInvite, EventLineup, MatchRating, MotmVote)
+
+# ClubSetting key holding the highest event id ever handed out.
+_EVENT_ID_HIGH_WATER = "events:last_id"
+
+
+def _next_event_id(session: Session) -> int:
+    """An id no event has ever had. SQLite on its own reuses the highest id
+    once that row is deleted, so a new event would inherit anything still
+    keyed to the old one -- its sign-ups, its "already reminded" marks --
+    and, worse, presses on the deleted event's Discord buttons (whose
+    custom_id carries the id) would land on the new event's sheet. So ids
+    are allocated past a stored high-water mark instead, which also takes
+    in any ids still referenced by leftover rows (database.init_db records
+    those before clearing them out)."""
+    candidates = [session.scalar(select(func.max(Event.id)))]
+    candidates += [session.scalar(select(func.max(m.event_id))) for m in EVENT_CHILD_MODELS + (ProspectNote,)]
+    row = session.get(ClubSetting, _EVENT_ID_HIGH_WATER)
+    if row is not None and (row.value or "").isdigit():
+        candidates.append(int(row.value))
+    next_id = max((c for c in candidates if c), default=0) + 1
+    if row is None:
+        session.add(ClubSetting(key=_EVENT_ID_HIGH_WATER, value=str(next_id)))
+    else:
+        row.value = str(next_id)
+    return next_id
+
+
 def _validated_event_fields(*, title: str, event_type: str, scheduled_at: datetime | None) -> tuple[str, str]:
     title = (title or "").strip()
     if not title:
@@ -455,6 +484,7 @@ def create_event(session: Session, *, title: str, event_type: str, scheduled_at:
     title, event_type = _validated_event_fields(
         title=title, event_type=event_type, scheduled_at=scheduled_at)
     event = Event(
+        id=_next_event_id(session),
         title=title, event_type=event_type, scheduled_at=scheduled_at,
         opponent=(opponent or "").strip() or None,
         description=(description or "").strip() or None,
@@ -496,11 +526,16 @@ def update_event(session: Session, event: Event, *, title: str, event_type: str,
 
 
 def delete_event(session: Session, event: Event) -> None:
-    """Removes the event and every sign-up for it. Sign-ups have no
-    meaning without their event, and this app manages its schema with
+    """Removes the event and everything hung off it by id. None of it means
+    anything without its event, and this app manages its schema with
     create_all rather than a migration tool, so the cascade is done here
     explicitly rather than relying on a DB-level ON DELETE."""
-    session.execute(delete(EventSignup).where(EventSignup.event_id == event.id))
+    for model in EVENT_CHILD_MODELS:
+        session.execute(delete(model).where(model.event_id == event.id))
+    session.execute(update(ProspectNote).where(ProspectNote.event_id == event.id).values(event_id=None))
+    session.execute(delete(Notification).where(
+        ((Notification.kind == "vote") & (Notification.key == str(event.id)))
+        | ((Notification.kind == "remind") & Notification.key.like(f"{event.id}:%"))))
     session.delete(event)
     session.commit()
 
@@ -842,80 +877,10 @@ def tactics_roles_for(session: Session, discord_user_ids: list[int],
 
 def _parse_discord_time(value: str) -> datetime:
     """Discord's timestamps are ISO 8601 with an explicit offset (or "Z").
-    Normalize to a naive UTC datetime -- the same shape scheduled_at is
-    stored in everywhere else on this model."""
+    Normalize to a naive UTC datetime -- the shape every DateTime column on
+    these models is stored in."""
     dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
-
-
-def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
-    """Mirrors Discord's Scheduled Events into Event rows. Discord is the
-    source of truth for title/description/scheduled_at/image on these rows
-    -- each sync overwrites them. event_type/opponent/result have no
-    Discord equivalent and no site UI to set them either; they're only
-    defaulted on first creation (Match / no opponent / no result) and never
-    touched again here.
-
-    Events this function previously created that Discord no longer lists
-    as upcoming (canceled, or the event itself deleted) are removed, so a
-    canceled Discord event doesn't linger as a fixture on the site.
-
-    New ones take the Tactics board's formation, the same default as the
-    site's own event form, so signing up asks for a position whichever way
-    a fixture was scheduled. Upcoming mirrored events still without one
-    get it too -- but only while nobody has answered, so a sign-up sheet
-    never changes shape under the people already on it.
-    """
-    formation = get_active_formation(session)
-    seen_ids = set()
-    created = updated = 0
-    for de in discord_events:
-        if not discord_events_mod.is_upcoming(de):
-            continue
-        discord_id = de["id"]
-        seen_ids.add(discord_id)
-        title = de.get("name") or "Discord Event"
-        description = de.get("description")
-        scheduled_at = _parse_discord_time(de["scheduled_start_time"])
-        image = discord_events_mod.cover_image_url(de)
-
-        event = session.execute(
-            select(Event).where(Event.discord_event_id == discord_id)
-        ).scalar_one_or_none()
-        if event is None:
-            session.add(Event(
-                discord_event_id=discord_id, title=title, event_type="Match",
-                description=description, scheduled_at=scheduled_at, image=image,
-                created_by_name="Discord sync", formation=formation,
-            ))
-            created += 1
-        else:
-            event.title = title
-            event.description = description
-            event.image = image
-            event.scheduled_at = scheduled_at
-            if not event.formation and not _has_signups(session, event.id):
-                event.formation = formation
-            updated += 1
-
-    removed = 0
-    synced_upcoming = session.execute(
-        select(Event).where(Event.discord_event_id.is_not(None))
-                     .where(Event.scheduled_at >= datetime.utcnow())
-    ).scalars()
-    for event in synced_upcoming:
-        if event.discord_event_id not in seen_ids:
-            session.delete(event)
-            removed += 1
-
-    session.commit()
-    return {"created": created, "updated": updated, "removed": removed}
-
-
-def _has_signups(session: Session, event_id: int) -> bool:
-    return session.execute(
-        select(EventSignup.id).where(EventSignup.event_id == event_id).limit(1)
-    ).first() is not None
 
 
 # --- Clips ------------------------------------------------------------------ #
@@ -951,9 +916,8 @@ def sync_clips(session: Session, channel_id: str, messages: list[dict]) -> dict:
     polled window, since Discord's attachment URLs are signed and expire
     (~24h) -- see discord_clips.py.
 
-    Unlike events, a message no longer in the polled window isn't treated
-    as deleted (older messages just age out of the default fetch -- they
-    aren't "canceled" the way a Discord event can be): existing Clip rows
+    A message no longer in the polled window isn't treated as deleted
+    (older messages just age out of the default fetch): existing Clip rows
     are never removed here, only added to or refreshed.
     """
     created = updated = 0

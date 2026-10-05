@@ -18,9 +18,9 @@ import pytest  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 import database  # noqa: E402
-import discord_events as discord_events_mod  # noqa: E402
 import services  # noqa: E402
-from models import Article, Clip, Comment, Event, Like, Streamer  # noqa: E402, F401
+from models import (Article, Clip, ClubSetting, Comment, Event, EventLineup, EventSignup,  # noqa: E402, F401
+                    EventTierInvite, Like, MatchRating, MotmVote, Notification, ProspectNote, Streamer)
 
 
 @pytest.fixture(autouse=True)
@@ -455,10 +455,8 @@ def test_delete_article_cascades_comments_and_likes():
 
 
 def _make_event(session, **overrides):
-    """Events have no create/update path left in services.py -- they're
-    read-only from the site's own UI, populated only via
-    services.sync_discord_events. Tests that need one on the board build
-    the row directly instead."""
+    """An Event row built directly, for tests that only need one on the
+    board and not create_event's validation."""
     fields = {
         "title": "Match", "event_type": "Match", "opponent": None,
         "description": None, "scheduled_at": datetime.utcnow(),
@@ -482,132 +480,84 @@ def test_event_upcoming_only_filters_past():
         assert [e.title for e in upcoming] == ["Tomorrow's Match"]
 
 
-def _discord_event(event_id, name="Scrim Night", status=1, start="2027-06-01T18:00:00+00:00",
-                    description=None, image=None):
-    return {
-        "id": event_id, "name": name, "description": description,
-        "scheduled_start_time": start, "status": status, "image": image,
-    }
+def _new_event(session, title="Match"):
+    return services.create_event(
+        session, title=title, event_type="Match", scheduled_at=datetime.utcnow() + timedelta(days=2),
+        opponent=None, description=None, image=None, staff_name="Coach")
 
 
-def test_sync_discord_events_creates_new_events():
+def test_a_new_event_never_reuses_a_deleted_events_id():
+    """SQLite alone hands the top id back out once that row is deleted --
+    and the deleted event's Discord buttons still carry it."""
     with database.get_session() as session:
-        result = services.sync_discord_events(session, [_discord_event("d1", name="Scrim Night")])
-        assert result == {"created": 1, "updated": 0, "removed": 0}
+        old = _new_event(session, title="Cancelled")
+        old_id = old.id
+        services.set_signup(session, old, discord_user_id=1, discord_name="A",
+                            discord_avatar=None, status="going", source="discord")
+        services.delete_event(session, old)
 
-        events = services.list_events(session)
-        assert len(events) == 1
-        assert events[0].discord_event_id == "d1"
-        assert events[0].title == "Scrim Night"
-        assert events[0].event_type == "Match"  # sensible default, not from Discord
+        new = _new_event(session, title="Next Match")
+        assert new.id > old_id
+        assert services.list_signups(session, new.id) == []
 
 
-def test_mirrored_events_ask_for_a_position():
-    """They take the Tactics board's formation, like the site's own form."""
+def test_deleting_an_event_removes_everything_keyed_to_it():
     with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1")])
-        assert services.list_events(session)[0].formation == services.get_active_formation(session)
-
-
-def test_a_formation_is_backfilled_only_while_nobody_has_answered():
-    with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
-        first, second = services.list_events(session)
-        first.formation = second.formation = None
-        session.commit()
-        services.set_signup(session, second, discord_user_id=1, discord_name="A",
-                            discord_avatar=None, status="going", source="site")
-        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
-        session.refresh(first); session.refresh(second)
-        assert first.formation and second.formation is None
-
-
-def test_sync_discord_events_sets_cover_image_when_discord_event_has_one():
-    with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1", image="somehash")])
-        event = services.list_events(session)[0]
-        assert event.image == "https://cdn.discordapp.com/guild-events/d1/somehash.png"
-
-
-def test_sync_discord_events_updates_cover_image_on_resync():
-    with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1", image="oldhash")])
-        services.sync_discord_events(session, [_discord_event("d1", image="newhash")])
-        event = services.list_events(session)[0]
-        assert event.image == "https://cdn.discordapp.com/guild-events/d1/newhash.png"
-
-        # And clears it if the organizer removes the cover in Discord.
-        services.sync_discord_events(session, [_discord_event("d1", image=None)])
-        event = services.list_events(session)[0]
-        assert event.image is None
-
-
-def test_sync_discord_events_updates_existing_by_discord_id():
-    with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1", name="Original Name")])
-        event = services.list_events(session)[0]
-
-        # Staff enriches fields Discord has no equivalent for (there's no
-        # site UI for this anymore, but the sync itself must still leave
-        # hand-set values alone -- simulate it by writing directly).
-        event.event_type = "Tournament"
-        event.opponent = "Rivals FC"
+        event = _new_event(session)
+        keep = _new_event(session, title="Other")
+        for eid in (event.id, keep.id):
+            session.add_all([
+                EventSignup(event_id=eid, discord_user_id=1, discord_name="A"),
+                EventTierInvite(event_id=eid, tier_key="create", role_id="9"),
+                EventLineup(event_id=eid, slot_key="GK", discord_user_id=1, display_name="A"),
+                MatchRating(event_id=eid, discord_id="1", display_name="A"),
+                MotmVote(event_id=eid, voter_id="1", nominee_id="2"),
+                Notification(kind="remind", key=f"{eid}:1"),
+                Notification(kind="vote", key=str(eid)),
+            ])
+        session.add(ProspectNote(prospect_id=1, event_id=event.id, body="Sharp", author="Coach"))
         session.commit()
 
-        result = services.sync_discord_events(session, [_discord_event("d1", name="Renamed Event")])
-        assert result == {"created": 0, "updated": 1, "removed": 0}
+        services.delete_event(session, event)
 
-        events = services.list_events(session)
-        assert len(events) == 1
-        assert events[0].title == "Renamed Event"       # overwritten from Discord
-        assert events[0].event_type == "Tournament"      # site-only field, untouched
-        assert events[0].opponent == "Rivals FC"          # site-only field, untouched
+        for model in services.EVENT_CHILD_MODELS:
+            assert {r.event_id for r in session.execute(select(model)).scalars()} == {keep.id}
+        assert sorted(n.key for n in session.execute(select(Notification)).scalars()) == \
+            sorted([f"{keep.id}:1", str(keep.id)])
+        # A trial assessment outlives the match it came from.
+        assert session.execute(select(ProspectNote)).scalar_one().event_id is None
 
 
-def test_sync_discord_events_removes_canceled_upcoming_events():
+def test_init_db_strips_what_an_event_inherited_through_a_reused_id():
+    """The state a live database can already be in: event 1 was deleted
+    without its rows, and the next event got id 1 and with it the old
+    sign-up sheet."""
     with database.get_session() as session:
-        services.sync_discord_events(session, [_discord_event("d1")])
-        assert len(services.list_events(session)) == 1
-
-        # Discord no longer lists it at all (deleted) -- treated as canceled.
-        result = services.sync_discord_events(session, [])
-        assert result == {"created": 0, "updated": 0, "removed": 1}
-        assert services.list_events(session) == []
-
-
-def test_sync_discord_events_ignores_completed_and_canceled_statuses():
-    with database.get_session() as session:
-        result = services.sync_discord_events(session, [
-            _discord_event("d1", status=discord_events_mod.STATUS_COMPLETED),
-            _discord_event("d2", status=discord_events_mod.STATUS_CANCELED),
+        event = _new_event(session)
+        before = event.created_at - timedelta(hours=1)
+        after = event.created_at + timedelta(minutes=5)
+        session.add_all([
+            EventSignup(event_id=event.id, discord_user_id=1, discord_name="Stale", responded_at=before),
+            EventSignup(event_id=event.id, discord_user_id=2, discord_name="Real", responded_at=after),
+            EventTierInvite(event_id=event.id, tier_key="create", role_id="9", invited_at=before),
+            Notification(kind="remind", key=f"{event.id}:1", sent_at=before),
+            Notification(kind="remind", key=f"{event.id}:2", sent_at=after),
+            Notification(kind="vote", key="7", sent_at=before),
+            # Left over from an event long gone; its id must stay retired.
+            EventSignup(event_id=41, discord_user_id=3, discord_name="Orphan"),
         ])
-        assert result == {"created": 0, "updated": 0, "removed": 0}
-        assert services.list_events(session) == []
+        session.commit()
+        event_id = event.id
 
+    database.init_db()
 
-def test_sync_discord_events_never_touches_manually_created_events():
     with database.get_session() as session:
-        _make_event(session, title="Community Night", event_type="Community",
-                    scheduled_at=datetime.utcnow() + timedelta(days=3))
-        # Discord reports nothing at all -- a manually-created event (no
-        # discord_event_id) must survive regardless.
-        result = services.sync_discord_events(session, [])
-        assert result == {"created": 0, "updated": 0, "removed": 0}
-        assert [e.title for e in services.list_events(session)] == ["Community Night"]
-
-
-def test_sync_discord_events_leaves_past_events_alone_even_if_discord_drops_them():
-    with database.get_session() as session:
-        services.sync_discord_events(session, [
-            _discord_event("d1", start="2020-01-01T18:00:00+00:00"),
-        ])
-        assert len(services.list_events(session)) == 1
-
-        # Discord's list no longer includes it (it's aged out on their side),
-        # but it's in the past -- leave it as a historical record.
-        result = services.sync_discord_events(session, [])
-        assert result["removed"] == 0
-        assert len(services.list_events(session)) == 1
+        assert [s.discord_name for s in services.list_signups(session, event_id)] == ["Real"]
+        assert session.execute(select(EventSignup).where(EventSignup.event_id == 41)).first() is None
+        assert session.execute(select(EventTierInvite)).first() is None
+        assert sorted(n.key for n in session.execute(select(Notification)).scalars()) == \
+            sorted([f"{event_id}:2", "7"])
+        assert _new_event(session).id == 42
 
 
 def _discord_message(message_id, content="", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",

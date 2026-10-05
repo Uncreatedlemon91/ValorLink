@@ -31,6 +31,7 @@ def init_db():
     _add_missing_columns()
     _drop_legacy_columns()
     _rename_legacy_values()
+    _repair_reused_event_ids()
 
 
 def _add_missing_columns():
@@ -94,6 +95,70 @@ def _rename_legacy_values():
             for table in ("contracts", "roster_moves"):
                 conn.execute(text(f"UPDATE {table} SET squad_status = :new WHERE squad_status = :old"),
                              {"new": new, "old": old})
+
+
+# Tables that hang rows off an event by id (no foreign key, see
+# services.delete_event), each with the column recording when the row was
+# first written. Mirrors services.EVENT_CHILD_MODELS.
+_EVENT_CHILD_STAMPS = {
+    "event_signups": "responded_at",
+    "event_tier_invites": "invited_at",
+    "event_lineups": "updated_at",
+    "match_ratings": "updated_at",
+    "motm_votes": "updated_at",
+}
+_EVENT_ID_HIGH_WATER = "events:last_id"   # services._EVENT_ID_HIGH_WATER
+
+
+def _repair_reused_event_ids():
+    """Undo the damage of SQLite handing a deleted event's id to the next
+    one. Deleting an event used to leave most of its rows behind (and the
+    old Discord Scheduled Events mirror left even its sign-ups), so a new
+    event that got the same id opened with someone else's sign-up sheet.
+
+    First records the highest id anything has ever pointed at, so
+    services._next_event_id never hands it out again -- the leftover rows
+    are the only record of those ids, so this must run before they go.
+    Then drops rows that can't belong to the event now holding their id:
+    any written before that event existed, and any whose event is gone.
+    Safe on every startup -- once clean, there's nothing for it to match."""
+    with engine.begin() as conn:
+        tables = set(inspect(conn).get_table_names())
+        if "events" not in tables:
+            return
+        children = {t: c for t, c in _EVENT_CHILD_STAMPS.items() if t in tables}
+
+        ids = [conn.execute(text("SELECT MAX(id) FROM events")).scalar()]
+        ids += [conn.execute(text(f"SELECT MAX(event_id) FROM {t}")).scalar() for t in children]
+        if "notifications" in tables:
+            ids.append(conn.execute(text(
+                "SELECT MAX(CAST(CASE kind WHEN 'vote' THEN key"
+                " ELSE substr(key, 1, instr(key, ':') - 1) END AS INTEGER))"
+                " FROM notifications WHERE kind IN ('remind', 'vote')")).scalar())
+        stored = conn.execute(text("SELECT value FROM club_settings WHERE key = :k"),
+                              {"k": _EVENT_ID_HIGH_WATER}).scalar()
+        if stored and stored.isdigit():
+            ids.append(int(stored))
+        high = max((i for i in ids if i), default=0)
+        if high:
+            conn.execute(text("DELETE FROM club_settings WHERE key = :k"), {"k": _EVENT_ID_HIGH_WATER})
+            conn.execute(text("INSERT INTO club_settings (key, value) VALUES (:k, :v)"),
+                         {"k": _EVENT_ID_HIGH_WATER, "v": str(high)})
+
+        for table, stamp in children.items():
+            conn.execute(text(
+                f"DELETE FROM {table} WHERE event_id NOT IN (SELECT id FROM events) "
+                f"OR {stamp} < (SELECT created_at FROM events WHERE events.id = {table}.event_id)"))
+        # "Already sent" marks keyed by event id (see notify_poll.py and
+        # matchweek_routes.py): an inherited one would silently skip the
+        # new event's reminders or its post-match vote.
+        if "notifications" not in tables:
+            return
+        conn.execute(text(
+            "DELETE FROM notifications WHERE kind IN ('remind', 'vote') AND EXISTS ("
+            " SELECT 1 FROM events WHERE notifications.sent_at < events.created_at AND ("
+            "  (notifications.kind = 'vote' AND notifications.key = CAST(events.id AS TEXT))"
+            "  OR (notifications.kind = 'remind' AND notifications.key LIKE events.id || ':%')))"))
 
 
 @contextmanager

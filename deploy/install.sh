@@ -26,6 +26,10 @@ LEGACY_UNITS=(
     valorlink-proclubs.service
     valorlink-backup.service
     valorlink-backup.timer
+    # The Discord Scheduled Events mirror. Removed so Discord's own Events
+    # tab (and its "Interested" list) stays out of the site's sign-ups.
+    proclubs-discord-events-poll.service
+    proclubs-discord-events-poll.timer
 )
 for unit in "${LEGACY_UNITS[@]}"; do
     if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
@@ -38,7 +42,6 @@ done
 cp "$DIR/yeehaw-fc.service" \
    "$DIR/yeehaw-fc-backup.service" "$DIR/yeehaw-fc-backup.timer" \
    "$DIR/proclubs-poll.service" "$DIR/proclubs-poll.timer" \
-   "$DIR/proclubs-discord-events-poll.service" "$DIR/proclubs-discord-events-poll.timer" \
    "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" \
    "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" \
    "$DIR/proclubs-event-invites-poll.service" "$DIR/proclubs-event-invites-poll.timer" \
@@ -52,9 +55,6 @@ systemctl enable --now yeehaw-fc-backup.timer
 # Hourly Pro Clubs history poll (the timer fires poll.py; optional -- only
 # does anything if proclubs/tracked_clubs.json is set up, see deploy/README.md).
 systemctl enable --now proclubs-poll.timer
-# Discord Scheduled Events -> site fixtures sync, every 10 minutes (optional --
-# only does anything if DISCORD_BOT_TOKEN is set in proclubs/.env).
-systemctl enable --now proclubs-discord-events-poll.timer
 # Discord clips -> site Clips page sync, every 30 minutes (optional -- only
 # does anything if DISCORD_BOT_TOKEN and CLIPS_CHANNEL_ID are set).
 systemctl enable --now proclubs-clips-poll.timer
@@ -88,10 +88,6 @@ echo
 echo "Pro Clubs history poll runs hourly. Check with:"
 echo "  systemctl list-timers proclubs-poll.timer"
 echo "  sudo -u valorlink $VENV $APP/poll.py    # run one now"
-echo
-echo "Discord Scheduled Events sync runs every 10 minutes. Check with:"
-echo "  systemctl list-timers proclubs-discord-events-poll.timer"
-echo "  sudo -u valorlink $VENV $APP/discord_events_poll.py    # run one now"
 echo
 echo "Discord clips sync runs every 30 minutes. Check with:"
 echo "  systemctl list-timers proclubs-clips-poll.timer"

@@ -77,9 +77,8 @@ def _csrf(client, path):
 
 def _seed_event(*, title="League Match", opponent="Rivals FC", scheduled_at=None,
                  event_type="Match", discord_event_id=None, image=None) -> int:
-    """Events are read-only from the site now (Discord-sync only, see
-    services.sync_discord_events) -- tests that need one on the page seed
-    it directly rather than going through a since-removed /events/new."""
+    """An event seeded straight into the DB, for tests that only need one
+    on the page."""
     with database.get_session() as session:
         event = Event(
             title=title, event_type=event_type, opponent=opponent,

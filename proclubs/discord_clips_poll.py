@@ -1,7 +1,7 @@
 """One-shot poller: mirror video clips from a Discord channel onto the
 site's Clips page. Run on a schedule via systemd (see
 deploy/proclubs-clips-poll.service + .timer) -- deliberately NOT part of
-the FastAPI app process, same reasoning as poll.py/discord_events_poll.py:
+the FastAPI app process, same reasoning as poll.py:
 this app has no always-on bot/gateway connection, so polling is the only
 way to notice a new clip -- and the only way to refresh a clip's video URL
 before Discord's signed link expires.

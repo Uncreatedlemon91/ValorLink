@@ -9,7 +9,6 @@ feature runs over REST and a signed interactions webhook.
 | `yeehaw-fc.service` | the site (gunicorn + uvicorn workers on 127.0.0.1:8001) |
 | `yeehaw-fc-backup.{service,timer}` | daily database backup |
 | `proclubs-poll.{service,timer}` | hourly EA stats snapshot → `history.db`, and the league table |
-| `proclubs-discord-events-poll.*` | Discord Scheduled Events → site fixtures, every 10 min |
 | `proclubs-clips-poll.*` | Discord video posts → Clips page, every 30 min |
 | `proclubs-reactions-poll.*` | reaction counts on article announcements, every 30 min |
 | `proclubs-event-invites-poll.*` | staged event-thread invites, every 10 min |
@@ -218,16 +217,6 @@ treat it as the most sensitive value in `.env`.
 sudo -u valorlink nano /opt/valorlink/proclubs/.env
 # DISCORD_BOT_TOKEN=...
 sudo systemctl restart yeehaw-fc
-```
-
-### Scheduled Events sync
-
-Events created in Discord (Server → Events → New Event) mirror in as site
-fixtures. See `proclubs/README.md#mirrored-discord-scheduled-events` for
-what does and doesn't sync. Needs only the bot token.
-
-```bash
-sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_events_poll.py
 ```
 
 ### Clips sync

@@ -5,7 +5,7 @@ second module needed the exact same logic.
 
 REST only -- no gateway/websocket connection, since this app has no
 always-on bot process. Changes are picked up by periodically polling (see
-discord_events_poll.py / discord_clips_poll.py), the same pattern as
+discord_clips_poll.py / discord_reactions_poll.py), the same pattern as
 ea_client.py's data feeding poll.py.
 
 DISCORD_BOT_TOKEN is this club's own bot token. It used to be shared with
