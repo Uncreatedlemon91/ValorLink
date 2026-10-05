@@ -15,7 +15,8 @@ cp "$DIR/valorlink-bot.service" "$DIR/valorlink-web.service" "$DIR/valorlink-pro
    "$DIR/proclubs-poll.service" "$DIR/proclubs-poll.timer" \
    "$DIR/proclubs-discord-events-poll.service" "$DIR/proclubs-discord-events-poll.timer" \
    "$DIR/proclubs-clips-poll.service" "$DIR/proclubs-clips-poll.timer" \
-   "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" /etc/systemd/system/
+   "$DIR/proclubs-reactions-poll.service" "$DIR/proclubs-reactions-poll.timer" \
+   "$DIR/proclubs-weekly-article.service" "$DIR/proclubs-weekly-article.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now valorlink-bot valorlink-web valorlink-proclubs
 systemctl restart valorlink-bot valorlink-web valorlink-proclubs
@@ -34,6 +35,9 @@ systemctl enable --now proclubs-clips-poll.timer
 # (optional -- only does anything if DISCORD_BOT_TOKEN and
 # NEWS_ANNOUNCE_CHANNEL_ID are set).
 systemctl enable --now proclubs-reactions-poll.timer
+# Weekly AI-written roundup, Saturdays (optional -- only does anything if
+# CLAUDE_CODE_OAUTH_TOKEN is set in proclubs/.env, see deploy/README.md).
+systemctl enable --now proclubs-weekly-article.timer
 systemctl --no-pager --lines=0 status valorlink-bot valorlink-web valorlink-proclubs
 
 echo
@@ -61,3 +65,7 @@ echo
 echo "Discord article-reaction poll runs every 30 minutes. Check with:"
 echo "  systemctl list-timers proclubs-reactions-poll.timer"
 echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_reactions_poll.py    # run one now"
+echo
+echo "Weekly AI-written article publishes Saturdays. Check with:"
+echo "  systemctl list-timers proclubs-weekly-article.timer"
+echo "  sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/weekly_article.py --dry-run    # preview one now"

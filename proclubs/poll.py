@@ -37,7 +37,7 @@ def load_tracked_clubs():
     return json.loads(TRACKED_CLUBS_PATH.read_text())
 
 
-def poll_club(platform, club_id, label):
+def poll_club(platform, club_id, label, track_squad=False):
     print(f"[{label}] polling {platform}/{club_id}...")
 
     try:
@@ -51,6 +51,12 @@ def poll_club(platform, club_id, label):
     try:
         members = (ea_client.member_stats(platform, club_id) or {}).get("members", [])
         team_size = len(members)
+        if track_squad:
+            # Signings/departures feed the weekly article (weekly_article.py).
+            # Only our own tracked clubs -- league opponents' rosters aren't news.
+            joined, left = db.record_squad(platform, club_id, [m.get("name") for m in members])
+            if joined or left:
+                print(f"[{label}] squad: joined {joined or '-'}, left {left or '-'}")
     except ea_client.EAApiError as exc:
         print(f"[{label}] member stats failed: {exc}")
 
@@ -98,7 +104,7 @@ def main():
 
     polled = set()
     for c in clubs:
-        poll_club(c["platform"], c["clubId"], c.get("label", c["clubId"]))
+        poll_club(c["platform"], c["clubId"], c.get("label", c["clubId"]), track_squad=True)
         polled.add((c["platform"], str(c["clubId"])))
 
     sync_and_poll_league_table(clubs, polled)

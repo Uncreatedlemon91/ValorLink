@@ -86,6 +86,27 @@ CREATE TABLE IF NOT EXISTS match_players (
     minutes_played INTEGER,
     UNIQUE(match_id, club_id, player_name)
 );
+
+-- Who's currently in the squad, per EA's member list (see record_squad) --
+-- the baseline that squad_moves below is diffed against.
+CREATE TABLE IF NOT EXISTS squad_members (
+    platform TEXT NOT NULL,
+    club_id TEXT NOT NULL,
+    player_name TEXT NOT NULL,
+    joined_at INTEGER NOT NULL,
+    PRIMARY KEY (platform, club_id, player_name)
+);
+
+-- Signings and departures, one row per change noticed between two polls.
+-- EA exposes no transfer history of its own, so this is the only record.
+CREATE TABLE IF NOT EXISTS squad_moves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    club_id TEXT NOT NULL,
+    player_name TEXT NOT NULL,
+    move TEXT NOT NULL,  -- 'joined' or 'left'
+    moved_at INTEGER NOT NULL
+);
 """
 
 
@@ -524,6 +545,103 @@ def player_trend(platform, club_id, player_name):
            WHERE m.platform=? AND m.club_id=? AND mp.player_name=?
            ORDER BY m.played_at""",
         (platform, club_id, player_name),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def record_squad(platform, club_id, member_names):
+    """Diffs EA's current member list against the last one we saw, logging
+    each signing/departure into squad_moves. Returns (joined, left) as
+    sorted name lists.
+
+    The very first call for a club only records a baseline -- everyone
+    already in the squad when tracking started isn't a "signing". An empty
+    member list is ignored outright: that's EA failing to answer, not the
+    whole squad walking out at once."""
+    current = {n.strip() for n in member_names if n and n.strip()}
+    if not current:
+        return [], []
+    now = int(time.time())
+    conn = _connect()
+    with conn:
+        existing = {r["player_name"] for r in conn.execute(
+            "SELECT player_name FROM squad_members WHERE platform=? AND club_id=?",
+            (platform, club_id),
+        ).fetchall()}
+        baseline = not existing
+        joined = sorted(current - existing)
+        left = sorted(existing - current)
+        for name in joined:
+            conn.execute(
+                "INSERT INTO squad_members (platform, club_id, player_name, joined_at) VALUES (?,?,?,?)",
+                (platform, club_id, name, now),
+            )
+        for name in left:
+            conn.execute(
+                "DELETE FROM squad_members WHERE platform=? AND club_id=? AND player_name=?",
+                (platform, club_id, name),
+            )
+        if not baseline:
+            conn.executemany(
+                "INSERT INTO squad_moves (platform, club_id, player_name, move, moved_at) VALUES (?,?,?,?,?)",
+                [(platform, club_id, n, "joined", now) for n in joined]
+                + [(platform, club_id, n, "left", now) for n in left],
+            )
+    conn.close()
+    if baseline:
+        return [], []
+    return joined, left
+
+
+def squad_moves(platform, club_id, since):
+    """Signings/departures logged at or after `since` (unix seconds),
+    oldest first."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT player_name, move, moved_at FROM squad_moves
+           WHERE platform=? AND club_id=? AND moved_at>=? ORDER BY moved_at, id""",
+        (platform, club_id, since),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def snapshot_at(platform, club_id, ts):
+    """The latest snapshot captured at or before `ts` -- "where did we
+    stand at the start of the week" -- or None if tracking started later."""
+    conn = _connect()
+    row = conn.execute(
+        """SELECT captured_at, division, points, skill_rating, wins, losses, ties
+           FROM club_snapshots WHERE platform=? AND club_id=? AND captured_at<=?
+           ORDER BY captured_at DESC, id DESC LIMIT 1""",
+        (platform, club_id, ts),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def player_totals(platform, club_id, since):
+    """Per-player totals across matches played at or after `since`, best
+    performers first. Forfeits are excluded, as everywhere else here."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT mp.player_name,
+                  COUNT(*) AS apps,
+                  COALESCE(SUM(mp.goals), 0) AS goals,
+                  COALESCE(SUM(mp.assists), 0) AS assists,
+                  ROUND(AVG(mp.rating), 2) AS avg_rating,
+                  COALESCE(SUM(mp.mom), 0) AS mom,
+                  COALESCE(SUM(mp.clean_sheet), 0) AS clean_sheets,
+                  COALESCE(SUM(mp.saves), 0) AS saves,
+                  COALESCE(SUM(mp.tackles_made), 0) AS tackles,
+                  COALESCE(SUM(mp.red_cards), 0) AS red_cards
+           FROM match_players mp
+           JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
+           WHERE m.platform=? AND m.club_id=? AND m.played_at>=? AND m.forfeit=0
+           GROUP BY mp.player_name
+           ORDER BY goals DESC, assists DESC, avg_rating DESC""",
+        (platform, club_id, since),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

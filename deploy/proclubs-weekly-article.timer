@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish the weekly AI-written roundup every Saturday morning
+
+[Timer]
+# After the hourly EA poll has had a chance to pick up Friday night's games.
+OnCalendar=Sat *-*-* 09:15:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
