@@ -18,12 +18,28 @@ import config  # noqa: E402
 import database  # noqa: E402
 import discord_roster  # noqa: E402
 import recruitment  # noqa: E402
+import role_settings  # noqa: E402
 import role_sync  # noqa: E402
 import services  # noqa: E402
 
 ROLES = {"Starter": "1548912106928087091", "Rotation": "222", "Substitute": "333",
          "Coach": "444", "Head Coach": "555", "Trialist": "1535705667925446706", "Squad": "777"}
 UNRELATED = "999"
+BOT_ID = "8000"
+
+
+def _server_roles():
+    """The guild's roles as Discord lists them. The bot's own role (8) sits
+    at position 50; "Owners" is above it, "BotRole" belongs to an integration."""
+    named = {"Starter": "Starters", "Rotation": "Rotation", "Substitute": "Subs", "Coach": "Coaches",
+             "Head Coach": "Head Coach", "Trialist": "Trialists", "Squad": "Squad"}
+    roles = [{"id": ROLES[k], "name": n, "position": 10 + i, "managed": False, "color": 0}
+             for i, (k, n) in enumerate(named.items())]
+    return roles + [{"id": "1", "name": "@everyone", "position": 0, "managed": False, "color": 0},
+                    {"id": "8", "name": "YeeHaw Bot", "position": 50, "managed": True, "color": 0},
+                    {"id": "60", "name": "Owners", "position": 60, "managed": False, "color": 0},
+                    {"id": "61", "name": "Fresh Role", "position": 5, "managed": False, "color": 0},
+                    {"id": UNRELATED, "name": "Gamers", "position": 3, "managed": False, "color": 0}]
 
 
 @pytest.fixture
@@ -36,10 +52,13 @@ def client():
 @pytest.fixture
 def discord(monkeypatch):
     """A fake guild: member roles by user id, and the calls made."""
-    state = {"members": {}, "calls": []}
-    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", True)
-    monkeypatch.setattr(config, "MANAGED_ROLE_IDS", dict(ROLES))
+    state = {"members": {BOT_ID: {"8"}}, "calls": [], "server_roles": _server_roles()}
+    monkeypatch.setattr(role_settings, "_bot_user_id", None)
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "bot-token")
     monkeypatch.setattr(config, "DISCORD_GUILD_ID", 1)
+    monkeypatch.setattr(config, "DISCORD_STAFF_ROLE_ID", 0)
+    monkeypatch.setattr(config, "MANAGED_ROLE_SETTINGS", {k: v for k, v in ROLES.items() if k != "Squad"})
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", ROLES["Squad"])
 
     class _Resp:
         def __init__(self, data):
@@ -49,6 +68,10 @@ def discord(monkeypatch):
             return self._data
 
     def get(path, params=None):
+        if path.endswith("/roles"):
+            return _Resp(state["server_roles"])
+        if path == "/users/@me":
+            return _Resp({"id": BOT_ID})
         uid = path.rsplit("/", 1)[1]
         if uid not in state["members"]:
             raise role_sync.DiscordApiError("404 Not Found")
@@ -68,6 +91,7 @@ def discord(monkeypatch):
     monkeypatch.setattr(role_sync.discord_api, "put", put)
     monkeypatch.setattr(role_sync.discord_api, "delete", delete)
     monkeypatch.setattr(discord_roster, "invalidate_members_cache", lambda: None)
+    monkeypatch.setattr(discord_roster, "fetch_guild_members", lambda: [])
     return state
 
 
@@ -129,7 +153,7 @@ def test_somebody_not_in_the_server_is_left_alone(client, discord):
 
 
 def test_nothing_happens_when_sync_is_off(client, discord, monkeypatch):
-    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", False)
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "")
     discord["members"]["1"] = {ROLES["Starter"]}
     with database.get_session() as session:
         role_sync.sync_member(session, "1")
@@ -205,3 +229,88 @@ def test_only_management_sees_the_server_page(client, discord):
         services.set_club_role(session, p, "Coach")
     client.post("/auth/dev", data={"name": "Coachy", "member": "1"})
     assert client.get("/discord-roles").status_code == 403
+
+
+# --- Which role is which, set on the site ---------------------------------------- #
+def _settings_form(**overrides):
+    values = {f"role__{k}": v for k, v in ROLES.items()}
+    values.update({f"role__{k}": v for k, v in overrides.items()})
+    return values
+
+
+def test_the_page_offers_the_servers_roles(client, discord):
+    client.post("/auth/dev", data={"name": "Boss", "member": "1", "staff": "1"})
+    html = client.get("/discord-roles").text
+    assert '<select id="role__Starter" name="role__Starter">' in html
+    assert "Fresh Role" in html and "@everyone" not in html
+    assert "belongs to an integration" in html                       # shown, but can't be picked
+    assert "read from .env" in html                                  # nothing saved on the site yet
+
+
+def test_a_saved_role_beats_the_env_and_blank_turns_it_off(client, discord):
+    with database.get_session() as session:
+        role_settings.save(session, {**ROLES, "Starter": "61", "Trialist": ""}, by_name="Boss")
+        assert role_settings.current(session)["Starter"] == {"value": "61", "source": "site"}
+        ids = role_sync.managed(session)
+    assert ids["Starter"] == "61" and "Trialist" not in ids
+    discord["members"]["1"] = set()
+    _contract("1", "Starter")
+    with database.get_session() as session:
+        role_sync.sync_member(session, "1")
+    assert discord["members"]["1"] == {"61", ROLES["Squad"]}
+
+
+def test_saving_through_the_page(client, discord):
+    client.post("/auth/dev", data={"name": "Boss", "member": "1", "staff": "1"})
+    token = _csrf(client, "/discord-roles")
+    r = client.post("/discord-roles/settings", data={**_settings_form(Starter="61"), "csrf_token": token})
+    assert "Discord roles saved." in r.text
+    assert "no longer manages the old Starter role" in r.text          # the old one isn't stripped
+    with database.get_session() as session:
+        assert role_sync.managed(session)["Starter"] == "61"
+
+
+@pytest.mark.parametrize("overrides, message", [
+    ({"Starter": "123"}, "a role in the server"),
+    ({"Starter": "8"}, "belongs to a bot or integration"),
+    ({"Starter": "abc"}, "should be a Discord role ID"),
+    ({"Starter": "1"}, "be @everyone"),
+    ({"Rotation": ROLES["Starter"]}, "set to the same role"),
+    ({"Coach": "4242"}, "Discord staff role"),
+])
+def test_the_page_refuses_roles_that_cant_work(client, discord, monkeypatch, overrides, message):
+    monkeypatch.setattr(config, "DISCORD_STAFF_ROLE_ID", 4242)
+    client.post("/auth/dev", data={"name": "Boss", "member": "1", "staff": "1"})
+    token = _csrf(client, "/discord-roles")
+    r = client.post("/discord-roles/settings", data={**_settings_form(**overrides), "csrf_token": token})
+    assert "Not saved" in r.text and message in r.text
+    with database.get_session() as session:
+        assert role_settings.current(session)["Starter"]["source"] == "env"   # nothing written
+
+
+def test_a_role_above_the_bot_is_flagged(client, discord):
+    with database.get_session() as session:
+        role_settings.save(session, {**ROLES, "Starter": "60"}, by_name="Boss")
+    client.post("/auth/dev", data={"name": "Boss", "member": "1", "staff": "1"})
+    assert "own role sits below this one" in client.get("/discord-roles").text
+
+
+def test_without_the_bot_the_roles_are_typed(client, discord, monkeypatch):
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "")
+    client.post("/auth/dev", data={"name": "Boss", "member": "1", "staff": "1"})
+    html = client.get("/discord-roles").text
+    assert 'name="role__Starter" value="1548912106928087091"' in html
+    token = _csrf(client, "/discord-roles")
+    client.post("/discord-roles/settings", data={**_settings_form(Starter="5555"), "csrf_token": token})
+    with database.get_session() as session:
+        assert role_settings.current(session)["Starter"]["value"] == "5555"
+
+
+def test_only_management_saves_roles(client, discord):
+    with database.get_session() as session:
+        p = services.ensure_player(session, discord_id=_id("Coachy"), display_name="Coachy")
+        services.set_club_role(session, p, "Coach")
+    client.post("/auth/dev", data={"name": "Coachy", "member": "1"})
+    token = _csrf(client, "/set-pieces")
+    r = client.post("/discord-roles/settings", data={**_settings_form(Starter="61"), "csrf_token": token})
+    assert r.status_code == 403

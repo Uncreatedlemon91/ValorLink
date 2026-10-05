@@ -22,7 +22,7 @@ club. So:
   Discord, where it is visible, reversible, and audited.
 * "Offer Contract" publishes an offer the player answers themselves,
   with Accept / Decline buttons that only they can press. Accepting adds
-  exactly one configured role (ROSTER_SQUAD_ROLE_ID) -- grant-only,
+  exactly one configured role (the Squad role, role_settings) -- grant-only,
   self-triggered, and to one named role rather than whatever a form
   posts. Declining touches nothing.
 * Staff then CONFIRM an accepted offer, which publishes the signing
@@ -562,9 +562,10 @@ def member_from_move(move) -> dict:
             "avatar_url": move.avatar_url or ""}
 
 
-def grant_squad_role(user_id: str) -> None:
-    """Adds config.ROSTER_SQUAD_ROLE_ID to one member. The ONLY role write
-    in this app, and there is no remove to pair with it.
+def grant_squad_role(user_id: str, role_id: str) -> None:
+    """Adds the Squad role (role_settings.squad_role_id) to one member who
+    has just accepted their offer. Add-only: there is no remove to pair
+    with it here (role_sync.py does the rest).
 
     Discord treats adding a role somebody already has as success, so a
     double-press costs a call and changes nothing. Raises DiscordApiError
@@ -573,11 +574,11 @@ def grant_squad_role(user_id: str) -> None:
     Server Settings -> Roles rather than in this app, so the caller
     records the message instead of discarding it.
     """
-    if not config.ROSTER_SQUAD_ROLE_ID:
-        raise DiscordApiError("ROSTER_SQUAD_ROLE_ID isn't set")
+    if not role_id:
+        raise DiscordApiError("the Squad role isn't set on the Discord roles page")
     discord_api.put(
         f"/guilds/{config.DISCORD_GUILD_ID}/members/{user_id}"
-        f"/roles/{config.ROSTER_SQUAD_ROLE_ID}"
+        f"/roles/{role_id}"
     )
 
 

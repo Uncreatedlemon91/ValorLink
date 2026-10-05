@@ -230,47 +230,34 @@ def roster_moves_missing() -> list[str]:
 
 ROSTER_MOVES_ENABLED = not roster_moves_missing()
 
-# The role a player is given when they ACCEPT an offer -- the one place
-# this app writes a Discord role, and the narrowest one it could be:
+# When a player ACCEPTS an offer, they're given the "Squad" role set on the
+# site's Discord roles page (role_settings.squad_role_id) -- triggered by
+# the player themselves, and add-only. Leave that role unset and accepting
+# is recorded on the site and nothing else happens in Discord. Needs the
+# bot to have Manage Roles, AND its own highest role to sit ABOVE this one
+# in Server Settings -> Roles; /roster shows Discord's refusal otherwise.
 #
-#   * it only ever adds, never removes;
-#   * it is triggered by the player themselves pressing Accept on their
-#     own offer, not by a staff click;
-#   * it is one specific role, named here, rather than whatever a form
-#     posts.
-#
-# Leave it blank and accepting is recorded on the site and nothing else
-# happens in Discord -- the offer flow still works, staff just move the
-# role by hand. Declining never touches a role either way.
-#
-# Needs the bot to have Manage Roles, AND its own highest role to sit
-# ABOVE this one in Server Settings -> Roles. Discord refuses otherwise,
-# and /roster shows that refusal against the acceptance rather than
-# swallowing it.
+# This variable is only the old .env fallback for that role.
 ROSTER_SQUAD_ROLE_ID = os.getenv("ROSTER_SQUAD_ROLE_ID", "")
-ROSTER_ROLE_GRANT_ENABLED = bool(ROSTER_MOVES_ENABLED and ROSTER_SQUAD_ROLE_ID)
 
 # --- Discord roles the site manages (see role_sync.py) ---------------------- #
-# The site is the source of truth for these: when somebody's squad status,
-# club role or trial changes here, their Discord role follows -- added
-# when they should have it, removed when they no longer should. Only the
-# roles named here are ever touched, and never DISCORD_STAFF_ROLE_ID (the
-# way into the site's management), whatever is configured.
-#
-# Blank leaves that role alone. Needs Manage Roles, and the bot's own
-# highest role ABOVE every role listed (Server Settings -> Roles).
+# Which Discord role is which is set by management on the site's Discord
+# roles page (role_settings.py), not here. These variables are only read
+# for a role that page has never saved, so an install that set them in
+# .env keeps working until the page is saved once. The site never manages
+# DISCORD_STAFF_ROLE_ID, whatever is configured.
 MANAGED_ROLE_SETTINGS = {
-    "Starter": os.getenv("ROLE_STARTER_ID", "1548912106928087091"),
+    "Starter": os.getenv("ROLE_STARTER_ID", ""),
     "Rotation": os.getenv("ROLE_ROTATION_ID", ""),
     "Substitute": os.getenv("ROLE_SUBSTITUTE_ID", ""),
     "Club President": os.getenv("ROLE_CLUB_PRESIDENT_ID", ""),
     "Head Coach": os.getenv("ROLE_HEAD_COACH_ID", ""),
     "Coach": os.getenv("ROLE_COACH_ID", ""),
-    "Trialist": os.getenv("ROLE_TRIALIST_ID", "1535705667925446706"),
-    # Everyone under contract, whatever their status -- the role the
-    # player's own Accept has always granted.
+    "Trialist": os.getenv("ROLE_TRIALIST_ID", ""),
     "Squad": ROSTER_SQUAD_ROLE_ID,
 }
+
+
 def managed_role_ids(settings: dict[str, str], staff_role_id: int) -> dict[str, str]:
     """The configured roles, minus blanks, junk and the staff role -- the
     way into the site's management is never something the site removes."""
@@ -279,9 +266,6 @@ def managed_role_ids(settings: dict[str, str], staff_role_id: int) -> dict[str, 
         if value and value.strip().isdigit() and int(value.strip()) != staff_role_id
     }
 
-
-MANAGED_ROLE_IDS = managed_role_ids(MANAGED_ROLE_SETTINGS, DISCORD_STAFF_ROLE_ID)
-ROLE_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID and MANAGED_ROLE_IDS)
 
 # --- Weekly AI-written article ------------------------------------------------
 # weekly_article.py (every ROUNDUP_DAYS days, via proclubs-weekly-article.timer)

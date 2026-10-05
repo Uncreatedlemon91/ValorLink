@@ -12,6 +12,7 @@ import auth
 import discord_roster
 import matchweek as mw
 import recruitment
+import role_settings
 import role_sync
 import roles
 import services
@@ -193,29 +194,65 @@ def _members() -> tuple[list[dict], str | None]:
         return [], str(exc)
 
 
+def _server_roles() -> tuple[list[dict] | None, int | None, str | None]:
+    """(roles, bot's top position, error). roles is None when the bot isn't
+    set up or Discord couldn't be read -- the page falls back to typed ids."""
+    if not role_settings.bot_ready():
+        return None, None, None
+    try:
+        roles, bot_top = role_settings.fetch_server_roles()
+        return roles, bot_top, None
+    except discord_roster.DiscordApiError as exc:
+        return None, None, str(exc)
+
+
 @router.get("/discord-roles")
 def discord_roles_page(request: Request, _staff=Depends(auth.require_management)):
-    import config
-
-    members, error = ([], None)
-    if config.ROLE_SYNC_ENABLED:
-        members, error = _members()
     with get_session() as session:
+        current = role_settings.current(session)
+        managed = role_sync.managed(session)
+        enabled = role_settings.bot_ready() and bool(managed)
+        members, error = _members() if enabled else ([], None)
         plan = role_sync.server_plan(session, members) if members else []
-    return render(request, "discord_roles.html", enabled=config.ROLE_SYNC_ENABLED, error=error,
-                  managed=role_sync.managed(), labels=role_sync.LABELS,
-                  settings=config.MANAGED_ROLE_SETTINGS, holders=role_sync.holders(members),
+    server_roles, bot_top, roles_error = _server_roles()
+    by_id = {r["id"]: r for r in server_roles or []}
+    return render(request, "discord_roles.html", enabled=enabled, bot_ready=role_settings.bot_ready(),
+                  error=error, managed=managed, keys=role_settings.KEYS, labels=role_sync.LABELS,
+                  current=current, server_roles=server_roles, roles_by_id=by_id, bot_top=bot_top,
+                  roles_error=roles_error, holders=role_sync.holders(members, managed),
                   plan=plan, member_count=len(members))
+
+
+@router.post("/discord-roles/settings")
+async def discord_roles_settings(request: Request, staff=Depends(auth.require_management)):
+    form = await request.form()
+    check_csrf(request, str(form.get("csrf_token") or ""))
+    server_roles, _bot_top, _err = _server_roles()
+    values = {key: str(form.get(f"role__{key}") or "") for key in role_settings.KEYS}
+    with get_session() as session:
+        before = role_sync.managed(session)
+        try:
+            role_settings.save(session, values, by_name=staff.get("name") or "Management",
+                               server_roles=server_roles)
+        except services.ServiceError as exc:
+            flash(request, f"Not saved: {exc}", "error")
+            return RedirectResponse("/discord-roles", status_code=303)
+        after = role_sync.managed(session)
+    dropped = [k for k, v in before.items() if after.get(k) != v]
+    message = "Discord roles saved."
+    if dropped:
+        message += (" The site no longer manages the old " + ", ".join(dropped)
+                    + " role — nobody loses it, so take it off by hand if it should go.")
+    flash(request, message)
+    return RedirectResponse("/discord-roles", status_code=303)
 
 
 @router.post("/discord-roles/apply")
 def discord_roles_apply(request: Request, csrf_token: str = Form(...),
                         _staff=Depends(auth.require_management)):
-    import config
-
     check_csrf(request, csrf_token)
-    if not config.ROLE_SYNC_ENABLED:
-        raise services.ServiceError("No managed Discord roles are configured.")
+    if not role_sync.enabled():
+        raise services.ServiceError("No managed Discord roles are set.")
     members, error = _members()
     if error:
         raise services.ServiceError(f"Couldn't read the server's members: {error}")

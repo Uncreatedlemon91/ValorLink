@@ -331,12 +331,16 @@ offers and departures. Needs `ROSTER_ANNOUNCE_CHANNEL_ID` (falls back to
 `NEWS_ANNOUNCE_CHANNEL_ID`), the **Server Members intent** as above, and
 the interactions endpoint for the Accept / Decline buttons.
 
-`ROSTER_SQUAD_ROLE_ID` is the role a player gets when they accept their own
-offer — the only Discord role this app ever writes, and it only ever adds.
-For that, the bot needs **Manage Roles**, *and* its own highest role must
-sit **above** the squad role in Server Settings → Roles. Discord refuses
-otherwise with a 403, which `/roster` shows against the acceptance. Leave
-the setting blank and accepting is just recorded.
+**Discord roles** (Starting players, Trialists, Squad, Coach, ...) are
+chosen on the site, not in `.env`: sign in as management and open
+**Squad → Discord roles**, pick each role from the server's list, and
+save. The Squad role is also the one a player gets when they accept their
+own offer. For any of it the bot needs **Manage Roles**, *and* its own
+highest role must sit **above** every one of these roles in Server
+Settings → Roles -- the page flags any that are above it. Discord refuses
+otherwise with a 403, which the site shows. Any old `ROLE_*_ID` /
+`ROSTER_SQUAD_ROLE_ID` lines in `.env` are read only until that page is
+saved once, and can be deleted after.
 
 ### Checking what's configured
 

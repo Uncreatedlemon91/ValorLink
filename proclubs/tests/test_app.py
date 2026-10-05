@@ -1573,21 +1573,24 @@ def test_the_page_says_whether_discord_roles_follow(client, roster_ready, monkey
     """Staff have to know whether a Let Go takes the roles too, or somebody
     will be 'let go' and keep their access for a week."""
     _login_staff(client)
-    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", False)
+    monkeypatch.setattr(config, "MANAGED_ROLE_SETTINGS", {})
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "")
     assert "roles are moved by hand" in client.get("/roster").text
-    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", True)
+    monkeypatch.setattr(config, "MANAGED_ROLE_SETTINGS", {"Starter": "10"})
+    monkeypatch.setattr(config, "DISCORD_BOT_TOKEN", "bot-token")
+    monkeypatch.setattr(config, "DISCORD_GUILD_ID", 1)
     assert "managed Discord roles follow every change" in client.get("/roster").text
 
 
 def test_the_page_says_whether_accepting_will_set_the_role(client, roster_ready, monkeypatch):
     """The one automatic role write in the app -- staff should know from
     the page whether it's actually switched on, not from the .env."""
-    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
     _login_staff(client)
     assert "adds them to the squad role automatically" in client.get("/roster").text
 
-    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
-    assert "ROSTER_SQUAD_ROLE_ID" in client.get("/roster").text
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "")
+    assert "no Squad role is set" in client.get("/roster").text
 
 
 # --------------------------------------------------------------------------- #
@@ -1632,7 +1635,6 @@ def discord_key(monkeypatch):
 @pytest.fixture
 def role_grant(monkeypatch):
     """Role granting switched on, with the PUTs captured rather than sent."""
-    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
     monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
     monkeypatch.setattr(config, "DISCORD_GUILD_ID", 999)
     puts = []
@@ -1731,7 +1733,6 @@ def test_an_acceptance_stands_even_if_the_role_write_fails(
         client, roster_ready, discord_key, monkeypatch):
     """The press is theirs. A permissions problem on our side is not a
     reason to pretend they didn't answer -- it's a thing to go and fix."""
-    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
     monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
 
     def forbidden(path):
@@ -1758,8 +1759,8 @@ def test_an_acceptance_stands_even_if_the_role_write_fails(
 
 def test_accepting_records_the_answer_when_role_granting_is_off(
         client, roster_ready, discord_key, monkeypatch):
-    """The offer flow has to work without ROSTER_SQUAD_ROLE_ID set."""
-    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
+    """The offer flow has to work without a Squad role set."""
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "")
     puts = []
     monkeypatch.setattr(appmod.discord_roster.discord_api, "put", lambda p: puts.append(p))
     _login_staff(client)

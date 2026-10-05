@@ -622,16 +622,27 @@ The site manages these Discord roles (`role_sync.py`): when someone's
 record changes here, their role follows -- added when they should hold
 it, removed when they no longer should.
 
-| Role | Held by | Setting |
-|---|---|---|
-| Starting players | a live contract at **Starter** | `ROLE_STARTER_ID` (default `1548912106928087091`) |
-| Rotation players | a live contract at **Rotation** | `ROLE_ROTATION_ID` |
-| Substitute players | a live contract at **Substitute** | `ROLE_SUBSTITUTE_ID` |
-| Squad | any live contract, or an accepted offer awaiting confirmation | `ROSTER_SQUAD_ROLE_ID` |
-| Club President / Head Coach / Coach | that club role on their player file | `ROLE_CLUB_PRESIDENT_ID` / `ROLE_HEAD_COACH_ID` / `ROLE_COACH_ID` |
-| Trialists | a prospect **On trial** or **Offered**, not yet under contract | `ROLE_TRIALIST_ID` (default `1535705667925446706`) |
+| Role | Held by |
+|---|---|
+| Starting players | a live contract at **Starter** |
+| Rotation players | a live contract at **Rotation** |
+| Substitute players | a live contract at **Substitute** |
+| Squad | any live contract, or an accepted offer awaiting confirmation |
+| Club President / Head Coach / Coach | that club role on their player file |
+| Trialists | a prospect **On trial** or **Offered**, not yet under contract |
 
-A blank setting leaves that role alone. Changes that trigger a sync:
+**Which Discord role is which** is set by management on **Squad → Discord
+roles** (`/discord-roles`, `role_settings.py`), picked from the server's
+own role list, and stored in `club_settings` under `discord_role:<key>`.
+"Not managed" leaves that role alone. The page refuses @everyone, roles
+that belong to a bot or integration, the same role for two keys, and
+`DISCORD_STAFF_ROLE_ID`; it flags any role sitting above the bot's own,
+which Discord would refuse to hand out. Swapping a role stops the site
+managing the old one but doesn't take it off anybody. A key never saved
+on the page falls back to its old `.env` variable (`ROLE_STARTER_ID`,
+`ROLE_TRIALIST_ID`, ..., `ROSTER_SQUAD_ROLE_ID`), so existing installs
+keep working until the page is saved once. The bot token, guild ID and
+staff role stay in `.env`. Changes that trigger a sync:
 confirming a signing or an appointment, recording, renewing (when the
 player accepts) or releasing a contract, Let Go, giving or clearing a
 club role, and moving a prospect through the pipeline. If Discord refuses,
@@ -892,7 +903,7 @@ announcement in the palette's blue rather than the signing green, and
 
 - **No contract.** Squad status and contract length mean nothing for a
   coach.
-- **No Discord role on Accept, even with `ROSTER_SQUAD_ROLE_ID` set.**
+- **No Discord role on Accept, even with a Squad role set.**
   The squad role isn't theirs by default, since a coach needn't be a
   player. The site access comes from the club role, and only when
   management confirm -- never from the person's own button press.
@@ -904,9 +915,9 @@ announcement in the palette's blue rather than the signing green, and
   player offers.
 
 **The role rule.** Squad moves themselves only ever *grant*:
-`ROSTER_SQUAD_ROLE_ID`, when the player presses Accept on their own
-contract offer (`grant_squad_role`, the only role write in
-`discord_roster.py`, asserted against its source). Every other role
+the Squad role (set on Discord roles), when the player presses Accept on
+their own contract offer (`grant_squad_role`, the only role write in
+`discord_roster.py`). Every other role
 change -- including every removal -- goes through `role_sync.py`, which
 keeps the managed roles in step with the site (see "Managed Discord
 roles" below).
@@ -999,8 +1010,8 @@ offer went out last week. Capped at six, and the whole section is absent
 when nothing qualifies.
 
 Set `ROSTER_ANNOUNCE_CHANNEL_ID` to choose the channel (falls back to
-`NEWS_ANNOUNCE_CHANNEL_ID`) and `ROSTER_SQUAD_ROLE_ID` for the role an
-acceptance grants. The Accept/Decline buttons ride on the same signed
+`NEWS_ANNOUNCE_CHANNEL_ID`); the role an acceptance grants is the Squad
+role on Discord roles. The Accept/Decline buttons ride on the same signed
 interactions webhook as event sign-ups, so they need `DISCORD_PUBLIC_KEY`
 and the Interactions Endpoint URL that those already require.
 
