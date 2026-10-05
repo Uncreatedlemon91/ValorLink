@@ -61,17 +61,14 @@ DISCORD_INVITE_URL = os.getenv("DISCORD_INVITE_URL", "https://discord.gg/J4d7D5k
 OAUTH_ENABLED = bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
                      and DISCORD_OAUTH_REDIRECT and DISCORD_GUILD_ID)
 
-# --- Discord Scheduled Events sync (fixtures) ------------------------------- #
-# One-directional: Discord's own Scheduled Events are the source of truth,
-# mirrored in as site Events (see discord_events.py / discord_events_poll.py).
-# Reuses the same DISCORD_GUILD_ID as OAuth above. DISCORD_BOT_TOKEN is the
-# club bot's token: full bot access, so it is the most sensitive value in
-# this file (see discord_api.py).
+# --- Discord bot ------------------------------------------------------------ #
+# DISCORD_BOT_TOKEN is the club bot's token: full bot access, so it is the
+# most sensitive value in this file (see discord_api.py). Everything below
+# that talks to Discord reuses it.
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
-DISCORD_EVENTS_SYNC_ENABLED = bool(DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)
 
 # --- Discord clips sync (Clips page) ----------------------------------------- #
-# One-directional, same shape as the events sync above: video files posted
+# One-directional: video files posted
 # in one configured Discord channel get mirrored onto the site's Clips
 # page (see discord_clips.py / discord_clips_poll.py). Reuses
 # DISCORD_BOT_TOKEN above -- no separate credential needed.

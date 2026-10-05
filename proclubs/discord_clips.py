@@ -9,7 +9,7 @@ reliably turning an arbitrary link into an embeddable player is a bigger
 job than this first pass covers.
 
 Networking (bot-token auth, 429 retry) lives in discord_api.py, shared with
-discord_events.py.
+the other modules that talk to Discord.
 """
 from __future__ import annotations
 
@@ -23,8 +23,7 @@ DiscordApiError = discord_api.DiscordApiError
 
 def list_recent_messages(channel_id: str, limit: int = 50) -> list[dict]:
     """The channel's most recent `limit` messages, newest first (Discord's
-    default order). Raises DiscordApiError on failure -- same reasoning as
-    discord_events.list_scheduled_events: a caller must not treat that as
+    default order). Raises DiscordApiError on failure: a caller must not treat that as
     "no messages," or a transient failure could look like every clip was
     deleted."""
     resp = discord_api.get(f"/channels/{channel_id}/messages", params={"limit": limit})

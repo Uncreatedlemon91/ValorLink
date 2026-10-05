@@ -303,7 +303,7 @@ The pieces that need real setup:
 - **`SESSION_SECRET`** -- a long random string (`openssl rand -hex 32`).
   Signs the session cookie; rotating it signs everyone out.
 - **`DISCORD_BOT_TOKEN`** (optional) -- enables every Discord feature
-  here: the Scheduled Events and Clips syncs, article and squad-move
+  here: the Clips sync, article and squad-move
   announcements, and event sign-ups. Developer Portal -> your app -> Bot
   -> Reset Token. This is full bot access rather than a scoped secret, so
   it is the most sensitive value in `.env`.
@@ -340,7 +340,7 @@ event's formation releases every claim (slot names differ between shapes),
 leaving those players signed up but needing to re-pick.
 
 **Without a formation** it's the plain **Going / Maybe / Can't make it**,
-which is also what events mirrored in from Discord's Events tab get.
+which is what an event gets when it's made without one.
 
 - **The Discord post is not polled.** Discord delivers each button press
   straight to `POST /discord/interactions` as a signed HTTPS request, so
@@ -454,29 +454,10 @@ token, a public key, and *a* channel to post in, and either setting
 satisfies the last of those. Leave it blank and everything above is
 skipped: announcements go into `EVENTS_ANNOUNCE_CHANNEL_ID` as before.
 
-Events created in Discord's own **Events** tab still mirror in on a timer
-(`proclubs-discord-events-poll.timer`) -- see below. That path is now one
-way of getting an event in, not the only one.
-
-### Mirrored Discord Scheduled Events
-
-- Runs on a schedule (`proclubs-discord-events-poll.timer`, every 10
-  minutes -- see `../deploy/README.md`), not instantly on creation. This
-  app has no always-on bot/gateway connection, so polling Discord's REST
-  API is the only way to notice a change made there.
-- Discord is the source of truth for **title, description, and
-  date/time** on every synced event -- each sync overwrites them.
-  **Type** (Match/Scrim/Tournament/Community), **opponent**, and
-  **result** are site-only fields Discord has no equivalent for; they're
-  set to a sensible default (Type: Match, no opponent, no result) on
-  first sync and never touched again by later syncs -- so a mirrored event
-  keeps whatever staff set for those on the site, and only its title,
-  description, and time follow Discord.
-- If a Discord event is canceled or deleted, its mirrored site fixture is
-  removed on the next sync too (as long as it's still in the future --
-  past fixtures are left alone even if their Discord event ages out of
-  Discord's own list).
-- Synced events show a "Discord" pill next to the event type badge.
+Discord's own **Events** tab is not read at all. An event someone makes
+there stays in Discord -- it never appears on the site, and the people who
+press **Interested** on it are not signed up for anything here. Site
+events are the only sign-up sheets, and they're made on the site.
 
 ## The match week
 
@@ -489,10 +470,7 @@ bot says, `notify_poll.py` when it says it):
    squad's grid for the next two weeks; a fixture's own answers override
    the pattern on its night, and the bottom row counts who's free or going.
 2. **Sign-up with positions.** Signing up for a match also asks for your
-   top three pitch positions, best first. Events created in Discord's
-   Events tab now take the Tactics board's formation, so they ask for a
-   position too (upcoming ones without one get it while nobody has
-   answered).
+   top three pitch positions, best first.
 3. **The team sheet** (`/events/<id>/teamsheet`, staff). Pick the XI and
    bench from a list that shows each player's answer, preferences, natural
    positions, form, appearances and whether they're free that night. The
@@ -1335,9 +1313,7 @@ proclubs/
   services.py            CRUD + validation for articles/events/streamers
   html_sanitize.py       Sanitizes the rich-text editor's HTML before it's stored
   twitch_client.py       Twitch Helix: is-this-channel-live, with a short cache
-  discord_events.py      Discord Scheduled Events REST client (read-only)
   discord_roster.py      Guild member list (with avatars) + squad-move announcements
-  discord_events_poll.py Standalone poller, mirrors Discord events -> Event rows
   ea_client.py           EA Pro Clubs API client (curl_cffi, unrelated to the above)
   db.py                  Locally-accumulated EA stats history (own sqlite3 file)
   poll.py                Standalone poller for db.py, run by proclubs-poll.timer
