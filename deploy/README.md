@@ -260,14 +260,16 @@ interactions, which needs `DISCORD_PUBLIC_KEY` (Developer Portal → General
 Information → Public Key) and either `EVENTS_ANNOUNCE_CHANNEL_ID` or
 `EVENT_THREAD_CHANNEL_ID`.
 
-**Weekly AI-written article (optional).** Every Saturday at about 09:15
-(server time), `proclubs-weekly-article.timer` (already installed by
-`install.sh`) fires `weekly_article.py`: it gathers the past seven days from
+**AI-written roundup (optional).** Every 2 days at about 09:15 (server
+time) -- `ROUNDUP_DAYS` in `proclubs/.env` changes how often -- the
+`proclubs-weekly-article.timer` (already installed by `install.sh`; it fires
+daily and the script skips the days in between) runs `weekly_article.py`:
+it gathers the last `ROUNDUP_DAYS` days from
 `data/history.db` -- results, player totals, division/points movement,
 league position, and signings/departures (the hourly poll diffs EA's member
 list to spot those) -- has Claude write it up, and **publishes it live**
 under the byline `WEEKLY_ARTICLE_AUTHOR`, announcing it to Discord like any
-other article. A week with no matches and no squad changes is skipped.
+other article. A stretch with no matches and no squad changes is skipped.
 
 It runs the Claude Code CLI on your Claude subscription rather than API
 credits. One-time setup on the droplet:

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -98,14 +99,16 @@ def test_player_who_leaves_and_returns_is_a_new_signing():
 
 
 # --- Gathering facts ------------------------------------------------------------ #
-def test_gather_week_covers_results_players_and_signings():
-    db.record_matches(PLATFORM, CLUB, "leagueMatch", [_match("m1"), _match("old", ts=int(time.time()) - 10 * 86400)])
+def test_gather_period_covers_results_players_and_signings(monkeypatch):
+    monkeypatch.setattr(config, "ROUNDUP_DAYS", 2)
+    db.record_matches(PLATFORM, CLUB, "leagueMatch", [_match("m1"), _match("old", ts=int(time.time()) - 3 * 86400)])
     db.record_squad(PLATFORM, CLUB, ["Striker9"])
     db.record_squad(PLATFORM, CLUB, ["Striker9", "NewGuy"])
 
-    facts = weekly_article.gather_week(PLATFORM, CLUB, int(time.time()))
+    facts = weekly_article.gather_period(PLATFORM, CLUB, int(time.time()))
 
-    assert [m["score"] for m in facts["matches"]] == ["3-1"]  # the 10-day-old match is excluded
+    assert [m["score"] for m in facts["matches"]] == ["3-1"]  # the 3-day-old match is excluded
+    assert facts["period"]["days"] == 2
     assert facts["record"] == {"played": 1, "won": 1, "drawn": 0, "lost": 0, "goals_for": 3, "goals_against": 1}
     top = facts["players"][0]
     assert (top["player_name"], top["goals"], top["mom"]) == ("Striker9", 2, 1)
@@ -118,7 +121,7 @@ def test_gather_week_covers_results_players_and_signings():
 def test_squad_news_alone_is_a_transfer_article():
     db.record_squad(PLATFORM, CLUB, ["A"])
     db.record_squad(PLATFORM, CLUB, ["A", "B"])
-    facts = weekly_article.gather_week(PLATFORM, CLUB, int(time.time()))
+    facts = weekly_article.gather_period(PLATFORM, CLUB, int(time.time()))
     assert weekly_article.has_news(facts)
     assert weekly_article.category_for(facts) == "Transfer"
 
@@ -159,7 +162,7 @@ def test_main_publishes_sanitized_article(monkeypatch):
         assert "<script>" not in article.body_html
 
 
-def test_main_does_not_post_twice_in_one_week(monkeypatch):
+def test_main_does_not_post_twice_in_one_period(monkeypatch):
     db.record_matches(PLATFORM, CLUB, "leagueMatch", [_match("m1")])
     _fake_cli(monkeypatch, GOOD_REPLY)
     weekly_article.main([])
@@ -168,7 +171,25 @@ def test_main_does_not_post_twice_in_one_week(monkeypatch):
         assert len(services.list_articles(session)) == 1
 
 
-def test_main_skips_a_quiet_week(monkeypatch, capsys):
+@pytest.mark.parametrize("hours_ago, posts_again", [(24, False), (42, True), (49, True)])
+def test_main_posts_again_once_the_period_is_up(monkeypatch, hours_ago, posts_again):
+    # The timer fires daily: with ROUNDUP_DAYS=2 the day in between is
+    # skipped, and a run that starts a little later than last time (a
+    # systemd retry, a slow boot) still goes out.
+    monkeypatch.setattr(config, "ROUNDUP_DAYS", 2)
+    db.record_matches(PLATFORM, CLUB, "leagueMatch", [_match("m1")])
+    _fake_cli(monkeypatch, GOOD_REPLY)
+    weekly_article.main([])
+    with database.get_session() as session:
+        [article] = services.list_articles(session)
+        article.published_at = datetime.utcnow() - timedelta(hours=hours_ago)
+        session.commit()
+    weekly_article.main([])
+    with database.get_session() as session:
+        assert len(services.list_articles(session)) == (2 if posts_again else 1)
+
+
+def test_main_skips_a_quiet_period(monkeypatch, capsys):
     _fake_cli(monkeypatch, GOOD_REPLY, calls=(calls := []))
     assert weekly_article.main([]) == 0
     assert calls == []

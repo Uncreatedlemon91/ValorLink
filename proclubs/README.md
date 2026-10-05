@@ -1070,16 +1070,16 @@ used to be left to each member. Now:
 - Suggestions never wait on EA: the roster is read non-blocking, so a slow
   or down API leaves just the recorded names.
 
-## The weekly AI-written article
+## The AI-written roundup
 
-Every Saturday morning, `weekly_article.py` has Claude write the week's
-roundup and publishes it live -- no staff review step -- under the byline
+Every 2 days (`ROUNDUP_DAYS`), `weekly_article.py` has Claude write a
+roundup of those days and publishes it live -- no staff review step -- under the byline
 `WEEKLY_ARTICLE_AUTHOR` (default `"<SITE_NAME> Desk"`), announced to Discord
 like any other article. Staff can edit or unpublish it afterwards like any
 other post.
 
-- **What it's written from:** only what `data/history.db` holds for the past
-  seven days -- results, per-player totals, division/points movement, league
+- **What it's written from:** only what `data/history.db` holds for the last
+  `ROUNDUP_DAYS` days -- results, per-player totals, division/points movement, league
   table position, form, and signings/departures. Claude is told to use those
   facts and nothing else, and runs with every tool disabled.
 - **Signings** come from `poll.py` diffing EA's member list for our own club
@@ -1087,7 +1087,8 @@ other post.
   records a baseline, so tracking starts from deploy day; an empty member
   list from EA is ignored rather than read as the whole squad leaving.
 - **Category:** "Match Highlight" if there were matches, otherwise
-  "Transfer". A week with neither is skipped.
+  "Transfer". A stretch with neither is skipped (and the next run tries
+  again the following morning).
 - **Billing:** it shells out to the Claude Code CLI on a Claude subscription
   (`CLAUDE_CODE_OAUTH_TOKEN`), not API credits. Setup is in
   [`../deploy/README.md`](../deploy/README.md). Preview without publishing
