@@ -144,3 +144,19 @@ def test_main_builds_league_table_end_to_end(monkeypatch):
     assert {r["label"] for r in table} >= {"Our Club"}
     ids = {r["club_id"] for r in db.league_roster("common-gen5")}
     assert "c2" in ids  # the opponent surfaced from our own match got pulled into the league table
+
+
+def test_poll_club_tracks_squad_only_when_asked(monkeypatch):
+    members = [{"name": "A"}]
+    monkeypatch.setattr(ea_client, "overall_stats", lambda p, c: None)
+    monkeypatch.setattr(ea_client, "division_stats", lambda p, c: None)
+    monkeypatch.setattr(ea_client, "member_stats", lambda p, c: {"members": list(members)})
+    monkeypatch.setattr(ea_client, "matches_stats", lambda p, c, mt, max_results=30: [])
+
+    poll.poll_club("common-gen5", "c1", "Our Club", track_squad=True)
+    members.append({"name": "B"})
+    poll.poll_club("common-gen5", "c1", "Our Club", track_squad=True)
+    poll.poll_club("common-gen5", "opp", "Opponent")  # league opponent: not tracked
+
+    assert [(m["player_name"], m["move"]) for m in db.squad_moves("common-gen5", "c1", 0)] == [("B", "joined")]
+    assert db.record_squad("common-gen5", "opp", ["X"]) == ([], [])  # still no baseline for it

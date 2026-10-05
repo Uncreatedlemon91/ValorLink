@@ -316,6 +316,29 @@ article with no reactions (or that was never announced) shows no badge at
 all, same "don't show a zero" pattern as the engagement badges on article
 thumbnails.
 
+## The weekly AI-written article
+
+Every Saturday morning, `weekly_article.py` has Claude write the week's
+roundup and publishes it live -- no staff review step -- under the byline
+`WEEKLY_ARTICLE_AUTHOR` (default `"<SITE_NAME> Desk"`), announced to Discord
+like any other article. Staff can edit or unpublish it afterwards like any
+other post.
+
+- **What it's written from:** only what `data/history.db` holds for the past
+  seven days -- results, per-player totals, division/points movement, league
+  table position, form, and signings/departures. Claude is told to use those
+  facts and nothing else, and runs with every tool disabled.
+- **Signings** come from `poll.py` diffing EA's member list for our own club
+  each hour (`squad_members` / `squad_moves` in `db.py`). The first poll only
+  records a baseline, so tracking starts from deploy day; an empty member
+  list from EA is ignored rather than read as the whole squad leaving.
+- **Category:** "Match Highlight" if there were matches, otherwise
+  "Transfer". A week with neither is skipped.
+- **Billing:** it shells out to the Claude Code CLI on a Claude subscription
+  (`CLAUDE_CODE_OAUTH_TOKEN`), not API credits. Setup is in
+  [`../deploy/README.md`](../deploy/README.md). Preview without publishing
+  with `python weekly_article.py --dry-run`.
+
 ## Comments and likes
 
 Any signed-in Discord user who's also a member of `DISCORD_GUILD_ID` (see
