@@ -36,6 +36,7 @@ import matchweek_routes
 import development
 import development_routes
 import recognition
+import role_settings
 import role_sync
 import staff_routes
 import staff_tools
@@ -1229,9 +1230,9 @@ def _handle_offer_response(custom_id: str, presser: dict) -> dict:
         role_granted, role_error = False, None
         if (response == discord_roster.RESPONSE_ACCEPTED
                 and move.kind == discord_roster.MOVE_OFFER
-                and config.ROSTER_ROLE_GRANT_ENABLED):
+                and role_settings.role_grant_enabled(session)):
             try:
-                discord_roster.grant_squad_role(str(move.discord_id))
+                discord_roster.grant_squad_role(str(move.discord_id), role_settings.squad_role_id(session))
                 role_granted = True
             except discord_roster.DiscordApiError as exc:
                 role_error = str(exc)
@@ -1454,8 +1455,8 @@ def roster_page(request: Request, _staff=Depends(auth.require_management)):
         squad_statuses=discord_roster.SQUAD_STATUSES,
         min_weeks=discord_roster.CONTRACT_MIN_WEEKS,
         max_weeks=discord_roster.CONTRACT_MAX_WEEKS,
-        role_grant_enabled=config.ROSTER_ROLE_GRANT_ENABLED,
-        role_sync_enabled=config.ROLE_SYNC_ENABLED,
+        role_grant_enabled=role_settings.role_grant_enabled(),
+        role_sync_enabled=role_sync.enabled(),
         offer_is_open=services.offer_is_open,
         awaits_confirmation=services.offer_awaits_confirmation,
         contracts=contracts, contract_states=states, renewals=renewals,

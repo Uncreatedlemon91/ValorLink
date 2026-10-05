@@ -3146,3 +3146,5 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 .managed-roles { padding: 0.9rem 1.2rem 0; gap: 0.6rem; }
 .managed-roles li { display: grid; gap: 0.1rem; }
 .managed-roles li.is-off .squad-name { color: var(--faint); }
+.managed-roles select, .managed-roles input { margin-top: 0.3rem; }
+.managed-roles .squad-sub.is-warn, .field-hint.is-warn { color: var(--amber); }

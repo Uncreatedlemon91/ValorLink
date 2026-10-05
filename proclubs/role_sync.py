@@ -1,6 +1,7 @@
 """Keeps the Discord roles the site manages in step with the site.
 
-The site is the source of truth for the roles in config.MANAGED_ROLE_IDS:
+The site is the source of truth for the roles set on /discord-roles
+(role_settings.py):
 
   Starter / Rotation / Substitute   the squad status on a live contract
   Squad                             anyone under contract (or whose
@@ -12,7 +13,7 @@ The site is the source of truth for the roles in config.MANAGED_ROLE_IDS:
 A member should hold exactly the managed roles their site record says,
 and sync_member makes it so: it adds what's missing and removes what no
 longer applies. It never touches any role outside that list, and never
-DISCORD_STAFF_ROLE_ID (excluded in config), so a mistake here can't lock
+DISCORD_STAFF_ROLE_ID (refused in role_settings), so a mistake here can't lock
 anybody out of the site or strip a role the club manages by hand.
 
 Syncing one person happens after every change to them on the site (see
@@ -29,6 +30,7 @@ from sqlalchemy.orm import Session
 import config
 import discord_api
 import discord_roster
+import role_settings
 from database import get_session
 from models import Player, Prospect, RosterMove
 from services import live_contract_for, offer_awaits_confirmation
@@ -49,9 +51,13 @@ LABELS = {
 TRIAL_STAGES = ("trial", "offered")
 
 
-def managed() -> dict[str, str]:
+def managed(session: Session | None = None) -> dict[str, str]:
     """key -> role id, for the roles configured."""
-    return dict(config.MANAGED_ROLE_IDS)
+    return role_settings.managed_ids(session)
+
+
+def enabled(session: Session | None = None) -> bool:
+    return role_settings.sync_enabled(session)
 
 
 def desired_keys(session: Session, discord_id: str) -> set[str]:
@@ -78,19 +84,19 @@ def desired_keys(session: Session, discord_id: str) -> set[str]:
     return keys
 
 
-def desired_role_ids(session: Session, discord_id: str) -> set[str]:
-    roles = managed()
+def desired_role_ids(session: Session, discord_id: str, roles: dict[str, str] | None = None) -> set[str]:
+    roles = managed(session) if roles is None else roles
     return {roles[k] for k in desired_keys(session, discord_id) if k in roles}
 
 
-def changes_for(current: set[str], desired: set[str]) -> tuple[set[str], set[str]]:
+def changes_for(current: set[str], desired: set[str], roles: dict[str, str]) -> tuple[set[str], set[str]]:
     """(to add, to remove), both limited to managed role ids."""
-    ours = set(managed().values())
+    ours = set(roles.values())
     return (desired & ours) - current, (current & ours) - desired
 
 
-def _key_for(role_id: str) -> str:
-    return next((k for k, v in managed().items() if v == role_id), role_id)
+def _key_for(role_id: str, roles: dict[str, str]) -> str:
+    return next((k for k, v in roles.items() if v == role_id), role_id)
 
 
 def _member_roles(discord_id: str) -> set[str] | None:
@@ -115,22 +121,23 @@ def apply_changes(discord_id: str, add: set[str], remove: set[str]) -> None:
 def sync_member(session: Session, discord_id: str) -> dict:
     """Brings one member's managed roles in line with the site. Returns
     {"added": [keys], "removed": [keys], "in_server": bool}."""
-    if not config.ROLE_SYNC_ENABLED or not str(discord_id).isdigit():
+    roles = managed(session)
+    if not (role_settings.bot_ready() and roles) or not str(discord_id).isdigit():
         return {"added": [], "removed": [], "in_server": True}
     current = _member_roles(str(discord_id))
     if current is None:
         return {"added": [], "removed": [], "in_server": False}
-    add, remove = changes_for(current, desired_role_ids(session, discord_id))
+    add, remove = changes_for(current, desired_role_ids(session, discord_id, roles), roles)
     apply_changes(str(discord_id), add, remove)
-    return {"added": sorted(_key_for(r) for r in add), "removed": sorted(_key_for(r) for r in remove),
-            "in_server": True}
+    return {"added": sorted(_key_for(r, roles) for r in add),
+            "removed": sorted(_key_for(r, roles) for r in remove), "in_server": True}
 
 
 def sync_quietly(*discord_ids: str) -> str | None:
     """Syncs each person in its own session, after the change that called
     it has committed. Returns what went wrong, for a flash, or None. A
     role problem never undoes the change on the site."""
-    if not config.ROLE_SYNC_ENABLED:
+    if not enabled():
         return None
     problems = []
     for discord_id in discord_ids:
@@ -156,7 +163,8 @@ def server_plan(session: Session, members: list[dict]) -> list[dict]:
     """Every member whose managed roles differ from what the site says:
     [{id, name, add: [keys], remove: [keys]}]. `members` is the guild
     member list (discord_roster.guild_members)."""
-    ours = set(managed().values())
+    roles = managed(session)
+    ours = set(roles.values())
     rows = []
     for m in members:
         user = m.get("user") or {}
@@ -164,22 +172,22 @@ def server_plan(session: Session, members: list[dict]) -> list[dict]:
         if not uid or user.get("bot"):
             continue
         current = {str(r) for r in m.get("roles") or []}
-        desired = desired_role_ids(session, uid)
+        desired = desired_role_ids(session, uid, roles)
         if not (current & ours) and not desired:
             continue
-        add, remove = changes_for(current, desired)
+        add, remove = changes_for(current, desired, roles)
         if add or remove:
             rows.append({"id": uid, "name": discord_roster.display_name(m),
-                         "add": sorted(_key_for(r) for r in add),
-                         "remove": sorted(_key_for(r) for r in remove),
+                         "add": sorted(_key_for(r, roles) for r in add),
+                         "remove": sorted(_key_for(r, roles) for r in remove),
                          "add_ids": sorted(add), "remove_ids": sorted(remove)})
     return sorted(rows, key=lambda r: r["name"].casefold())
 
 
-def holders(members: list[dict]) -> dict[str, list[str]]:
+def holders(members: list[dict], roles: dict[str, str]) -> dict[str, list[str]]:
     """key -> names of members holding that managed role in Discord now."""
-    out = {k: [] for k in managed()}
-    by_id = {v: k for k, v in managed().items()}
+    out = {k: [] for k in roles}
+    by_id = {v: k for k, v in roles.items()}
     for m in members:
         for r in m.get("roles") or []:
             key = by_id.get(str(r))

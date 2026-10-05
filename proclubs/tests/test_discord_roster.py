@@ -287,30 +287,21 @@ def test_this_module_never_removes_a_role():
     assert source.count("discord_api.put") == 1
 
 
-def test_the_only_role_written_is_the_one_named_in_config():
-    """Not "whatever the form posted" -- a single configured role is what
-    makes the grant safe to trigger from a button press."""
-    source = _module_source()
-    assert "/roles/{config.ROSTER_SQUAD_ROLE_ID}" in source
-
-
 def test_granting_refuses_when_no_squad_role_is_configured(monkeypatch):
     """Rather than PUTting to /roles/ with an empty id, which Discord
     would answer with something far less clear."""
-    monkeypatch.setattr(discord_roster.config, "ROSTER_SQUAD_ROLE_ID", "")
     called = []
     monkeypatch.setattr(discord_roster.discord_api, "put", lambda p: called.append(p))
     with pytest.raises(discord_roster.DiscordApiError):
-        discord_roster.grant_squad_role("42")
+        discord_roster.grant_squad_role("42", "")
     assert called == []
 
 
 def test_granting_puts_the_configured_role_on_the_member(monkeypatch):
-    monkeypatch.setattr(discord_roster.config, "ROSTER_SQUAD_ROLE_ID", "777")
     monkeypatch.setattr(discord_roster.config, "DISCORD_GUILD_ID", 999)
     calls = []
     monkeypatch.setattr(discord_roster.discord_api, "put", lambda p: calls.append(p))
-    discord_roster.grant_squad_role("42")
+    discord_roster.grant_squad_role("42", "777")
     assert calls == ["/guilds/999/members/42/roles/777"]
 
 
