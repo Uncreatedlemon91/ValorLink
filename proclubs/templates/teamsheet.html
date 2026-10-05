@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Team sheet · {{ event.title }}{% endblock %}
+{% block content %}
+{% set answer_label = {'going': 'Going', 'maybe': 'Maybe', None: 'No answer', 'out': 'Out'} %}
+{% set free_label = {'free': 'Free', 'busy': 'Not usually', 'away': 'Away', 'unknown': '—'} %}
+{% macro slot_select(key, label) %}
+  <select name="slot__{{ key }}" aria-label="{{ label }}" data-slot="{{ key }}">
+    <option value="">—</option>
+    {% for group, title in [('going', 'Going'), ('maybe', 'Maybe'), (None, 'No answer'), ('out', 'Out')] %}
+      {% set members = candidates | selectattr('answer', 'equalto', group) | list %}
+      {% if members %}
+        <optgroup label="{{ title }}">
+          {% for c in members %}
+            <option value="{{ c.id }}"{% if draft.get(key) == c.id %} selected{% endif %}>{{ c.name }}{% if c.prefs %} · {{ c.prefs[0] }}{% elif c.position %} · {{ c.position }}{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+      {% endif %}
+    {% endfor %}
+  </select>
+{% endmacro %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Team sheet</h1>
+      <p class="page-lede">{{ event.title }}{% if event.opponent %} vs {{ event.opponent }}{% endif %} ·
+        {{ localtime(event.scheduled_at, 'short') }}
+        {% if event.lineup_published_at %} · <strong>published {{ localtime(event.lineup_published_at, 'short') }}</strong>{% endif %}</p>
+    </div>
+    <a class="btn secondary" href="/events/{{ event.id }}">Back to the event</a>
+  </div>
+
+  <form method="post" action="/events/{{ event.id }}/teamsheet" class="formation-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <label for="ts-formation">Formation</label>
+    <select id="ts-formation" name="formation">
+      {% if not event.formation %}<option value="">Choose…</option>{% endif %}
+      {% for f in formations %}<option value="{{ f }}"{% if f == event.formation %} selected{% endif %}>{{ f }}</option>{% endfor %}
+    </select>
+    <button type="submit" name="action" value="formation" class="btn secondary btn-sm">Change</button>
+    {% if draft %}<span class="field-hint">Changing it keeps picks only for positions the new shape still has.</span>{% endif %}
+  </form>
+
+  {% if not pitch %}
+    <div class="card empty-state">Pick a formation to start the team sheet.</div>
+  {% else %}
+  <form method="post" action="/events/{{ event.id }}/teamsheet" class="ts-layout" data-teamsheet>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <section class="panel">
+      <header class="panel-head"><h2>Starting XI · {{ event.formation }}</h2></header>
+      <div class="ts-pitch-wrap">
+        <div class="pitch ts-pitch">
+          <div class="pitch-markings">
+            <div class="pitch-center-circle"></div><div class="pitch-center-line"></div>
+            <div class="pitch-box pitch-box-top"></div><div class="pitch-box pitch-box-bottom"></div>
+          </div>
+          {% for key, meta in pitch.items() %}
+            <label class="ts-slot" style="top: {{ meta.top }}%; left: {{ meta.left }}%;">
+              <span class="pitch-slot-pos">{{ meta.label }}</span>
+              {{ slot_select(key, meta.label) }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="panel-body">
+        <h3 class="ts-bench-title">Bench</h3>
+        <div class="ts-bench">
+          {% for key, meta in bench_slots.items() %}
+            <label class="ts-bench-slot"><span class="pitch-slot-pos">{{ meta.label }}</span>{{ slot_select(key, meta.label) }}</label>
+          {% endfor %}
+        </div>
+        <div class="form-actions ts-actions">
+          <button type="submit" name="action" value="save" class="btn secondary">Save draft</button>
+          <button type="submit" name="action" value="publish" class="btn">
+            {{ 'Publish changes' if event.lineup_published_at else 'Publish team sheet' }}
+          </button>
+        </div>
+        <p class="field-hint">
+          Publishing shows the sheet on the event page{% if notify_enabled %}, posts it to Discord and
+          DMs every player their shirt{% endif %}. Shirts players claimed when signing up are filled in
+          to start with.
+        </p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head"><h2>Who's available</h2><span>{{ candidates | selectattr('answer', 'equalto', 'going') | list | length }} going</span></header>
+      <div class="table-scroll">
+        <table class="league-table ts-candidates">
+          <thead>
+            <tr>
+              <th scope="col">Player</th><th scope="col">Answer</th><th scope="col">Wants</th>
+              <th scope="col">Plays</th><th scope="col" class="lt-num">Form</th>
+              <th scope="col" class="lt-num" title="Matches played among the club's last ten">Apps</th>
+              <th scope="col">That night</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in candidates %}
+              <tr class="ts-cand a-{{ c.answer or 'none' }}" data-candidate="{{ c.id }}">
+                <td><span class="squad-name">{{ c.name }}</span>
+                  <span class="ts-picked" data-picked-for="{{ c.id }}"></span>
+                  <span class="squad-sub">{{ c.status or c.club_role or 'Not under contract' }}</span></td>
+                <td><span class="ts-answer a-{{ c.answer or 'none' }}">{{ answer_label[c.answer] }}</span></td>
+                <td class="ts-prefs">{{ c.prefs | join(', ') or '—' }}</td>
+                <td class="ts-prefs">{{ c.position or '—' }}{% if c.secondary %} / {{ c.secondary }}{% endif %}</td>
+                <td class="lt-num"><span class="lt-rating">{{ form_label(c.form) }}</span></td>
+                <td class="lt-num">{{ c.apps if c.apps is not none else '—' }}</td>
+                <td><span class="ts-free f-{{ c.free }}">{{ free_label[c.free] }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </form>
+  {% endif %}
+</div>
+
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/teamsheet.js?v={{ asset_version('js/teamsheet.js') }}" defer></script>
+{% endblock %}

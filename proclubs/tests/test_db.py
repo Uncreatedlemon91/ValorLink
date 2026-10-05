@@ -302,25 +302,62 @@ def test_recent_form_caps_at_limit():
     assert db.recent_form("common-gen5", "c1", limit=5) == ["W"] * 5
 
 
-def test_league_table_filters_to_our_current_division_and_sorts_by_points():
+def test_league_table_filters_to_our_current_division_and_sorts_by_skill_rating():
     db.record_matches("common-gen5", "c1", "leagueMatch", [
         _raw_match("m1", opp_id="c2", opp_name="Same Division Club"),
         _raw_match("m2", opp_id="c3", opp_name="Different Division Club"),
     ])
     db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
-    db.record_snapshot("common-gen5", "c1", {"wins": "1", "losses": "0", "ties": "0"},
+    db.record_snapshot("common-gen5", "c1", {"wins": "1", "losses": "0", "ties": "0", "skillRating": "1900"},
                         {"currentDivision": "3", "points": "10"})
-    db.record_snapshot("common-gen5", "c2", {"wins": "3", "losses": "0", "ties": "0"},
+    db.record_snapshot("common-gen5", "c2", {"wins": "3", "losses": "0", "ties": "0", "skillRating": "1700"},
                         {"currentDivision": "3", "points": "15"})
-    db.record_snapshot("common-gen5", "c3", {"wins": "0", "losses": "3", "ties": "0"},
+    db.record_snapshot("common-gen5", "c3", {"wins": "0", "losses": "3", "ties": "0", "skillRating": "2500"},
                         {"currentDivision": "5", "points": "2"})
 
     table = db.league_table("common-gen5", "c1")
     labels = [r["label"] for r in table]
     assert "Different Division Club" not in labels  # different division -- filtered out
-    assert labels == ["Same Division Club", "Our Club"]  # sorted by points, highest first
-    assert table[0]["points"] == 15
-    assert table[1]["is_us"] is True
+    # Ranked by skill rating, not points: the club with MORE points (15 vs 10)
+    # sits below us because its rating is lower. Points reward volume as much
+    # as quality, which is the whole reason for the change.
+    assert labels == ["Our Club", "Same Division Club"]
+    assert table[0]["skill_rating"] == 1900
+    assert table[0]["is_us"] is True
+
+
+def test_league_table_breaks_rating_ties_on_points():
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Level Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    db.record_snapshot("common-gen5", "c1", {"wins": "1", "losses": "0", "ties": "0", "skillRating": "1800"},
+                        {"currentDivision": "3", "points": "20"})
+    db.record_snapshot("common-gen5", "c2", {"wins": "1", "losses": "0", "ties": "0", "skillRating": "1800"},
+                        {"currentDivision": "3", "points": "44"})
+
+    table = db.league_table("common-gen5", "c1")
+    assert [r["label"] for r in table] == ["Level Club", "Our Club"]
+
+
+def test_league_table_sorts_unrated_clubs_last():
+    """A club whose snapshot carries no skill rating has unknown strength,
+    not zero -- it belongs at the bottom rather than jumbled among rated
+    clubs. (A club with no snapshot at all never reaches the sort: the
+    division filter drops it first, and the page lists it as excluded.)"""
+    db.record_matches("common-gen5", "c1", "leagueMatch", [
+        _raw_match("m1", opp_id="c2", opp_name="Unrated Club"),
+    ])
+    db.sync_league_roster("common-gen5", "c1", "Our Club", max_teams=25)
+    db.record_snapshot("common-gen5", "c1", {"wins": "1", "losses": "0", "ties": "0", "skillRating": "1200"},
+                        {"currentDivision": "3", "points": "5"})
+    db.record_snapshot("common-gen5", "c2", {"wins": "9", "losses": "0", "ties": "0"},
+                        {"currentDivision": "3", "points": "99"})
+
+    table = db.league_table("common-gen5", "c1")
+    # 99 points and a 9-0 record still can't outrank a real rating.
+    assert [r["label"] for r in table] == ["Our Club", "Unrated Club"]
+    assert table[-1]["skill_rating"] is None
 
 
 def test_league_table_shows_all_when_our_own_club_has_no_snapshot_yet():

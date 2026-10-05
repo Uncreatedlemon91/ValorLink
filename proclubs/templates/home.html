@@ -1,216 +1,312 @@
 {% extends "base.html" %}
 {% block title %}Home{% endblock %}
 {% block content %}
-
-<section class="hero-featured {{ '' if (featured and featured.cover_image) else 'no-image' }}"
-         {% if featured and featured.cover_image %}style="background-image: url('{{ featured.cover_image }}'); background-position: {{ focal_position(featured) }};"{% endif %}>
-  <div class="hero-scrim"></div>
-  <div class="hero-content">
-    {% if featured %}
-      <span class="hero-kicker">Latest Story</span>
-      <span class="category-badge cat-{{ featured.category | replace(' ', '-') | lower }}">{{ featured.category }}</span>
-      <h1><a href="/news/{{ featured.slug }}">{{ featured.title }}</a></h1>
-      {% if featured.summary %}<p>{{ featured.summary }}</p>{% endif %}
-      <div class="hero-meta">
-        <span class="article-meta">{{ featured.author_name }} &middot; {{ featured.published_at.strftime('%b %-d, %Y') }}</span>
-        <a class="btn hero-cta" href="/news/{{ featured.slug }}">Read the full story</a>
-      </div>
-    {% else %}
-      <span class="hero-kicker">{{ SITE_TAGLINE }}</span>
-      <h1>{{ SITE_NAME }}</h1>
-      <p>News, transfers, and match highlights from the squad.</p>
-      {% if is_staff %}<a class="btn hero-cta" href="/news/new">Post the first story</a>{% endif %}
-    {% endif %}
+{# The club's home screen, laid out like a manager's dashboard: the next
+   match and the club's standing across the top, the news down the main
+   column, and the short lists (squad moves, transfers, who's live) down
+   the side. Every block is a panel with a title strip, so the page scans
+   in the same way as every other screen on the site. #}
+<div class="page page-wide home-dash">
+  <div class="page-head">
+    <div>
+      <h1>Club headquarters</h1>
+      <p class="page-lede">{{ SITE_NAME }} · the next match, the table and the news in one place.</p>
+    </div>
+    {% if is_staff %}<a class="btn secondary" href="/news/new">Write an article</a>{% endif %}
   </div>
-  <div class="scroll-cue" aria-hidden="true">&darr;</div>
-</section>
 
-<div class="match-center">
-  <div class="match-center-inner">
-    {% if next_event %}
-      <span class="mc-kicker-label">Next {{ next_event.event_type }}</span>
-      <div class="mc-matchup">
-        <div class="mc-team">
-          <span class="crest{{ ' crest-branded' if crest_colors and crest_colors.crest else '' }}"
-                {% if crest_colors and crest_colors.crest %}style="background:{{ crest_colors.crest }};"{% endif %}>{{ initials(SITE_NAME) }}</span>
-          <span class="mc-team-name">{{ SITE_NAME }}</span>
-        </div>
-        <div class="mc-vs">
-          <span>{{ next_event.scheduled_at.strftime('%a %b %-d') }}</span>
-          <span class="mc-vs-text">VS</span>
-          <span>{{ next_event.scheduled_at.strftime('%H:%M UTC') }}</span>
-        </div>
-        <div class="mc-team">
-          {% if next_event.opponent %}
-            <span class="crest">{{ initials(next_event.opponent) }}</span>
-            <span class="mc-team-name">{{ next_event.opponent }}</span>
-          {% else %}
-            <span class="crest">?</span>
-            <span class="mc-team-name">{{ next_event.title }}</span>
-          {% endif %}
-        </div>
+  <div class="dash-top">
+    {# --- Next match ----------------------------------------------------- #}
+    <section class="panel match-center">
+      <header class="panel-head">
+        <h2>{{ 'Next ' ~ next_event.event_type if next_event else 'Next match' }}</h2>
+        <a href="/events">Fixtures &rarr;</a>
+      </header>
+      <div class="panel-body">
+        {% if next_event %}
+          <div class="mc-matchup">
+            <div class="mc-team">
+              <span class="crest{{ ' crest-branded' if crest_colors and crest_colors.crest else '' }}"
+                    {% if crest_colors and crest_colors.crest %}style="background:{{ crest_colors.crest }};"{% endif %}>{{ initials(SITE_NAME) }}</span>
+              <span class="mc-team-name">{{ SITE_NAME }}</span>
+            </div>
+            <div class="mc-vs">
+              <span>{{ localtime(next_event.scheduled_at, 'daymonth') }}</span>
+              <span class="mc-vs-text">v</span>
+              <span>{{ localtime(next_event.scheduled_at, 'time') }}</span>
+            </div>
+            <div class="mc-team">
+              {% if next_event.opponent %}
+                <span class="crest">{{ initials(next_event.opponent) }}</span>
+                <span class="mc-team-name">{{ next_event.opponent }}</span>
+              {% else %}
+                <span class="crest">?</span>
+                <span class="mc-team-name">{{ next_event.title }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mc-foot">
+            <div class="mc-countdown" data-countdown="{{ next_event.scheduled_at.isoformat() }}Z">
+              <div class="cd-box"><span class="cd-d">00</span><small>Days</small></div>
+              <div class="cd-box"><span class="cd-h">00</span><small>Hrs</small></div>
+              <div class="cd-box"><span class="cd-m">00</span><small>Min</small></div>
+              <div class="cd-box"><span class="cd-s">00</span><small>Sec</small></div>
+            </div>
+            <a class="btn mc-cta" href="/events/{{ next_event.id }}">Sign up</a>
+          </div>
+        {% else %}
+          <div class="mc-empty">
+            <p class="muted">No fixture scheduled yet.</p>
+            <a class="btn secondary mc-cta" href="/events">View schedule</a>
+          </div>
+        {% endif %}
       </div>
-      <div class="mc-countdown" data-countdown="{{ next_event.scheduled_at.isoformat() }}Z">
-        <div class="cd-box"><span class="cd-d">00</span><small>Days</small></div>
-        <div class="cd-box"><span class="cd-h">00</span><small>Hrs</small></div>
-        <div class="cd-box"><span class="cd-m">00</span><small>Min</small></div>
-        <div class="cd-box"><span class="cd-s">00</span><small>Sec</small></div>
+    </section>
+
+    {# --- Club standing -------------------------------------------------- #}
+    <section class="panel">
+      <header class="panel-head panel-amber">
+        <h2>Club Standing</h2>
+        <a href="/stats">Full stats &rarr;</a>
+      </header>
+      <div class="panel-body">
+        {% if stats_teaser %}
+          {# Skill rating leads because it's the only standing figure EA
+             keeps current; the record and win rate beside it are live for
+             the same reason. No division: see app._standing_teaser. #}
+          <div class="standing-band">
+            <div class="standing-item standing-item--hero">
+              <div class="standing-value--hero"{% if stats_teaser.skillRating %} data-countup="{{ stats_teaser.skillRating }}"{% endif %}>{{ stats_teaser.skillRating or '—' }}</div>
+              <div class="standing-label">Skill Rating</div>
+            </div>
+            <div class="standing-item">
+              <div class="standing-value">{{ stats_teaser.record or '—' }}</div>
+              <div class="standing-label">Record{% if stats_teaser.played %} &middot; {{ stats_teaser.played }} played{% endif %}</div>
+            </div>
+            <div class="standing-item">
+              <div class="standing-value"{% if stats_teaser.winRate is not none %} data-countup="{{ stats_teaser.winRate }}" data-countup-suffix="%"{% endif %}>{{ stats_teaser.winRate ~ '%' if stats_teaser.winRate is not none else '—' }}</div>
+              <div class="standing-label">Win Rate</div>
+            </div>
+          </div>
+        {% else %}
+          <p class="muted panel-empty">Club figures appear once EA has answered.</p>
+        {% endif %}
       </div>
-      <a class="btn secondary mc-cta" href="/events">Full Schedule</a>
-    {% else %}
-      <div class="mc-empty">
-        <span class="mc-kicker-label">No fixture scheduled yet</span>
-        <a class="btn secondary mc-cta" href="/events">View schedule</a>
-      </div>
-    {% endif %}
+    </section>
   </div>
-</div>
 
-<div class="page">
-
-  {% if articles %}
-    <div class="section-head"><h2>Latest News</h2><a href="/news">All news &rarr;</a></div>
-    <div class="news-rail">
-      {% for a in articles %}
-        <a class="rail-card" href="/news/{{ a.slug }}">
-          <div class="rail-card-image">
-            {% if a.cover_image %}<img src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
-            {% if a.category == 'Match Highlight' %}<span class="play-badge">&#9658;</span>{% endif %}
-            {% include "_engagement_badge.html" %}
-          </div>
-          <div class="rail-card-body">
-            <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
-            <h3>{{ a.title }}</h3>
-            <div class="article-meta">{{ a.published_at.strftime('%b %-d, %Y') }}</div>
-          </div>
-        </a>
-      {% endfor %}
-    </div>
-  {% endif %}
-
-  {% if transfers %}
-    <div class="section-band">
-      <div class="band-head">
-        <span class="hero-kicker">Transfer Centre</span>
-        <a href="/news?category=Transfer">All transfers &rarr;</a>
-      </div>
-      <div class="band-list">
-        {% for a in transfers %}
-          <a class="band-row" href="/news/{{ a.slug }}">
-            <span class="band-arrow">&rarr;</span>
-            <span class="band-title">{{ a.title }}</span>
-            <span class="article-meta">{{ a.published_at.strftime('%b %-d') }}</span>
-          </a>
-        {% endfor %}
-      </div>
-    </div>
-  {% endif %}
-
-  {% if highlights %}
-    <div class="section-head"><h2>Match Highlights</h2><a href="/news?category=Match+Highlight">All highlights &rarr;</a></div>
-    <div class="card-grid">
-      {% for a in highlights %}
-        <a class="card article-card" href="/news/{{ a.slug }}">
-          <div class="rail-card-image" style="aspect-ratio: 16/9;">
-            {% if a.cover_image %}<img class="cover" src="{{ a.cover_image }}" alt="" style="object-position: {{ focal_position(a) }};" />{% endif %}
-            <span class="play-badge">&#9658;</span>
-            {% include "_engagement_badge.html" %}
-          </div>
-          <div class="body">
-            <h3>{{ a.title }}</h3>
-            <div class="article-meta">{{ a.published_at.strftime('%b %-d, %Y') }}</div>
-          </div>
-        </a>
-      {% endfor %}
-    </div>
-  {% endif %}
-
-  {% if featured_streamer_live or other_live_streamers %}
-    <div class="section-head accent-live">
-      <h2>Live Now</h2>
-      <a href="/streamers">Watch on Live &rarr;</a>
-    </div>
-  {% endif %}
-
-  {% if featured_streamer_live %}
-    <div class="featured-stream card">
-      <div class="featured-stream-player">
-        <iframe
-          src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
-          allowfullscreen frameborder="0" scrolling="no"></iframe>
-      </div>
-      <div class="featured-stream-info">
-        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ featured_streamer.avatar }}" alt="" />{% endif %}
-        <div class="featured-stream-text">
-          <div class="streamer-name">{{ featured_streamer.display_name }} <span class="featured-pill">Featured</span></div>
-          <div class="streamer-status is-live">Live now</div>
-        </div>
-        <a class="btn secondary" href="https://twitch.tv/{{ featured_streamer.twitch_login }}" target="_blank" rel="noopener noreferrer">
-          Open on Twitch
-        </a>
-      </div>
-    </div>
-  {% endif %}
-
-  {% if other_live_streamers %}
-    <div class="live-banner">
-      <div class="live-banner-head"><span class="live-dot"></span> Also live now</div>
-      <div class="live-banner-row">
-        {% for s in other_live_streamers %}
-          {% set info = live[s.twitch_login] %}
-          <a class="live-banner-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
-            {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" />{% endif %}
-            <div class="live-banner-info">
-              {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
-              <div>
-                <div class="streamer-name">{{ s.display_name }}</div>
-                <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>
-              </div>
+  <div class="dash-grid">
+    <div class="dash-main">
+      {# --- News: the lead story, then the rest as a list ----------------- #}
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Latest News</h2>
+          <a href="/news">All news &rarr;</a>
+        </header>
+        {% if featured %}
+          <a class="lead-story{{ ' has-cover' if featured.has_cover }}" href="/news/{{ featured.slug }}">
+            {% if featured.has_cover %}
+              {# fetchpriority high: the page's largest image, which would
+                 otherwise queue behind the stylesheet and thumbnails. #}
+              <img class="lead-image" src="{{ media_url('article', featured, 'cover') }}" alt=""
+                   fetchpriority="high" decoding="async"
+                   style="object-position: {{ focal_position(featured) }};" />
+            {% endif %}
+            <div class="lead-body">
+              <span class="category-badge cat-{{ featured.category | replace(' ', '-') | lower }}">{{ featured.category }}</span>
+              <h3>{{ featured.title }}</h3>
+              {% if featured.summary %}<p>{{ featured.summary }}</p>{% endif %}
+              <span class="article-meta">{{ featured.author_name }} &middot; {{ featured.published_at.strftime('%b %-d, %Y') }}</span>
             </div>
           </a>
-        {% endfor %}
-      </div>
-    </div>
-  {% endif %}
-
-  {% if stats_teaser %}
-    {% set band_accent = crest_colors.accent if crest_colors and crest_colors.accent else None %}
-    {% set band_trim = crest_colors.accent_trim if crest_colors and crest_colors.accent_trim else None %}
-    <div class="section-head accent-amber"><h2>Club Standing</h2><a href="/stats">Full stats &rarr;</a></div>
-    <div class="standing-band" data-reveal>
-      <div class="standing-glow" {% if band_accent %}style="background: radial-gradient(circle, {{ band_accent }}59, transparent 70%);"{% endif %}></div>
-      <div class="standing-shine"></div>
-      <div class="standing-grid">
-        <div class="standing-item">
-          <div class="division-ring">
-            <span>{{ stats_teaser.currentDivision or '—' }}</span>
+          {% if articles %}
+            <ul class="news-list">
+              {% for a in articles %}
+                <li>
+                  <a class="news-row" href="/news/{{ a.slug }}">
+                    {# No placeholder box for a story without a cover: an empty
+                       grey frame reads as a broken image. #}
+                    {% if a.has_cover %}
+                      <span class="news-thumb">
+                        <img src="{{ media_url('article', a) }}" alt="" loading="lazy" decoding="async"
+                             width="96" height="54" style="object-position: {{ focal_position(a) }};" />
+                      </span>
+                    {% endif %}
+                    <span class="news-row-text">
+                      <span class="news-row-title">{{ a.title }}</span>
+                      <span class="article-meta">
+                        <span class="category-badge cat-{{ a.category | replace(' ', '-') | lower }}">{{ a.category }}</span>
+                        {{ a.published_at.strftime('%b %-d') }}
+                      </span>
+                    </span>
+                    {% include "_engagement_badge.html" %}
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% else %}
+          <div class="panel-body">
+            <p class="muted panel-empty">No news yet.</p>
+            {% if is_staff %}<a class="btn" href="/news/new">Post the first story</a>{% endif %}
           </div>
-          <div class="standing-label">Current Division</div>
-        </div>
-        <div class="standing-item standing-item--hero">
-          <div class="standing-value--hero"{% if stats_teaser.points is not none %} data-countup="{{ stats_teaser.points }}"{% endif %}>{{ stats_teaser.points if stats_teaser.points is not none else '—' }}</div>
-          <div class="standing-label">Points</div>
-        </div>
-        <div class="standing-item">
-          <div class="division-ring division-ring--muted" {% if band_trim %}style="border-color: {{ band_trim }};"{% endif %}>
-            <span>{{ stats_teaser.bestDivision or '—' }}</span>
+        {% endif %}
+      </section>
+
+      {% if highlights %}
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Match Highlights</h2>
+            <a href="/news?category=Match+Highlight">All highlights &rarr;</a>
+          </header>
+          <div class="panel-body">
+            <div class="card-grid">
+              {% for a in highlights %}
+                <a class="card article-card" href="/news/{{ a.slug }}">
+                  <div class="rail-card-image" style="aspect-ratio: 16/9;">
+                    {% if a.has_cover %}<img class="cover" src="{{ media_url('article', a) }}" alt="" loading="lazy" decoding="async"
+                                              width="400" height="225" style="object-position: {{ focal_position(a) }};" />{% endif %}
+                    <span class="play-badge">&#9658;</span>
+                    {% include "_engagement_badge.html" %}
+                  </div>
+                  <div class="body">
+                    <h3>{{ a.title }}</h3>
+                    <div class="article-meta">{{ a.published_at.strftime('%b %-d, %Y') }}</div>
+                  </div>
+                </a>
+              {% endfor %}
+            </div>
           </div>
-          <div class="standing-label">Best Division</div>
-        </div>
-      </div>
-    </div>
-  {% endif %}
+        </section>
+      {% endif %}
 
-  {% if DISCORD_INVITE_URL %}
-    <div class="connect-band card">
-      <div class="connect-band-text">
-        <h2>Connect with us</h2>
-        <p>Join the {{ SITE_NAME }} Discord for match threads and clips, and to comment and like news posts.</p>
-      </div>
-      <a class="btn discord connect-band-cta" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Connect with us</a>
+      {# --- Live: only when somebody actually is ------------------------- #}
+      {% if featured_streamer_live or other_live_streamers %}
+        <section class="panel">
+          <header class="panel-head panel-live">
+            <h2>Live Now</h2>
+            <a href="/streamers">Watch on Live &rarr;</a>
+          </header>
+          <div class="panel-body">
+            {% if featured_streamer_live %}
+              <div class="featured-stream">
+                <div class="featured-stream-player">
+                  <iframe
+                    src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
+                    allowfullscreen frameborder="0" scrolling="no" loading="lazy"></iframe>
+                </div>
+                <div class="featured-stream-info">
+                  {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', featured_streamer) }}" alt="" loading="lazy" decoding="async" />{% endif %}
+                  <div class="featured-stream-text">
+                    <div class="streamer-name">{{ featured_streamer.display_name }} <span class="featured-pill">Featured</span></div>
+                    <div class="streamer-status is-live">Live now</div>
+                  </div>
+                  <a class="btn secondary" href="https://twitch.tv/{{ featured_streamer.twitch_login }}" target="_blank" rel="noopener noreferrer">
+                    Open on Twitch
+                  </a>
+                </div>
+              </div>
+            {% endif %}
+            {% if other_live_streamers %}
+              <div class="live-banner">
+                <div class="live-banner-head"><span class="live-dot"></span> Also live now</div>
+                <div class="live-banner-row">
+                  {% for s in other_live_streamers %}
+                    {% set info = live[s.twitch_login] %}
+                    <a class="live-banner-card" href="{{ info.url }}" target="_blank" rel="noopener noreferrer">
+                      {% if info.thumbnail_url %}<img src="{{ info.thumbnail_url }}" alt="" loading="lazy" decoding="async" />{% endif %}
+                      <div class="live-banner-info">
+                        {% if s.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', s) }}" alt="" loading="lazy" decoding="async" />{% endif %}
+                        <div>
+                          <div class="streamer-name">{{ s.display_name }}</div>
+                          <div class="streamer-status is-live">{{ info.viewer_count }} watching</div>
+                        </div>
+                      </div>
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+        </section>
+      {% endif %}
     </div>
-  {% endif %}
 
+    <aside class="dash-side">
+      {% if inbox is not none %}
+        <section class="panel inbox">
+          <header class="panel-head panel-staff"><h2>Needs a decision</h2><span>{{ inbox | length or 'All clear' }}</span></header>
+          {% if inbox %}
+            <ul class="inbox-list">
+              {% for item in inbox %}
+                <li class="inbox-item i-{{ item.level }}"><a href="{{ item.href }}">{{ item.text }}</a></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="panel-body"><p class="muted panel-empty">Nothing waiting on you.</p></div>
+          {% endif %}
+        </section>
+      {% endif %}
+      {# Signings and departures. Only moves that are genuinely public reach
+         here -- see services.public_roster_moves. #}
+      {% if squad_moves %}
+        <section class="panel">
+          <header class="panel-head"><h2>Squad Moves</h2></header>
+          <div class="move-grid">
+            {% for m in squad_moves %}
+              {% set direction = {'offer': 'in', 'staff_offer': 'staff'}.get(m.kind, 'out') %}
+              <div class="move-card move-{{ direction }}">
+                {% if m.avatar_url %}
+                  <img class="move-avatar" src="{{ m.avatar_url }}" alt=""
+                       width="40" height="40" loading="lazy" decoding="async" />
+                {% else %}
+                  <span class="move-avatar move-avatar-fallback">{{ initials(m.display_name) }}</span>
+                {% endif %}
+                <div class="move-body">
+                  {# The word carries it, not the colour. #}
+                  <span class="move-tag">{{ {'in': 'Signed', 'staff': 'Appointed'}.get(direction, 'Departed') }}</span>
+                  <span class="move-name">{{ m.display_name }}</span>
+                  {% if m.position %}
+                    <span class="move-pos">{{ m.position }}{% if m.secondary_position %} · {{ m.secondary_position }}{% endif %}</span>
+                  {% endif %}
+                </div>
+                <span class="move-date">{{ (m.confirmed_at or m.announced_at).strftime('%b %-d') }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      {% if transfers %}
+        <section class="panel">
+          <header class="panel-head panel-amber">
+            <h2>Transfer Centre</h2>
+            <a href="/news?category=Transfer">All &rarr;</a>
+          </header>
+          <ul class="band-list">
+            {% for a in transfers %}
+              <li>
+                <a class="band-row" href="/news/{{ a.slug }}">
+                  <span class="band-title">{{ a.title }}</span>
+                  <span class="article-meta">{{ a.published_at.strftime('%b %-d') }}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if DISCORD_INVITE_URL %}
+        <section class="panel connect-band">
+          <header class="panel-head"><h2>Connect with us</h2></header>
+          <div class="panel-body">
+            <p>Join the {{ SITE_NAME }} Discord for match threads and clips, and to comment and like news posts.</p>
+            <a class="btn discord connect-band-cta" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord</a>
+          </div>
+        </section>
+      {% endif %}
+    </aside>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}

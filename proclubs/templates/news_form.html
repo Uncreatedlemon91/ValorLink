@@ -36,7 +36,7 @@
     <div class="field">
       <label for="cover_image">Cover image</label>
       <div class="focal-picker" id="focal-picker" {% if not (article and article.cover_image) %}hidden{% endif %}>
-        <img class="focal-preview" id="focal-preview" src="{{ article.cover_image if article and article.cover_image else '' }}" alt="" style="object-position: {{ fx }}% {{ fy }}%;" />
+        <img class="focal-preview" id="focal-preview" src="{{ media_url('article', article, 'cover') if article and article.cover_image else '' }}" alt="" style="object-position: {{ fx }}% {{ fy }}%;" />
         <span class="focal-marker" id="focal-marker" style="left: {{ fx }}%; top: {{ fy }}%;"></span>
       </div>
       <input id="cover_image" name="cover_image" type="file" accept="image/*" />

@@ -1,0 +1,14 @@
+[Unit]
+Description=Widen each upcoming event's Discord thread on schedule
+
+[Timer]
+# Every 10 minutes: a tier is "due" once its moment has passed rather than
+# inside a window, so this only decides how sharp the timing looks, never
+# whether a tier fires at all. A run that is missed entirely (droplet
+# down) is caught up by Persistent + the same past-its-moment rule.
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

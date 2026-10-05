@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Club profile{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Club profile</h1>
+      <p class="page-lede">What the public page says about the club. It's the only page people
+        outside the Discord can see.</p>
+    </div>
+    <a class="btn secondary" href="/welcome" target="_blank" rel="noopener">View public page</a>
+  </div>
+
+  <form method="post" action="/club-profile" class="card stack-form club-profile-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    {% for key, (label, _default, limit) in fields.items() %}
+      <div class="field">
+        <label for="cp-{{ key }}">{{ label }}</label>
+        {% if limit > 150 %}
+          <textarea id="cp-{{ key }}" name="{{ key }}" rows="3" maxlength="{{ limit }}">{{ profile[key] }}</textarea>
+        {% else %}
+          <input id="cp-{{ key }}" name="{{ key }}" maxlength="{{ limit }}" value="{{ profile[key] }}"
+                 {% if key == 'match_nights' %}placeholder="e.g. Tue & Thu, 8–10pm ET"{% elif key == 'region' %}placeholder="e.g. NA East"{% elif key == 'platform' %}placeholder="e.g. PS5 & Xbox Series X|S (crossplay)"{% elif key == 'play_style' %}placeholder="e.g. Possession 4-3-3, high press"{% endif %} />
+        {% endif %}
+      </div>
+    {% endfor %}
+    <p class="field-hint">Leave a field blank to leave it off the page. The skill rating, record,
+      recent results, squad size, staff and the positions you're short of are filled in
+      automatically.</p>
+    <div class="form-actions"><button type="submit" class="btn">Save</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -7,8 +7,6 @@ visitor's browser unescaped, so it's never trusted outright (a compromised
 staff account, or a bug in the editor's own JS, shouldn't turn into
 stored XSS).
 
-A local copy rather than importing ValorLink's utils/markdown_render.py --
-this app deliberately shares no code with the bot/web app (see README.md).
 """
 from __future__ import annotations
 

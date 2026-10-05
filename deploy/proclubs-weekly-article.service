@@ -12,7 +12,7 @@ User=valorlink
 Group=valorlink
 WorkingDirectory=/opt/valorlink/proclubs
 # Needs proclubs/.env (CLAUDE_CODE_OAUTH_TOKEN, CLAUDE_BIN) -- config.py
-# loads it itself via python-dotenv, same as valorlink-proclubs.service.
+# loads it itself via python-dotenv, same as yeehaw-fc.service.
 ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 weekly_article.py
 Restart=on-failure
 RestartSec=1h

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Session plan · {{ event.title }}{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head">
+    <div>
+      <h1>Session plan</h1>
+      <p class="page-lede">{{ event.title }} · {{ localtime(event.scheduled_at, 'short') }}</p>
+    </div>
+    <a class="btn secondary" href="/events/{{ event.id }}">Back to the session</a>
+  </div>
+
+  <form method="post" action="/events/{{ event.id }}/plan" class="card stack-form plan-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="field">
+      <label for="objective">Objective <span class="muted">(one line)</span></label>
+      <input id="objective" name="objective" maxlength="200" value="{{ event.session_objective or '' }}"
+             placeholder="e.g. Press as a unit when their centre back turns back" />
+    </div>
+    <div class="field">
+      <label for="plan">The plan</label>
+      <textarea id="plan" name="plan" rows="6" maxlength="3000"
+                placeholder="1. Warm-up: rondos in the arena (10 min)&#10;2. Pressing triggers, 3 x 10 min&#10;3. Full match, 4-3-3">{{ event.session_plan or '' }}</textarea>
+    </div>
+
+    {% if pitch %}
+      <h2 class="form-subhead">Role briefs · {{ event.formation }}</h2>
+      <p class="field-hint">What each position does in this session. Players see their own at the top of the
+        event page; everyone sees the full list.</p>
+      <div class="brief-grid">
+        {% for key, meta in pitch.items() %}
+          <div class="field">
+            <label for="brief-{{ key }}">{{ meta.label }}</label>
+            <input id="brief-{{ key }}" name="brief__{{ key }}" maxlength="300" value="{{ briefs.get(key, '') }}" />
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="field-hint">Give the session a formation (Edit) to write a brief for each position.</p>
+    {% endif %}
+    <div class="form-actions"><button type="submit" name="action" value="plan" class="btn">Save plan</button></div>
+    <p class="field-hint">If the session is already posted to Discord, the post is updated with the plan.</p>
+  </form>
+
+  {% if is_past %}
+    <form method="post" action="/events/{{ event.id }}/plan" class="card stack-form plan-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <h2 class="form-subhead">How it went</h2>
+      <div class="field">
+        <label for="review">Review</label>
+        <textarea id="review" name="review" rows="5" maxlength="3000"
+                  placeholder="What worked, what didn't, what to carry into the next match.">{{ event.session_review or '' }}</textarea>
+      </div>
+      <div class="form-actions"><button type="submit" name="action" value="review" class="btn">Save review</button></div>
+      <p class="field-hint">Mark who turned up on the session page, the same as a match.</p>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

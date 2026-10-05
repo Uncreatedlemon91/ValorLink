@@ -3,9 +3,14 @@
 // [data-reveal] elements fade/slide into place, the first time each scrolls
 // into view. No dependencies, matches charts.js/countdown.js.
 (function () {
+  // An optional data-countup-suffix rides along with the value so a unit
+  // (a percent sign) survives the animation instead of being overwritten
+  // on the first frame.
+  const withSuffix = (el, value) => `${value}${el.dataset.countupSuffix || ''}`;
+
   if (!('IntersectionObserver' in window)) {
     document.querySelectorAll('[data-countup]').forEach((el) => {
-      el.textContent = el.dataset.countup;
+      el.textContent = withSuffix(el, el.dataset.countup);
     });
     document.querySelectorAll('[data-reveal]').forEach((el) => {
       el.classList.add('is-visible');
@@ -18,11 +23,11 @@
   function countUp(el) {
     const target = Number(el.dataset.countup);
     if (!Number.isFinite(target)) {
-      el.textContent = el.dataset.countup;
+      el.textContent = withSuffix(el, el.dataset.countup);
       return;
     }
     if (reduceMotion) {
-      el.textContent = target;
+      el.textContent = withSuffix(el, target);
       return;
     }
     const duration = 900;
@@ -30,9 +35,9 @@
     function tick(now) {
       const progress = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      el.textContent = Math.round(target * eased);
+      el.textContent = withSuffix(el, Math.round(target * eased));
       if (progress < 1) requestAnimationFrame(tick);
-      else el.textContent = target;
+      else el.textContent = withSuffix(el, target);
     }
     requestAnimationFrame(tick);
   }

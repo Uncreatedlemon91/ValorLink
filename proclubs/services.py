@@ -1,29 +1,42 @@
-"""CRUD helpers for articles and streamers, plus read/sync for events.
+"""CRUD helpers for articles, streamers, and events.
 
-Events are read-only from the site's own UI -- they exist only via the
-Discord Scheduled Events sync (see sync_discord_events below); there's no
-create/update/delete path left for staff to use directly, by design.
+Events are created and edited on the site by staff, and players sign up
+from either surface -- the site or the Discord announcement's buttons (see
+discord_rsvp.py). The older Discord Scheduled Events mirror still runs
+alongside that (sync_discord_events below), so an event someone makes in
+Discord's own Events tab still appears here; it just isn't the only way in
+any more.
 
-Kept separate from app.py so the routes stay thin (parse request -> call
-service -> render/redirect), matching the ValorLink web app's own
-app.py/services.py split.
+Kept separate from app.py so the routes stay thin: parse request -> call
+service -> render/redirect.
 """
 from __future__ import annotations
 
-import base64
-import binascii
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape as _escape_html
 
 from fastapi import UploadFile
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, with_expression
 
 import discord_clips as discord_clips_mod
 import discord_events as discord_events_mod
+import discord_roster
 import html_sanitize
-from models import ARTICLE_CATEGORIES, Article, Clip, Comment, Event, Like, Streamer, TacticsBoard, TacticsSlot
+import images
+import roles
+from formations import BENCH_SLOTS, FORMATIONS
+from models import (ARTICLE_CATEGORIES, ATTENDANCE_STATUSES, SIGNUP_STATUSES, Article, Clip,
+                    ClubSetting, CoachNote, Comment, Contract, Event, EventSignup, EventTierInvite, Like,
+                    Player, PlayerLink, RosterMove, Streamer, TacticsBoard, TacticsSlot)
+
+EVENT_TYPES = ["Match", "Scrim", "Tournament", "Training", "Theory", "Community"]
+
+# Below this many marked events, a reliability percentage is noise dressed
+# up as data -- two events is a 50% swing per event. The UI shows the raw
+# record instead until there's enough to average.
+MIN_EVENTS_FOR_RELIABILITY = 3
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # 2MB, generous enough for a cover photo
 _MAX_COMMENT_LENGTH = 2000
@@ -52,38 +65,65 @@ def unique_slug(session: Session, title: str, *, exclude_id: int | None = None) 
         n += 1
 
 
-async def image_to_data_uri(upload: UploadFile | None) -> str | None:
+async def process_image_upload(upload: UploadFile | None) -> tuple[str, str] | tuple[None, None]:
+    """(display, thumbnail) data URIs for an uploaded image, or (None, None)
+    if nothing was uploaded. Both are downscaled and re-encoded rather than
+    stored verbatim -- see images.py for why, and app.py for how they're
+    then served as cacheable URLs instead of pasted into the markup."""
     if upload is None or not upload.filename:
-        return None
+        return None, None
     content_type = upload.content_type or ""
     if not content_type.startswith("image/"):
         raise ServiceError("That file doesn't look like an image.")
     data = await upload.read()
     if not data:
-        return None
+        return None, None
     if len(data) > _MAX_IMAGE_BYTES:
         raise ServiceError("Images must be under 2MB.")
-    encoded = base64.b64encode(data).decode("ascii")
-    return f"data:{content_type};base64,{encoded}"
-
-
-_DATA_URI_RE = re.compile(r"^data:([^;]+);base64,(.+)$", re.S)
-
-
-def decode_data_uri(data_uri: str | None) -> tuple[str, bytes] | tuple[None, None]:
-    """Splits a `data:<mime>;base64,<...>` URI (see image_to_data_uri above)
-    back into (content_type, raw bytes) -- used to serve a stored cover
-    image at a real fetchable URL (see GET /news/<slug>/cover-image),
-    since e.g. Discord's embed API needs a URL it can fetch, not a data:
-    URI baked into the embed JSON."""
-    match = _DATA_URI_RE.match(data_uri or "")
-    if not match:
-        return None, None
-    content_type, encoded = match.groups()
     try:
-        return content_type, base64.b64decode(encoded)
-    except (binascii.Error, ValueError):
-        return None, None
+        return images.render_variants(data)
+    except images.ImageError as exc:
+        raise ServiceError(str(exc)) from exc
+
+
+# Re-exported so callers that only need to turn a stored image back into
+# bytes don't have to reach past the service layer.
+decode_data_uri = images.decode_data_uri
+
+
+def article_image(session: Session, *, article_id: int | None = None,
+                   slug: str | None = None, variant: str = "cover") -> str | None:
+    """One article's stored cover image, as a data URI, selected on its own
+    -- these rows are the biggest thing in the database and there's no
+    reason to hydrate a whole Article (body_html included) to serve one
+    picture.
+
+    "thumb" falls back to the full-size cover for rows saved before
+    thumbnails existed, so old articles keep showing a cover rather than a
+    hole while only new uploads get the smaller variant."""
+    column = Article.cover_thumb if variant == "thumb" else Article.cover_image
+    query = select(column, Article.cover_image)
+    if article_id is not None:
+        query = query.where(Article.id == article_id)
+    elif slug is not None:
+        query = query.where(Article.slug == slug)
+    else:
+        return None
+    row = session.execute(query).first()
+    if row is None:
+        return None
+    return row[0] or row[1]
+
+
+def streamer_avatar(session: Session, streamer_id: int, *, variant: str = "thumb") -> str | None:
+    """Same idea as article_image, for a streamer's uploaded avatar."""
+    column = Streamer.avatar_thumb if variant == "thumb" else Streamer.avatar
+    row = session.execute(
+        select(column, Streamer.avatar).where(Streamer.id == streamer_id)
+    ).first()
+    if row is None:
+        return None
+    return row[0] or row[1]
 
 
 def _normalize_category(category: str) -> str:
@@ -103,9 +143,27 @@ def _is_meaningfully_empty(html: str) -> bool:
 
 
 # --- Articles ---------------------------------------------------------- #
+# The columns no list view ever renders: the full article body, and the two
+# base64 cover images. Left in the SELECT they dominate every listing query
+# -- a home page of 17 cards was reading tens of megabytes out of SQLite to
+# render a few hundred kilobytes of markup. Deferred instead, with a cheap
+# boolean standing in for "is there a cover" so templates never have to
+# touch the blob to find out (see Article.has_cover).
+_LIST_DEFERRED = (Article.body_html, Article.cover_image, Article.cover_thumb)
+
+
+def _list_options():
+    return [defer(column) for column in _LIST_DEFERRED] + [
+        with_expression(Article.has_cover, Article.cover_image.is_not(None)),
+    ]
+
+
 def list_articles(session: Session, *, include_drafts: bool = False,
                    category: str | None = None, limit: int | None = None) -> list[Article]:
-    query = select(Article).order_by(Article.published_at.desc())
+    """Articles for a listing page. Cover images and bodies are NOT loaded
+    -- see _LIST_DEFERRED. Use get_article() for a page that renders one
+    article in full."""
+    query = select(Article).options(*_list_options()).order_by(Article.published_at.desc())
     if not include_drafts:
         query = query.where(Article.published.is_(True))
     if category:
@@ -150,7 +208,8 @@ def _clamp_focal(value) -> float:
 
 def create_article(session: Session, *, title: str, summary: str, body_html: str,
                     cover_image: str | None, published: bool, author: dict,
-                    category: str = "News", cover_focal_x=50, cover_focal_y=50) -> Article:
+                    category: str = "News", cover_focal_x=50, cover_focal_y=50,
+                    cover_thumb: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -165,6 +224,7 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
         summary=summary.strip() or None,
         body_html=html_sanitize.sanitize(body_html),
         cover_image=cover_image,
+        cover_thumb=cover_thumb,
         cover_focal_x=_clamp_focal(cover_focal_x),
         cover_focal_y=_clamp_focal(cover_focal_y),
         author_discord_id=author.get("id") or None,
@@ -181,7 +241,8 @@ def create_article(session: Session, *, title: str, summary: str, body_html: str
 
 def update_article(session: Session, article: Article, *, title: str, summary: str,
                     body_html: str, cover_image: str | None, published: bool,
-                    category: str | None = None, cover_focal_x=50, cover_focal_y=50) -> Article:
+                    category: str | None = None, cover_focal_x=50, cover_focal_y=50,
+                    cover_thumb: str | None = None) -> Article:
     title = title.strip()
     if not title:
         raise ServiceError("Give the article a title.")
@@ -197,6 +258,7 @@ def update_article(session: Session, article: Article, *, title: str, summary: s
     article.body_html = html_sanitize.sanitize(body_html)
     if cover_image is not None:
         article.cover_image = cover_image
+        article.cover_thumb = cover_thumb
     article.cover_focal_x = _clamp_focal(cover_focal_x)
     article.cover_focal_y = _clamp_focal(cover_focal_y)
     if published and not article.published:
@@ -267,6 +329,26 @@ def comment_counts_for(session: Session, article_ids: list[int]) -> dict[int, in
 
 
 # --- Likes ------------------------------------------------------------------ #
+def combined_like_count(article: Article, site_likes: int) -> int:
+    """One reaction figure for an article: likes given on the site plus
+    reactions on its Discord announcement.
+
+    These used to be shown as two separate badges, on the reasoning that
+    they measure different things -- the site's is a per-member toggle we
+    know the identity behind, Discord's is an anonymous aggregate of any
+    emoji. That's still true, and it's why the button's filled/empty state
+    is driven by the viewer's own like alone (see has_liked) rather than by
+    this total. But two numbers side by side read as a puzzle rather than a
+    signal, so the count itself is the sum.
+
+    A caveat worth knowing when the number looks high: Discord's side counts
+    every emoji on the announcement, not just hearts, and one person
+    reacting three times counts three times -- see
+    discord_announce.fetch_reaction_count. It also lags by up to the
+    reactions poll interval."""
+    return site_likes + (article.discord_reaction_count or 0)
+
+
 def count_likes(session: Session, article: Article) -> int:
     return len(list(session.execute(select(Like.id).where(Like.article_id == article.id)).scalars()))
 
@@ -317,6 +399,447 @@ def list_events(session: Session, *, upcoming_only: bool = False, limit: int | N
     return list(session.execute(query).scalars())
 
 
+def get_event(session: Session, event_id: int) -> Event | None:
+    return session.get(Event, event_id)
+
+
+def _validated_formation(formation: str | None) -> str | None:
+    formation = (formation or "").strip()
+    if not formation:
+        return None
+    if formation not in FORMATIONS:
+        raise ServiceError(f"Unknown formation {formation!r}.")
+    return formation
+
+
+def event_slots(event: Event) -> dict[str, str]:
+    """slot_key -> display label for everything claimable on this event:
+    the formation's eleven, then the bench. Empty for an event with no
+    formation, which is what makes "does this event use positions" a single
+    truthy check everywhere else."""
+    if not event.formation:
+        return {}
+    slots = {key: meta["label"] for key, meta in FORMATIONS[event.formation].items()}
+    slots.update({key: meta["label"] for key, meta in BENCH_SLOTS.items()})
+    return slots
+
+
+def claimed_slots(session: Session, event_id: int) -> dict[str, EventSignup]:
+    """slot_key -> the sign-up holding it. Only "going" rows can hold a
+    slot, so this is also the starting XI as it currently stands."""
+    return {
+        s.slot_key: s
+        for s in session.execute(
+            select(EventSignup).where(
+                EventSignup.event_id == event_id,
+                EventSignup.slot_key.isnot(None),
+            )
+        ).scalars()
+    }
+
+
+def _validated_event_fields(*, title: str, event_type: str, scheduled_at: datetime | None) -> tuple[str, str]:
+    title = (title or "").strip()
+    if not title:
+        raise ServiceError("Give the event a title.")
+    if event_type not in EVENT_TYPES:
+        raise ServiceError(f"Unknown event type {event_type!r}.")
+    if scheduled_at is None:
+        raise ServiceError("Give the event a date and time.")
+    return title, event_type
+
+
+def create_event(session: Session, *, title: str, event_type: str, scheduled_at: datetime,
+                 opponent: str | None, description: str | None, image: str | None,
+                 staff_name: str, formation: str | None = None) -> Event:
+    title, event_type = _validated_event_fields(
+        title=title, event_type=event_type, scheduled_at=scheduled_at)
+    event = Event(
+        title=title, event_type=event_type, scheduled_at=scheduled_at,
+        opponent=(opponent or "").strip() or None,
+        description=(description or "").strip() or None,
+        image=image, created_by_name=staff_name,
+        formation=_validated_formation(formation),
+    )
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def update_event(session: Session, event: Event, *, title: str, event_type: str,
+                 scheduled_at: datetime, opponent: str | None, description: str | None,
+                 image: str | None, result: str | None, formation: str | None = None) -> Event:
+    title, event_type = _validated_event_fields(
+        title=title, event_type=event_type, scheduled_at=scheduled_at)
+    formation = _validated_formation(formation)
+    if formation != event.formation:
+        # Slot keys are formation-specific, so a claimed CDM2 is meaningless
+        # once the shape becomes 4-3-3. Release every claim rather than
+        # leaving players holding positions that no longer exist -- they
+        # stay signed up as going, they just have to re-pick a shirt.
+        session.execute(
+            update(EventSignup).where(EventSignup.event_id == event.id).values(slot_key=None)
+        )
+        event.formation = formation
+    event.title = title
+    event.event_type = event_type
+    event.scheduled_at = scheduled_at
+    event.opponent = (opponent or "").strip() or None
+    event.description = (description or "").strip() or None
+    event.result = (result or "").strip() or None
+    if image is not None:
+        event.image = image
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def delete_event(session: Session, event: Event) -> None:
+    """Removes the event and every sign-up for it. Sign-ups have no
+    meaning without their event, and this app manages its schema with
+    create_all rather than a migration tool, so the cascade is done here
+    explicitly rather than relying on a DB-level ON DELETE."""
+    session.execute(delete(EventSignup).where(EventSignup.event_id == event.id))
+    session.delete(event)
+    session.commit()
+
+
+def set_signups_open(session: Session, event: Event, *, open_: bool) -> Event:
+    event.signups_open = open_
+    session.commit()
+    session.refresh(event)
+    return event
+
+
+def set_event_announcement(session: Session, event: Event, *, channel_id: str, message_id: str) -> None:
+    event.discord_channel_id = str(channel_id)
+    event.discord_message_id = str(message_id)
+    session.commit()
+
+
+# --- Staged thread invites -------------------------------------------------- #
+def events_awaiting_invites(session: Session) -> list[Event]:
+    """Announced, still-upcoming events whose thread can still be widened.
+
+    Past events are excluded: a tier that comes due after kick-off has
+    missed its purpose, and pinging people to a fixture that has already
+    been played is worse than staying quiet. Events that were never
+    announced have no thread to add anyone to.
+    """
+    return list(session.execute(
+        select(Event)
+        .where(Event.discord_channel_id.is_not(None))
+        .where(Event.scheduled_at >= datetime.utcnow())
+        .order_by(Event.scheduled_at)
+    ).scalars())
+
+
+def invited_tier_keys(session: Session, event_id: int) -> set[str]:
+    return set(session.execute(
+        select(EventTierInvite.tier_key).where(EventTierInvite.event_id == event_id)
+    ).scalars())
+
+
+def due_invite_tiers(session: Session, event: Event, tiers: list[dict],
+                     now: datetime | None = None) -> list[dict]:
+    """Which rungs of the invite ladder this event owes right now.
+
+    A tier is due when its moment has passed and it has not already fired.
+    `create` is due the instant the event is announced; an hours-before
+    tier is due once kick-off is that close.
+
+    Deliberately "has passed", not "is within a window": an event announced
+    12 hours before kick-off owes its 48h and 24h tiers immediately rather
+    than never, and a poller that was down over a tier's moment still
+    catches up on its next run instead of silently skipping it.
+    """
+    now = now or datetime.utcnow()
+    already = invited_tier_keys(session, event.id)
+    due = []
+    for tier in tiers:
+        if tier["key"] in already:
+            continue
+        hours = tier["hours_before"]
+        if hours is not None and (event.scheduled_at - now).total_seconds() > hours * 3600:
+            continue
+        due.append(tier)
+    return due
+
+
+def record_tier_invite(session: Session, event: Event, tier: dict, member_count: int) -> None:
+    """Marks a tier as fired for this event. The unique constraint makes a
+    concurrent double-fire an error rather than a second ping."""
+    session.add(EventTierInvite(
+        event_id=event.id, tier_key=tier["key"],
+        role_id=str(tier["role_id"]), member_count=member_count,
+    ))
+    session.commit()
+
+
+# --- Sign-ups --------------------------------------------------------------- #
+def list_signups(session: Session, event_id: int) -> list[EventSignup]:
+    """Everyone who has answered, ordered going -> maybe -> out and then by
+    when they answered, so the roster reads as a squad list rather than in
+    click order."""
+    order = {status: i for i, status in enumerate(SIGNUP_STATUSES)}
+    rows = list(session.execute(
+        select(EventSignup).where(EventSignup.event_id == event_id)
+    ).scalars())
+    return sorted(rows, key=lambda s: (order.get(s.status, 99), s.responded_at or datetime.min))
+
+
+def get_signup(session: Session, event_id: int, discord_user_id: int) -> EventSignup | None:
+    return session.execute(
+        select(EventSignup).where(
+            EventSignup.event_id == event_id,
+            EventSignup.discord_user_id == discord_user_id,
+        )
+    ).scalars().first()
+
+
+def signup_counts(session: Session, event_id: int) -> dict[str, int]:
+    counts = {status: 0 for status in SIGNUP_STATUSES}
+    for status, total in session.execute(
+        select(EventSignup.status, func.count(EventSignup.id))
+        .where(EventSignup.event_id == event_id).group_by(EventSignup.status)
+    ).all():
+        if status in counts:
+            counts[status] = total
+    return counts
+
+
+def set_signup(session: Session, event: Event, *, discord_user_id: int, discord_name: str,
+               discord_avatar: str | None, status: str, source: str = "site") -> EventSignup:
+    """Records (or changes) one player's answer. Idempotent per player --
+    answering again updates the existing row rather than stacking, which is
+    what makes the two surfaces safe to use interchangeably."""
+    if status not in SIGNUP_STATUSES:
+        raise ServiceError(f"Unknown sign-up status {status!r}.")
+    if not event.signups_open:
+        raise ServiceError("Sign-ups for this event are closed.")
+
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is None:
+        signup = EventSignup(
+            event_id=event.id, discord_user_id=discord_user_id, discord_name=discord_name,
+            discord_avatar=discord_avatar, status=status, source=source,
+        )
+        session.add(signup)
+    else:
+        signup.status = status
+        signup.source = source
+        # Refresh the display name -- people rename themselves, and a stale
+        # name on a live roster is worse than no name.
+        signup.discord_name = discord_name
+        signup.discord_avatar = discord_avatar
+    if status != "going":
+        # Answering maybe/out frees the shirt for someone else. Holding a
+        # position while saying you can't make it would quietly block a slot
+        # nobody can see is free.
+        signup.slot_key = None
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+def claim_slot(session: Session, event: Event, *, discord_user_id: int, discord_name: str,
+               discord_avatar: str | None, slot_key: str, source: str = "site") -> EventSignup:
+    """Takes a shirt. Claiming a position IS signing up -- it sets status
+    "going" as well, because picking where you'll play and saying you'll be
+    there are the same statement.
+
+    One player per slot: a formation has exactly one GK, so a second
+    claimant is refused rather than silently sharing. A player moving
+    between slots releases their old one first, so nobody can hold two.
+    """
+    if not event.signups_open:
+        raise ServiceError("Sign-ups for this event are closed.")
+    slots = event_slots(event)
+    if not slots:
+        raise ServiceError("This event doesn't use positions.")
+    if slot_key not in slots:
+        raise ServiceError(f"{slot_key} isn't a position in this event's formation.")
+
+    holder = claimed_slots(session, event.id).get(slot_key)
+    if holder is not None and holder.discord_user_id != discord_user_id:
+        raise ServiceError(f"{slots[slot_key]} is already taken by {holder.discord_name}.")
+
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is None:
+        signup = EventSignup(
+            event_id=event.id, discord_user_id=discord_user_id, discord_name=discord_name,
+            discord_avatar=discord_avatar, status="going", slot_key=slot_key, source=source,
+        )
+        session.add(signup)
+    else:
+        signup.status = "going"
+        signup.slot_key = slot_key
+        signup.source = source
+        signup.discord_name = discord_name
+        signup.discord_avatar = discord_avatar
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+def release_slot(session: Session, event: Event, *, discord_user_id: int) -> EventSignup | None:
+    """Gives up the shirt but stays signed up as going -- "I'll be there,
+    just not in that position" is a normal thing to want to say."""
+    signup = get_signup(session, event.id, discord_user_id)
+    if signup is not None and signup.slot_key is not None:
+        signup.slot_key = None
+        session.commit()
+        session.refresh(signup)
+    return signup
+
+
+def mark_attendance(session: Session, signup: EventSignup, *, attendance: str | None,
+                    staff_name: str) -> EventSignup:
+    """Records what actually happened. Passing None clears the mark, which
+    returns the event to "not evidence" rather than counting as absent."""
+    if attendance is not None and attendance not in ATTENDANCE_STATUSES:
+        raise ServiceError(f"Unknown attendance status {attendance!r}.")
+    signup.attendance = attendance
+    signup.attendance_marked_by = staff_name if attendance else None
+    signup.attendance_marked_at = datetime.utcnow() if attendance else None
+    session.commit()
+    session.refresh(signup)
+    return signup
+
+
+# --- Attendance reliability ------------------------------------------------- #
+def attendance_record(session: Session, discord_user_id: int) -> dict:
+    """How often this player actually turned up, across every event where
+    staff marked them.
+
+    Only marked events count. "excused" is deliberately excluded from both
+    halves of the ratio rather than counted as a miss -- an approved
+    absence says nothing about reliability, and counting it as a no-show
+    would punish people for telling staff in advance, which is the exact
+    behaviour we want to encourage.
+    """
+    rows = list(session.execute(
+        select(EventSignup.attendance).where(
+            EventSignup.discord_user_id == discord_user_id,
+            EventSignup.attendance.isnot(None),
+        )
+    ).scalars())
+    present = sum(1 for a in rows if a == "present")
+    absent = sum(1 for a in rows if a == "absent")
+    excused = sum(1 for a in rows if a == "excused")
+    counted = present + absent
+    rate = round(100 * present / counted) if counted else None
+    return {
+        "present": present, "absent": absent, "excused": excused,
+        "counted": counted,
+        # None means "not enough history to say" -- render the raw record
+        # instead of a number the sample can't support.
+        "rate": rate if counted >= MIN_EVENTS_FOR_RELIABILITY else None,
+        "has_history": counted > 0,
+    }
+
+
+def attendance_records_for(session: Session, discord_user_ids: list[int]) -> dict[int, dict]:
+    """attendance_record() for a whole roster in one query, so an event
+    page with 20 sign-ups doesn't fire 20 round trips."""
+    if not discord_user_ids:
+        return {}
+    tally: dict[int, dict[str, int]] = {
+        uid: {"present": 0, "absent": 0, "excused": 0} for uid in discord_user_ids
+    }
+    for user_id, attendance, total in session.execute(
+        select(EventSignup.discord_user_id, EventSignup.attendance, func.count(EventSignup.id))
+        .where(EventSignup.discord_user_id.in_(discord_user_ids),
+               EventSignup.attendance.isnot(None))
+        .group_by(EventSignup.discord_user_id, EventSignup.attendance)
+    ).all():
+        if user_id in tally and attendance in tally[user_id]:
+            tally[user_id][attendance] = total
+
+    out = {}
+    for user_id, counts in tally.items():
+        counted = counts["present"] + counts["absent"]
+        rate = round(100 * counts["present"] / counted) if counted else None
+        out[user_id] = {
+            **counts, "counted": counted,
+            "rate": rate if counted >= MIN_EVENTS_FOR_RELIABILITY else None,
+            "has_history": counted > 0,
+        }
+    return out
+
+
+# --- Gamertag links and Tactics roles --------------------------------------- #
+def get_player_link(session: Session, discord_user_id: int) -> PlayerLink | None:
+    return session.get(PlayerLink, discord_user_id)
+
+
+def set_player_link(session: Session, *, discord_user_id: int, player_name: str) -> PlayerLink:
+    player_name = (player_name or "").strip()
+    if not player_name:
+        raise ServiceError("Pick the gamertag you play under.")
+    taken = session.execute(
+        select(PlayerLink).where(
+            func.lower(PlayerLink.player_name) == player_name.lower(),
+            PlayerLink.discord_user_id != discord_user_id,
+        )
+    ).scalars().first()
+    if taken is not None:
+        raise ServiceError(f"{player_name} is already claimed by another member.")
+
+    link = session.get(PlayerLink, discord_user_id)
+    if link is None:
+        link = PlayerLink(discord_user_id=discord_user_id, player_name=player_name)
+        session.add(link)
+    else:
+        link.player_name = player_name
+    session.commit()
+    session.refresh(link)
+    return link
+
+
+def clear_player_link(session: Session, discord_user_id: int) -> None:
+    link = session.get(PlayerLink, discord_user_id)
+    if link is not None:
+        session.delete(link)
+        session.commit()
+
+
+def player_links_for(session: Session, discord_user_ids: list[int]) -> dict[int, str]:
+    if not discord_user_ids:
+        return {}
+    return {
+        row.discord_user_id: row.player_name
+        for row in session.execute(
+            select(PlayerLink).where(PlayerLink.discord_user_id.in_(discord_user_ids))
+        ).scalars()
+    }
+
+
+def tactics_roles_for(session: Session, discord_user_ids: list[int],
+                      slot_labels: dict[str, str]) -> dict[int, str]:
+    """discord_user_id -> the position they hold on the current team sheet.
+
+    Two hops: Discord user -> gamertag (PlayerLink) -> slot on the active
+    formation (TacticsSlot). Anyone missing either hop simply has no role,
+    which is a normal state (a new member, or a squad player not in the
+    current XI) rather than an error. `slot_labels` maps a slot key to its
+    display position ("CM1" -> "CM") and comes from app.py's FORMATIONS,
+    which is the authority on what a formation's slots are called.
+    """
+    links = player_links_for(session, discord_user_ids)
+    if not links:
+        return {}
+    slots = get_tactics_slots(session, get_active_formation(session))
+    by_player = {name.lower(): slot_key for slot_key, name in slots.items()}
+    roles = {}
+    for user_id, player_name in links.items():
+        slot_key = by_player.get(player_name.lower())
+        if slot_key:
+            roles[user_id] = slot_labels.get(slot_key, slot_key)
+    return roles
+
+
 def _parse_discord_time(value: str) -> datetime:
     """Discord's timestamps are ISO 8601 with an explicit offset (or "Z").
     Normalize to a naive UTC datetime -- the same shape scheduled_at is
@@ -336,7 +859,14 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
     Events this function previously created that Discord no longer lists
     as upcoming (canceled, or the event itself deleted) are removed, so a
     canceled Discord event doesn't linger as a fixture on the site.
+
+    New ones take the Tactics board's formation, the same default as the
+    site's own event form, so signing up asks for a position whichever way
+    a fixture was scheduled. Upcoming mirrored events still without one
+    get it too -- but only while nobody has answered, so a sign-up sheet
+    never changes shape under the people already on it.
     """
+    formation = get_active_formation(session)
     seen_ids = set()
     created = updated = 0
     for de in discord_events:
@@ -356,7 +886,7 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
             session.add(Event(
                 discord_event_id=discord_id, title=title, event_type="Match",
                 description=description, scheduled_at=scheduled_at, image=image,
-                created_by_name="Discord sync",
+                created_by_name="Discord sync", formation=formation,
             ))
             created += 1
         else:
@@ -364,6 +894,8 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
             event.description = description
             event.image = image
             event.scheduled_at = scheduled_at
+            if not event.formation and not _has_signups(session, event.id):
+                event.formation = formation
             updated += 1
 
     removed = 0
@@ -378,6 +910,12 @@ def sync_discord_events(session: Session, discord_events: list[dict]) -> dict:
 
     session.commit()
     return {"created": created, "updated": updated, "removed": removed}
+
+
+def _has_signups(session: Session, event_id: int) -> bool:
+    return session.execute(
+        select(EventSignup.id).where(EventSignup.event_id == event_id).limit(1)
+    ).first() is not None
 
 
 # --- Clips ------------------------------------------------------------------ #
@@ -491,6 +1029,556 @@ def render_clip_embeds(session: Session, body_html: str) -> str:
     return _CLIP_EMBED_RE.sub(_replace, body_html)
 
 
+# --- Squad moves ------------------------------------------------------------ #
+def record_roster_move(session: Session, *, discord_id: str, display_name: str,
+                       avatar_url: str | None, kind: str, position: str | None,
+                       note: str | None, announced_by_name: str | None,
+                       announced_by_discord_id: int | None,
+                       discord_message_id: str | None,
+                       contract_weeks: int | None = None,
+                       squad_status: str | None = None,
+                       contract_id: int | None = None,
+                       secondary_position: str | None = None) -> RosterMove:
+    """Writes the history row for one published squad announcement.
+
+    Called after the Discord post is attempted, not before, so
+    discord_message_id records what actually happened -- a null there is
+    the honest record of a post that failed, and the page says so rather
+    than implying the club announced something it didn't.
+    """
+    move = RosterMove(
+        discord_id=str(discord_id), display_name=display_name, avatar_url=avatar_url,
+        kind=kind, position=(position or "").strip() or None,
+        note=(note or "").strip() or None,
+        announced_by_name=announced_by_name,
+        announced_by_discord_id=announced_by_discord_id,
+        discord_message_id=discord_message_id,
+        contract_weeks=contract_weeks, squad_status=squad_status,
+        contract_id=contract_id,
+        secondary_position=(secondary_position or "").strip() or None,
+    )
+    session.add(move)
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def set_roster_move_message(session: Session, move_id: int, *, channel_id: str,
+                            message_id: str) -> None:
+    """Backfills where the announcement landed.
+
+    Split from record_roster_move because an offer's buttons carry its row
+    id, so the row has to exist before the message can be built -- the id
+    only comes back once Discord has accepted the post.
+    """
+    move = session.get(RosterMove, move_id)
+    if move is None:
+        return
+    move.discord_channel_id = str(channel_id)
+    move.discord_message_id = str(message_id)
+    session.commit()
+
+
+def get_roster_move(session: Session, move_id: int) -> RosterMove | None:
+    return session.get(RosterMove, move_id)
+
+
+def record_offer_response(session: Session, move: RosterMove, *, response: str,
+                          role_granted: bool, role_error: str | None) -> RosterMove:
+    """Stores the player's own answer to their offer.
+
+    The acceptance and the role write are recorded separately because
+    they can disagree: the press is theirs and always stands, while
+    granting the role can fail on Discord's side (see
+    discord_roster.grant_squad_role). Swallowing that would leave staff
+    looking at an acceptance that quietly granted nothing.
+    """
+    move.response = response
+    move.responded_at = datetime.utcnow()
+    move.role_granted = role_granted
+    move.role_error = role_error
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def confirm_roster_move(session: Session, move: RosterMove, *,
+                        confirmed_by_name: str | None,
+                        confirm_message_id: str | None) -> RosterMove:
+    """Marks an accepted offer as confirmed by staff.
+
+    Like record_roster_move, written after the announcement is attempted
+    so a null confirm_message_id is the honest record of a celebration
+    that didn't send.
+    """
+    move.confirmed_at = datetime.utcnow()
+    move.confirmed_by_name = confirmed_by_name
+    move.confirm_message_id = confirm_message_id
+    session.commit()
+    session.refresh(move)
+    return move
+
+
+def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
+    """The squad moves that may be shown on the public home page.
+
+    ONLY two things qualify, and the exclusions matter more than the
+    inclusions:
+
+    * a DEPARTURE -- already announced publicly the moment it was made;
+    * a SIGNING, meaning an offer the player accepted AND staff then
+      confirmed -- or its staff equivalent, an APPOINTMENT.
+
+    Everything else is a negotiation, not news, and stays on the staff
+    page:
+
+    * a pending offer -- the player hasn't answered. Putting "we offered
+      X a place" on the front page announces it over their head.
+    * an offer accepted but not yet confirmed -- deciding when that
+      becomes public is the entire reason the confirm step exists;
+      leaking it here would make that step ornamental.
+    * a DECLINED offer -- publishing that someone turned the club down is
+      unkind and is not the club's news to tell.
+
+    Ordered by when each became public: a signing confirmed today belongs
+    at the top even if the offer went out last week, so the sort is on
+    confirmed_at where there is one and announced_at otherwise.
+    """
+    became_public = func.coalesce(RosterMove.confirmed_at, RosterMove.announced_at)
+    return list(session.execute(
+        select(RosterMove)
+        .where(
+            (RosterMove.kind == discord_roster.MOVE_RELEASE)
+            | (RosterMove.kind.in_(discord_roster.CONFIRMABLE_KINDS)
+               & RosterMove.confirmed_at.is_not(None))
+        )
+        .order_by(became_public.desc(), RosterMove.id.desc())
+        .limit(limit)
+    ).scalars())
+
+
+def offer_is_open(move: RosterMove) -> bool:
+    """An offer or renewal still waiting on the player. Departures are
+    never open -- there is nothing to accept about being let go."""
+    return move.kind in discord_roster.ANSWERABLE_KINDS and move.response is None
+
+
+def offer_awaits_confirmation(move: RosterMove) -> bool:
+    """Accepted, not yet confirmed by staff -- the state the /roster page
+    turns into a Confirm signing (or Confirm appointment) button."""
+    return (move.kind in discord_roster.CONFIRMABLE_KINDS
+            and move.response == discord_roster.RESPONSE_ACCEPTED
+            and move.confirmed_at is None)
+
+
+def recent_roster_moves(session: Session, limit: int = 15) -> list[RosterMove]:
+    """Newest first, bounded -- this is a "what did we just publish"
+    panel on the staff page, not an archive anyone pages through."""
+    return list(session.execute(
+        select(RosterMove).order_by(RosterMove.announced_at.desc(), RosterMove.id.desc())
+        .limit(limit)
+    ).scalars())
+
+
+# --- Contracts ------------------------------------------------------------- #
+# How close to the end a contract has to be before the staff page starts
+# drawing attention to it. A week is one matchday cycle for most clubs --
+# enough notice to have the conversation before it lapses.
+CONTRACT_EXPIRING_SOON = timedelta(days=7)
+
+CONTRACT_ACTIVE = "active"
+CONTRACT_EXPIRING = "expiring"
+CONTRACT_EXPIRED = "expired"
+CONTRACT_RELEASED = "released"
+
+
+def parse_contract_terms(weeks: str, squad_status: str) -> tuple[int, str]:
+    """(weeks, squad status) out of form input, or a ServiceError that
+    says which one is wrong. The form's own min/max and <select> are only
+    suggestions to a browser, so the bounds are enforced here too."""
+    try:
+        weeks_n = int(str(weeks).strip())
+    except ValueError:
+        weeks_n = 0
+    lo, hi = discord_roster.CONTRACT_MIN_WEEKS, discord_roster.CONTRACT_MAX_WEEKS
+    if not lo <= weeks_n <= hi:
+        raise ServiceError(f"Give the contract a length between {lo} and {hi} weeks.")
+    if squad_status not in discord_roster.SQUAD_STATUSES:
+        raise ServiceError(
+            "Pick a squad status: " + ", ".join(discord_roster.SQUAD_STATUSES) + ".")
+    return weeks_n, squad_status
+
+
+def parse_positions(primary: str, secondary: str, *,
+                    keep: str | None = None) -> tuple[str, str | None]:
+    """(primary, secondary or None) out of form input, or a ServiceError
+    that says what's wrong.
+
+    Both must come from discord_roster.PITCH_POSITIONS; the selects are
+    only a suggestion to a browser. `keep` lets a renewal carry forward a
+    contract's existing primary position that predates the fixed list,
+    rather than forcing staff to change it just to renew.
+    """
+    primary = (primary or "").strip()
+    secondary = (secondary or "").strip()
+    allowed = set(discord_roster.PITCH_POSITIONS)
+    if not primary:
+        raise ServiceError("Pick the contract's primary position.")
+    if primary not in allowed and primary != keep:
+        raise ServiceError(f"{primary!r} isn't a position a contract can name.")
+    if not secondary:
+        return primary, None
+    if secondary not in allowed:
+        raise ServiceError(f"{secondary!r} isn't a position a contract can name.")
+    if secondary.casefold() == primary.casefold():
+        raise ServiceError("The secondary position has to differ from the primary one.")
+    return primary, secondary
+
+
+def parse_staff_role(role: str) -> str:
+    """The club role an appointment is for: one of roles.CLUB_ROLES, since
+    confirming it gives the person that role's permissions on the site."""
+    role = (role or "").strip()
+    if not role:
+        raise ServiceError("Pick the staff role you're offering.")
+    if role not in roles.CLUB_ROLES:
+        raise ServiceError("Pick a staff role: " + ", ".join(roles.CLUB_ROLES) + ".")
+    return role
+
+
+def live_contract_for(session: Session, discord_id: str) -> Contract | None:
+    """This person's contract that hasn't been ended by a release --
+    including one that has run out, which is still theirs until staff
+    decide what happens to it."""
+    return session.execute(
+        select(Contract)
+        .where(Contract.discord_id == str(discord_id), Contract.ended_at.is_(None))
+        .order_by(Contract.id.desc())
+    ).scalars().first()
+
+
+def get_contract(session: Session, contract_id: int) -> Contract | None:
+    return session.get(Contract, contract_id)
+
+
+def create_contract(session: Session, *, discord_id: str, display_name: str,
+                    avatar_url: str | None, position: str | None, squad_status: str,
+                    weeks: int, source: str, created_by_name: str | None,
+                    signing_move_id: int | None = None,
+                    starts_at: datetime | None = None,
+                    secondary_position: str | None = None) -> Contract:
+    """Starts a contract. Refuses a second live one for the same person:
+    two contracts would mean two different answers to "when is their deal
+    up?", and the fix for an existing one is to renew it."""
+    existing = live_contract_for(session, discord_id)
+    if existing is not None:
+        raise ServiceError(
+            f"{existing.display_name} is already under contract -- renew that one instead.")
+    starts_at = starts_at or datetime.utcnow()
+    contract = Contract(
+        discord_id=str(discord_id), display_name=display_name, avatar_url=avatar_url,
+        position=(position or "").strip()[:80] or None,
+        secondary_position=(secondary_position or "").strip()[:80] or None,
+        squad_status=squad_status,
+        weeks=weeks, starts_at=starts_at, expires_at=starts_at + timedelta(weeks=weeks),
+        source=source, signing_move_id=signing_move_id, created_by_name=created_by_name,
+    )
+    session.add(contract)
+    ensure_player(session, discord_id=str(discord_id), display_name=display_name,
+                  avatar_url=avatar_url, commit=False)
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def apply_renewal(session: Session, contract: Contract, move: RosterMove,
+                  now: datetime | None = None) -> Contract:
+    """Puts an accepted renewal's terms on the contract.
+
+    The new weeks are added from the CURRENT end date, not from today --
+    renewing early must never cost the player time they already had.
+    Renewing a contract that has already lapsed starts the new term from
+    today instead, since the weeks in between were nobody's.
+    """
+    now = now or datetime.utcnow()
+    contract.weeks = move.contract_weeks
+    contract.squad_status = move.squad_status
+    # The renewal names the positions as a pair, so they're applied as a
+    # pair: dropping the secondary on renewal is a real choice staff can
+    # make, not something to paper over with the old value.
+    if move.position:
+        contract.position = move.position
+        contract.secondary_position = move.secondary_position
+    contract.expires_at = max(contract.expires_at, now) + timedelta(weeks=move.contract_weeks)
+    contract.renewal_count = (contract.renewal_count or 0) + 1
+    contract.last_renewed_at = now
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def end_contract(session: Session, contract: Contract, *, ended_by_name: str | None) -> Contract:
+    contract.ended_at = datetime.utcnow()
+    contract.ended_by_name = ended_by_name
+    session.commit()
+    session.refresh(contract)
+    return contract
+
+
+def contract_state(contract: Contract, now: datetime | None = None) -> str:
+    """Active, expiring (inside CONTRACT_EXPIRING_SOON), expired, or
+    released. Computed rather than stored, so a contract runs out on time
+    without a timer having to notice."""
+    now = now or datetime.utcnow()
+    if contract.ended_at is not None:
+        return CONTRACT_RELEASED
+    if contract.expires_at <= now:
+        return CONTRACT_EXPIRED
+    if contract.expires_at - now <= CONTRACT_EXPIRING_SOON:
+        return CONTRACT_EXPIRING
+    return CONTRACT_ACTIVE
+
+
+def contract_time_left(contract: Contract, now: datetime | None = None) -> str:
+    """"5 weeks left", "3 days left", "expired 2 days ago" -- whole weeks
+    while there are some, days once it's close, because "0 weeks left"
+    on a contract with six days to run reads as already over."""
+    now = now or datetime.utcnow()
+    delta = contract.expires_at - now
+    if delta.total_seconds() <= 0:
+        days = (-delta).days
+        if days == 0:
+            return "expired today"
+        return f"expired {days} day{'s' if days != 1 else ''} ago"
+    days = delta.days
+    if days >= 14:
+        weeks = days // 7
+        return f"{weeks} weeks left"
+    if days >= 1:
+        return f"{days} day{'s' if days != 1 else ''} left"
+    return "ends today"
+
+
+def live_contracts(session: Session) -> list[Contract]:
+    """Every contract not yet released, soonest to run out first -- the
+    ones needing a decision are the ones at the top."""
+    return list(session.execute(
+        select(Contract).where(Contract.ended_at.is_(None))
+        .order_by(Contract.expires_at.asc(), Contract.id.asc())
+    ).scalars())
+
+
+def open_renewals(session: Session) -> dict[int, RosterMove]:
+    """contract_id -> the renewal still waiting on the player, for every
+    contract that has one. One query for the whole staff page rather than
+    one per row."""
+    rows = session.execute(
+        select(RosterMove).where(
+            RosterMove.kind == discord_roster.MOVE_RENEWAL,
+            RosterMove.response.is_(None),
+            RosterMove.contract_id.is_not(None),
+        )
+    ).scalars()
+    return {move.contract_id: move for move in rows}
+
+
+# --- Players: the personnel file ------------------------------------------- #
+PREFERRED_FEET = ("Right", "Left", "Both")
+_MAX_ARCHETYPE = 40
+_MAX_BIO = 500
+_MAX_COACH_NOTE = 2000
+
+
+def get_player(session: Session, discord_id: str) -> Player | None:
+    return session.execute(
+        select(Player).where(Player.discord_id == str(discord_id))
+    ).scalar_one_or_none()
+
+
+def ensure_player(session: Session, *, discord_id: str, display_name: str,
+                  avatar_url: str | None = None, commit: bool = True) -> Player:
+    """This person's record, created if it's their first. Refreshes the
+    name and avatar when given new ones, so the file shows them as they
+    are in Discord now rather than as they were on day one."""
+    player = get_player(session, discord_id)
+    if player is None:
+        player = Player(discord_id=str(discord_id), display_name=display_name,
+                        avatar_url=avatar_url)
+        session.add(player)
+    else:
+        if display_name and player.display_name != display_name:
+            player.display_name = display_name
+        if avatar_url and player.avatar_url != avatar_url:
+            player.avatar_url = avatar_url
+    if commit:
+        session.commit()
+        session.refresh(player)
+    return player
+
+
+def backfill_players(session: Session) -> int:
+    """Gives everyone with a contract a player record. Run at startup, so
+    a squad carried over from a previous season, or contracts recorded
+    before player records existed, need no manual step. Returns how many
+    were created; a no-op once everybody has one."""
+    known = set(session.execute(select(Player.discord_id)).scalars())
+    created = 0
+    # Newest contract first, so a person with several gets their latest
+    # name and avatar.
+    for contract in session.execute(select(Contract).order_by(Contract.id.desc())).scalars():
+        if contract.discord_id in known:
+            continue
+        session.add(Player(discord_id=contract.discord_id, display_name=contract.display_name,
+                           avatar_url=contract.avatar_url))
+        known.add(contract.discord_id)
+        created += 1
+    if created:
+        session.commit()
+    return created
+
+
+def club_role_for(session: Session, discord_id) -> str | None:
+    return session.execute(
+        select(Player.club_role).where(Player.discord_id == str(discord_id))
+    ).scalar_one_or_none()
+
+
+def set_club_role(session: Session, player: Player, role: str) -> Player:
+    """Gives or clears a club role. Blank clears it."""
+    role = (role or "").strip()
+    if role and role not in roles.CLUB_ROLES:
+        raise ServiceError("Pick a club role: " + ", ".join(roles.CLUB_ROLES) + ".")
+    new = role or None
+    if new != player.club_role:
+        player.club_role = new
+        player.club_role_since = datetime.utcnow() if new else None
+        session.commit()
+        session.refresh(player)
+    return player
+
+
+def update_player_profile(session: Session, player: Player, *, preferred_foot: str,
+                          archetype: str, bio: str) -> Player:
+    """What a player says about themselves. Each field optional."""
+    foot = (preferred_foot or "").strip()
+    if foot and foot not in PREFERRED_FEET:
+        raise ServiceError("Pick a preferred foot: " + ", ".join(PREFERRED_FEET) + ".")
+    archetype = (archetype or "").strip()
+    if len(archetype) > _MAX_ARCHETYPE:
+        raise ServiceError(f"Keep your build under {_MAX_ARCHETYPE} characters.")
+    bio = (bio or "").strip()
+    if len(bio) > _MAX_BIO:
+        raise ServiceError(f"Keep your bio under {_MAX_BIO} characters.")
+    player.preferred_foot = foot or None
+    player.archetype = archetype or None
+    player.bio = bio or None
+    session.commit()
+    session.refresh(player)
+    return player
+
+
+def club_staff(session: Session) -> list[Player]:
+    """Everyone holding a club role, most senior first."""
+    rank = {r: i for i, r in enumerate(roles.CLUB_ROLES)}
+    staff = session.execute(select(Player).where(Player.club_role.is_not(None))).scalars()
+    return sorted(staff, key=lambda p: (rank.get(p.club_role, len(rank)), p.display_name.casefold()))
+
+
+def players_by_id(session: Session, discord_ids: list[str]) -> dict[str, Player]:
+    if not discord_ids:
+        return {}
+    rows = session.execute(
+        select(Player).where(Player.discord_id.in_([str(i) for i in discord_ids]))
+    ).scalars()
+    return {p.discord_id: p for p in rows}
+
+
+def contract_history(session: Session, discord_id: str) -> list[Contract]:
+    """Every contract this person has had, newest first."""
+    return list(session.execute(
+        select(Contract).where(Contract.discord_id == str(discord_id))
+        .order_by(Contract.id.desc())
+    ).scalars())
+
+
+def moves_for(session: Session, discord_id: str, limit: int = 20) -> list[RosterMove]:
+    return list(session.execute(
+        select(RosterMove).where(RosterMove.discord_id == str(discord_id))
+        .order_by(RosterMove.announced_at.desc(), RosterMove.id.desc()).limit(limit)
+    ).scalars())
+
+
+def list_coach_notes(session: Session, discord_id: str) -> list[CoachNote]:
+    return list(session.execute(
+        select(CoachNote).where(CoachNote.discord_id == str(discord_id))
+        .order_by(CoachNote.created_at.desc(), CoachNote.id.desc())
+    ).scalars())
+
+
+def get_coach_note(session: Session, note_id: int) -> CoachNote | None:
+    return session.get(CoachNote, note_id)
+
+
+def add_coach_note(session: Session, *, discord_id: str, body: str, author: dict) -> CoachNote:
+    body = (body or "").strip()
+    if not body:
+        raise ServiceError("The note is empty.")
+    if len(body) > _MAX_COACH_NOTE:
+        raise ServiceError(f"Keep a note under {_MAX_COACH_NOTE} characters.")
+    note = CoachNote(discord_id=str(discord_id), body=body,
+                     author_name=author.get("name") or "Staff",
+                     author_discord_id=str(author.get("id") or "") or None)
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+    return note
+
+
+def delete_coach_note(session: Session, note: CoachNote) -> None:
+    session.delete(note)
+    session.commit()
+
+
+# --- Club profile (the public splash page) --------------------------------- #
+# key -> (label, default, max length). Everything the club says about
+# itself to people who haven't joined yet. Facts the site already knows
+# (record, squad size, staff, open positions) are filled in live instead.
+CLUB_PROFILE_FIELDS = {
+    "headline": ("Headline", "Pro Clubs, done properly.", 80),
+    "about": ("About the club",
+              "A competitive EA FC Pro Clubs side that plays as a team: set positions, "
+              "a real tactic, and a squad that turns up.", 600),
+    "match_nights": ("When we play", "", 120),
+    "region": ("Region", "", 60),
+    "platform": ("Platform", "", 60),
+    "play_style": ("How we play", "", 120),
+    "recruiting": ("Recruiting note",
+                   "Think you'd fit? Join the Discord and say hello.", 200),
+}
+
+
+def get_club_profile(session: Session) -> dict[str, str]:
+    stored = {row.key: row.value for row in session.execute(select(ClubSetting)).scalars()}
+    return {key: (stored.get(key) if stored.get(key) is not None else default)
+            for key, (_label, default, _limit) in CLUB_PROFILE_FIELDS.items()}
+
+
+def save_club_profile(session: Session, values: dict[str, str], *, by_name: str | None) -> None:
+    for key, (label, _default, limit) in CLUB_PROFILE_FIELDS.items():
+        value = (values.get(key) or "").strip()
+        if len(value) > limit:
+            raise ServiceError(f"Keep “{label}” under {limit} characters.")
+    for key in CLUB_PROFILE_FIELDS:
+        value = (values.get(key) or "").strip()
+        row = session.get(ClubSetting, key)
+        if row is None:
+            session.add(ClubSetting(key=key, value=value, updated_by_name=by_name))
+        else:
+            row.value = value
+            row.updated_by_name = by_name
+    session.commit()
+
+
 # --- Streamers ------------------------------------------------------------ #
 def list_streamers(session: Session) -> list[Streamer]:
     return list(session.execute(select(Streamer).order_by(Streamer.position.asc(), Streamer.id.asc())).scalars())
@@ -505,7 +1593,8 @@ def get_featured_streamer(session: Session) -> Streamer | None:
 
 
 def create_streamer(session: Session, *, display_name: str, twitch_login: str,
-                     avatar: str | None, author_name: str, featured: bool = False) -> Streamer:
+                     avatar: str | None, author_name: str, featured: bool = False,
+                     avatar_thumb: str | None = None) -> Streamer:
     display_name = display_name.strip()
     twitch_login = twitch_login.strip().lower().lstrip("@")
     if not display_name or not twitch_login:
@@ -521,6 +1610,7 @@ def create_streamer(session: Session, *, display_name: str, twitch_login: str,
         display_name=display_name,
         twitch_login=twitch_login,
         avatar=avatar,
+        avatar_thumb=avatar_thumb,
         position=next_position,
         featured=featured,
         added_by_name=author_name,

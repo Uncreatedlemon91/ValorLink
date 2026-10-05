@@ -1,71 +1,68 @@
-# Hosting ValorLink on a DigitalOcean droplet
+# Hosting YeeHaw FC on a DigitalOcean droplet
 
-This runs **both** the Discord bot and the web UI on one small droplet,
-sharing a single SQLite database file, with Caddy terminating HTTPS in front
-of the web app. Total cost: about **$6/month** for the droplet plus a domain
-name (~$1–12/year).
+One FastAPI app behind Caddy, plus a handful of oneshot systemd timers for
+the things that need polling. No always-on bot process — every Discord
+feature runs over REST and a signed interactions webhook.
 
-```
-                    ┌──────────────── one droplet ────────────────┐
-Discord gateway ⇄  │  valorlink-bot.service   (bot.py + bridge)   │
-                    │             │  shared /opt/valorlink/valorlink.db
-browsers ⇄ :443 ⇄ Caddy ⇄ :8000 │  valorlink-web.service   (uvicorn)          │
-                    └──────────────────────────────────────────────┘
-```
-
-Files in this folder:
-
-| File | Where it goes |
+| File | What it is |
 |---|---|
-| `valorlink-bot.service` | `/etc/systemd/system/` (via `install.sh`) |
-| `valorlink-web.service` | `/etc/systemd/system/` (via `install.sh`) |
-| `valorlink-proclubs.service` | `/etc/systemd/system/` (via `install.sh`, optional -- see below) |
-| `proclubs-poll.service` / `.timer` | `/etc/systemd/system/` (via `install.sh`, optional -- see below) |
-| `install.sh` | run in place with `sudo` |
-| `Caddyfile` | `/etc/caddy/Caddyfile` |
-| `.env.production.example` | copy to `/opt/valorlink/.env` |
+| `yeehaw-fc.service` | the site (gunicorn + uvicorn workers on 127.0.0.1:8001) |
+| `yeehaw-fc-backup.{service,timer}` | daily database backup |
+| `proclubs-poll.{service,timer}` | hourly EA stats snapshot → `history.db`, and the league table |
+| `proclubs-discord-events-poll.*` | Discord Scheduled Events → site fixtures, every 10 min |
+| `proclubs-clips-poll.*` | Discord video posts → Clips page, every 30 min |
+| `proclubs-reactions-poll.*` | reaction counts on article announcements, every 30 min |
+| `proclubs-event-invites-poll.*` | staged event-thread invites, every 10 min |
+| `proclubs-notify-poll.*` | match-week messages every 10 min: reminders, the post-match vote, availability nudges, milestones, Player of the Month |
+| `Caddyfile` | reverse proxy + automatic HTTPS |
+| `install.sh` | copies the units in, enables and starts them |
+| `backup.sh` / `restore.sh` | database snapshot and restore |
 
-The units assume the app lives at **`/opt/valorlink`**, runs as a
-**`valorlink`** system user, and uses a virtualenv at
-`/opt/valorlink/.venv`. The steps below set that up. If you use different
-paths, edit the two `.service` files to match.
+The app runs as a `valorlink` system user out of `/opt/valorlink`. That
+name is a leftover from a different project this repo used to hold; it is
+kept on purpose, because renaming a live path and uid buys nothing and
+risks an outage.
 
 ---
 
 ## 1. Create the droplet
 
-In the DigitalOcean control panel: **Create → Droplets**.
+DigitalOcean control panel → **Create → Droplets**.
 
 - **Image:** Ubuntu 24.04 (LTS)
 - **Type:** Basic → Regular. The **$6/mo** (1 GB RAM) size is comfortable;
-  the $4/mo (512 MB) works too but leaves little headroom for updates.
+  the $4/mo (512 MB) works but leaves little headroom for updates.
 - **Authentication:** add your SSH key (not a password).
-- Create it, and note the droplet's public IP.
+- Create it, and note the public IP.
 
-## 2. Point a domain at it
+## 2. Point the domain at it
 
-The web UI needs a real hostname for HTTPS and Discord sign-in. Create a
-DNS **A record** for e.g. `hq.yourregiment.com` pointing at the droplet IP.
-(You can use DigitalOcean's own DNS under **Networking → Domains**, or your
-registrar's.) DNS can take a few minutes to propagate.
+Two DNS **A records**, both at the droplet's IP:
+
+- `yeehaw-fc.club`
+- `www.yeehaw-fc.club` — Caddy redirects www to the apex, but still needs
+  the record to get a certificate for it.
+
+The apex is the canonical host: `SITE_BASE_URL` and the Discord OAuth
+redirect URI both name it, and Discord rejects a callback whose host
+doesn't match the registered redirect exactly.
 
 ## 3. First login and firewall
 
 ```bash
 ssh root@YOUR_DROPLET_IP
 
-# Basic firewall: SSH + web only.
 ufw allow OpenSSH
 ufw allow 80
 ufw allow 443
 ufw --force enable
 ```
 
-## 4. Install system packages
+## 4. System packages
 
 ```bash
 apt update && apt upgrade -y
-apt install -y python3-venv python3-pip git
+apt install -y python3-venv python3-pip git sqlite3
 
 # Caddy (official apt repo)
 apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
@@ -76,7 +73,9 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
 apt update && apt install -y caddy
 ```
 
-## 5. Create the app user and clone the repo
+`sqlite3` is needed by `backup.sh`, which uses SQLite's online `.backup`.
+
+## 5. App user and clone
 
 ```bash
 # Clone first, then create the service user and hand it ownership.
@@ -89,362 +88,177 @@ chown -R valorlink:valorlink /opt/valorlink
 
 ```bash
 cd /opt/valorlink
-sudo -u valorlink python3 -m venv .venv
-sudo -u valorlink .venv/bin/pip install --upgrade pip
-sudo -u valorlink .venv/bin/pip install -r requirements.txt -r web/requirements.txt
+sudo -u valorlink python3 -m venv proclubs/.venv
+sudo -u valorlink proclubs/.venv/bin/pip install --upgrade pip
+sudo -u valorlink proclubs/.venv/bin/pip install -r proclubs/requirements.txt
 ```
 
-## 7. Configure the environment
+## 7. Configure
 
 ```bash
-sudo -u valorlink cp deploy/.env.production.example .env
-# generate a session secret to paste into the file:
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"
-sudo -u valorlink nano .env      # fill everything in (see notes below)
-chmod 600 .env
+sudo -u valorlink cp proclubs/.env.example proclubs/.env
+# A session secret to paste in:
+openssl rand -hex 32
+sudo -u valorlink nano proclubs/.env
+chmod 600 proclubs/.env
 ```
 
-Fill in `.env`:
-- `DISCORD_BOT_TOKEN`, `GUILD_ID` — from your Discord application (see the
-  main [`SETUP.md`](../SETUP.md) if you haven't created the bot yet).
-- `WEB_SESSION_SECRET` — the value you just generated.
-- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` — from the app's **OAuth2**
-  page.
-- `DISCORD_OAUTH_REDIRECT` — `https://hq.yourregiment.com/auth/discord/callback`
-  with **your** domain. Then, in the Discord app's **OAuth2 → Redirects**,
-  add that exact URL.
-- Leave `DATABASE_URL` as the absolute SQLite path unless you have a reason
-  to change it. Leave `WEB_DEV_LOGIN` unset.
-
-## 8. Create the database
+`proclubs/.env.example` documents every setting inline.
+`proclubs/README.md#configuring-a-fresh-deployment` explains where each
+value comes from. The minimum for a working site is `SESSION_SECRET`,
+`HTTPS_ONLY=1`, `SITE_BASE_URL`, the four Discord OAuth values, and the
+club — which you don't type in. Look it up on EA and write it to `.env` in
+one step:
 
 ```bash
-cd /opt/valorlink
-sudo -u valorlink .venv/bin/alembic upgrade head
+cd /opt/valorlink/proclubs
+sudo -u valorlink .venv/bin/python3 season.py find
+sudo -u valorlink .venv/bin/python3 season.py switch
 ```
 
-## 9. Start the bot and web services
+(See `proclubs/README.md#a-new-season`; the same command handles every
+later season change.) Everything else switches on an optional feature.
+
+The database needs no setup — it is created on first start.
+
+## 8. Start it
 
 ```bash
 sudo bash deploy/install.sh
 ```
 
-This copies both unit files, enables them on boot, and starts them. Check:
+This copies every unit into `/etc/systemd/system`, reloads systemd, and
+enables and starts them. It also retires the old `valorlink-*` units if
+the box still has them (see **Updating**, below).
+
+## 9. Point Caddy at it
 
 ```bash
-systemctl status valorlink-bot valorlink-web
-journalctl -u valorlink-web -f      # Ctrl-C to stop tailing
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ```
 
-## 10. Point Caddy at the web app
+Caddy fetches and renews the certificates itself. DNS has to resolve to
+the droplet first, so if the first attempt fails, give it a few minutes
+and reload again.
+
+Visit `https://yeehaw-fc.club`, sign in with Discord, and check:
 
 ```bash
-cp /opt/valorlink/deploy/Caddyfile /etc/caddy/Caddyfile
-nano /etc/caddy/Caddyfile      # replace hq.example.com with your domain
-systemctl reload caddy
+systemctl status yeehaw-fc
+journalctl -u yeehaw-fc -f
 ```
-
-Caddy will fetch a Let's Encrypt certificate automatically. Visit
-`https://hq.yourregiment.com` — you should see the ValorLink Headquarters
-site. Sign in with Discord; your permission tier is read from your regiment
-roles.
-
-## 11. Configure the regiment
-
-If this is a fresh install, set roles/channels/ranks/companies either from
-Discord (`/config`, `/rank`, `/company` — see [`SETUP.md`](../SETUP.md)) or,
-once an admin role is set, from the web **Command Tent**. Officer sign-in on
-the site maps admin/officer/recruiter Discord roles to what each person can
-do, so make sure those role IDs are configured.
 
 ---
 
-## Updating later
+## Updating
 
 ```bash
 cd /opt/valorlink
 sudo -u valorlink git pull
-sudo -u valorlink .venv/bin/pip install -r requirements.txt -r web/requirements.txt
-sudo -u valorlink .venv/bin/alembic upgrade head
-sudo systemctl restart valorlink-bot valorlink-web
-```
-
-If the Pro Clubs Tracker is installed (see below), also refresh its
-**separate** venv and restart it -- it's independent of the bot/web app, so a
-bot/web deploy never needs to touch it, and vice versa:
-
-```bash
-sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/pip install -r proclubs/requirements.txt
-sudo systemctl restart valorlink-proclubs
-```
-
-**Multi-unit deployments:** `alembic upgrade head` only migrates the default
-database. Each unit has its own database, so after a schema change run:
-
-```bash
-sudo -u valorlink .venv/bin/python -m tenancy.manage migrate
-```
-
-which upgrades every unit's database (and the default) to the current schema.
-Add `--slug <handle>` to migrate just one. Do this before restarting the
-services so the app never queries a column a unit's database doesn't have yet.
-
-## Hosting multiple units (multi-tenant)
-
-The platform can host many units on this one droplet, each at its own
-subdomain (`5thva.valorlink.co`) with its own database, plus one central bot
-they invite. This is opt-in — leave the variables below unset and you stay in
-single-unit mode. See [`docs/MULTI_TENANT.md`](../../docs/MULTI_TENANT.md) for
-the architecture; the operational steps are:
-
-1. **Wildcard DNS** — add an A record for `*.valorlink.co` pointing at the
-   droplet (alongside the apex record), so every unit subdomain resolves here.
-
-2. **Wildcard TLS via Caddy on-demand.** A wildcard cert would need DNS-01;
-   the simpler path is Caddy's on-demand TLS, which issues a cert per
-   subdomain as it's first visited. Replace the Caddyfile with:
-
-   ```
-   {
-       on_demand_tls {
-           # only issue for hosts the app recognises as a unit
-           ask http://127.0.0.1:8000/tls-allow
-       }
-   }
-
-   valorlink.co, www.valorlink.co {
-       encode zstd gzip
-       reverse_proxy 127.0.0.1:8000
-   }
-
-   *.valorlink.co {
-       tls { on_demand }
-       encode zstd gzip
-       reverse_proxy 127.0.0.1:8000
-   }
-   ```
-
-   (The `ask` endpoint — `GET /tls-allow?domain=…` — answers 200 only for the
-   apex and registered unit subdomains, so Caddy won't mint certs for random
-   hostnames.)
-
-3. **Environment** — in `.env`, set:
-   ```
-   PLATFORM_BASE_DOMAIN=valorlink.co
-   SESSION_COOKIE_DOMAIN=.valorlink.co
-   ```
-   The cookie domain lets a sign-in on a unit's subdomain work (the OAuth
-   callback stays on the apex). Register the apex callback URL
-   (`https://valorlink.co/auth/discord/callback`) in Discord as before. With
-   platform mode on, the **apex becomes the public directory** (units live on
-   their subdomains); people browse it, sign in with Discord, and apply to any
-   recruiting unit. Each unit's admins set their public name/motto/blurb and
-   recruiting status from the **Command Tent → Public Listing**.
-
-4. **Create units — two ways:**
-   - **Self-serve:** signed-in users open **Raise a unit** on the directory
-     (`/register`), name it, link their Discord server, and get the bot invite
-     link. To restrict who may register, set `PLATFORM_ADMIN_IDS` in `.env` to
-     a comma-separated list of Discord user IDs (unset = open registration).
-   - **CLI:**
-     ```bash
-     cd /opt/valorlink
-     sudo -u valorlink .venv/bin/python -m tenancy.manage create \
-         --slug 5thva --name "5th Virginia Volunteers" --guild <discord-guild-id> \
-         --admin-role <discord-role-id>
-     ```
-   A new unit is live at `https://5thva.valorlink.co`. Both paths take an
-   optional **admin role ID** — an *existing* Discord role in that server,
-   picked before the bot is even invited (right-click the role in Server
-   Settings → Roles → Copy Role ID). That's the recommended way to set it up:
-   the Command Tent works the moment the bot joins, nobody has to touch
-   Discord first. Skip it and the owner gets DMed a reminder once the bot
-   joins; they (or anyone with server Administrator permission) can still
-   bind one afterward with `/config set_role key:admin role:@YourRole`.
-
-**Removing a unit:** platform admins (`PLATFORM_ADMIN_IDS`) get a **Remove**
-control under **Raise a unit** (`/register`), or use the CLI:
-```bash
-sudo -u valorlink .venv/bin/python -m tenancy.manage remove --slug 5thva
-# add --purge to delete its database instead of archiving it
-```
-Removing takes the unit off the directory and stops it resolving; its database
-is **archived on the server** (renamed `*.removed-<timestamp>`), not destroyed,
-unless you `--purge`.
-
-**Kicking the bot auto-retires the unit.** When the bot is removed from a unit's
-Discord server, it retires that unit automatically — the registry row is deleted
-(so its subdomain and directory listing stop) and its database is archived, the
-same as a manual remove. The default/HQ unit is never retired this way. So for a
-unit that has invited the bot, simply kicking the bot is enough; the CLI/web
-remove is for units the bot never joined, or to `--purge` the database.
-
-The live event only arrives while the bot is running, so a unit kicked **while
-the bot was offline** isn't caught then. To cover that, the bot also reconciles
-on startup: it retires any unit whose server it's no longer in. Units registered
-in the last 24 hours are spared (their owner may not have invited the bot yet),
-as is the default unit. So a restart cleans up anything kicked during downtime.
-
-**Re-pointing a unit's Discord server:** a unit admin can change (or clear)
-the linked server from **Command Tent → Discord Server** — useful if the unit
-rebuilds its server or the ID was entered wrong. The platform refuses a server
-already linked to another unit. After a change, invite the bot to the new
-server (or restart `valorlink-bot`) so slash commands sync there.
-
-The one bot serves every unit's Discord: it drains each unit's action queue
-against that unit's guild, so web actions reach Discord for **all** units.
-(New units are picked up on the next bot restart, when it syncs commands to
-their guild — `sudo systemctl restart valorlink-bot`.)
-
-## Optional: Pro Clubs team site
-
-A separate FastAPI app under [`proclubs/`](../proclubs): a news/blog,
-events calendar, Twitch streamer showcase, and EA stats dashboard for the
-Pro Clubs team, with Discord-role-gated staff access. It shares the droplet
-but nothing else with the bot/web app: its own venv, its own systemd
-service, its own subdomain, its own database, its own `.env`. Safe to
-install, skip, or remove without affecting anything above.
-
-```bash
-# 1. DNS: add an A record for proclubs.apps.valorlink.co -> the droplet IP.
-#    (Deliberately a nested, two-label subdomain -- a single-label host like
-#    proclubs.valorlink.co textually matches the *.valorlink.co wildcard used
-#    for tenancy units below, and Caddy's automatic HTTPS can end up
-#    provisioning a hostname covered by both an eager block and that
-#    wildcard's on-demand policy via NEITHER path -- no cert, no clear error.
-#    Nesting it sidesteps that entirely.)
-
-# 2. Its own venv (deliberately not /opt/valorlink/.venv):
-cd /opt/valorlink
-sudo -u valorlink python3 -m venv proclubs/.venv
-sudo -u valorlink proclubs/.venv/bin/pip install --upgrade pip
 sudo -u valorlink proclubs/.venv/bin/pip install -r proclubs/requirements.txt
-
-# 3. Its own .env -- Discord OAuth app, Twitch app, and a session secret.
-#    See proclubs/README.md#configuring-a-fresh-deployment for how to get
-#    each value; proclubs/.env.example lists every setting.
-sudo -u valorlink cp proclubs/.env.example proclubs/.env
-sudo -u valorlink nano proclubs/.env
-
-# 4. Install/start the service (install.sh already includes it):
 sudo bash deploy/install.sh
-
-# 5. Caddy: the proclubs.apps.valorlink.co block is already in
-#    Caddyfile.platform (or Caddyfile, if you're not running platform mode).
-#    Copy whichever you use to /etc/caddy/Caddyfile, then:
-sudo systemctl reload caddy
 ```
 
-Visit `https://proclubs.apps.valorlink.co`. Check it independently of the
-other two services:
+`install.sh` is safe to re-run; it reinstalls the units and restarts the
+site. Run the `pip install` whenever `requirements.txt` changed — it is a
+no-op otherwise.
 
-```bash
-systemctl status valorlink-proclubs
-journalctl -u valorlink-proclubs -f
-```
+**Coming from a droplet that ran the old bot:** this repo used to carry an
+unrelated Discord bot and its web app, and the site itself ran under the
+name `valorlink-proclubs`. `install.sh` stops, disables and removes
+`valorlink-bot`, `valorlink-web`, `valorlink-proclubs` and
+`valorlink-backup.*` before installing the new units — the site rename
+especially, since both would otherwise fight over `127.0.0.1:8001` and
+whichever lost would stay down. Nothing else is deleted; the bot's old
+databases are simply left alone under `/opt/valorlink`, and you can remove
+them by hand once you are sure you want to.
 
-**History tracking (optional, on top of the above).** EA's API only exposes
-a rolling window of recent matches and no historical division data at all,
-so real season-long trend charts need us to start accumulating a copy over
-time. `proclubs-poll.timer` (already installed by `install.sh` above) fires
-`poll.py` hourly, which snapshots every club listed in
-`proclubs/tracked_clubs.json` into `proclubs/data/history.db` (its own
-SQLite file, plain stdlib `sqlite3` -- no extra dependency, not shared with
-anything else). `tracked_clubs.json` ships in the repo already set up for
-YeeHaw FC, so it's in place as soon as you `git pull` -- nothing to create.
-Just run it once to confirm it works, instead of waiting an hour:
+---
+
+## Optional features
+
+Each one is off until its settings are present, and the site works without
+any of them. All need `sudo systemctl restart yeehaw-fc` after editing
+`proclubs/.env`.
+
+### History tracking and the league table
+
+EA's API exposes only a rolling window of recent matches and no historical
+data at all, so season-long trends have to be accumulated over time.
+`proclubs-poll.timer` fires `poll.py` hourly, snapshotting our club
+(`CLUB_ID` in `.env`) into `proclubs/data/history.db`. Run it once rather
+than waiting an hour:
 
 ```bash
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/poll.py
 ```
 
-Add more clubs later by editing that file (one more `{...}` entry) --
-no code change, no redeploy, just takes effect on the next poll. Check on
-it with `systemctl list-timers proclubs-poll.timer` and
-`journalctl -u proclubs-poll`. History only accumulates going forward from
-whenever a club is added here -- there's no way to backfill matches EA has
-already evicted from its own rolling window.
+To snapshot extra clubs as well, list them in `proclubs/tracked_clubs.json`
+(it ships empty); it takes effect on the next poll, no redeploy. History
+only accumulates forward from when a club is added — there is no way to
+backfill matches EA has already evicted.
 
-This same run also maintains `/league` -- see
-`proclubs/README.md#the-league-table-auto-built-not-manually-curated` for
-how that table builds itself from real opponents rather than a manually
-curated list. No setup needed beyond what's already here, but it does mean
-poll runtime and EA API calls grow as more distinct opponents get polled
-(capped by `LEAGUE_TABLE_MAX_TEAMS` in `proclubs/.env`, default 25 --
-`proclubs/.env.example` has the details).
+A new game means a new club ID; `season.py switch` handles it and erases
+the previous season's stats (`proclubs/README.md#a-new-season`).
 
-**Discord Scheduled Events sync (optional, on top of the above).** Events
-scheduled in Discord (Server → Events → New Event) can mirror in as site
-fixtures automatically -- see `proclubs/README.md#discord-scheduled-events-sync`
-for exactly what does and doesn't sync. Needs `DISCORD_BOT_TOKEN` in
-`proclubs/.env`; deliberately the **same token the main bot already
-uses** (copy it from `/opt/valorlink/.env`) rather than a separate bot
-registration -- a real exception to this app's normal "share nothing"
-isolation, accepted for this one feature. Leave `DISCORD_BOT_TOKEN` unset
-to skip this entirely; the site works fine without it.
+The same run maintains `/league`, which builds itself from real opponents
+rather than a curated list (see
+`proclubs/README.md#the-league-table-auto-built-not-manually-curated`).
+More distinct opponents means more EA calls per run, capped by
+`LEAGUE_TABLE_MAX_TEAMS` (default 25).
+
+### Discord: the bot token
+
+Everything below needs `DISCORD_BOT_TOKEN` (Developer Portal → your app →
+Bot → Reset Token). It is full bot access rather than a scoped secret, so
+treat it as the most sensitive value in `.env`.
 
 ```bash
 sudo -u valorlink nano /opt/valorlink/proclubs/.env
-# DISCORD_BOT_TOKEN=<copy from /opt/valorlink/.env>
-sudo systemctl restart valorlink-proclubs
+# DISCORD_BOT_TOKEN=...
+sudo systemctl restart yeehaw-fc
 ```
 
-`proclubs-discord-events-poll.timer` (already installed by `install.sh`)
-fires `discord_events_poll.py` every 10 minutes. Run it once to confirm it
-works instead of waiting:
+### Scheduled Events sync
+
+Events created in Discord (Server → Events → New Event) mirror in as site
+fixtures. See `proclubs/README.md#mirrored-discord-scheduled-events` for
+what does and doesn't sync. Needs only the bot token.
 
 ```bash
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_events_poll.py
 ```
 
-Check on it with `systemctl list-timers proclubs-discord-events-poll.timer`
-and `journalctl -u proclubs-discord-events-poll`.
+### Clips sync
 
-**Discord clips sync (optional, on top of the above).** Video files posted
-directly in a configured Discord channel can mirror onto the site's Clips
-page automatically -- see
-`proclubs/README.md#clips-are-discord-only` for exactly what does and
-doesn't sync (short version: real video *file* attachments only, not
-pasted links). Reuses the same `DISCORD_BOT_TOKEN` as the Events sync
-above, plus one more setting, `CLIPS_CHANNEL_ID` -- the ID of the channel
-to pull from (enable Developer Mode in Discord, right-click the channel,
-"Copy Channel ID"). The bot needs View Channel + Read Message History in
-that channel. Leave `CLIPS_CHANNEL_ID` unset to skip this; the Clips page
-just shows "not configured yet."
-
-```bash
-sudo -u valorlink nano /opt/valorlink/proclubs/.env
-# CLIPS_CHANNEL_ID=<the channel ID>
-sudo systemctl restart valorlink-proclubs
-```
-
-`proclubs-clips-poll.timer` (already installed by `install.sh`) fires
-`discord_clips_poll.py` every 30 minutes. Run it once to confirm it works
-instead of waiting:
+Video files posted in one Discord channel mirror onto the Clips page —
+real video *attachments* only, not pasted links (see
+`proclubs/README.md#clips-are-discord-only`). Set `CLIPS_CHANNEL_ID` (enable
+Developer Mode, right-click the channel, "Copy Channel ID"). The bot needs
+View Channel + Read Message History there.
 
 ```bash
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_clips_poll.py
 ```
 
-Check on it with `systemctl list-timers proclubs-clips-poll.timer` and
-`journalctl -u proclubs-clips-poll`.
+### Announcements and reactions
 
-**Discord article-reaction counts (optional, needs the announcements
-above).** If `NEWS_ANNOUNCE_CHANNEL_ID` is set (see
-`proclubs/README.md#publishing-announces-to-discord`), reactions on an
-article's announcement message -- any emoji, all summed together -- show
-up on the article page as a heart count. `proclubs-reactions-poll.timer`
-(already installed by `install.sh`) fires `discord_reactions_poll.py`
-every 30 minutes. Run it once to confirm it works instead of waiting:
+With `NEWS_ANNOUNCE_CHANNEL_ID` and `SITE_BASE_URL` set, publishing an
+article posts an embed to that channel. Reactions on it — any emoji, all
+summed — come back as the article's like count, refreshed every 30 minutes
+for the `DISCORD_REACTIONS_POLL_LIMIT` most recent (default 20).
 
 ```bash
 sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/discord_reactions_poll.py
 ```
 
-Check on it with `systemctl list-timers proclubs-reactions-poll.timer` and
-`journalctl -u proclubs-reactions-poll`. Only the `DISCORD_REACTIONS_POLL_LIMIT`
-most-recently-announced articles (default 20, `.env`-configurable) get
-checked each run.
+### Event sign-ups
+
+Sign-up buttons on the Discord post come back to the site as signed
+interactions, which needs `DISCORD_PUBLIC_KEY` (Developer Portal → General
+Information → Public Key) and either `EVENTS_ANNOUNCE_CHANNEL_ID` or
+`EVENT_THREAD_CHANNEL_ID`.
 
 **Weekly AI-written article (optional).** Every Saturday at about 09:15
 (server time), `proclubs-weekly-article.timer` (already installed by
@@ -480,63 +294,125 @@ and re-running `claude setup-token` fixes it. Signings only start being
 tracked from the first poll after this ships -- that first poll records the
 current squad as a baseline, so nobody already in it shows up as "new".
 
-**Removing it** is just: `sudo systemctl disable --now valorlink-proclubs`,
-delete its Caddy block, `rm -rf /opt/valorlink/proclubs/.venv` if reclaiming
-space -- none of that touches the bot, the web app, or their database.
+In the same portal, set **Interactions Endpoint URL** to
+`https://yeehaw-fc.club/discord/interactions`. Discord verifies the URL as
+you save it — it sends a signed PING and some deliberately-invalid ones,
+and refuses the URL unless the bad ones come back 401 — so save it *after*
+the site is deployed and reachable.
 
-## Troubleshooting
+### Staged event threads
 
-- **Web up but "sign in" fails** — the `DISCORD_OAUTH_REDIRECT` in `.env`
-  must exactly match a redirect registered in the Discord app, and the bot
-  must be in the guild (`GUILD_ID`) so it can read your roles.
-- **Actions on the site don't change Discord** — the **bot** service applies
-  those. Confirm `valorlink-bot` is running and that both services point at
-  the same `DATABASE_URL` (`journalctl -u valorlink-bot`).
-- **Certificate errors** — DNS must resolve to the droplet before Caddy can
-  issue a cert; give it a few minutes, then `systemctl reload caddy`.
+An announced event can open its own **private thread** and widen who can
+see it as kick-off approaches (see
+`proclubs/README.md#staged-thread-invites`):
+
+```ini
+EVENT_THREAD_CHANNEL_ID=<the parent channel's ID>
+EVENT_INVITE_TIERS=create:<role>,48:<role>,24:<role>
+```
+
+**Needs the Server Members privileged intent** (Developer Portal → your app
+→ Bot → Server Members Intent). Discord has no route to list a role's
+members, and threads carry no permissions of their own, so people are added
+one at a time — which means listing the guild. Without it each tier is
+pinged but nobody gains access; `"added 0 member(s)"` in the log is that
+signature.
+
+```bash
+sudo -u valorlink /opt/valorlink/proclubs/.venv/bin/python3 /opt/valorlink/proclubs/event_invites_poll.py
+```
+
+### Squad moves
+
+`/roster` (staff only) lists the Discord server's members and publishes
+offers and departures. Needs `ROSTER_ANNOUNCE_CHANNEL_ID` (falls back to
+`NEWS_ANNOUNCE_CHANNEL_ID`), the **Server Members intent** as above, and
+the interactions endpoint for the Accept / Decline buttons.
+
+`ROSTER_SQUAD_ROLE_ID` is the role a player gets when they accept their own
+offer — the only Discord role this app ever writes, and it only ever adds.
+For that, the bot needs **Manage Roles**, *and* its own highest role must
+sit **above** the squad role in Server Settings → Roles. Discord refuses
+otherwise with a 403, which `/roster` shows against the acceptance. Leave
+the setting blank and accepting is just recorded.
+
+### Checking what's configured
+
+```bash
+cd /opt/valorlink/proclubs && sudo -u valorlink .venv/bin/python3 -c "
+import sys; sys.path.insert(0, '/opt/valorlink/proclubs')
+import config
+print('roster moves missing:', config.roster_moves_missing() or 'nothing')
+print('role grant enabled :', config.ROSTER_ROLE_GRANT_ENABLED)
+print('event rsvp missing :', config.event_rsvp_missing() or 'nothing')
+"
+```
 
 ---
 
 ## Backups
 
-Everything a regiment owns lives in SQLite files under `/opt/valorlink`: the
-default `valorlink.db`, and — in multi-unit mode — `registry.db` plus one
-database per unit under `units/`. `install.sh` sets up a **daily** backup that
-snapshots all of them into one compressed archive and keeps the last 14.
+Two SQLite files under `proclubs/data`:
 
-It uses SQLite's online `.backup`, so it's safe to run while the bot and web
-app are live (a plain `cp` of a database mid-write can capture a torn file;
-this doesn't). Each snapshot is integrity-checked before it's kept.
+- `site.db` — articles, events, sign-ups, squad moves, streamers, tactics
+- `history.db` — accumulated EA stats. **This one cannot be rebuilt**, since
+  EA evicts old matches from its own rolling window.
 
-**What runs it.** The `valorlink-backup.timer` fires `deploy/backup.sh` at
-03:30 daily (with a catch-up run if the droplet was off). Check and drive it:
+`install.sh` sets up a daily backup that snapshots both into one compressed
+archive and keeps the last 14. It uses SQLite's online `.backup`, so it is
+safe while the site is live (a plain `cp` of a database mid-write can
+capture a torn file), and each snapshot is integrity-checked before it is
+kept.
 
 ```bash
-systemctl list-timers valorlink-backup.timer      # when it last/next runs
+systemctl list-timers yeehaw-fc-backup.timer      # when it last/next runs
 sudo -u valorlink bash deploy/backup.sh           # run one right now
-ls -lh /opt/valorlink/backups                      # the archives
-journalctl -u valorlink-backup                     # backup run logs
+ls -lh /opt/valorlink/backups                     # the archives
+journalctl -u yeehaw-fc-backup                    # run logs
 ```
 
-Archives are named `valorlink-<UTC-timestamp>.tar.gz`.
+Archives are named `yeehaw-fc-<UTC-timestamp>.tar.gz`. Older
+`valorlink-*.tar.gz` archives are left alone by the pruner and are still
+restorable.
 
-**Tune it** in `/opt/valorlink/.env` (see `.env.production.example`):
-`BACKUP_RETENTION` (how many to keep), `BACKUP_DIR` (where they go), and
-`BACKUP_REMOTE` — an [rclone](https://rclone.org/) target such as a
-DigitalOcean Spaces or S3 bucket. If `BACKUP_REMOTE` is set and `rclone` is
-installed (`apt install -y rclone` + `rclone config`), every archive is also
-copied off-box, so a lost droplet doesn't take the backups with it. Keeping at
-least one copy off the droplet is strongly recommended.
+**Tune it** in `proclubs/.env`: `BACKUP_RETENTION` (how many to keep),
+`BACKUP_DIR` (where they go), and `BACKUP_REMOTE` — an
+[rclone](https://rclone.org/) target such as a DigitalOcean Spaces or S3
+bucket. If it is set and `rclone` is installed (`apt install -y rclone` +
+`rclone config`), every archive is also copied off-box, so a lost droplet
+doesn't take the backups with it. Keeping at least one copy off the droplet
+is strongly recommended.
 
-**Restore** with `deploy/restore.sh` (stops the services, moves the current
-databases aside as `*.pre-restore-*`, lays the snapshot back, restarts):
+**Restore** stops the site, moves the current databases aside as
+`*.pre-restore-*` (never deletes them), lays the snapshot back down, and
+starts the site again:
 
 ```bash
-sudo bash deploy/restore.sh --list                 # available archives
-sudo bash deploy/restore.sh --latest               # restore the newest
-sudo bash deploy/restore.sh /opt/valorlink/backups/valorlink-20260715-033000.tar.gz
+sudo bash deploy/restore.sh --list                # available archives
+sudo bash deploy/restore.sh --latest              # restore the newest
+sudo bash deploy/restore.sh /opt/valorlink/backups/yeehaw-fc-20260715-033000.tar.gz
 ```
 
-DigitalOcean's own weekly droplet backups (a paid add-on in the panel) are a
-fine belt-and-suspenders layer on top of this, but they're weekly and
-whole-disk; the script above is daily, per-database, and restorable in place.
+DigitalOcean's own weekly droplet backups (a paid add-on) are a fine
+belt-and-braces layer on top, but they're weekly and whole-disk; this is
+daily, per-database, and restorable in place.
+
+---
+
+## Troubleshooting
+
+- **Site up but sign-in fails** — `DISCORD_OAUTH_REDIRECT` must exactly
+  match a redirect registered on the Discord application, down to the host
+  and path, and the bot must be in the guild so it can read roles.
+- **Certificate errors** — DNS must resolve to the droplet before Caddy can
+  issue a cert. Give it a few minutes, then `systemctl reload caddy`.
+- **A Discord feature does nothing** — it is almost always an unset value in
+  `proclubs/.env`. Run the "what's configured" check above; the site also
+  says which settings are missing where the feature would have appeared.
+- **`"added 0 member(s)"`, or an empty Squad page** — the Server Members
+  privileged intent is off.
+- **An acceptance says the squad role wasn't added** — the bot's own role is
+  below the squad role in Server Settings → Roles, or it lacks Manage Roles.
+- **Site won't start after an update** — `journalctl -u yeehaw-fc -n 50`. A
+  port conflict here means an old `valorlink-proclubs` is still running;
+  `sudo systemctl disable --now valorlink-proclubs` and re-run `install.sh`.

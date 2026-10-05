@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block title %}{{ player.display_name }}{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  {# --- Who they are: the file's cover sheet --------------------------------- #}
+  {% set photo = (player.avatar_url or '') | replace('size=128', 'size=512') %}
+  <section class="file-hero">
+    {% if photo %}
+      <img class="file-photo" src="{{ photo }}" alt="" width="168" height="196" decoding="async" />
+    {% else %}
+      <span class="file-photo move-avatar-fallback" aria-hidden="true">{{ initials(player.display_name) }}</span>
+    {% endif %}
+    <div class="file-id">
+      <p class="kicker">{{ SITE_NAME }} / player file</p>
+      <h1>{{ player.display_name }}</h1>
+      <p class="file-role">
+        {% if contract %}{{ status_label(contract.squad_status) }}{% if contract.position %}<span class="sep">/</span>{{ contract.position }}{% endif %}
+        {% elif player.club_role %}{{ player.club_role }}
+        {% else %}Not under contract{% endif %}
+      </p>
+      <div class="file-chips">
+        {% if player.club_role %}<span class="role-pill">{{ player.club_role }}</span>{% endif %}
+        {% if contract %}<span class="contract-status">Signed</span>
+          <span class="file-state">{{ 'Active' if contract_state in ('active', 'expiring') else 'Contract expired' }}</span>
+        {% endif %}
+      </div>
+      <dl class="profile-facts">
+        {% if contract and contract.secondary_position %}<div><dt>Also plays</dt><dd>{{ contract.secondary_position }}</dd></div>{% endif %}
+        <div><dt>Gamertag</dt><dd>{{ gamertag or '—' }}</dd></div>
+        {% if player.preferred_foot %}<div><dt>Foot</dt><dd>{{ player.preferred_foot }}</dd></div>{% endif %}
+        {% if player.archetype %}<div><dt>Build</dt><dd>{{ player.archetype }}</dd></div>{% endif %}
+      </dl>
+    </div>
+    <div class="file-side">
+      <p class="kicker">Squad status</p>
+      <span class="file-side-value">{{ status_label(contract.squad_status) if contract else (player.club_role or 'Free agent') }}</span>
+      {% if contract and contract.position %}<span class="file-side-sub">{{ contract.position }}{% if contract.secondary_position %} · {{ contract.secondary_position }}{% endif %}</span>{% endif %}
+      {% if player.created_at %}<span class="file-side-sub">On file since {{ localtime(player.created_at, 'date') }}</span>{% endif %}
+    </div>
+  </section>
+
+  <div class="dash-grid">
+    <div class="dash-main">
+      {# --- Stats: everyone can see these --------------------------------- #}
+      <section class="panel">
+        <header class="panel-head"><h2>Season</h2>{% if window %}<span class="muted">club's last {{ window }} matches</span>{% endif %}</header>
+        <div class="panel-body">
+          {% if usage %}
+            <div class="tile-row">
+              <div class="tile"><span class="tile-value">{{ usage.apps_window }}{% if window %}<small>/{{ window }}</small>{% endif %}</span><span class="tile-label">Played</span></div>
+              <div class="tile"><span class="tile-value">{{ form_label(usage.form) }}</span><span class="tile-label">Form</span></div>
+              <div class="tile"><span class="tile-value">{{ usage.goals }}</span><span class="tile-label">Goals</span></div>
+              <div class="tile"><span class="tile-value">{{ usage.assists }}</span><span class="tile-label">Assists</span></div>
+              <div class="tile"><span class="tile-value">{{ usage.mom }}</span><span class="tile-label">EA MOTM</span></div>
+              <div class="tile"><span class="tile-value">{{ motm_total }}</span><span class="tile-label">Squad's MOTM</span></div>
+              <div class="tile"><span class="tile-value">{{ usage.apps_total }}</span><span class="tile-label">Apps</span></div>
+            </div>
+          {% elif gamertag %}
+            <p class="muted panel-empty">No recorded matches for {{ gamertag }} yet. They appear after the hourly poll picks up a match they played in.</p>
+          {% else %}
+            <p class="muted panel-empty">
+              {% if is_self %}Link your EA gamertag below and your matches show up here.
+              {% else %}No gamertag linked, so there are no match stats to show.{% endif %}
+            </p>
+          {% endif %}
+        </div>
+        {% if recent %}
+          <div class="table-scroll">
+            <table class="league-table">
+              <thead><tr>
+                <th scope="col">Date</th><th scope="col">Opponent</th><th scope="col" class="lt-num">Score</th>
+                <th scope="col">Pos</th><th scope="col" class="lt-num">Rating</th>
+                <th scope="col" class="lt-num">G</th><th scope="col" class="lt-num">A</th>
+              </tr></thead>
+              <tbody>
+                {% for m in recent %}
+                  <tr>
+                    <td>{% if m.played %}{{ localtime(m.played, 'daymonth') }}{% else %}—{% endif %}</td>
+                    <td>{{ m.opp_name or '—' }}{% if m.mom %} <span class="role-pill">MOTM</span>{% endif %}</td>
+                    <td class="lt-num">{% if m.us_score is not none %}{{ m.us_score }}–{{ m.opp_score }}{% else %}—{% endif %}</td>
+                    <td>{{ m.pos or '—' }}</td>
+                    <td class="lt-num"><span class="lt-rating">{{ '%.1f' % m.rating if m.rating is not none else '—' }}</span></td>
+                    <td class="lt-num">{{ m.goals or 0 }}</td>
+                    <td class="lt-num">{{ m.assists or 0 }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </section>
+
+      {% if honours or potm_months %}
+        <section class="panel">
+          <header class="panel-head"><h2>Honours</h2></header>
+          <ul class="honours">
+            {% for m in potm_months %}<li class="honour is-potm"><span class="kicker">Player of the Month</span>{{ m }}</li>{% endfor %}
+            {% for h in honours %}<li class="honour"><span class="kicker kicker-dim">{{ localtime(h.achieved_at, 'date') }}</span>{{ h.label }}</li>{% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if match_ratings %}
+        <section class="panel">
+          <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
+          <div class="table-scroll">
+            <table class="league-table">
+              <thead><tr><th scope="col">Match</th><th scope="col" class="lt-num">Self</th>
+                <th scope="col" class="lt-num">Coach</th><th scope="col">Comment</th></tr></thead>
+              <tbody>
+                {% for m in match_ratings %}
+                  <tr>
+                    <td><a href="/events/{{ m.event.id }}/report">{{ m.event.title }}</a>
+                      <span class="squad-sub">{{ localtime(m.event.scheduled_at, 'date') }}{% if m.event.result %} · {{ m.event.result }}{% endif %}</span></td>
+                    <td class="lt-num">{{ m.rating.self_rating or '—' }}</td>
+                    <td class="lt-num"><span class="lt-rating">{{ m.rating.coach_rating or '—' }}</span></td>
+                    <td class="ts-prefs">{{ m.rating.coach_comment or '' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endif %}
+
+      {# --- About: theirs to write ---------------------------------------- #}
+      <section class="panel">
+        <header class="panel-head"><h2>About</h2></header>
+        <div class="panel-body">
+          {% if player.bio %}<p class="profile-bio">{{ player.bio }}</p>
+          {% elif not is_self %}<p class="muted panel-empty">Nothing written yet.</p>{% endif %}
+          {% if is_self %}
+            <details class="profile-edit"{% if not player.bio %} open{% endif %}>
+              <summary>Edit your profile</summary>
+              <form method="post" action="/players/{{ player.discord_id }}/profile" class="stack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <div class="field-row">
+                  <div class="field">
+                    <label for="preferred-foot">Preferred foot</label>
+                    <select id="preferred-foot" name="preferred_foot">
+                      <option value="">—</option>
+                      {% for f in preferred_feet %}<option value="{{ f }}"{% if player.preferred_foot == f %} selected{% endif %}>{{ f }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="archetype">Build / archetype</label>
+                    <input id="archetype" name="archetype" maxlength="40" value="{{ player.archetype or '' }}" placeholder="e.g. Box-to-box" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="bio">About you</label>
+                  <textarea id="bio" name="bio" rows="3" maxlength="500" placeholder="Where you like to play, what you're working on.">{{ player.bio or '' }}</textarea>
+                </div>
+                <div class="form-actions"><button type="submit" class="btn">Save profile</button></div>
+              </form>
+            </details>
+            {% if not gamertag %}
+              <form method="post" action="/me/gamertag" class="inline-form profile-gamertag">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="hidden" name="redirect_to" value="/players/{{ player.discord_id }}" />
+                <label for="my-gamertag">EA gamertag</label>
+                <input id="my-gamertag" name="player_name" list="gamertag-options" maxlength="64" autocomplete="off" required placeholder="As it shows in game" />
+                <button type="submit" class="btn secondary">Link</button>
+                <datalist id="gamertag-options">
+                  {% for g in gamertag_options %}<option value="{{ g }}"></option>{% endfor %}
+                </datalist>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      </section>
+
+      {% if see_private %}{% include "_development.html" %}{% endif %}
+
+      {# --- Coach notes: staff only, never the player ---------------------- #}
+      {% if notes_visible %}
+        <section class="panel" id="coach-notes">
+          <header class="panel-head panel-staff"><h2>Coach notes</h2><span class="muted">Staff only</span></header>
+          <div class="panel-body">
+            <p class="field-hint">Only the Club President, Head Coach and Coaches can see these, never {{ player.display_name }}.</p>
+            <form method="post" action="/players/{{ player.discord_id }}/notes" class="stack-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <label class="visually-hidden" for="note-body">New note</label>
+              <textarea id="note-body" name="body" rows="3" maxlength="2000" required placeholder="Training focus, a conversation you had, what to watch for…"></textarea>
+              <div class="form-actions"><button type="submit" class="btn staff">Add note</button></div>
+            </form>
+            {% if notes %}
+              <ul class="note-list">
+                {% for n in notes %}
+                  <li class="note">
+                    <p>{{ n.body }}</p>
+                    <div class="note-meta">
+                      <span>{{ n.author_name }} · {{ localtime(n.created_at, 'date') }}</span>
+                      {% if is_management or n.author_discord_id == user.id|string %}
+                        <form method="post" action="/players/{{ player.discord_id }}/notes/{{ n.id }}/delete"
+                              onsubmit="return confirm('Delete this note?');">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                          <button type="submit" class="btn-link">Delete</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
+
+    <div class="dash-side">
+      {% if see_private %}
+        <section class="panel">
+          <header class="panel-head"><h2>Contract</h2>{% if not is_self %}<span class="muted">Player &amp; staff</span>{% endif %}</header>
+          <div class="panel-body">
+            {% if contract %}
+              <dl class="kv">
+                <div><dt>Status</dt><dd>{{ status_label(contract.squad_status) }}</dd></div>
+                <div><dt>Term</dt><dd>{{ weeks_label(contract.weeks) }}</dd></div>
+                <div><dt>Ends</dt><dd class="contract-{{ contract_state }}">{{ localtime(contract.expires_at, 'date') }} · {{ time_left }}</dd></div>
+                {% if contract.renewal_count %}<div><dt>Renewed</dt><dd>{{ contract.renewal_count }}×</dd></div>{% endif %}
+              </dl>
+            {% else %}
+              <p class="muted panel-empty">Not under contract.</p>
+            {% endif %}
+            {% if history | length > (1 if contract else 0) %}
+              <p class="field-hint">Previous contracts:</p>
+              <ul class="plain-list">
+                {% for c in history if c.ended_at %}
+                  <li>{{ status_label(c.squad_status) }}, {{ localtime(c.starts_at, 'date') }} – {{ localtime(c.ended_at, 'date') }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </div>
+        </section>
+
+        <section class="panel">
+          <header class="panel-head"><h2>Attendance</h2></header>
+          <div class="panel-body">
+            {% if attendance and attendance.has_history %}
+              <dl class="kv">
+                {% if attendance.rate is not none %}<div><dt>Turned up</dt><dd>{{ attendance.rate }}%</dd></div>{% endif %}
+                <div><dt>Present</dt><dd>{{ attendance.present }}</dd></div>
+                <div><dt>Absent</dt><dd>{{ attendance.absent }}</dd></div>
+                {% if attendance.excused %}<div><dt>Excused</dt><dd>{{ attendance.excused }}</dd></div>{% endif %}
+              </dl>
+            {% else %}
+              <p class="muted panel-empty">No attendance marked yet.</p>
+            {% endif %}
+          </div>
+        </section>
+      {% endif %}
+
+      {% if can_set_role %}
+        <section class="panel">
+          <header class="panel-head panel-staff"><h2>Club role</h2></header>
+          <div class="panel-body">
+            <form method="post" action="/players/{{ player.discord_id }}/role" class="stack-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+              <label class="visually-hidden" for="club-role">Club role</label>
+              <select id="club-role" name="club_role">
+                <option value="">No club role</option>
+                {% for r in club_roles %}<option value="{{ r }}"{% if player.club_role == r %} selected{% endif %}>{{ r }}</option>{% endfor %}
+              </select>
+              <div class="form-actions"><button type="submit" class="btn secondary">Save role</button></div>
+            </form>
+            <p class="field-hint">President and Head Coach run contracts and the squad. Coaches run matchday and coach notes. To announce it, use a staff offer on <a href="/roster">Moves &amp; contracts</a> instead.</p>
+          </div>
+        </section>
+      {% endif %}
+
+      {% if see_private and moves %}
+        <section class="panel">
+          <header class="panel-head"><h2>History</h2></header>
+          <ul class="plain-list history-list">
+            {% for m in moves %}
+              <li>
+                <span class="muted">{{ localtime(m.announced_at, 'date') }}</span>
+                {% if m.kind == 'offer' %}Offered a contract{% if m.position %} ({{ m.position }}){% endif %}
+                {% elif m.kind == 'staff_offer' %}Offered the {{ m.position }} role
+                {% elif m.kind == 'renewal' %}Offered a renewal
+                {% else %}Left the club{% endif %}
+                {%- if m.response == 'accepted' %} — accepted{% elif m.response == 'declined' %} — declined{% endif %}
+                {%- if m.confirmed_at %}, confirmed{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

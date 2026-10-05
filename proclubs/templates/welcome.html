@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block body_attrs %} class="welcome-body"{% endblock %}
+{% block body %}
+{# The one public page. Everything else on the site is for members of the
+   club's Discord server, so this is the club's shop window: who we are,
+   where you'd fit, how we're doing, and how to join. The facts are live
+   (standing, results, squad, staff, open shirts); the words come from the
+   Club profile that management edits. #}
+{% from "_icons.html" import icon %}
+{% from "_crest.html" import crest %}
+{% set motto = SITE_MOTTO.split('. ') %}
+<div class="welcome">
+  <header class="welcome-top">
+    <a class="welcome-brand" href="/">
+      {{ crest(initials(SITE_NAME, 3), 40, "top") }}
+      <span class="brand-text">
+        <span class="brand-name">{{ SITE_NAME }}</span>
+        <span class="brand-tagline">{{ SITE_TAGLINE }}</span>
+      </span>
+    </a>
+    <nav class="welcome-top-links">
+      <span class="topbar-clock" data-utc-clock>{{ icon('clock') }}<span class="clock-text">UTC</span></span>
+      {% if is_member %}
+        <a class="btn btn-sm" href="/">Go to the club</a>
+      {% else %}
+        <a class="btn secondary btn-sm" href="/login">Member sign in</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  {# --- The banner -------------------------------------------------------- #}
+  <section class="welcome-banner">
+    <div class="welcome-banner-crest">{{ crest(initials(SITE_NAME, 3), 132, "hero") }}</div>
+    <h1 class="welcome-name">{{ SITE_NAME }}</h1>
+    <p class="welcome-sub">{{ SITE_TAGLINE }}{% if profile.region %} · {{ profile.region }}{% endif %}</p>
+    {% if profile.headline %}<p class="welcome-headline">{{ profile.headline }}</p>{% endif %}
+  </section>
+
+  {# --- Intro -------------------------------------------------------------- #}
+  <section class="welcome-intro">
+    <div>
+      <p class="kicker">{{ SITE_SHORT }} / club records</p>
+      <h2 class="welcome-motto">
+        {% for line in motto %}<span>{{ line }}{{ '.' if not line.endswith('.') else '' }}</span>{% endfor %}
+      </h2>
+      <p class="kicker kicker-dim">EA FC Pro Clubs / {{ profile.platform or platform_label }}</p>
+    </div>
+    <div class="welcome-intro-text">
+      {% if profile.about %}<p>{{ profile.about }}</p>{% endif %}
+      <p>Members get a player file: stats from every match the club records, their contract,
+        attendance and the matchday plan. Sign in with the Discord account you use in our server.</p>
+    </div>
+  </section>
+
+  <nav class="welcome-links" aria-label="Get involved">
+    <a class="link-card link-card-primary" href="{{ DISCORD_INVITE_URL or '/login' }}"{% if DISCORD_INVITE_URL %} target="_blank" rel="noopener noreferrer"{% endif %}>
+      {{ icon('shield') }}
+      <span class="link-card-text">
+        <span class="kicker">Recruitment</span>
+        <span class="link-card-title">Join the club</span>
+        <span class="link-card-sub">Say hello in our Discord. Trials run on match nights.</span>
+      </span>
+      {{ icon('chevron') }}
+    </a>
+    <a class="link-card" href="/login">
+      {{ icon('file') }}
+      <span class="link-card-text">
+        <span class="kicker">Your place in the squad</span>
+        <span class="link-card-title">Player portal</span>
+        <span class="link-card-sub">Stats, contract and match history.</span>
+      </span>
+      {{ icon('chevron') }}
+    </a>
+    <a class="link-card" href="#the-club">
+      {{ icon('book') }}
+      <span class="link-card-text">
+        <span class="kicker">The standard</span>
+        <span class="link-card-title">How we play</span>
+        <span class="link-card-sub">{{ profile.play_style or 'Set positions, a real tactic, a squad that turns up.' }}</span>
+      </span>
+      {{ icon('chevron') }}
+    </a>
+  </nav>
+
+  {# --- Where you'd play --------------------------------------------------- #}
+  <div class="welcome-section-head">
+    <h2><span class="section-num">01</span> Choose your position</h2>
+    <span class="kicker kicker-dim">Formation {{ formation }}</span>
+  </div>
+  <div class="line-grid">
+    {% for line in lines %}
+      <article class="line-card{{ ' is-open' if line.open }}">
+        <div class="line-card-top">
+          {{ icon(line.icon) }}
+          <span class="line-card-num">{{ '%02d' % loop.index }}</span>
+        </div>
+        <svg class="line-pitch" viewBox="0 0 100 140" aria-hidden="true" focusable="false">
+          <rect x="4" y="4" width="92" height="132" class="lp-grass"/>
+          <g class="lp-chalk">
+            <rect x="4" y="4" width="92" height="132"/>
+            <line x1="4" y1="70" x2="96" y2="70"/>
+            <circle cx="50" cy="70" r="11"/>
+            <rect x="24" y="4" width="52" height="20"/><rect x="37" y="4" width="26" height="7"/>
+            <rect x="24" y="116" width="52" height="20"/><rect x="37" y="129" width="26" height="7"/>
+          </g>
+          {% if line.band %}<rect x="4" y="{{ line.band.y }}" width="92" height="{{ line.band.h }}" class="lp-band"/>{% endif %}
+          {% for d in line.dots %}
+            <circle cx="{{ d.x }}" cy="{{ d.y }}" r="{{ 4.2 if d.mine else 3 }}"
+                    class="lp-dot{{ ' mine' if d.mine }}{{ ' open' if d.open }}"/>
+          {% endfor %}
+        </svg>
+        <div class="line-card-body">
+          <h3>{{ line.label }}</h3>
+          <p>{{ line.tagline }}</p>
+          {% if line.open %}
+            <span class="line-status open">Recruiting · {{ line.open | join(', ') }}</span>
+          {% elif line.used %}
+            <span class="line-status">Covered · trials welcome</span>
+          {% else %}
+            <span class="line-status">Not in our {{ formation }}</span>
+          {% endif %}
+        </div>
+      </article>
+    {% endfor %}
+    <article class="line-card line-card-staff">
+      <div class="line-card-top">
+        {{ icon('whistle') }}
+        <span class="line-card-num">{{ '%02d' % (lines | length + 1) }}</span>
+      </div>
+      <svg class="line-pitch" viewBox="0 0 100 140" aria-hidden="true" focusable="false">
+        <rect x="4" y="4" width="92" height="132" class="lp-grass"/>
+        <g class="lp-chalk">
+          <rect x="4" y="4" width="92" height="132"/>
+          <line x1="4" y1="70" x2="96" y2="70"/><circle cx="50" cy="70" r="11"/>
+          <rect x="24" y="4" width="52" height="20"/><rect x="24" y="116" width="52" height="20"/>
+        </g>
+        {# A coach's whiteboard: runs drawn over the pitch. #}
+        <g class="lp-plan">
+          <path d="M30 104 C 26 84, 22 66, 26 46" /><path d="M24 50 l2 -5 3 4.5" />
+          <path d="M70 104 C 76 86, 80 70, 74 42" /><path d="M71 46 l3 -5 2.5 5" />
+          <path d="M50 92 L 50 34" stroke-dasharray="3 3" /><path d="M47 38 l3 -5 3 5" />
+        </g>
+        <g class="lp-x"><path d="M28 30 l6 6 m0 -6 l-6 6"/><path d="M66 30 l6 6 m0 -6 l-6 6"/></g>
+      </svg>
+      <div class="line-card-body">
+        <h3>Coaching</h3>
+        <p>Set the plan.</p>
+        <span class="line-status">{{ staff | length }} on the staff</span>
+      </div>
+    </article>
+  </div>
+
+  {# --- Club operations and live standing ---------------------------------- #}
+  <div class="ops-grid" id="the-club">
+    <section class="ops-panel">
+      <div class="ops-head">
+        <div>
+          <p class="kicker">{{ SITE_SHORT }} / club operations</p>
+          <h2>The club, this season.</h2>
+        </div>
+        {{ crest(initials(SITE_NAME, 3), 56, "ops") }}
+      </div>
+
+      <div class="ops-figures">
+        <div><span class="ops-value">{{ squad_size }}</span><span class="ops-label">Players signed</span></div>
+        <div><span class="ops-value">{{ staff | length }}</span><span class="ops-label">Coaching staff</span></div>
+        <div><span class="ops-value">{{ matches_recorded }}</span><span class="ops-label">Matches recorded</span></div>
+      </div>
+
+      <div class="ops-feature">
+        <div class="ops-feature-head">
+          <span class="kicker kicker-dim">Next fixture</span>
+          <span class="kicker kicker-dim">{{ formation }}</span>
+        </div>
+        {% if next_event %}
+          <h3>{{ ('vs ' ~ next_event.opponent) if next_event.opponent else next_event.title }}</h3>
+          <p class="muted">{{ next_event.event_type }} · {{ localtime(next_event.scheduled_at, 'short') }}</p>
+          <div class="ops-meter">
+            <span class="ops-meter-figure"><strong>{{ going }}</strong> / {{ shirts }} signed up</span>
+            <span class="kicker kicker-dim">{{ ((going / shirts * 100) | round | int) if shirts else 0 }}%</span>
+          </div>
+          <div class="meter" role="presentation"><span style="width: {{ [going / shirts * 100, 100] | min if shirts else 0 }}%"></span></div>
+        {% else %}
+          <h3>No fixture scheduled</h3>
+          <p class="muted">Match nights are announced in our Discord first.</p>
+        {% endif %}
+      </div>
+
+      <div class="ops-row">
+        <span class="kicker">{{ icon('bell') }} Club dispatch</span>
+        <p>{{ profile.recruiting or "We're always looking at players who fit. Join the Discord and say hello." }}</p>
+      </div>
+
+      <div class="ops-line">
+        <span class="kicker kicker-dim">Club form</span>
+        {% if form %}
+          <span class="form-chips">{% for r in form %}<span class="form-chip {{ r }}">{{ r }}</span>{% endfor %}</span>
+        {% else %}
+          <span class="muted">Building our record</span>
+        {% endif %}
+      </div>
+      {% if looking_for %}
+        <div class="ops-line">
+          <span class="kicker kicker-dim">Open shirts</span>
+          <span class="ops-open">{{ looking_for | join(' · ') }}</span>
+        </div>
+      {% endif %}
+
+      <div class="ops-foot">
+        <span class="kicker kicker-dim">{% if president %}{{ president.display_name }} / Club President{% else %}{{ SITE_NAME }}{% endif %}</span>
+        <span class="kicker kicker-dim">{{ SITE_SHORT }}</span>
+      </div>
+      <div class="ops-actions">
+        {% if DISCORD_INVITE_URL %}
+          <a class="btn btn-sm" href="{{ DISCORD_INVITE_URL }}" target="_blank" rel="noopener noreferrer">Join our Discord {{ icon('chevron') }}</a>
+        {% endif %}
+        <a class="ops-link" href="/login">Open your player file {{ icon('chevron') }}</a>
+      </div>
+    </section>
+
+    <section class="standing-panel">
+      <div class="standing-panel-head">
+        <h2>Club standing</h2>
+        {% if stats_teaser %}<span class="live-chip"><span class="live-dot"></span>Live</span>{% endif %}
+      </div>
+      <div class="standing-club">
+        {{ icon('pulse') }}
+        <div>
+          <span class="standing-club-name">{{ club_name }}</span>
+          <span class="kicker kicker-dim">EA FC Pro Clubs · {{ platform_label }}</span>
+        </div>
+      </div>
+      <div class="standing-figures">
+        <div>
+          <span class="ops-label">Skill rating</span>
+          <span class="standing-big">{{ stats_teaser.skillRating if stats_teaser and stats_teaser.skillRating else '—' }}</span>
+        </div>
+        <div>
+          <span class="ops-label">Win rate</span>
+          <span class="standing-big">{{ (stats_teaser.winRate ~ '%') if stats_teaser and stats_teaser.winRate is not none else '—' }}</span>
+        </div>
+      </div>
+      <div class="meter meter-quiet" role="presentation"><span style="width: {{ stats_teaser.winRate if stats_teaser and stats_teaser.winRate is not none else 0 }}%"></span></div>
+      <div class="standing-rows">
+        <div><span class="kicker kicker-dim">Record</span><span>{{ stats_teaser.record if stats_teaser and stats_teaser.record else '—' }}</span></div>
+        <div><span class="kicker kicker-dim">Played</span><span>{{ stats_teaser.played if stats_teaser and stats_teaser.played else '—' }}</span></div>
+        <div><span class="kicker kicker-dim">Last five</span>
+          {% if form %}<span class="form-chips">{% for r in form %}<span class="form-chip {{ r }}">{{ r }}</span>{% endfor %}</span>{% else %}<span>—</span>{% endif %}
+        </div>
+      </div>
+
+      {% set facts = [('When we play', profile.match_nights), ('How we play', profile.play_style),
+                      ('Region', profile.region), ('Platform', profile.platform)] %}
+      {% if facts | selectattr(1) | list %}
+        <dl class="kv standing-facts">
+          {% for label, value in facts if value %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+        </dl>
+      {% endif %}
+      <p class="standing-foot kicker kicker-dim">{{ icon('clock') }} Live from EA's Pro Clubs data</p>
+    </section>
+  </div>
+
+  {% if staff %}
+    <div class="welcome-section-head">
+      <h2><span class="section-num">02</span> The staff</h2>
+      <span class="kicker kicker-dim">Who runs the club</span>
+    </div>
+    <ul class="staff-strip">
+      {% for p in staff %}
+        <li>
+          {% if p.avatar_url %}
+            <img class="roster-avatar" src="{{ p.avatar_url }}" alt="" width="44" height="44" loading="lazy" decoding="async" />
+          {% else %}
+            <span class="roster-avatar move-avatar-fallback">{{ initials(p.display_name) }}</span>
+          {% endif %}
+          <span class="person-text"><span class="squad-name">{{ p.display_name }}</span><span class="kicker kicker-dim">{{ p.club_role }}</span></span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <footer class="welcome-footer">
+    <span>{{ icon('shield') }} {{ SITE_NAME }}. Unofficial, fan-run, not affiliated with EA.</span>
+    <span class="kicker kicker-dim">{{ SITE_SHORT }} / a Pro Clubs side in EA FC</span>
+  </footer>
+</div>
+{% endblock %}

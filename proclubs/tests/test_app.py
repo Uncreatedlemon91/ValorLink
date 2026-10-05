@@ -3,6 +3,7 @@ event/streamer flows through the actual HTTP layer.
 
 Run with: pytest proclubs/tests/test_app.py
 """
+import json
 import os
 import re
 import sys
@@ -19,10 +20,12 @@ os.environ["HTTPS_ONLY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from nacl.signing import SigningKey  # noqa: E402
 
 import app as appmod  # noqa: E402
 import config  # noqa: E402
 import database  # noqa: E402
+import discord_rsvp  # noqa: E402
 import services  # noqa: E402
 from models import Clip, Event  # noqa: E402
 
@@ -95,14 +98,11 @@ def test_public_pages_load_signed_out(client):
 
 
 def test_tactics_page_hides_editing_ui_from_non_staff(client):
-    anon = client.get("/tactics")
-    assert "Save Lineup" not in anon.text
-    assert "tactics-roster" not in anon.text
-    assert "Substitutes Bench" in anon.text  # read-only for everyone, like the pitch
-
     _login_fan(client)
     fan = client.get("/tactics")
     assert "Save Lineup" not in fan.text
+    assert "tactics-roster" not in fan.text
+    assert "Substitutes Bench" in fan.text  # read-only for members, like the pitch
 
 
 def test_tactics_page_shows_editing_ui_to_staff(client):
@@ -230,6 +230,7 @@ def test_league_page_shows_not_configured_when_club_id_unset(client, monkeypatch
 
 
 def test_league_page_shows_empty_state_when_no_data_yet(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [])
     monkeypatch.setattr(appmod.db, "latest_snapshot", lambda platform, club_id: None)
@@ -240,6 +241,7 @@ def test_league_page_shows_empty_state_when_no_data_yet(client, monkeypatch):
 
 
 def test_league_page_renders_table_rows(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
         {"club_id": "c2", "label": "Rivals FC", "is_us": False, "division": "3", "points": 15,
@@ -257,7 +259,9 @@ def test_league_page_renders_table_rows(client, monkeypatch):
     assert r.status_code == 200
     assert "Rivals FC" in r.text
     assert "YeeHaw FC" in r.text
-    assert "Division 3" in r.text
+    # The lede describes the grouping without printing the tier number:
+    # it comes from EA's all-time leaderboard and lags live play badly.
+    assert "groups in the same tier as us" in r.text
     assert "2 of" in r.text  # roster_size footnote
     # Sorted by points, highest first -- match the specific table-row spans,
     # not just any mention of "YeeHaw FC" (which is also the site's own brand
@@ -267,6 +271,7 @@ def test_league_page_renders_table_rows(client, monkeypatch):
 
 
 def test_league_page_explains_roster_members_hidden_by_division(client, monkeypatch):
+    _login_fan(client)
     # A club can be in the roster (we've played them) without appearing in
     # the main table (different division right now) -- the page must say
     # so explicitly rather than the club just silently not being there.
@@ -292,10 +297,14 @@ def test_league_page_explains_roster_members_hidden_by_division(client, monkeypa
     assert "1 more tracked club" in r.text
     assert "not shown above" in r.text
     assert "Rivals FC" in r.text
-    assert "Division 5" in r.text
+    # Named as a tier, not a division number: the value behind it is EA's
+    # stale leaderboard tier, and no division is shown anywhere on the site.
+    assert "different tier" in r.text
+    assert "Division 5" not in r.text
 
 
 def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLUB_ID", "8481799")
     monkeypatch.setattr(appmod.db, "league_table", lambda platform, club_id: [
         {"club_id": "8481799", "label": "YeeHaw FC", "is_us": True, "division": "8", "points": 10,
@@ -320,6 +329,7 @@ def test_league_page_explains_roster_members_not_polled_yet(client, monkeypatch)
 
 
 def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: 1700000000)
     monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [
         {"name": "Rivals FC", "played": 3, "wins": 2, "draws": 1, "losses": 0,
@@ -334,6 +344,7 @@ def test_api_history_rivals_returns_tracked_since_and_records(client, monkeypatc
 
 
 def test_api_history_rivals_empty_when_untracked(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.db, "tracked_since", lambda platform, club_id: None)
     monkeypatch.setattr(appmod.db, "rival_records", lambda platform, club_id: [])
     r = client.get("/api/history/rivals")
@@ -401,6 +412,7 @@ def test_focal_point_out_of_range_is_clamped_on_save(client):
 
 
 def test_article_cover_image_renders_with_its_focal_position(client):
+    _login_fan(client)
     slug = _seed_article(cover_image="data:image/png;base64,x", cover_focal_x=30, cover_focal_y=70)
     detail = client.get(f"/news/{slug}")
     assert 'style="object-position: 30.0% 70.0%;"' in detail.text
@@ -502,7 +514,10 @@ def test_failed_announcement_does_not_save_a_message_id(client, monkeypatch):
         assert article.discord_message_id is None
 
 
-def test_article_page_shows_discord_reaction_count(client):
+def test_article_page_folds_discord_reactions_into_the_like_count(client):
+    """One figure, not two: the Discord announcement's reactions are added
+    to the site's own likes rather than shown as a separate badge."""
+    _login_fan(client)
     slug = _seed_article(title="Popular Post")
     with database.get_session() as session:
         article = services.get_article(session, slug)
@@ -511,12 +526,22 @@ def test_article_page_shows_discord_reaction_count(client):
         session.commit()
 
     detail = client.get(f"/news/{slug}")
-    assert "12 on Discord" in detail.text
+    assert "12 Likes" in detail.text
+    assert "on Discord" not in detail.text
+
+    # A site like adds to the same total rather than starting a second one.
+    _login_fan(client)
+    token = _csrf(client, f"/news/{slug}")
+    client.post(f"/news/{slug}/like", data={"csrf_token": token})
+    detail = client.get(f"/news/{slug}")
+    assert "13 Likes" in detail.text
 
 
-def test_article_page_hides_discord_reaction_badge_when_zero_or_unset(client):
+def test_article_like_count_is_site_only_when_no_discord_reactions(client):
+    _login_fan(client)
     slug = _seed_article(title="Quiet Post")
     detail = client.get(f"/news/{slug}")
+    assert "0 Likes" in detail.text
     assert "on Discord" not in detail.text
 
     with database.get_session() as session:
@@ -526,6 +551,7 @@ def test_article_page_hides_discord_reaction_badge_when_zero_or_unset(client):
         session.commit()
 
     detail = client.get(f"/news/{slug}")
+    assert "0 Likes" in detail.text
     assert "on Discord" not in detail.text
 
 
@@ -661,12 +687,13 @@ def test_home_shows_most_recent_article_as_featured(client):
     # The most recently published article leads as the featured story...
     assert 'href="/news/second-post"' in home.text
     assert home.text.index("second-post") < home.text.index("first-post")
-    # ...linked twice within the hero itself (headline + CTA button), but
-    # not a third time from the "Latest news" rail below it.
-    assert home.text.count('href="/news/second-post"') == 2
+    # ...as one link (the whole lead story is the link), and it isn't
+    # repeated in the news list beneath it.
+    assert home.text.count('href="/news/second-post"') == 1
 
 
 def test_home_shows_engagement_badge_with_like_and_comment_counts(client):
+    _login_fan(client)
     # Must not be the single most-recent article -- that one is the hero
     # "featured" story, which doesn't render through the news-rail badge.
     slug = _seed_article(title="Big Win", cover_image="/static/img/cover.jpg")
@@ -703,11 +730,16 @@ def test_home_hides_engagement_badge_without_cover_image(client):
 
 
 def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
+    _login_fan(client)
     _seed_event()
 
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: None)
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    # overall_stats deliberately fails here: the crest is fetched
+    # independently, so a stats outage must not blank club identity.
+    def _boom(platform, club_id, **kw):
+        raise appmod.ea_client.EAApiError("stats down", 503)
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", _boom)
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
     })
     home = client.get("/")
@@ -715,37 +747,65 @@ def test_home_uses_real_crest_color_when_ea_data_available(client, monkeypatch):
     assert "crest-branded" in home.text
 
 
-def test_home_standing_band_shows_countup_points_and_accent_colored_ring(client, monkeypatch):
+def test_home_standing_band_shows_countup_rating_and_live_record(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
-        "currentDivision": 3, "bestDivision": 1, "points": 1450,
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {
+        "skillRating": "1450", "wins": "111", "ties": "16", "losses": "58",
+        "bestDivision": "9",
     })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: {
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: {
         "crest": "#C91B1B", "kit1": "#F2F2F2", "kit2": "#DB1812",
         "accent": "#6CACDE", "accent_trim": "#F2F2F2",
     })
     home = client.get("/")
     assert 'class="standing-band"' in home.text
+    # Every figure in the band comes from live overallStats.
     assert 'data-countup="1450"' in home.text
-    # Uses the third-kit accent duo (blue + white), not the crest red. The
-    # accent tints the band's glow and the trim outlines the best-division
-    # marker; current division is deliberately not club-colored -- standing
-    # is the amber accent's job, and a club color there could collide with
-    # the win/draw/loss colors sitting next to it.
-    assert '#6CACDE' in home.text
-    assert 'border-color: #F2F2F2;' in home.text
-    assert '#C91B1B' not in home.text
+    assert "111W 16D 58L" in home.text
+    assert 'data-countup="60"' in home.text  # 111 of 185 won
+    # EA's bestDivision is a stale legacy field; no division is shown at all.
+    assert "Division" not in home.text
+    assert ">9<" not in home.text
+    # (The kit-accent glow behind this band went with the broadcast look;
+    # the real crest colour still shows on the next-match panel -- see the
+    # crest test above.)
 
 
-def test_home_standing_band_handles_missing_points_gracefully(client, monkeypatch):
+def test_home_standing_band_handles_missing_rating_gracefully(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
-    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id: {
-        "currentDivision": 3, "bestDivision": None, "points": None,
-    })
-    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id: None)
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {})
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
     home = client.get("/")
     assert "data-countup" not in home.text
     assert 'class="standing-band"' in home.text
+
+
+def test_site_never_shows_a_division_anywhere(client, monkeypatch):
+    """EA's allTimeLeaderboard record carries a currentDivision that ran a
+    hundred matches behind (10 while the club was really in 2), EA exposes
+    no live one, and it can't be derived from skill rating. So the site
+    reports no division at all rather than a wrong or hand-maintained one
+    -- see ea_client.division_stats and app._standing_teaser."""
+    _login_fan(client)
+    monkeypatch.setattr(appmod.config, "CLUB_ID", "8481799")
+    monkeypatch.setattr(appmod.ea_client, "division_stats", lambda platform, club_id, **kw: {
+        "currentDivision": "10", "bestDivision": "4", "points": "54",
+    })
+    monkeypatch.setattr(appmod.ea_client, "overall_stats", lambda platform, club_id, **kw: {
+        "skillRating": "2054", "wins": "111", "ties": "16", "losses": "58",
+    })
+    monkeypatch.setattr(appmod.ea_client, "crest_colors", lambda platform, club_id, **kw: None)
+    home = client.get("/")
+    assert 'data-countup="2054"' in home.text
+    assert "Division" not in home.text
+    assert ">10<" not in home.text
+
+    standings = client.get("/api/standings").json()
+    assert "currentDivision" not in standings
+    assert "bestDivision" not in standings
+    assert "points" not in standings  # same stale record
 
 
 def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):
@@ -755,6 +815,7 @@ def test_home_falls_back_to_neutral_crest_without_ea_data(client, monkeypatch):
 
 
 def test_home_shows_connect_with_us_button_to_the_discord_invite(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     home = client.get("/")
     assert "Connect with us" in home.text
@@ -767,20 +828,25 @@ def test_home_hides_connect_band_when_invite_not_configured(client, monkeypatch)
     assert "Connect with us" not in home.text
 
 
-def test_discord_banner_shows_for_signed_out_visitors(client, monkeypatch):
+def test_signed_out_visitors_get_the_splash_page_with_the_invite(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     home = client.get("/")
-    assert "discord-banner" in home.text
+    assert "welcome-banner" in home.text
     assert 'href="https://discord.gg/J4d7D5kDX8"' in home.text
-    assert "Sign in with Discord" in home.text
+    assert 'href="/login"' in home.text
+    # None of the members' pages are linked from it.
+    assert 'href="/events"' not in home.text and 'href="/news"' not in home.text
 
 
-def test_discord_banner_shows_for_signed_in_non_members(client, monkeypatch):
+def test_signed_in_non_members_are_shown_the_way_in(client, monkeypatch):
     monkeypatch.setattr(appmod.config, "DISCORD_INVITE_URL", "https://discord.gg/J4d7D5kDX8")
     _login_non_member(client)
-    home = client.get("/")
-    assert "discord-banner" in home.text
-    assert "not in our Discord server" in home.text
+    assert "welcome-banner" in client.get("/").text
+    r = client.get("/news")
+    assert r.status_code == 403
+    assert "for members of our Discord server" in r.text
+    assert 'href="https://discord.gg/J4d7D5kDX8"' in r.text
+    assert 'href="/logout"' in r.text
 
 
 def test_discord_banner_hidden_for_guild_members(client, monkeypatch):
@@ -859,6 +925,7 @@ def test_news_list_filters_by_category(client):
 
 
 def test_news_list_shows_engagement_badge_with_counts(client):
+    _login_fan(client)
     slug = _seed_article(title="Popular Post", cover_image="/static/img/cover.jpg")
     with database.get_session() as session:
         article = services.get_article(session, slug)
@@ -877,19 +944,17 @@ def test_news_list_hides_engagement_badge_when_no_engagement(client):
     assert "engagement-badge" not in listing
 
 
-def test_comments_section_prompts_sign_in_when_signed_out(client):
+def test_articles_need_signing_in(client):
     slug = _seed_article()
-    detail = client.get(f"/news/{slug}")
-    assert "Sign in with Discord" in detail.text
-    assert 'like-btn static' in detail.text
+    r = client.get(f"/news/{slug}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
-def test_comments_section_explains_membership_requirement_when_not_in_guild(client):
+def test_signing_in_returns_you_to_the_page_you_asked_for(client):
     slug = _seed_article()
-    _login_non_member(client)
-    detail = client.get(f"/news/{slug}")
-    assert "need to be a member of our Discord server to comment" in detail.text
-    assert 'like-btn static' in detail.text
+    client.get(f"/news/{slug}", follow_redirects=False)
+    r = client.post("/auth/dev", data={"name": "Fan", "member": "1"}, follow_redirects=False)
+    assert r.headers["location"] == f"/news/{slug}"
 
 
 def test_comment_route_rejects_signed_out_visitor(client):
@@ -1017,19 +1082,24 @@ def test_csrf_token_is_required_on_writes(client):
     assert r.status_code == 400
 
 
-def test_events_page_shows_events_but_has_no_editing_ui_even_for_staff(client):
-    _login_staff(client)
+def test_events_page_offers_editing_to_staff_only(client):
+    """Events are staff-editable on the site now -- the old Discord-only
+    rule is gone (see README's Events section). Everyone else still just
+    reads the schedule."""
     _seed_event(title="League Match", opponent="Rivals FC")
 
+    _login_fan(client)
     listing = client.get("/events")
     assert "Rivals FC" in listing.text
-    assert "New event" not in listing.text
-    assert ">Edit<" not in listing.text
     assert "/events/new" not in listing.text
-    assert "/edit" not in listing.text
+
+    _login_staff(client)
+    listing = client.get("/events")
+    assert "/events/new" in listing.text
 
 
 def test_events_page_shows_the_event_cover_image_when_present(client):
+    _login_fan(client)
     _seed_event(title="With A Cover", image="https://cdn.discordapp.com/guild-events/1/hash.png")
     _seed_event(title="No Cover", opponent="")
 
@@ -1038,15 +1108,45 @@ def test_events_page_shows_the_event_cover_image_when_present(client):
     assert listing.text.count('class="event-thumb"') == 1
 
 
-def test_event_editing_routes_no_longer_exist(client):
-    _login_staff(client)
+def test_event_editing_routes_are_staff_gated(client):
+    """The routes exist again, but a signed-in non-staff member must not
+    reach any of the writing ones."""
     event_id = _seed_event()
+    _login_fan(client)
 
-    assert client.get("/events/new").status_code == 404
-    assert client.post("/events/new", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
-    assert client.get(f"/events/{event_id}/edit").status_code == 404
-    assert client.post(f"/events/{event_id}/edit", data={"title": "x", "scheduled_at": "2027-01-01T18:00", "csrf_token": "x"}).status_code == 404
-    assert client.post(f"/events/{event_id}/delete", data={"csrf_token": "x"}).status_code == 404
+    assert client.get("/events/new", follow_redirects=False).status_code in (302, 303, 401, 403)
+    assert client.get(f"/events/{event_id}/edit", follow_redirects=False).status_code in (302, 303, 401, 403)
+    for path in (f"/events/{event_id}/edit", f"/events/{event_id}/delete",
+                 f"/events/{event_id}/announce", f"/events/{event_id}/signups-open"):
+        r = client.post(path, data={"title": "x", "scheduled_at": "2027-01-01T18:00",
+                                    "csrf_token": "x"}, follow_redirects=False)
+        assert r.status_code in (302, 303, 401, 403), path
+
+
+def test_staff_can_create_and_edit_an_event(client):
+    _login_staff(client)
+    token = _csrf(client, "/events/new")
+    r = client.post("/events/new", data={
+        "title": "Cup Final", "event_type": "Match", "scheduled_at": "2030-05-01T19:00",
+        "opponent": "Rivals FC", "description": "Bring your boots.", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    with database.get_session() as session:
+        event = services.list_events(session)[0]
+        assert event.title == "Cup Final" and event.opponent == "Rivals FC"
+        event_id = event.id
+
+    detail = client.get(f"/events/{event_id}")
+    assert "Cup Final" in detail.text and "Bring your boots." in detail.text
+
+    token = _csrf(client, f"/events/{event_id}/edit")
+    client.post(f"/events/{event_id}/edit", data={
+        "title": "Cup Final", "event_type": "Match", "scheduled_at": "2030-05-01T19:00",
+        "opponent": "Rivals FC", "description": "", "result": "W 3-0", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.get_event(session, event_id).result == "W 3-0"
 
 
 def _seed_clip(*, discord_message_id="m1", title="Nice goal",
@@ -1072,6 +1172,7 @@ def test_clips_page_shows_not_configured_message_when_sync_disabled(client, monk
 
 
 def test_clips_page_shows_empty_state_when_enabled_but_no_clips(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
     r = client.get("/clips")
     assert r.status_code == 200
@@ -1079,6 +1180,7 @@ def test_clips_page_shows_empty_state_when_enabled_but_no_clips(client, monkeypa
 
 
 def test_clips_page_lists_synced_clips(client, monkeypatch):
+    _login_fan(client)
     monkeypatch.setattr(config, "CLIPS_SYNC_ENABLED", True)
     _seed_clip(title="Nice goal", video_url="https://cdn.discordapp.com/attachments/1/2/clip.mp4",
                jump_url="https://discord.com/channels/1/2/m1")
@@ -1120,6 +1222,7 @@ def test_api_clips_lists_synced_clips_without_video_url(client):
 
 
 def test_article_resolves_clip_embed_to_live_video(client):
+    _login_fan(client)
     clip_id = _seed_clip(title="Golazo", video_url="https://cdn.discordapp.com/attachments/1/2/golazo.mp4",
                           jump_url="https://discord.com/channels/1/2/m1")
     slug = _seed_article(body_html=f'<p>Check this out:</p><clip-embed data-clip-id="{clip_id}"></clip-embed>')
@@ -1132,6 +1235,7 @@ def test_article_resolves_clip_embed_to_live_video(client):
 
 
 def test_article_clip_embed_falls_back_when_clip_gone(client):
+    _login_fan(client)
     slug = _seed_article(body_html='<p>Old clip:</p><clip-embed data-clip-id="99999"></clip-embed>')
 
     detail = client.get(f"/news/{slug}")
@@ -1170,9 +1274,11 @@ def test_duplicate_streamer_is_rejected(client):
 
 
 def test_nav_says_live_not_streamers(client):
-    home = client.get("/")
-    assert ">Live</a>" in home.text
-    assert ">Streamers</a>" not in home.text
+    _login_fan(client)
+    # "Live" is a tab in the Media section now, so it's on Media's pages.
+    page = client.get("/clips")
+    assert ">Live</a>" in page.text
+    assert ">Streamers</a>" not in page.text
 
 
 def test_featured_streamer_gets_embedded_player_on_live_page(client):
@@ -1258,3 +1364,1523 @@ def test_logout_clears_session(client):
     client.get("/logout", follow_redirects=False)
     r = client.get("/news/new", follow_redirects=False)
     assert r.status_code == 303
+
+
+# --------------------------------------------------------------------------- #
+# Squad Moves (/roster)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def roster_ready(monkeypatch):
+    """A configured, reachable Discord with two members in it.
+
+    ROSTER_MOVES_ENABLED is computed at import, so the gate on the routes
+    is patched alongside the channel it reads -- monkeypatching the env
+    var alone would leave the flag stale and every test here blocked.
+    """
+    monkeypatch.setattr(config, "ROSTER_MOVES_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_ANNOUNCE_CHANNEL_ID", "555")
+    monkeypatch.setattr(appmod.discord_roster, "fetch_guild_members", lambda: [
+        {"nick": "Cap", "avatar": None, "roles": [],
+         "user": {"id": "42", "username": "alex", "global_name": None,
+                  "avatar": "abc", "discriminator": "0", "bot": False}},
+        {"nick": None, "avatar": None, "roles": [],
+         "user": {"id": "43", "username": "sam", "global_name": None,
+                  "avatar": None, "discriminator": "0", "bot": False}},
+    ])
+    appmod.discord_roster.invalidate_members_cache()
+    posted = []
+
+    def fake_post(path, json):
+        posted.append((path, json))
+
+        class _R:
+            @staticmethod
+            def json():
+                return {"id": "msg-1"}
+        return _R()
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "post", fake_post)
+    yield posted
+    appmod.discord_roster.invalidate_members_cache()
+
+
+def test_roster_page_is_staff_only(client, roster_ready):
+    # Signed out -> sent to sign in; signed in but not staff -> refused.
+    assert client.get("/roster", follow_redirects=False).status_code == 303
+    _login_fan(client)
+    assert client.get("/roster", follow_redirects=False).status_code == 403
+    _login_staff(client)
+    assert client.get("/roster").status_code == 200
+
+
+def test_roster_page_lists_members_with_their_discord_avatars(client, roster_ready):
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "Cap" in html and "sam" in html
+    assert "cdn.discordapp.com/avatars/42/abc.png" in html
+    # Nobody without an avatar set should render a broken image.
+    assert "cdn.discordapp.com/embed/avatars/" in html
+
+
+def test_squad_tabs_follow_the_viewers_access(client, roster_ready):
+    """Every member sees the players; the overview is for staff, and
+    contracts for management."""
+    _login_fan(client)
+    page = client.get("/players").text
+    assert 'href="/players"' in page
+    assert 'href="/squad"' not in page and 'href="/roster"' not in page
+    _login_staff(client)
+    page = client.get("/players").text
+    assert 'href="/squad"' in page and 'href="/roster"' in page
+
+
+def test_offering_a_position_posts_the_announcement_and_records_it(client, roster_ready):
+    _login_staff(client, name="Coach")
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": "Striker",
+        "note": "Joining from Rivals FC.", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+    assert len(roster_ready) == 1
+    path, body = roster_ready[0]
+    assert path == "/channels/555/messages"
+    embed = body["embeds"][0]
+    assert "Cap" in embed["title"] and "Offer" in embed["title"]
+    assert "Striker" in embed["description"]
+    assert body["allowed_mentions"] == {"users": ["42"]}
+
+    with database.get_session() as session:
+        moves = services.recent_roster_moves(session)
+    assert len(moves) == 1
+    assert (moves[0].kind, moves[0].display_name) == ("offer", "Cap")
+    assert moves[0].discord_message_id == "msg-1"
+    assert moves[0].announced_by_name == "Coach"
+
+
+def test_letting_someone_go_posts_the_other_announcement(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "position": "", "note": "",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "Departure" in embed["title"]
+    assert "sam" in embed["title"]
+
+
+def test_announcing_never_touches_a_discord_role(client, roster_ready):
+    """The one thing this feature must not do: a squad announcement is a
+    message, not a permission change."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert [path for path, _ in roster_ready] == ["/channels/555/messages"]
+
+
+def test_the_history_shows_what_was_announced(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": "Striker", "csrf_token": token,
+    }, follow_redirects=False)
+    html = client.get("/roster").text
+    assert "Recently announced" in html
+    assert "roster-move-offer" in html
+    assert "Striker" in html
+
+
+def test_an_id_that_is_not_in_the_server_is_refused(client, roster_ready):
+    """The form posts an id back; a stale tab or a hand-edited one must
+    not be able to announce a position for a stranger."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "99999", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+    with database.get_session() as session:
+        assert services.recent_roster_moves(session) == []
+
+
+def test_an_unknown_kind_is_refused(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "promote", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_announcing_requires_a_valid_csrf_token(client, roster_ready):
+    _login_staff(client)
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "csrf_token": "forged",
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_failed_post_is_recorded_and_reported_not_silently_dropped(client, roster_ready, monkeypatch):
+    """Otherwise staff see a success redirect, assume the club announced
+    something, and never find out it didn't."""
+    def boom(path, json):
+        raise appmod.discord_roster.DiscordApiError("Missing Access, code 50001")
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "post", boom)
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8", "squad_status": "Starter",
+        "position": "Striker", "csrf_token": token,
+    }, follow_redirects=True)
+    assert "Missing Access" in r.text
+    with database.get_session() as session:
+        moves = services.recent_roster_moves(session)
+    assert len(moves) == 1 and moves[0].discord_message_id is None
+    assert "not delivered to Discord" in r.text
+
+
+def test_the_page_explains_a_missing_server_members_intent(client, roster_ready, monkeypatch):
+    """A 403 here is a checkbox in Discord's Developer Portal, not a bug
+    in this app -- the page has to say so or nobody will find it."""
+    def forbidden():
+        raise appmod.discord_roster.DiscordApiError("403 Forbidden (Missing Access, code 50001)")
+
+    monkeypatch.setattr(appmod.discord_roster, "fetch_guild_members", forbidden)
+    appmod.discord_roster.invalidate_members_cache()
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "Server Members Intent" in html
+    assert "403 Forbidden" in html
+
+
+def test_the_page_names_the_settings_it_is_missing_when_unconfigured(client, monkeypatch):
+    monkeypatch.setattr(config, "ROSTER_MOVES_ENABLED", False)
+    monkeypatch.setattr(config, "roster_moves_missing", lambda: ["DISCORD_BOT_TOKEN"])
+    _login_staff(client)
+    html = client.get("/roster").text
+    assert "DISCORD_BOT_TOKEN" in html
+
+
+def test_the_page_says_whether_discord_roles_follow(client, roster_ready, monkeypatch):
+    """Staff have to know whether a Let Go takes the roles too, or somebody
+    will be 'let go' and keep their access for a week."""
+    _login_staff(client)
+    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", False)
+    assert "roles are moved by hand" in client.get("/roster").text
+    monkeypatch.setattr(config, "ROLE_SYNC_ENABLED", True)
+    assert "managed Discord roles follow every change" in client.get("/roster").text
+
+
+def test_the_page_says_whether_accepting_will_set_the_role(client, roster_ready, monkeypatch):
+    """The one automatic role write in the app -- staff should know from
+    the page whether it's actually switched on, not from the .env."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    _login_staff(client)
+    assert "adds them to the squad role automatically" in client.get("/roster").text
+
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
+    assert "ROSTER_SQUAD_ROLE_ID" in client.get("/roster").text
+
+
+# --------------------------------------------------------------------------- #
+# Offers: the player answers, then staff confirm the signing
+# --------------------------------------------------------------------------- #
+def _offer(client, roster_ready, *, discord_id="42", position="Striker"):
+    """Publishes an offer through the real route and returns its row id."""
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "offer", "contract_weeks": "8", "squad_status": "Starter", "position": position,
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0].id
+
+
+def _press(client, key, *, custom_id, user_id, name="Cap"):
+    """One button press, signed the way Discord signs it."""
+    payload = {
+        "type": discord_rsvp.INTERACTION_MESSAGE_COMPONENT,
+        "data": {"custom_id": custom_id},
+        "member": {"user": {"id": str(user_id), "username": name, "avatar": None}},
+    }
+    body = json.dumps(payload).encode()
+    timestamp = "1700000000"
+    signature = key.sign(timestamp.encode() + body).signature.hex()
+    return client.post("/discord/interactions", content=body, headers={
+        "X-Signature-Ed25519": signature,
+        "X-Signature-Timestamp": timestamp,
+        "Content-Type": "application/json",
+    })
+
+
+@pytest.fixture
+def discord_key(monkeypatch):
+    key = SigningKey.generate()
+    monkeypatch.setattr(config, "DISCORD_PUBLIC_KEY", bytes(key.verify_key).hex())
+    return key
+
+
+@pytest.fixture
+def role_grant(monkeypatch):
+    """Role granting switched on, with the PUTs captured rather than sent."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
+    monkeypatch.setattr(config, "DISCORD_GUILD_ID", 999)
+    puts = []
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", lambda p: puts.append(p))
+    return puts
+
+
+def test_an_offer_is_posted_with_accept_and_decline_buttons(client, roster_ready):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    body = roster_ready[0][1]
+    ids = [c["custom_id"] for c in body["components"][0]["components"]]
+    assert ids == [f"roster:accepted:{move_id}", f"roster:declined:{move_id}"]
+
+
+def test_a_departure_gets_no_buttons(client, roster_ready):
+    """Nobody declines being let go."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert "components" not in roster_ready[0][1]
+
+
+def test_accepting_grants_the_squad_role_and_edits_the_offer_in_place(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Offer Accepted" in payload["data"]["embeds"][0]["title"]
+    # Buttons cleared: a settled offer with live buttons invites presses
+    # that can't be honoured.
+    assert payload["data"]["components"] == []
+
+    assert role_grant == ["/guilds/999/members/42/roles/777"]
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted"
+        assert move.role_granted is True
+        assert move.role_error is None
+        assert move.responded_at is not None
+
+
+def test_declining_records_the_answer_and_touches_no_role(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    assert "Offer Declined" in r.json()["data"]["embeds"][0]["title"]
+    assert role_grant == [], "declining must never write a role"
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "declined"
+        assert move.role_granted is False
+
+
+def test_only_the_player_the_offer_names_can_answer_it(
+        client, roster_ready, discord_key, role_grant):
+    """Otherwise anyone who can see the channel could accept on somebody
+    else's behalf -- and, with role granting on, give themselves a role."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=43)
+    assert r.status_code == 200
+    # Ephemeral refusal (type 4, flag 64), not an edit of the post.
+    assert r.json()["type"] == 4
+    assert r.json()["data"]["flags"] == 64
+    assert "isn't yours" in r.json()["data"]["content"]
+
+    assert role_grant == []
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).response is None
+
+
+def test_an_offer_can_only_be_answered_once(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    assert r.json()["type"] == 4
+    assert "already been accepted" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).response == "accepted"
+    assert len(role_grant) == 1, "a second press must not re-grant"
+
+
+def test_an_acceptance_stands_even_if_the_role_write_fails(
+        client, roster_ready, discord_key, monkeypatch):
+    """The press is theirs. A permissions problem on our side is not a
+    reason to pretend they didn't answer -- it's a thing to go and fix."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", True)
+    monkeypatch.setattr(config, "ROSTER_SQUAD_ROLE_ID", "777")
+
+    def forbidden(path):
+        raise appmod.discord_roster.DiscordApiError("403 Forbidden (Missing Permissions, code 50013)")
+
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", forbidden)
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Offer Accepted" in r.json()["data"]["embeds"][0]["title"]
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted"
+        assert move.role_granted is False
+        assert "Missing Permissions" in move.role_error
+
+    # And staff are told, rather than seeing an acceptance that silently
+    # granted nothing.
+    html = client.get("/roster").text
+    assert "the squad role wasn't added" in html
+    assert "Missing Permissions" in html
+
+
+def test_accepting_records_the_answer_when_role_granting_is_off(
+        client, roster_ready, discord_key, monkeypatch):
+    """The offer flow has to work without ROSTER_SQUAD_ROLE_ID set."""
+    monkeypatch.setattr(config, "ROSTER_ROLE_GRANT_ENABLED", False)
+    puts = []
+    monkeypatch.setattr(appmod.discord_roster.discord_api, "put", lambda p: puts.append(p))
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert puts == []
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted" and move.role_error is None
+
+
+def test_a_press_on_an_offer_that_no_longer_exists_is_answered_not_crashed(
+        client, roster_ready, discord_key):
+    _login_staff(client)
+    r = _press(client, discord_key, custom_id="roster:accepted:9999", user_id=42)
+    assert r.json()["type"] == 4
+    assert "no longer exists" in r.json()["data"]["content"]
+
+
+def test_a_malformed_roster_button_is_rejected(client, roster_ready, discord_key):
+    r = _press(client, discord_key, custom_id="roster:maybe:1", user_id=42)
+    assert r.status_code == 400
+
+
+def test_event_signups_still_route_past_the_roster_branch(client, roster_ready, discord_key):
+    """Both features share the interactions URL; adding offers must not
+    have swallowed event sign-ups. Checked with a real, well-formed
+    sign-up press and a real event, not a string that would have failed
+    to parse anyway."""
+    event_id = _seed_event()
+    r = _press(client, discord_key, custom_id=f"rsvp:{event_id}:going", user_id=42)
+    assert r.status_code == 200
+    assert r.json()["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    with database.get_session() as session:
+        assert services.signup_counts(session, event_id)["going"] == 1
+
+
+# --- Staff confirmation ----------------------------------------------------- #
+def test_an_accepted_offer_offers_a_confirm_signing_button(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    assert "Confirm signing" not in client.get("/roster").text, "not before they answer"
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    html = client.get("/roster").text
+    assert "Confirm signing" in html
+    assert f"/roster/{move_id}/confirm" in html
+
+
+def test_confirming_publishes_the_celebration(client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 303
+
+    assert len(roster_ready) == 1
+    embed = roster_ready[0][1]["embeds"][0]
+    assert embed["title"] == "Cap has signed for YeeHaw FC"
+    assert "Welcome to the squad" in embed["description"]
+    assert embed["footer"]["text"].startswith("Confirmed by Coach")
+
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.confirmed_at is not None
+        assert move.confirm_message_id == "msg-1"
+        assert move.confirmed_by_name == "Coach"
+
+
+def test_the_celebration_goes_to_the_channel_the_offer_went_to(
+        client, roster_ready, discord_key, role_grant, monkeypatch):
+    """The setting can change between the offer and the signing; the
+    conversation shouldn't split across two channels because of it."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+
+    monkeypatch.setattr(config, "ROSTER_ANNOUNCE_CHANNEL_ID", "different-channel")
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    assert roster_ready[0][0] == "/channels/555/messages"
+
+
+def test_an_unanswered_offer_cannot_be_confirmed(client, roster_ready):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_declined_offer_cannot_be_confirmed(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:declined:{move_id}", user_id=42)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_a_signing_cannot_be_announced_twice(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    roster_ready.clear()
+
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_confirming_is_staff_only_and_csrf_protected(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    roster_ready.clear()
+
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": "forged"},
+                    follow_redirects=False)
+    assert r.status_code == 400
+
+    _login_fan(client)
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": "x"},
+                    follow_redirects=False)
+    assert r.status_code in (303, 403)
+    assert roster_ready == []
+
+
+def test_the_page_shows_the_offer_moving_through_its_states(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    assert "Awaiting answer" in client.get("/roster").text
+
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Accepted" in client.get("/roster").text
+
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    html = client.get("/roster").text
+    assert "Signed" in html
+    assert "Confirm signing" not in html
+
+
+# --------------------------------------------------------------------------- #
+# Contracts: length and squad status, renewals, expiry
+# --------------------------------------------------------------------------- #
+def _sign(client, roster_ready, discord_key, *, discord_id="42", weeks="8", status="Starter"):
+    """Offer -> accept -> confirm through the real routes. Returns the
+    live contract that confirming started."""
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "offer", "position": "Striker",
+        "contract_weeks": weeks, "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        move_id = services.recent_roster_moves(session)[0].id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=discord_id)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                follow_redirects=False)
+    with database.get_session() as session:
+        return services.live_contract_for(session, discord_id)
+
+
+def _record(client, *, discord_id="42", weeks="8", status="Rotation", position="Winger"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/contracts", data={
+        "discord_id": discord_id, "contract_weeks": weeks, "squad_status": status,
+        "position": position, "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _set_expiry(contract_id, when):
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        contract.expires_at = when
+        session.commit()
+
+
+def _renew(client, contract_id, *, weeks="6", status="Rotation", position=""):
+    token = _csrf(client, "/roster")
+    return client.post(f"/roster/contracts/{contract_id}/renew", data={
+        "contract_weeks": weeks, "squad_status": status, "position": position,
+        "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _latest_move_id():
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0].id
+
+
+@pytest.mark.parametrize("weeks,status", [
+    ("", "Starter"),        # no length at all
+    ("0", "Starter"),       # below the minimum
+    ("53", "Starter"),      # above the maximum
+    ("eight", "Starter"),   # not a number
+    ("8", ""),              # no status
+    ("8", "Key Player"),    # not one of ours
+])
+def test_an_offer_needs_a_contract_length_and_a_squad_status(client, roster_ready, weeks, status):
+    """The form marks both required, but that's only a suggestion to a
+    browser -- the route has to refuse too."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": weeks,
+        "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_the_offer_shows_the_player_the_terms_they_are_agreeing_to(client, roster_ready):
+    _login_staff(client)
+    _offer(client, roster_ready)
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Contract"] == "8 weeks"
+    assert fields["Squad status"] == "Starter"
+
+
+def test_letting_go_needs_no_contract_terms(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "43", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+    assert len(roster_ready) == 1
+
+
+def test_accepting_alone_does_not_start_a_contract(client, roster_ready, discord_key, role_grant):
+    """The contract starts when the club confirms, not when the player
+    presses -- until then it isn't a signing."""
+    _login_staff(client)
+    move_id = _offer(client, roster_ready)
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_confirming_a_signing_starts_the_contract(client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    contract = _sign(client, roster_ready, discord_key, weeks="10", status="Rotation")
+    assert contract is not None
+    assert (contract.weeks, contract.squad_status, contract.position) == (10, "Rotation", "Striker")
+    assert contract.expires_at - contract.starts_at == timedelta(weeks=10)
+    assert contract.source == "signing"
+
+    signing = roster_ready[-1][1]["embeds"][0]
+    assert "has signed for" in signing["title"]
+    fields = {f["name"]: f["value"] for f in signing["fields"]}
+    assert fields["Contract"] == "10 weeks" and fields["Squad status"] == "Rotation"
+
+
+def test_somebody_under_contract_is_renewed_not_offered_again(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "contract_weeks": "8",
+        "squad_status": "Starter", "position": "Striker", "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    assert "renew" in r.text
+    assert roster_ready == []
+
+
+def test_recording_a_contract_for_an_existing_player_posts_nothing(client, roster_ready, role_grant):
+    """For people who were in the squad before contracts were tracked --
+    announcing a signing of somebody who's been here all along would be
+    wrong, and so would touching their roles."""
+    _login_staff(client, name="Coach")
+    r = _record(client, weeks="12", status="Substitute")
+    assert r.status_code == 303
+    assert roster_ready == [] and role_grant == []
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+    assert (contract.weeks, contract.squad_status, contract.source) == (12, "Substitute", "recorded")
+    assert contract.display_name == "Cap"
+    assert contract.created_by_name == "Coach"
+
+
+def test_a_second_contract_cannot_be_recorded_over_a_live_one(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    r = _record(client, weeks="20")
+    assert r.status_code == 400
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42").weeks == 8
+
+
+def test_recording_refuses_somebody_not_in_the_server(client, roster_ready):
+    _login_staff(client)
+    assert _record(client, discord_id="99999").status_code == 400
+
+
+def test_recording_a_contract_is_staff_only_and_csrf_protected(client, roster_ready):
+    _login_staff(client)
+    r = client.post("/roster/contracts", data={
+        "discord_id": "42", "contract_weeks": "8", "squad_status": "Starter",
+        "csrf_token": "forged",
+    }, follow_redirects=False)
+    assert r.status_code == 400
+    _login_fan(client)
+    r = client.post("/roster/contracts", data={
+        "discord_id": "42", "contract_weeks": "8", "squad_status": "Starter",
+        "csrf_token": "x",
+    }, follow_redirects=False)
+    assert r.status_code in (303, 403)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_the_contracts_panel_lists_terms_and_time_left(client, roster_ready):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    html = client.get("/roster").text
+    assert "Contracts" in html
+    assert "Rotation" in html
+    assert "weeks left" in html
+    assert "Under contract · Rotation" in html, "the picker should say who is signed"
+
+
+def test_an_expired_contract_is_flagged_and_nothing_happens_by_itself(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() - timedelta(days=2))
+
+    html = client.get("/roster").text
+    assert "1 contract has run out" in html
+    assert "Expired" in html and "expired 2 days ago" in html
+    assert f"/roster/contracts/{contract_id}/renew" in html
+    assert f"/roster/contracts/{contract_id}/release" in html
+    # Still theirs until staff decide: not ended, nothing posted.
+    assert roster_ready == []
+    with database.get_session() as session:
+        assert services.get_contract(session, contract_id).ended_at is None
+
+
+def test_a_contract_close_to_the_end_is_marked_expiring(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() + timedelta(days=3, hours=1))
+    html = client.get("/roster").text
+    assert "Expiring soon" in html and "3 days left" in html
+
+
+def test_renewing_posts_an_offer_only_the_player_can_answer(client, roster_ready):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation", position="Winger")
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+
+    r = _renew(client, contract_id, weeks="6", status="Starter")
+    assert r.status_code == 303
+    assert len(roster_ready) == 1
+    body = roster_ready[0][1]
+    embed = body["embeds"][0]
+    assert "Contract Renewal" in embed["title"]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields == {"Position": "Winger", "Contract": "6 weeks", "Squad status": "Starter"}
+    move_id = _latest_move_id()
+    ids = [c["custom_id"] for c in body["components"][0]["components"]]
+    assert ids == [f"roster:accepted:{move_id}", f"roster:declined:{move_id}"]
+
+    # Nothing changes until they answer.
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        assert (contract.weeks, contract.squad_status) == (8, "Rotation")
+    assert "Renewal offered" in client.get("/roster").text
+
+
+def test_accepting_a_renewal_adds_the_weeks_to_the_current_end_date(
+        client, roster_ready, discord_key, role_grant):
+    """Renewing early must never cost the player time they already had."""
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id, weeks="6", status="Starter")
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    payload = r.json()
+    assert payload["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Contract Renewed" in payload["data"]["embeds"][0]["title"]
+    assert "<t:" in payload["data"]["embeds"][0]["description"]
+    assert payload["data"]["components"] == []
+
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert contract.expires_at == old_end + timedelta(weeks=6)
+    assert (contract.weeks, contract.squad_status) == (6, "Starter")
+    assert contract.renewal_count == 1
+    assert role_grant == [], "a renewal is not a signing -- no role is written"
+
+
+def test_renewing_a_lapsed_contract_starts_the_new_term_from_today(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _set_expiry(contract_id, datetime.utcnow() - timedelta(weeks=3))
+    _renew(client, contract_id, weeks="4")
+    before = datetime.utcnow()
+    _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert contract.expires_at >= before + timedelta(weeks=4)
+    assert contract.expires_at <= datetime.utcnow() + timedelta(weeks=4)
+    assert services.contract_state(contract) == services.CONTRACT_ACTIVE
+
+
+def test_declining_a_renewal_leaves_the_contract_to_run_out(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _record(client, weeks="8", status="Rotation")
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id, weeks="6", status="Starter")
+
+    r = _press(client, discord_key, custom_id=f"roster:declined:{_latest_move_id()}", user_id=42)
+    assert "Renewal Declined" in r.json()["data"]["embeds"][0]["title"]
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+    assert (contract.expires_at, contract.weeks, contract.squad_status) == (old_end, 8, "Rotation")
+    assert contract.ended_at is None
+
+
+def test_only_the_player_can_answer_their_renewal(client, roster_ready, discord_key):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        contract_id, old_end = contract.id, contract.expires_at
+    _renew(client, contract_id)
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=43)
+    assert r.json()["type"] == 4 and "isn't yours" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_contract(session, contract_id).expires_at == old_end
+
+
+def test_one_renewal_at_a_time(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    roster_ready.clear()
+    r = _renew(client, contract_id, weeks="10")
+    assert r.status_code == 400
+    assert roster_ready == []
+
+
+def test_releasing_ends_the_contract_and_announces_the_departure(client, roster_ready, role_grant):
+    _login_staff(client, name="Coach")
+    _record(client, position="Winger")
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract_id}/release",
+                    data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 303
+
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "Departure" in embed["title"] and "Winger" in embed["description"]
+    assert role_grant == []
+    with database.get_session() as session:
+        contract = services.get_contract(session, contract_id)
+        assert contract.ended_at is not None and contract.ended_by_name == "Coach"
+        assert services.live_contract_for(session, "42") is None
+    # Gone from the panel; a released contract can't be renewed or
+    # released again.
+    assert f"/roster/contracts/{contract_id}/renew" not in client.get("/roster").text
+    assert _renew(client, contract_id).status_code == 400
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract_id}/release",
+                    data={"csrf_token": token}, follow_redirects=False)
+    assert r.status_code == 400
+
+
+def test_a_renewal_left_open_cannot_be_accepted_after_a_release(
+        client, roster_ready, discord_key):
+    """Otherwise the player could extend a deal the club already ended."""
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    renewal_id = _latest_move_id()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/contracts/{contract_id}/release",
+                data={"csrf_token": token}, follow_redirects=False)
+
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{renewal_id}", user_id=42)
+    assert r.json()["type"] == 4
+    assert "already ended" in r.json()["data"]["content"]
+    with database.get_session() as session:
+        assert services.get_roster_move(session, renewal_id).response is None
+
+
+def test_let_go_from_the_picker_also_ends_their_contract(client, roster_ready):
+    _login_staff(client)
+    _record(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_a_renewal_never_reaches_the_public_home_page(
+        client, roster_ready, discord_key, role_grant):
+    """A contract negotiation is not news."""
+    _login_staff(client)
+    _record(client)
+    with database.get_session() as session:
+        contract_id = services.live_contract_for(session, "42").id
+    _renew(client, contract_id)
+    _press(client, discord_key, custom_id=f"roster:accepted:{_latest_move_id()}", user_id=42)
+    with database.get_session() as session:
+        assert services.public_roster_moves(session) == []
+
+
+# --------------------------------------------------------------------------- #
+# Squad Moves on the home page: what the public may and may not see
+# --------------------------------------------------------------------------- #
+def _seed_move(*, kind="offer", name="Bo", response=None, confirmed=False,
+               position="Striker", announced_at=None, confirmed_at=None):
+    with database.get_session() as session:
+        move = services.record_roster_move(
+            session, discord_id="1", display_name=name,
+            avatar_url="https://cdn.discordapp.com/embed/avatars/0.png",
+            kind=kind, position=position, note=None, announced_by_name="Coach",
+            announced_by_discord_id=1, discord_message_id="m",
+        )
+        if response:
+            services.record_offer_response(session, move, response=response,
+                                           role_granted=False, role_error=None)
+        if confirmed:
+            services.confirm_roster_move(session, move, confirmed_by_name="Coach",
+                                         confirm_message_id="c")
+        if announced_at:
+            move.announced_at = announced_at
+        if confirmed_at:
+            move.confirmed_at = confirmed_at
+        if announced_at or confirmed_at:
+            session.commit()
+        return move.id
+
+
+def test_a_confirmed_signing_and_a_departure_show_on_the_home_page(client):
+    _login_fan(client)
+    _seed_move(kind="offer", name="Bo Nakamura", response="accepted", confirmed=True)
+    _seed_move(kind="release", name="Eli Strand", position="Centre Back")
+    html = client.get("/").text
+    assert "Squad Moves" in html
+    assert "Bo Nakamura" in html and ">Signed<" in html
+    assert "Eli Strand" in html and ">Departed<" in html
+
+
+def test_a_pending_offer_is_not_announced_over_the_players_head(client):
+    """They haven't answered. Putting it on the front page announces it
+    for them."""
+    _seed_move(kind="offer", name="Bo Nakamura")
+    html = client.get("/").text
+    assert "Bo Nakamura" not in html
+    assert "Squad Moves" not in html
+
+
+def test_an_accepted_but_unconfirmed_offer_stays_private(client):
+    """Deciding when an acceptance becomes public is the whole reason the
+    confirm step exists -- leaking it here would make that ornamental."""
+    _seed_move(kind="offer", name="Bo Nakamura", response="accepted")
+    assert "Bo Nakamura" not in client.get("/").text
+
+
+def test_a_declined_offer_is_never_shown_publicly(client):
+    """Publishing that somebody turned the club down is unkind, and isn't
+    the club's news to tell."""
+    _seed_move(kind="offer", name="Bo Nakamura", response="declined")
+    assert "Bo Nakamura" not in client.get("/").text
+
+
+def test_the_section_is_absent_entirely_when_there_is_nothing_public(client):
+    _seed_move(kind="offer", name="Pending One")
+    _seed_move(kind="offer", name="Declined One", response="declined")
+    assert "Squad Moves" not in client.get("/").text
+
+
+def test_moves_are_ordered_by_when_they_became_public(client):
+    """A signing confirmed today leads, even if the offer went out last
+    week -- the confirmation is the news, not the offer."""
+    _login_fan(client)
+    old = datetime.utcnow() - timedelta(days=7)
+    _seed_move(kind="release", name="Departed Yesterday",
+               announced_at=datetime.utcnow() - timedelta(days=1))
+    _seed_move(kind="offer", name="Signed Today", response="accepted", confirmed=True,
+               announced_at=old, confirmed_at=datetime.utcnow())
+    html = client.get("/").text
+    assert html.index("Signed Today") < html.index("Departed Yesterday")
+
+
+def test_the_home_page_shows_a_bounded_number_of_moves(client):
+    _login_fan(client)
+    for i in range(10):
+        _seed_move(kind="release", name=f"Player {i}")
+    html = client.get("/").text
+    assert html.count("move-card") == 6
+
+
+def test_a_move_with_no_stored_avatar_falls_back_to_initials(client):
+    """Rather than a broken image on the front page."""
+    _login_fan(client)
+    with database.get_session() as session:
+        services.record_roster_move(
+            session, discord_id="1", display_name="No Avatar", avatar_url=None,
+            kind="release", position=None, note=None, announced_by_name="Coach",
+            announced_by_discord_id=1, discord_message_id="m",
+        )
+    html = client.get("/").text
+    assert "move-avatar-fallback" in html
+    assert "No Avatar" in html
+
+
+# --------------------------------------------------------------------------- #
+# Secondary position on contracts; staff roles as their own offer
+# --------------------------------------------------------------------------- #
+def _contract_offer(client, *, position="Striker", secondary="Winger", follow=False):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "offer", "position": position,
+        "secondary_position": secondary, "contract_weeks": "8",
+        "squad_status": "Starter", "csrf_token": token,
+    }, follow_redirects=follow)
+
+
+def _staff_offer(client, *, role="Head Coach", discord_id="42"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/announce", data={
+        "discord_id": discord_id, "kind": "staff_offer", "staff_role": role,
+        "staff_note": "Runs set pieces.", "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _latest_move():
+    with database.get_session() as session:
+        return services.recent_roster_moves(session)[0]
+
+
+def test_the_page_has_separate_contract_staff_and_departure_panels(client, roster_ready):
+    _login_staff(client)
+    html = client.get("/roster").text
+    for legend in ("Player contract", "Staff role", "Departure"):
+        assert f"<legend>{legend}</legend>" in html
+    assert 'name="secondary_position"' in html
+    assert 'value="staff_offer"' in html
+    # Staff roles are offered in the staff panel, not as contract positions.
+    contract_panel = html.split("move-panel-staff")[0]
+    assert "Head Coach" not in contract_panel
+
+
+def test_a_contract_offer_carries_both_positions(client, roster_ready):
+    _login_staff(client)
+    assert _contract_offer(client).status_code == 303
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Position"] == "Striker" and fields["Secondary position"] == "Winger"
+    move = _latest_move()
+    assert (move.position, move.secondary_position) == ("Striker", "Winger")
+
+
+def test_the_secondary_position_is_optional(client, roster_ready):
+    _login_staff(client)
+    assert _contract_offer(client, secondary="").status_code == 303
+    assert _latest_move().secondary_position is None
+
+
+@pytest.mark.parametrize("position, secondary, message", [
+    ("", "Winger", "primary position"),
+    ("Striker", "Striker", "has to differ"),
+    ("Manager", "", "a position a contract can name"),   # staff roles aren't positions
+])
+def test_a_bad_contract_offer_posts_nothing(client, roster_ready, position, secondary, message):
+    _login_staff(client)
+    r = _contract_offer(client, position=position, secondary=secondary)
+    assert r.status_code == 400 and message in r.text
+    assert roster_ready == []
+
+
+def test_signing_starts_a_contract_with_both_positions(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    _contract_offer(client, position="Centre Back", secondary="Full Back")
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=False)
+
+    fields = {f["name"]: f["value"] for f in roster_ready[0][1]["embeds"][0]["fields"]}
+    assert fields["Secondary position"] == "Full Back"
+    with database.get_session() as session:
+        contract = services.live_contract_for(session, "42")
+        assert (contract.position, contract.secondary_position) == ("Centre Back", "Full Back")
+    assert "Centre Back / Full Back" in client.get("/roster").text
+
+
+def test_recording_a_contract_takes_a_secondary_position(client, roster_ready):
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/contracts", data={
+        "discord_id": "42", "position": "Goalkeeper", "secondary_position": "Centre Back",
+        "contract_weeks": "8", "squad_status": "Substitute", "csrf_token": token,
+    }, follow_redirects=False)
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42").secondary_position == "Centre Back"
+
+
+def test_a_renewal_can_change_the_secondary_position(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    contract = _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/contracts/{contract.id}/renew", data={
+        "contract_weeks": "4", "squad_status": "Starter", "position": "Striker",
+        "secondary_position": "Attacking Midfield", "csrf_token": token,
+    }, follow_redirects=False)
+    renewal = _latest_move()
+    assert renewal.secondary_position == "Attacking Midfield"
+    _press(client, discord_key, custom_id=f"roster:accepted:{renewal.id}", user_id=42)
+    with database.get_session() as session:
+        assert services.get_contract(session, contract.id).secondary_position == "Attacking Midfield"
+
+
+def test_a_legacy_position_survives_a_renewal(client, roster_ready, discord_key, role_grant):
+    """A contract recorded before the fixed list may say "Sweeper"; renewing
+    it keeps working without forcing a change."""
+    _login_staff(client)
+    contract = _sign(client, roster_ready, discord_key)
+    with database.get_session() as session:
+        c = services.get_contract(session, contract.id)
+        c.position = "Sweeper"
+        session.commit()
+    assert '<option value="Sweeper" selected>' in client.get("/roster").text
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/contracts/{contract.id}/renew", data={
+        "contract_weeks": "4", "squad_status": "Starter", "position": "Sweeper",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_a_staff_offer_is_posted_as_a_role_with_buttons(client, roster_ready):
+    _login_staff(client)
+    assert _staff_offer(client).status_code == 303
+    body = roster_ready[0][1]
+    embed = body["embeds"][0]
+    assert embed["title"] == "Cap — Staff Role Offered"
+    assert embed["fields"][0] == {"name": "Role", "value": "Head Coach", "inline": True}
+    assert "Contract" not in {f["name"] for f in embed["fields"]}
+    assert len(body["components"][0]["components"]) == 2   # Accept / Decline
+    move = _latest_move()
+    assert (move.kind, move.position, move.contract_weeks) == ("staff_offer", "Head Coach", None)
+    assert move.note == "Runs set pieces."
+
+
+def test_a_staff_offer_needs_a_role(client, roster_ready):
+    _login_staff(client)
+    r = _staff_offer(client, role="  ")
+    assert r.status_code == 400 and "Pick the staff role" in r.text
+    assert roster_ready == []
+
+
+def test_a_player_under_contract_can_still_be_offered_a_staff_role(
+        client, roster_ready, discord_key, role_grant):
+    """Player-coach is a normal thing; the 'already under contract' rule is
+    about a second playing contract, not about staff roles."""
+    _login_staff(client)
+    _sign(client, roster_ready, discord_key)
+    roster_ready.clear()
+    assert _staff_offer(client).status_code == 303
+    assert len(roster_ready) == 1
+
+
+def test_accepting_a_staff_role_grants_no_discord_role(client, roster_ready, discord_key, role_grant):
+    """The guarantee the feature rests on: the staff role controls this
+    site, so it's never handed out by a button press -- and the squad role
+    isn't theirs by default either. Role granting is ON here, and still
+    nothing is written."""
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert r.json()["type"] == discord_rsvp.RESPONSE_UPDATE_MESSAGE
+    assert "Staff Role Accepted" in r.json()["data"]["embeds"][0]["title"]
+    assert role_grant == []
+    with database.get_session() as session:
+        move = services.get_roster_move(session, move_id)
+        assert move.response == "accepted" and move.role_granted is False
+    assert "give Cap the staff role in Discord yourself" in client.get("/roster").text
+
+
+def test_only_the_person_named_can_answer_a_staff_offer(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    r = _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=43)
+    assert r.json()["type"] == 4 and "isn't yours" in r.json()["data"]["content"]
+
+
+def test_confirming_a_staff_offer_announces_an_appointment_not_a_signing(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client, name="Coach")
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    assert "Confirm appointment" in client.get("/roster").text
+
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token},
+                    follow_redirects=True)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert embed["title"] == "Cap appointed Head Coach"
+    assert embed["author"]["name"] == "Staff Announcement · Appointment"
+    # The appointment gives the club role, and with it site access --
+    # but no Discord role.
+    assert "They now have Head Coach access on the site." in r.text
+    assert role_grant == []
+    with database.get_session() as session:
+        assert services.live_contract_for(session, "42") is None, "no contract for staff"
+        assert services.get_player(session, "42").club_role == "Head Coach"
+    assert ">Appointed<" in client.get("/roster").text
+
+
+def test_a_confirmed_appointment_shows_on_the_home_page(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    token = _csrf(client, "/roster")
+    client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=False)
+    html = client.get("/").text
+    assert "move-staff" in html and ">Appointed<" in html
+    assert "Head Coach" in html
+
+
+def test_a_departure_reads_its_own_panel(client, roster_ready):
+    """The departure panel posts its own fields, so a half-filled contract
+    above it can't leak into the announcement."""
+    _login_staff(client)
+    token = _csrf(client, "/roster")
+    client.post("/roster/announce", data={
+        "discord_id": "42", "kind": "release", "position": "Striker", "note": "WRONG PANEL",
+        "release_position": "Coach", "release_note": "Thanks for everything.",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    embed = roster_ready[0][1]["embeds"][0]
+    assert "**Coach**" in embed["description"]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert fields["From the staff"] == "Thanks for everything."
+    assert "WRONG PANEL" not in str(embed)
+
+
+# --------------------------------------------------------------------------- #
+# Squad screen (/squad) and gamertag linking at signing
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def history_db(tmp_path, monkeypatch):
+    """A scratch history.db for our club, with a helper to add matches."""
+    monkeypatch.setattr(appmod.db, "DB_PATH", tmp_path / "history.db")
+    monkeypatch.setattr(config, "CLUB_ID", "c1")
+    monkeypatch.setattr(config, "CLUB_PLATFORM", "common-gen5")
+    # The EA roster is only a suggestion source; keep tests off the network.
+    monkeypatch.setattr(appmod.ea_client, "member_stats",
+                        lambda p, c, blocking=True: {"members": [{"name": "RosterOnly"}]})
+
+    def add(n, players):
+        for i in range(n):
+            appmod.db.record_matches("common-gen5", "c1", "leagueMatch", [{
+                "matchId": f"m{add.count}", "timestamp": 1_700_000_000 + add.count * 1000,
+                "clubs": {"c1": {"goals": "2", "details": {"name": "Us"}},
+                          "c2": {"goals": "1", "details": {"name": "Them"}}},
+                "players": {"c1": {str(j): {"playername": name, "rating": str(r),
+                                            "goals": "1", "assists": "0", "mom": "0",
+                                            "pos": "forward"}
+                                   for j, (name, r) in enumerate(players.items())}},
+            }])
+            add.count += 1
+    add.count = 0
+    return add
+
+
+def _record_contract(client, *, discord_id="42", position="Striker", secondary="",
+                     status="Starter"):
+    token = _csrf(client, "/roster")
+    return client.post("/roster/contracts", data={
+        "discord_id": discord_id, "position": position, "secondary_position": secondary,
+        "contract_weeks": "8", "squad_status": status, "csrf_token": token,
+    }, follow_redirects=False)
+
+
+def _link(client, discord_id, gamertag, follow=False):
+    # From /roster, which always carries a token; /squad has no form at
+    # all when nobody is under contract.
+    token = _csrf(client, "/roster")
+    return client.post("/squad/gamertag", data={
+        "discord_id": discord_id, "player_name": gamertag, "csrf_token": token,
+    }, follow_redirects=follow)
+
+
+def test_squad_page_is_staff_only(client, roster_ready):
+    assert client.get("/squad", follow_redirects=False).status_code == 303
+    _login_fan(client)
+    assert client.get("/squad", follow_redirects=False).status_code == 403
+    _login_staff(client)
+    assert client.get("/squad").status_code == 200
+
+
+def test_squad_page_with_nobody_under_contract_points_to_squad_moves(client, roster_ready):
+    _login_staff(client)
+    assert "Nobody is under contract yet" in client.get("/squad").text
+
+
+def test_a_starter_who_isnt_playing_is_flagged_on_the_squad_page(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", status="Starter")
+    _link(client, "42", "Cap_GT")
+    history_db(10, {"SomebodyElse": 7.0})        # Cap_GT never appears
+    html = client.get("/squad").text
+    assert "Cap_GT" in html
+    assert "Starter, but has played 0 of the last 10 matches." in html
+
+
+def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="43", status="Substitute")
+    _link(client, "43", "Sam_GT")
+    history_db(6, {"Sam_GT": 8.1})
+    assert "Substitute, averaging 8.1 — worth a promotion?" in client.get("/squad").text
+
+
+def test_depth_follows_the_formation_on_the_tactics_board(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", position="Goalkeeper")
+    html = client.get("/squad").text
+    assert "Depth · 4-3-3" in html
+    assert "depth-thin" in html            # one keeper, no backup
+
+    # Switch the board to a two-striker shape: the depth chart follows.
+    from formations import FORMATIONS
+    with database.get_session() as session:
+        services.save_tactics_lineup(session, formation="4-4-2", slots={},
+                                     valid_slot_keys=set(FORMATIONS["4-4-2"]),
+                                     staff_name="Coach")
+    html = client.get("/squad").text
+    assert "Depth · 4-4-2" in html
+    assert '<span class="depth-pos">Striker</span>\n            <span class="depth-need">×2</span>' in html
+
+
+def test_a_secondary_position_fills_a_gap_on_the_depth_chart(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", position="Centre Back", secondary="Goalkeeper")
+    html = client.get("/squad").text
+    assert "Cover: Cap" in html
+
+
+def test_regulars_without_a_contract_are_listed(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    history_db(4, {"Trialist_GT": 6.9})
+    html = client.get("/squad").text
+    assert "Playing without a contract" in html and "Trialist_GT" in html
+
+
+def test_no_history_is_explained_rather_than_shown_as_dashes(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    assert "No matches recorded yet" in client.get("/squad").text
+
+
+def test_gamertag_suggestions_include_history_and_the_cached_roster(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    history_db(1, {"Seen_In_A_Match": 7.0})
+    html = client.get("/squad").text
+    assert '<option value="Seen_In_A_Match">' in html
+    assert '<option value="RosterOnly">' in html
+
+
+def test_staff_can_link_a_contracted_players_gamertag(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    assert _link(client, "42", "Cap_GT").status_code == 303
+    with database.get_session() as session:
+        assert services.get_player_link(session, 42).player_name == "Cap_GT"
+
+
+def test_staff_cannot_link_somebody_who_is_not_under_contract(client, roster_ready):
+    """Members link their own; staff only manage the squad they track."""
+    _login_staff(client)
+    assert _link(client, "43", "Sam_GT").status_code == 400
+    with database.get_session() as session:
+        assert services.get_player_link(session, 43) is None
+
+
+def test_a_gamertag_already_claimed_is_refused_not_stolen(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=999, player_name="Taken_GT")
+    r = _link(client, "42", "Taken_GT", follow=True)
+    assert "already claimed" in r.text
+    with database.get_session() as session:
+        assert services.get_player_link(session, 999).player_name == "Taken_GT"
+        assert services.get_player_link(session, 42) is None
+
+
+def test_linking_rejects_an_offsite_redirect(client, roster_ready):
+    _login_staff(client)
+    _record_contract(client, discord_id="42")
+    token = _csrf(client, "/squad")
+    r = client.post("/squad/gamertag", data={
+        "discord_id": "42", "player_name": "Cap_GT", "redirect_to": "//evil.example",
+        "csrf_token": token,
+    }, follow_redirects=False)
+    assert r.headers["location"] == "/squad"
+
+
+def _accepted_offer(client, roster_ready, discord_key):
+    _offer(client, roster_ready)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    return move_id
+
+
+def test_confirming_a_signing_can_link_the_gamertag(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    assert 'name="player_name"' in client.get("/roster").text
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm",
+                    data={"csrf_token": token, "player_name": "Cap_GT"}, follow_redirects=True)
+    assert "Linked to Cap_GT" in r.text
+    with database.get_session() as session:
+        assert services.get_player_link(session, 42).player_name == "Cap_GT"
+
+
+def test_confirming_without_a_gamertag_still_signs_but_says_so(client, roster_ready, discord_key, role_grant):
+    """A new signing may not be in the EA club yet -- that can't block the
+    signing, but it mustn't be silent either."""
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm", data={"csrf_token": token}, follow_redirects=True)
+    assert len(roster_ready) == 1, "the signing still goes out"
+    assert "no gamertag linked yet" in r.text
+
+
+def test_a_claimed_gamertag_stops_the_signing_before_anything_is_posted(
+        client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    move_id = _accepted_offer(client, roster_ready, discord_key)
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=999, player_name="Taken_GT")
+    roster_ready.clear()
+    token = _csrf(client, "/roster")
+    r = client.post(f"/roster/{move_id}/confirm",
+                    data={"csrf_token": token, "player_name": "Taken_GT"}, follow_redirects=False)
+    assert r.status_code == 400
+    assert roster_ready == [], "nothing announced"
+    with database.get_session() as session:
+        assert services.get_roster_move(session, move_id).confirmed_at is None
+        assert services.live_contract_for(session, "42") is None
+
+
+def test_an_existing_link_prefills_the_confirm_form(client, roster_ready, discord_key, role_grant):
+    _login_staff(client)
+    with database.get_session() as session:
+        services.set_player_link(session, discord_user_id=42, player_name="Cap_GT")
+    _accepted_offer(client, roster_ready, discord_key)
+    html = client.get("/roster").text
+    assert 'value="Cap_GT"' in html and "(linked)" in html
+
+
+def test_an_appointment_never_asks_for_a_gamertag(client, roster_ready, discord_key):
+    _login_staff(client)
+    _staff_offer(client)
+    move_id = _latest_move().id
+    _press(client, discord_key, custom_id=f"roster:accepted:{move_id}", user_id=42)
+    html = client.get("/roster").text
+    assert "Confirm appointment" in html
+    assert f'id="gt-{move_id}"' not in html

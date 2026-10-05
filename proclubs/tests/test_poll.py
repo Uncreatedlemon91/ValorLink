@@ -125,10 +125,10 @@ def test_sync_and_poll_league_table_does_nothing_without_club_id(monkeypatch):
 
 
 def test_main_builds_league_table_end_to_end(monkeypatch):
-    monkeypatch.setattr(poll, "load_tracked_clubs", lambda: [
-        {"platform": "common-gen5", "clubId": "c1", "label": "Our Club"},
-    ])
+    # Our club comes from .env alone now -- no tracked_clubs.json entry.
+    monkeypatch.setattr(poll, "load_tracked_clubs", lambda: [])
     monkeypatch.setattr(config, "CLUB_ID", "c1")
+    monkeypatch.setattr(config, "CLUB_NAME", "Our Club")
     monkeypatch.setattr(config, "CLUB_PLATFORM", "common-gen5")
 
     monkeypatch.setattr(ea_client, "overall_stats", lambda p, c: {"wins": "1"})
@@ -144,6 +144,46 @@ def test_main_builds_league_table_end_to_end(monkeypatch):
     assert {r["label"] for r in table} >= {"Our Club"}
     ids = {r["club_id"] for r in db.league_roster("common-gen5")}
     assert "c2" in ids  # the opponent surfaced from our own match got pulled into the league table
+
+
+# --- Where our club comes from ---------------------------------------------- #
+def test_our_club_is_polled_from_env_without_any_tracked_file(monkeypatch):
+    """A season switch is one .env value; nothing in the repo names the
+    club any more."""
+    monkeypatch.setattr(poll, "load_tracked_clubs", lambda: [])
+    monkeypatch.setattr(config, "CLUB_ID", "9001")
+    monkeypatch.setattr(config, "CLUB_NAME", "Yeehaw FC")
+    monkeypatch.setattr(config, "CLUB_PLATFORM", "common-gen5")
+    assert poll.clubs_to_poll() == [
+        {"platform": "common-gen5", "clubId": "9001", "label": "Yeehaw FC"},
+    ]
+
+
+def test_a_tracked_entry_for_our_own_club_is_not_polled_twice(monkeypatch):
+    """A droplet still carrying the old tracked_clubs.json entry for our
+    club must not snapshot it twice a run."""
+    monkeypatch.setattr(poll, "load_tracked_clubs", lambda: [
+        {"platform": "common-gen5", "clubId": "9001", "label": "Old Label"},
+        {"platform": "common-gen5", "clubId": "42", "label": "Friends FC"},
+    ])
+    monkeypatch.setattr(config, "CLUB_ID", "9001")
+    monkeypatch.setattr(config, "CLUB_NAME", "Yeehaw FC")
+    monkeypatch.setattr(config, "CLUB_PLATFORM", "common-gen5")
+    clubs = poll.clubs_to_poll()
+    assert [c["clubId"] for c in clubs] == ["9001", "42"]
+    assert clubs[0]["label"] == "Yeehaw FC"
+
+
+def test_nothing_is_polled_with_no_club_configured(monkeypatch, capsys):
+    monkeypatch.setattr(poll, "load_tracked_clubs", lambda: [])
+    monkeypatch.setattr(config, "CLUB_ID", "")
+
+    def fail(*a, **k):
+        raise AssertionError("must not poll with no club configured")
+
+    monkeypatch.setattr(poll, "poll_club", fail)
+    poll.main()
+    assert "nothing to poll" in capsys.readouterr().out
 
 
 def test_poll_club_tracks_squad_only_when_asked(monkeypatch):

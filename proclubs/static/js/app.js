@@ -91,8 +91,61 @@ function panelError(panel, result) {
   panel.innerHTML = `<p style="color:#e05a5a">${result.reason.message}</p>`;
 }
 
-function statCard(label, value) {
-  return `<div class="stat-card"><div class="label">${label}</div><div class="value">${value ?? '-'}</div></div>`;
+// A stat tile is: label, value, and optionally a line of context under it.
+// Tiles with nothing to show are marked so they recede instead of sitting at
+// full strength shouting a dash -- EA simply doesn't report some of these
+// until a club has played enough, and a wall of confident "-" reads as broken.
+function statCard(label, value, hint) {
+  const empty = value == null || value === '-' || value === '';
+  return `<div class="stat-card${empty ? ' is-empty' : ''}">
+    <div class="label">${label}</div>
+    <div class="value">${empty ? '-' : value}</div>
+    ${hint ? `<div class="stat-hint">${esc(hint)}</div>` : ''}
+  </div>`;
+}
+
+// A percentage as a labelled meter. Four rates that all live on 0-100 are
+// only comparable at a glance if they're drawn on the same scale -- as bare
+// numbers the reader has to rescale each one mentally.
+function meterStat(label, pct) {
+  const known = pct != null && Number.isFinite(Number(pct));
+  const value = known ? Math.max(0, Math.min(100, Number(pct))) : 0;
+  return `<div class="meter-stat${known ? '' : ' is-empty'}">
+    <div class="meter-head">
+      <span class="meter-label">${esc(label)}</span>
+      <span class="meter-value">${known ? `${pct}%` : '-'}</span>
+    </div>
+    <div class="meter-track"><span class="meter-fill" style="width:${value}%"></span></div>
+  </div>`;
+}
+
+// One row of the season/career comparison. The pairing is the point, so the
+// two numbers sit on one line under aligned column headers rather than in
+// two separate cards the reader has to match up themselves.
+function compareRow(label, season, career) {
+  const fmt = (v) => (v == null || v === '' ? '-' : esc(v));
+  return `<tr>
+    <td>${esc(label)}</td>
+    <td class="num">${fmt(season)}</td>
+    <td class="num career">${fmt(career)}</td>
+  </tr>`;
+}
+
+// The one number the page leads with. Exactly one per view: if everything is
+// emphasised, nothing is. Carries its own sparkline when we have history, so
+// the headline figure shows its direction rather than just its level.
+function heroStat(label, value, hint, delta) {
+  const dir = delta == null || delta === 0 ? '' : (delta > 0 ? ' up' : ' down');
+  return `<div class="stat-card stat-hero">
+    <div class="label">${label}</div>
+    <div class="value">${value ?? '-'}</div>
+    <div class="stat-meta">
+      ${hint ? `<span class="stat-hint">${esc(hint)}</span>` : ''}
+      ${delta != null && delta !== 0
+        ? `<span class="stat-delta${dir}">${delta > 0 ? '+' : ''}${delta} since tracking began</span>`
+        : ''}
+    </div>
+  </div>`;
 }
 
 function num(v) {
@@ -108,30 +161,61 @@ function esc(v) {
   }[c]));
 }
 
-// One point per local calendar day (the highest reading that day) --
-// snapshots come from hourly polls (see poll.py), so raw points are
-// closer to "per match" resolution than a real day-over-day trend, and
-// the polled history for a busy club can get noisy. Skips a reading with
-// no usable numeric value for the field rather than treating it as 0.
-function dailyPeak(snapshots, field) {
+// --- Grouping by day -------------------------------------------------------
+// EA gives us readings at whatever cadence we happened to poll or play at,
+// so raw per-reading charts are noisy and unevenly spaced. Every trend chart
+// here collapses to one point per local calendar day first; they differ only
+// in how a day's readings get combined.
+function _dayKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// rows -> [{ label, value, count }], one per day with at least one usable
+// reading, oldest first. A reading with no usable numeric value is skipped
+// rather than counted as 0 -- a missing rating is not a rating of zero, and
+// averaging one in would drag the day down.
+function groupByDay(rows, { time, value, combine }) {
   const byDay = new Map();
-  snapshots.forEach((s) => {
-    const raw = s[field];
-    if (raw == null || raw === '') return;
-    const value = num(raw);
-    const d = new Date(s.captured_at * 1000);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const existing = byDay.get(key);
-    if (!existing || value > existing.value) {
-      byDay.set(key, { date: d, value });
-    }
+  (rows || []).forEach((row) => {
+    const seconds = Number(time(row));
+    const raw = value(row);
+    if (!Number.isFinite(seconds) || !seconds || raw == null || raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    const date = new Date(seconds * 1000);
+    const key = _dayKey(date);
+    const bucket = byDay.get(key);
+    if (bucket) bucket.values.push(n);
+    else byDay.set(key, { date, values: [n] });
   });
   return [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, { date, value }]) => ({
+    .map(([, { date, values }]) => ({
       label: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      value,
+      value: combine(values),
+      count: values.length,
     }));
+}
+
+// The highest reading that day. Club snapshots come from hourly polls (see
+// poll.py), so a day holds several readings of the same drifting number and
+// the peak is the meaningful daily figure.
+function dailyPeak(snapshots, field) {
+  return groupByDay(snapshots, {
+    time: (s) => s.captured_at,
+    value: (s) => s[field],
+    combine: (values) => Math.max(...values),
+  });
+}
+
+// The mean of that day's readings. For per-match player stats the mean is
+// the honest daily figure -- a session of four matches is one day's
+// performance, and taking the best of them would flatter it.
+function dailyAverage(rows, { time, value, decimals = 2 }) {
+  return groupByDay(rows, {
+    time, value,
+    combine: (values) => Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(decimals)),
+  });
 }
 
 // --------------------------------------------------------------------------
@@ -178,12 +262,6 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
   ratingBadge.className = 'hero-badge accent';
   ratingBadge.textContent = `${stats.skillRating ?? '-'} SR`;
   badges.append(recordBadge, ratingBadge);
-  if (standings.currentDivision != null) {
-    const divBadge = document.createElement('span');
-    divBadge.className = 'hero-badge';
-    divBadge.textContent = `Division ${standings.currentDivision}`;
-    badges.append(divBadge);
-  }
   clubHeader.append(badges);
 
   const recentMatches = matchesResult.status === 'fulfilled' ? (matchesResult.value || []) : [];
@@ -204,16 +282,30 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
     clubHeader.append(strip);
   }
 
+  // Skill-rating movement across everything we've tracked. Deliberately not
+  // shown when there's only one snapshot: a delta needs two readings, and
+  // "+0" would read as "flat" rather than "we don't know yet".
+  const ratingSnapshots = historyResult.status === 'fulfilled' ? (historyResult.value.snapshots || []) : [];
+  const ratingSeries = dailyPeak(ratingSnapshots, 'skill_rating');
+  const ratingDelta = ratingSeries.length > 1
+    ? ratingSeries[ratingSeries.length - 1].value - ratingSeries[0].value
+    : null;
+
   const played = num(stats.wins) + num(stats.losses) + num(stats.ties);
   const winRate = played > 0 ? Math.round((num(stats.wins) / played) * 100) : null;
   const goalDiff = stats.goals != null && stats.goalsAgainst != null ? num(stats.goals) - num(stats.goalsAgainst) : null;
 
   panel.innerHTML = `
+    ${heroStat('Skill Rating', stats.skillRating,
+               played ? `${played} league matches` : null,
+               ratingDelta)}
     <div class="stat-grid">
-      ${statCard('Points', standings.points)}
-      ${statCard('Skill Rating', stats.skillRating)}
-      ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-')}
-      ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-')}
+      ${statCard('Games Played', played || '-',
+                 played ? `${num(stats.wins)} of them won` : null)}
+      ${statCard('Win Rate', winRate != null ? `${winRate}%` : '-',
+                 played ? `${num(stats.wins)}W ${num(stats.ties)}D ${num(stats.losses)}L` : null)}
+      ${statCard('Goal Difference', goalDiff != null ? (goalDiff > 0 ? `+${goalDiff}` : goalDiff) : '-',
+                 stats.goals != null ? `${num(stats.goals)} for, ${num(stats.goalsAgainst)} against` : null)}
       ${statCard('Win Streak', stats.wstreak)}
       ${statCard('Unbeaten Streak', standings.unbeatenstreak)}
     </div>
@@ -256,7 +348,7 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
       </button>
       <button class="explore-card" data-goto="competition" type="button">
         <h4>Competition</h4>
-        <p>Division standing and promotion history, plus a full head-to-head record against every club we've faced.</p>
+        <p>Promotion and relegation history, plus a full head-to-head record against every club we've faced.</p>
         <span class="explore-cta">Open report &rarr;</span>
       </button>
     </div>
@@ -287,17 +379,20 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
 
   const members = membersResult.status === 'fulfilled' ? (membersResult.value.members || []) : [];
   const nameOf = (m) => m.proName || m.name || 'Unknown';
+  // One hue across all three: each is a single series, and the titles say
+  // what's plotted. Three different hues would imply the color meant
+  // something it doesn't.
   Charts.hBarChart(document.getElementById('chart-spotlight-scorers'), {
     data: [...members].sort((a, b) => num(b.goals) - num(a.goals)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.goals) })),
     color: 'var(--series-1)',
   });
   Charts.hBarChart(document.getElementById('chart-spotlight-assists'), {
     data: [...members].sort((a, b) => num(b.assists) - num(a.assists)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.assists) })),
-    color: 'var(--series-2)',
+    color: 'var(--series-1)',
   });
   Charts.hBarChart(document.getElementById('chart-spotlight-motm'), {
     data: [...members].sort((a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch)).slice(0, 5).map((m) => ({ label: nameOf(m), value: num(m.manOfTheMatch) })),
-    color: 'var(--series-4)',
+    color: 'var(--series-1)',
   });
 }
 
@@ -306,13 +401,31 @@ function renderOverview(overviewResult, standingsResult, membersResult, matchesR
 // search by name, sort by any column, click a row for the full breakdown.
 // --------------------------------------------------------------------------
 
-const PLAYER_SORTERS = {
-  goals: (a, b) => num(b.goals) - num(a.goals),
-  assists: (a, b) => num(b.assists) - num(a.assists),
-  rating: (a, b) => num(b.ratingAve) - num(a.ratingAve),
-  motm: (a, b) => num(b.manOfTheMatch) - num(a.manOfTheMatch),
-  name: (a, b) => (a.proName || a.name || '').localeCompare(b.proName || b.name || ''),
-};
+// One entry per sortable column. `key` pulls the comparable value; `text`
+// marks the columns that sort alphabetically (and so default to ascending --
+// A-Z is the useful direction for a name, while 20 goals is the useful
+// direction for goals).
+const PLAYER_COLUMNS = [
+  { id: 'name', label: 'Name', text: true, key: (m) => (m.proName || m.name || '') },
+  { id: 'position', label: 'Position', text: true, key: (m) => (m.favoritePosition || m.proPos || '') },
+  { id: 'gp', label: 'GP', key: (m) => num(m.gamesPlayed) },
+  { id: 'goals', label: 'Goals', key: (m) => num(m.goals) },
+  { id: 'assists', label: 'Assists', key: (m) => num(m.assists) },
+  { id: 'rating', label: 'Avg Rating', key: (m) => num(m.ratingAve) },
+  { id: 'motm', label: 'MOTM', key: (m) => num(m.manOfTheMatch) },
+  { id: 'careerGoals', label: 'Career Goals', key: (m) => num(m.careerGoals) },
+];
+
+function playerSorter(sortId, dir) {
+  const col = PLAYER_COLUMNS.find((c) => c.id === sortId) || PLAYER_COLUMNS[3];
+  const sign = dir === 'asc' ? 1 : -1;
+  return (a, b) => {
+    const av = col.key(a);
+    const bv = col.key(b);
+    if (col.text) return sign * String(av).localeCompare(String(bv));
+    return sign * (av - bv);
+  };
+}
 
 function renderPlayers(result) {
   const panel = document.getElementById('tab-players');
@@ -324,13 +437,13 @@ function renderPlayers(result) {
     return;
   }
 
-  playerFilterState = { pos: 'ALL', sort: 'goals', q: '' };
+  playerFilterState = { pos: 'ALL', sort: 'goals', dir: 'desc', q: '' };
 
   panel.innerHTML = `
     <div class="chart-row">
       <div class="chart-card">
         <h3>Position Mix</h3>
-        <div id="chart-positions"></div>
+        <div id="chart-positions" class="chart-compact"></div>
       </div>
     </div>
     <div class="filter-row">
@@ -342,18 +455,19 @@ function renderPlayers(result) {
         <button class="chip" data-pos="forward" type="button">FWD</button>
       </div>
       <input id="member-filter" type="text" placeholder="Filter roster by name..." style="min-width:200px" />
-      <select id="player-sort" class="sort-select">
-        <option value="goals">Sort: Goals</option>
-        <option value="assists">Sort: Assists</option>
-        <option value="rating">Sort: Avg rating</option>
-        <option value="motm">Sort: MOTM</option>
-        <option value="name">Sort: Name</option>
-      </select>
     </div>
     <p class="chart-caption">
       The name filter searches this club's roster only -- EA's API has no way to look up a player
       across clubs, only within a club you already have loaded. Click a card for the full stat breakdown.
     </p>
+    <div class="player-sort">
+      <label for="player-sort-by">Sort</label>
+      <select id="player-sort-by">
+        ${PLAYER_COLUMNS.map((c) => `<option value="${c.id}">${c.label}</option>`).join('')}
+      </select>
+      <button id="player-sort-dir" class="btn secondary sort-dir" type="button"
+              aria-label="Toggle sort direction">High &rarr; low</button>
+    </div>
     <div class="player-grid" id="players-body"></div>
   `;
 
@@ -369,20 +483,59 @@ function renderPlayers(result) {
     playerFilterState.q = e.target.value.trim().toLowerCase();
     renderPlayersTable(members);
   });
-  document.getElementById('player-sort').addEventListener('change', (e) => {
-    playerFilterState.sort = e.target.value;
+  const sortBy = (id) => {
+    if (playerFilterState.sort === id) {
+      playerFilterState.dir = playerFilterState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      const col = PLAYER_COLUMNS.find((c) => c.id === id);
+      playerFilterState.sort = id;
+      // Start each column in its useful direction rather than always
+      // descending: names read A-Z, counts read biggest-first.
+      playerFilterState.dir = col && col.text ? 'asc' : 'desc';
+    }
+    renderPlayersTable(members);
+  };
+  // Cards have no column headers to click, so the same sortBy() above --
+  // and every column it knows about -- is driven from a select plus a
+  // direction toggle. Picking a column still starts it in its useful
+  // direction; the toggle flips whatever that landed on.
+  const sortSelect = document.getElementById('player-sort-by');
+  const sortDirBtn = document.getElementById('player-sort-dir');
+  const syncSortDir = () => {
+    const col = PLAYER_COLUMNS.find((c) => c.id === playerFilterState.sort);
+    const asc = playerFilterState.dir === 'asc';
+    sortDirBtn.textContent = col && col.text
+      ? (asc ? 'A \u2192 Z' : 'Z \u2192 A')
+      : (asc ? 'Low \u2192 high' : 'High \u2192 low');
+  };
+  sortSelect.value = playerFilterState.sort;
+  syncSortDir();
+  sortSelect.addEventListener('change', (e) => {
+    // sortBy() only flips direction when the column is unchanged, so a
+    // fresh pick gets that column's sensible default.
+    if (e.target.value !== playerFilterState.sort) sortBy(e.target.value);
+    syncSortDir();
+  });
+  sortDirBtn.addEventListener('click', () => {
+    playerFilterState.dir = playerFilterState.dir === 'asc' ? 'desc' : 'asc';
+    syncSortDir();
     renderPlayersTable(members);
   });
 
   renderPlayersTable(members);
 
-  Charts.donutChart(document.getElementById('chart-positions'), {
+  // Bars, not a donut: these values sit close together (four defenders and
+  // four midfielders are indistinguishable as two arcs) and a donut can only
+  // show part-to-whole at a glance. One hue -- the labels carry identity, so
+  // a colour per position would encode nothing.
+  Charts.hBarChart(document.getElementById('chart-positions'), {
     data: [
-      { label: 'Goalkeeper', value: num(positionCount.goalkeeper), color: 'var(--series-1)' },
-      { label: 'Defender', value: num(positionCount.defender), color: 'var(--series-2)' },
-      { label: 'Midfielder', value: num(positionCount.midfielder), color: 'var(--series-3)' },
-      { label: 'Forward', value: num(positionCount.forward), color: 'var(--series-4)' },
+      { label: 'Goalkeeper', value: num(positionCount.goalkeeper) },
+      { label: 'Defender', value: num(positionCount.defender) },
+      { label: 'Midfielder', value: num(positionCount.midfielder) },
+      { label: 'Forward', value: num(positionCount.forward) },
     ],
+    color: 'var(--series-1)',
   });
 }
 
@@ -400,7 +553,7 @@ const TIER_ELITE = 88;
 const TIER_SQUAD = 75;
 
 function playerTier(member) {
-  const ovr = member.proOverall == null ? null : num(member.proOverall);
+  const ovr = num(member.proOverall);
   if (!ovr) return 'rotation';
   if (ovr >= TIER_ELITE) return 'elite';
   if (ovr >= TIER_SQUAD) return 'squad';
@@ -413,7 +566,7 @@ function positionCode(member) {
 }
 
 // Three headline stats per card. Keepers get clean sheets in place of the
-// win rate, since a shooting-style number says nothing about them.
+// win rate, since the outfield framing says nothing useful about them.
 function cardStats(member) {
   const rating = member.ratingAve != null ? member.ratingAve : '-';
   const motm = member.manOfTheMatch != null ? member.manOfTheMatch : '-';
@@ -465,7 +618,7 @@ function playerCardHtml(member, idx) {
 
 function renderPlayersTable(members) {
   const body = document.getElementById('players-body');
-  const { pos, q, sort } = playerFilterState;
+  const { pos, q, sort, dir } = playerFilterState;
 
   const filtered = members
     .filter((m) => {
@@ -477,7 +630,7 @@ function renderPlayersTable(members) {
       }
       return true;
     })
-    .sort(PLAYER_SORTERS[sort]);
+    .sort(playerSorter(sort, dir));
 
   if (!filtered.length) {
     body.innerHTML = '<p class="chart-empty player-grid-empty">No players match this filter.</p>';
@@ -587,9 +740,9 @@ function togglePlayerDetail(row, member) {
 
   row.classList.add('expanded');
 
-  // Spans every column of the card grid (see .member-detail-row), so it
-  // opens as a full-width drawer directly beneath the card that was
-  // clicked rather than displacing the cards around it.
+  // Spans every column of the card grid (see .member-detail-row), so the
+  // dashboard opens as a full-width drawer directly beneath the row of
+  // cards the clicked one sits in, rather than displacing the grid.
   const detailRow = document.createElement('div');
   detailRow.className = 'member-detail-row';
   detailRow.dataset.forIdx = idx;
@@ -598,75 +751,105 @@ function togglePlayerDetail(row, member) {
   const proName = esc(member.proName ?? member.name ?? 'Unknown');
   const gamertag = esc(member.name ?? '');
   const position = esc(member.favoritePosition ?? member.proPos ?? '-');
+  // Clean sheets only mean something for the players who keep them. The
+  // goalkeeper section below already owns the GK figures, so the summary
+  // never carries them.
+  const isKeeper = member.favoritePosition === 'goalkeeper';
+  const defensive = isKeeper || ['defender', 'defensive midfielder'].includes(
+    (member.favoritePosition || '').toLowerCase());
 
   td.innerHTML = `
     <div class="player-detail">
-      <div class="player-detail-head">
-        <strong>${proName}</strong>
-        ${gamertag && gamertag !== proName ? `<span class="muted">(${gamertag})</span>` : ''}
-        <span class="muted">${position}</span>
-        ${member.proOverall ? `<span class="muted">OVR ${esc(member.proOverall)}</span>` : ''}
-      </div>
-      <div class="stat-grid compact">
-        ${statCard('Win Rate', member.winRate != null ? `${member.winRate}%` : '-')}
-        ${statCard('Shot Success', member.shotSuccessRate != null ? `${member.shotSuccessRate}%` : '-')}
-        ${statCard('Passes Made', member.passesMade)}
-        ${statCard('Pass Success', member.passSuccessRate != null ? `${member.passSuccessRate}%` : '-')}
-        ${statCard('Tackles Made', member.tacklesMade)}
-        ${statCard('Tackle Success', member.tackleSuccessRate != null ? `${member.tackleSuccessRate}%` : '-')}
-        ${statCard('Clean Sheets (Def)', member.cleanSheetsDef)}
-        ${statCard('Clean Sheets (GK)', member.cleanSheetsGK)}
-        ${statCard('Red Cards', member.redCards)}
-        ${statCard('Height (cm)', member.proHeight)}
-      </div>
-      <div class="chart-row">
-        <div class="chart-card">
-          <h3>Season vs Career</h3>
-          <div class="stat-grid compact">
-            ${statCard('Season Goals', member.goals)}
-            ${statCard('Career Goals', member.careerGoals)}
-            ${statCard('Season Assists', member.assists)}
-            ${statCard('Career Assists', member.careerAssists)}
-            ${statCard('Season GP', member.gamesPlayed)}
-            ${statCard('Career GP', member.careerGamesPlayed)}
-            ${statCard('Season Avg Rating', member.ratingAve)}
-            ${statCard('Career Avg Rating', member.careerRatingAve)}
+      <div class="player-hero">
+        <div class="player-identity">
+          <h3>${proName}</h3>
+          <div class="player-meta">
+            ${gamertag && gamertag !== proName ? `<span>${gamertag}</span>` : ''}
+            <span class="player-pos">${position}</span>
           </div>
         </div>
+        <div class="player-figures">
+          ${member.proOverall ? `
+            <div class="player-figure primary">
+              <div class="value">${esc(member.proOverall)}</div>
+              <div class="label">Overall</div>
+            </div>` : ''}
+          ${member.ratingAve != null ? `
+            <div class="player-figure">
+              <div class="value">${esc(member.ratingAve)}</div>
+              <div class="label">Avg rating</div>
+            </div>` : ''}
+        </div>
+      </div>
+
+      <div class="meter-row">
+        ${meterStat('Win rate', member.winRate)}
+        ${meterStat('Shot success', member.shotSuccessRate)}
+        ${meterStat('Pass success', member.passSuccessRate)}
+        ${meterStat('Tackle success', member.tackleSuccessRate)}
+      </div>
+
+      <div class="chart-row">
         <div class="chart-card">
-          <h3>Recent Form (Goals)</h3>
+          <h3>Season vs career</h3>
+          <div class="table-wrap">
+            <table class="compare-table">
+              <thead>
+                <tr><th>Stat</th><th class="num">Season</th><th class="num">Career</th></tr>
+              </thead>
+              <tbody>
+                ${compareRow('Games', member.gamesPlayed, member.careerGamesPlayed)}
+                ${compareRow('Goals', member.goals, member.careerGoals)}
+                ${compareRow('Assists', member.assists, member.careerAssists)}
+                ${compareRow('MOTM', member.manOfTheMatch, member.careerManOfTheMatch)}
+                ${compareRow('Avg rating', member.ratingAve, member.careerRatingAve)}
+              </tbody>
+            </table>
+          </div>
+          <p class="chart-caption player-extras">
+            ${member.passesMade != null ? `${num(member.passesMade).toLocaleString()} passes` : ''}
+            ${member.tacklesMade != null ? ` &middot; ${num(member.tacklesMade).toLocaleString()} tackles` : ''}
+            ${member.redCards != null ? ` &middot; ${member.redCards} red` : ''}
+            ${defensive && member.cleanSheetsDef != null ? ` &middot; ${member.cleanSheetsDef} clean sheets` : ''}
+            ${member.proHeight ? ` &middot; ${member.proHeight}cm` : ''}
+          </p>
+        </div>
+        <div class="chart-card">
+          <h3>Goals per match &mdash; recent form</h3>
           <div id="spark-${idx}"></div>
           <p class="chart-caption">Oldest &rarr; most recent match.</p>
         </div>
       </div>
+
       <div class="chart-row">
         <div class="chart-card">
-          <h3>Recent Match Performance</h3>
+          <h3>Last 10 matches</h3>
           <p class="chart-caption">
             From the matches currently loaded on the Matches tab, not
             full-season -- this per-appearance detail (shots, pass/tackle
-            attempts, minutes, personal W/L) isn't in the season-aggregate
+            attempts, minutes, personal W-D-L) isn't in the season-aggregate
             endpoint at all.
           </p>
           <div id="perf-summary-${idx}"></div>
         </div>
         <div class="chart-card">
-          <h3>Rating Trend</h3>
+          <h3>Match rating &mdash; last 10</h3>
           <div id="rating-spark-${idx}"></div>
           <p class="chart-caption">Oldest &rarr; most recent match.</p>
         </div>
       </div>
+
       <div class="chart-row">
         <div class="chart-card">
-          <h3>Rating &mdash; Full Tracked History</h3>
-          <p class="chart-caption">
-            Every match we've captured for this player since tracking began (see Competition),
+          <h3>Rating &mdash; full tracked history</h3>
+          <div id="history-rating-${idx}"></div>
+          <p class="chart-caption" id="history-rating-caption-${idx}">
+            Everything we've captured for this player since tracking began (see Competition),
             not just the recent sample above.
           </p>
-          <div id="history-rating-${idx}"></div>
         </div>
       </div>
-      ${member.favoritePosition === 'goalkeeper' ? goalkeeperSectionHtml(idx) : ''}
+      ${isKeeper ? goalkeeperSectionHtml(idx) : ''}
     </div>
   `;
 
@@ -701,13 +884,18 @@ function togglePlayerDetail(row, member) {
         ${statCard('Minutes Played', minutes)}
         ${statCard('MOTM', agg.mom)}
         ${statCard('Red Cards', agg.redCards)}
-        ${statCard('Personal Record', `${agg.wins}-${agg.losses}-${agg.ties}`)}
+        ${statCard('W-D-L', `${agg.wins}-${agg.ties}-${agg.losses}`)}
       </div>
     `;
-    Charts.sparkline(ratingSpark, {
-      values: [...agg.ratings].reverse(),
-      color: 'var(--series-3)',
-      formatValue: (v) => v.toFixed(1),
+    // Ratings live in a narrow band around 6-9, so bars from a zero
+    // baseline come out nearly uniform and say almost nothing. An
+    // autoscaled area shows the actual movement. --series-3 was also the
+    // wrong colour: green is reserved here for win/good status, and a
+    // match rating isn't a state.
+    const ratings = [...agg.ratings].reverse();
+    Charts.areaChart(ratingSpark, {
+      data: ratings.map((v, i) => ({ label: `Match ${i + 1}`, value: Number(v.toFixed(1)) })),
+      color: 'var(--series-1)',
     });
   }
 
@@ -761,19 +949,46 @@ function goalkeeperSectionHtml(idx) {
 // render, since most players won't have this drawer opened.
 async function loadPlayerHistoryTrend(playerName, idx) {
   const container = document.getElementById(`history-rating-${idx}`);
+  const captionEl = document.getElementById(`history-rating-caption-${idx}`);
   if (!container) return;
   try {
     const data = await api(`/api/history/players?name=${encodeURIComponent(playerName)}`);
     const rows = data.matches || [];
-    if (!rows.length) {
-      Charts.emptyState(container, 'No tracked history for this player yet.');
+    // One point per day rather than per match: people play in sessions, so
+    // per-match points bunch up on match nights and leave gaps elsewhere,
+    // which reads as a trend that isn't there. The mean is the day's
+    // performance -- the peak would flatter a bad night with one good game.
+    const daily = dailyAverage(rows, {
+      time: (r) => r.played_at,
+      value: (r) => r.rating,
+      decimals: 2,
+    });
+    if (!daily.length) {
+      // Distinguish "nothing captured" from "captured, but nothing we can
+      // place on a day" -- grouping by date drops any reading with no usable
+      // timestamp, and silently showing the empty-history message for those
+      // would misreport why the chart is blank.
+      Charts.emptyState(container, rows.length
+        ? 'Tracked matches for this player have no usable dates, so they cannot be plotted by day.'
+        : 'No tracked history for this player yet.');
+      if (captionEl) captionEl.textContent = '';
       return;
     }
-    Charts.sparkline(container, {
-      values: rows.map((r) => num(r.rating)),
-      color: 'var(--series-3)',
-      formatValue: (v) => v.toFixed(1),
+    Charts.areaChart(container, {
+      data: daily.map((d) => ({
+        ...d,
+        // Say what each point is made of -- a day averaging four matches and
+        // a day with one shouldn't look equally solid without saying so.
+        hint: `${d.count} ${d.count === 1 ? 'match' : 'matches'}`,
+      })),
+      color: 'var(--series-1)',
     });
+    if (captionEl) {
+      const matches = daily.reduce((sum, d) => sum + d.count, 0);
+      captionEl.textContent =
+        `Average match rating per day, oldest → most recent — `
+        + `${matches} match${matches === 1 ? '' : 'es'} across ${daily.length} day${daily.length === 1 ? '' : 's'}.`;
+    }
   } catch (err) {
     Charts.emptyState(container, err.message);
   }
@@ -1138,34 +1353,10 @@ function toggleMatchDetail(row, rawMatch) {
 }
 
 // --------------------------------------------------------------------------
-// Competition -- our own divisional progress (EA has no full league table
+// Competition -- our own standing over time (EA has no full league table
 // to show), plus a head-to-head record against every club we've actually
 // played, built from tracked match history (see db.py's rival_records).
 // --------------------------------------------------------------------------
-
-// EA Sports FC Pro Clubs has 10 divisions as of this writing -- undocumented
-// by EA (see ea_client.py), so this is a reasonable default rather than a
-// hard fact; the ladder extends past it automatically if a club's current
-// or best division ever reports higher, rather than silently truncating.
-const DIVISION_COUNT_DEFAULT = 10;
-
-function renderDivisionLadder(container, current, best) {
-  const cur = num(current);
-  const bestNum = num(best);
-  const top = Math.max(DIVISION_COUNT_DEFAULT, cur, bestNum, 1);
-  const rows = [];
-  for (let d = 1; d <= top; d++) {
-    const isCurrent = cur > 0 && d === cur;
-    const isBest = bestNum > 0 && d === bestNum;
-    rows.push(`
-      <div class="rung ${isCurrent ? 'current' : ''} ${isBest ? 'best' : ''}">
-        <span class="rn">D${d}</span>
-        <div class="bar"><span style="width:${isCurrent ? 100 : isBest ? 45 : 8}%"></span></div>
-        <span class="rung-note">${isCurrent ? 'Current' : isBest ? 'Best finish' : ''}</span>
-      </div>`);
-  }
-  container.innerHTML = `<div class="ladder">${rows.reverse().join('')}</div>`;
-}
 
 function renderCompetition(standingsResult, historyDivisionResult, historyMatchesResult, rivalsResult) {
   const panel = document.getElementById('tab-competition');
@@ -1174,23 +1365,13 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
 
   panel.innerHTML = `
     <p style="color:var(--muted)">
-      EA's Pro Clubs API does not expose a full league table -- only your club's own divisional
-      progress, and, below, your own head-to-head record against clubs you've actually played.
+      EA's Pro Clubs API does not expose a full league table, and it reports no division we can
+      trust -- the only one it returns is an all-time snapshot that runs many matches behind, and
+      nothing in the API derives the real one. So this report leads on skill rating, which is live,
+      plus your own head-to-head record against clubs you've actually played.
     </p>
-    <div class="chart-row">
-      <div class="chart-card">
-        <h3>Division Ladder</h3>
-        <div id="chart-ladder"></div>
-      </div>
-      <div class="chart-card">
-        <h3>Promotions vs Relegations</h3>
-        <div id="chart-promo"></div>
-      </div>
-    </div>
     <div class="stat-grid">
-      ${statCard('Current Division', s.currentDivision)}
-      ${statCard('Points', s.points)}
-      ${statCard('Best Division', s.bestDivision)}
+      ${statCard('Skill Rating', s.skillRating)}
       ${statCard('Best Finish', s.bestFinishGroup)}
       ${statCard('Promotions', s.promotions)}
       ${statCard('Relegations', s.relegations)}
@@ -1210,14 +1391,6 @@ function renderCompetition(standingsResult, historyDivisionResult, historyMatche
     </div>
   `;
 
-  renderDivisionLadder(document.getElementById('chart-ladder'), s.currentDivision, s.bestDivision);
-
-  Charts.vBarChart(document.getElementById('chart-promo'), {
-    data: [
-      { label: 'Promotions', value: num(s.promotions), color: 'var(--status-good)' },
-      { label: 'Relegations', value: num(s.relegations), color: 'var(--status-critical)' },
-    ],
-  });
 
   const historyRow = document.getElementById('competition-history-row');
   const trackedSince = historyDivisionResult.status === 'fulfilled' ? historyDivisionResult.value.trackedSince : null;

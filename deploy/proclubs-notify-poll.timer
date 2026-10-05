@@ -1,0 +1,12 @@
+[Unit]
+Description=Send the match week's scheduled Discord messages
+
+[Timer]
+# Every 10 minutes. Each message is recorded when sent, so a run only
+# decides how prompt a reminder is, never whether it goes twice.
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

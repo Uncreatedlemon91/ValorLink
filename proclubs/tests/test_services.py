@@ -502,6 +502,26 @@ def test_sync_discord_events_creates_new_events():
         assert events[0].event_type == "Match"  # sensible default, not from Discord
 
 
+def test_mirrored_events_ask_for_a_position():
+    """They take the Tactics board's formation, like the site's own form."""
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1")])
+        assert services.list_events(session)[0].formation == services.get_active_formation(session)
+
+
+def test_a_formation_is_backfilled_only_while_nobody_has_answered():
+    with database.get_session() as session:
+        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
+        first, second = services.list_events(session)
+        first.formation = second.formation = None
+        session.commit()
+        services.set_signup(session, second, discord_user_id=1, discord_name="A",
+                            discord_avatar=None, status="going", source="site")
+        services.sync_discord_events(session, [_discord_event("d1"), _discord_event("d2")])
+        session.refresh(first); session.refresh(second)
+        assert first.formation and second.formation is None
+
+
 def test_sync_discord_events_sets_cover_image_when_discord_event_has_one():
     with database.get_session() as session:
         services.sync_discord_events(session, [_discord_event("d1", image="somehash")])
@@ -830,3 +850,161 @@ def test_set_featured_streamer_is_exclusive():
         assert first.featured is False
         assert second.featured is True
         assert services.get_featured_streamer(session).id == second.id
+
+
+# --- Contracts ------------------------------------------------------------- #
+def _contract(session, *, weeks=8, starts_at=None):
+    return services.create_contract(
+        session, discord_id="42", display_name="Cap", avatar_url=None,
+        position="Striker", squad_status="Starter", weeks=weeks,
+        source="recorded", created_by_name="Coach", starts_at=starts_at,
+    )
+
+
+def test_a_contract_runs_for_its_weeks_from_its_start():
+    start = datetime(2026, 9, 1, 20, 0)
+    with database.get_session() as session:
+        contract = _contract(session, weeks=8, starts_at=start)
+    assert contract.expires_at == datetime(2026, 10, 27, 20, 0)
+
+
+@pytest.mark.parametrize("weeks,status", [("0", "Starter"), ("53", "Starter"),
+                                          ("x", "Starter"), ("4", "Captain")])
+def test_contract_terms_are_validated(weeks, status):
+    with pytest.raises(services.ServiceError):
+        services.parse_contract_terms(weeks, status)
+
+
+def test_contract_terms_accept_the_bounds():
+    assert services.parse_contract_terms("1", "Substitute") == (1, "Substitute")
+    assert services.parse_contract_terms(" 52 ", "Starter") == (52, "Starter")
+
+
+@pytest.mark.parametrize("remaining,state,text", [
+    (timedelta(weeks=5, hours=1), services.CONTRACT_ACTIVE, "5 weeks left"),
+    (timedelta(days=13, hours=1), services.CONTRACT_ACTIVE, "13 days left"),
+    (timedelta(days=6, hours=1), services.CONTRACT_EXPIRING, "6 days left"),
+    (timedelta(days=1, hours=1), services.CONTRACT_EXPIRING, "1 day left"),
+    (timedelta(hours=3), services.CONTRACT_EXPIRING, "ends today"),
+    (-timedelta(hours=3), services.CONTRACT_EXPIRED, "expired today"),
+    (-timedelta(days=4, hours=1), services.CONTRACT_EXPIRED, "expired 4 days ago"),
+])
+def test_contract_state_and_time_left(remaining, state, text):
+    now = datetime(2026, 9, 30, 12, 0)
+    with database.get_session() as session:
+        contract = _contract(session)
+        contract.expires_at = now + remaining
+        assert services.contract_state(contract, now) == state
+        assert services.contract_time_left(contract, now) == text
+
+
+def test_a_released_contract_is_released_whatever_its_date():
+    with database.get_session() as session:
+        contract = _contract(session)
+        services.end_contract(session, contract, ended_by_name="Coach")
+        assert services.contract_state(contract) == services.CONTRACT_RELEASED
+        assert services.live_contract_for(session, "42") is None
+        assert services.live_contracts(session) == []
+
+
+def test_live_contracts_put_the_soonest_to_run_out_first():
+    with database.get_session() as session:
+        later = _contract(session, weeks=20)
+        sooner = services.create_contract(
+            session, discord_id="43", display_name="Sam", avatar_url=None, position=None,
+            squad_status="Substitute", weeks=2, source="recorded", created_by_name=None,
+        )
+        assert [c.id for c in services.live_contracts(session)] == [sooner.id, later.id]
+
+
+# --- Contract positions ------------------------------------------------------ #
+def test_positions_parse_to_primary_and_optional_secondary():
+    assert services.parse_positions("Striker", "Winger") == ("Striker", "Winger")
+    assert services.parse_positions(" Striker ", "") == ("Striker", None)
+
+
+@pytest.mark.parametrize("primary, secondary, message", [
+    ("", "Winger", "primary position"),
+    ("Stirker", "", "isn't a position"),
+    ("Striker", "Manager", "isn't a position"),       # staff roles aren't positions
+    ("Striker", "Striker", "has to differ"),
+])
+def test_bad_positions_are_refused_with_the_reason(primary, secondary, message):
+    with pytest.raises(services.ServiceError, match=message):
+        services.parse_positions(primary, secondary)
+
+
+def test_a_renewal_may_keep_a_primary_from_before_the_fixed_list():
+    """Old contracts hold free-text positions; renewing one mustn't force
+    staff to change it."""
+    assert services.parse_positions("Sweeper", "", keep="Sweeper") == ("Sweeper", None)
+    with pytest.raises(services.ServiceError):
+        services.parse_positions("Sweeper", "", keep="Libero")
+
+
+def test_a_staff_role_must_be_a_club_role():
+    """Confirming an appointment grants that role's access on the site, so
+    it's one of the three club roles and nothing invented."""
+    assert services.parse_staff_role("  Head Coach ") == "Head Coach"
+    with pytest.raises(services.ServiceError, match="Pick the staff role"):
+        services.parse_staff_role("   ")
+    with pytest.raises(services.ServiceError, match="Club President, Head Coach, Coach"):
+        services.parse_staff_role("Set Piece Coach")
+
+
+def test_a_renewal_restates_both_positions():
+    """Positions are applied as a pair, so dropping the secondary on
+    renewal really drops it."""
+    with database.get_session() as session:
+        contract = services.create_contract(
+            session, discord_id="42", display_name="Cap", avatar_url=None,
+            position="Striker", secondary_position="Winger", squad_status="Starter",
+            weeks=8, source="recorded", created_by_name="Coach",
+        )
+        assert contract.secondary_position == "Winger"
+        move = services.record_roster_move(
+            session, discord_id="42", display_name="Cap", avatar_url=None,
+            kind="renewal", position="Centre Midfield", secondary_position=None,
+            note=None, announced_by_name="Coach", announced_by_discord_id=1,
+            discord_message_id="m", contract_weeks=4, squad_status="Rotation",
+            contract_id=contract.id,
+        )
+        services.apply_renewal(session, contract, move)
+        assert (contract.position, contract.secondary_position) == ("Centre Midfield", None)
+
+
+# --- Staff appointments on the home page ------------------------------------- #
+def _staff_offer(session, *, response=None, confirmed=False):
+    move = services.record_roster_move(
+        session, discord_id="7", display_name="Sam", avatar_url=None,
+        kind="staff_offer", position="Coach", note=None, announced_by_name="Coach",
+        announced_by_discord_id=1, discord_message_id="m",
+    )
+    if response:
+        services.record_offer_response(session, move, response=response,
+                                       role_granted=False, role_error=None)
+    if confirmed:
+        services.confirm_roster_move(session, move, confirmed_by_name="Coach",
+                                     confirm_message_id="c")
+    return move
+
+
+def test_a_confirmed_appointment_is_public_news():
+    with database.get_session() as session:
+        _staff_offer(session, response="accepted", confirmed=True)
+        assert [m.display_name for m in services.public_roster_moves(session)] == ["Sam"]
+
+
+def test_an_unconfirmed_or_declined_staff_offer_stays_private():
+    """The same rule as player offers: a negotiation isn't news."""
+    with database.get_session() as session:
+        _staff_offer(session)
+        _staff_offer(session, response="accepted")
+        _staff_offer(session, response="declined")
+        assert services.public_roster_moves(session) == []
+
+
+def test_an_accepted_staff_offer_awaits_confirmation():
+    with database.get_session() as session:
+        move = _staff_offer(session, response="accepted")
+        assert services.offer_awaits_confirmation(move)

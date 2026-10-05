@@ -1,0 +1,111 @@
+{# A player's development goals and monthly reviews -- on their file, for
+   them and the staff (see development.py). #}
+<section class="panel" id="development">
+  <header class="panel-head"><h2>Development</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
+  <div class="panel-body">
+    {% set open_goals = goals | selectattr('status', 'equalto', 'open') | list %}
+    {% set closed_goals = goals | rejectattr('status', 'equalto', 'open') | list %}
+    {% if not goals %}
+      <p class="muted panel-empty">{{ 'No goals yet. Your coaches set them, and you track your progress here.' if is_self else 'No goals set yet.' }}</p>
+    {% endif %}
+
+    {% for g in open_goals %}
+      <article class="goal">
+        <div class="goal-head">
+          <span class="kicker kicker-dim">{{ g.area or 'Goal' }}{% if g.due_on %} · by {{ g.due_on.strftime('%-d %b') }}{% endif %}</span>
+          <span class="goal-by">set by {{ g.set_by_name }}</span>
+        </div>
+        <p class="goal-text">{{ g.text }}</p>
+        <div class="goal-progress" role="img" aria-label="{{ g.progress or 0 }}% of the way there">
+          <span style="width: {{ g.progress or 0 }}%"></span>
+        </div>
+        <p class="goal-meta">{{ g.progress or 0 }}%{% if g.player_note %} · <span class="goal-note">“{{ g.player_note }}”</span>{% endif %}</p>
+        {% if is_self %}
+          <form method="post" action="/players/{{ player.discord_id }}/goals/{{ g.id }}/progress" class="goal-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <select name="progress" aria-label="How far along">
+              {% for step in progress_steps %}<option value="{{ step }}"{% if (g.progress or 0) == step %} selected{% endif %}>{{ step }}%</option>{% endfor %}
+            </select>
+            <input name="note" maxlength="400" value="{{ g.player_note or '' }}" placeholder="How's it going?" aria-label="Your note" />
+            <button type="submit" class="btn secondary btn-sm">Update</button>
+          </form>
+        {% endif %}
+        {% if is_staff and not is_self %}
+          <form method="post" action="/players/{{ player.discord_id }}/goals/{{ g.id }}/status" class="goal-actions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" name="status" value="achieved" class="btn btn-sm">Achieved</button>
+            <button type="submit" name="status" value="dropped" class="btn-link">Drop</button>
+          </form>
+        {% endif %}
+      </article>
+    {% endfor %}
+
+    {% if is_staff and not is_self %}
+      {% if open_goals | length < max_open_goals %}
+        <details class="goal-new"{% if not goals %} open{% endif %}>
+          <summary>Set a goal</summary>
+          <form method="post" action="/players/{{ player.discord_id }}/goals" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="field"><label for="goal-text">Goal</label>
+              <input id="goal-text" name="text" maxlength="200" required placeholder="e.g. Track the overlapping full-back" /></div>
+            <div class="field-row">
+              <div class="field"><label for="goal-area">Area</label>
+                <select id="goal-area" name="area"><option value="">—</option>
+                  {% for a in goal_areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select></div>
+              <div class="field"><label for="goal-due">Target date <span class="muted">(optional)</span></label>
+                <input id="goal-due" type="date" name="due_on" /></div>
+            </div>
+            <div class="form-actions"><button type="submit" class="btn staff">Set goal</button></div>
+            <p class="field-hint">{{ player.display_name }} sees it on their file{% if notify_enabled %} and gets a DM{% endif %}.</p>
+          </form>
+        </details>
+      {% else %}
+        <p class="field-hint">{{ max_open_goals }} goals open -- close one to set another.</p>
+      {% endif %}
+    {% endif %}
+
+    {% if closed_goals %}
+      <p class="kicker kicker-dim goal-closed-head">Closed</p>
+      <ul class="plain-list goal-closed">
+        {% for g in closed_goals %}
+          <li class="g-{{ g.status }}"><span class="goal-status">{{ 'Achieved' if g.status == 'achieved' else 'Dropped' }}</span> {{ g.text }}
+            {% if is_staff and not is_self %}
+              <form method="post" action="/players/{{ player.discord_id }}/goals/{{ g.id }}/status" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" name="status" value="open" class="btn-link">Reopen</button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <div class="reviews">
+      <p class="kicker kicker-dim">Monthly reviews</p>
+      {% for r in reviews %}
+        <article class="review">
+          <span class="review-month">{{ review_label(r.month) }}</span>
+          <p>{{ r.summary }}</p>
+          <span class="goal-by">{{ r.by_name }}</span>
+        </article>
+      {% else %}
+        <p class="muted panel-empty">No reviews yet.</p>
+      {% endfor %}
+      {% if is_staff and not is_self %}
+        <details class="goal-new">
+          <summary>Log a review</summary>
+          <form method="post" action="/players/{{ player.discord_id }}/reviews" class="stack-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <div class="field"><label for="review-month">Month</label>
+              <input id="review-month" type="month" name="month" value="{{ this_month }}" required /></div>
+            <div class="field"><label for="review-summary">How the month went</label>
+              <textarea id="review-summary" name="summary" rows="4" maxlength="2000" required
+                        placeholder="Against the goals: what's improved, what's next."></textarea></div>
+            <div class="form-actions"><button type="submit" class="btn staff">Save review</button></div>
+            <p class="field-hint">One per month; saving again for the same month replaces it.</p>
+          </form>
+        </details>
+      {% endif %}
+    </div>
+  </div>
+</section>

@@ -7,9 +7,8 @@ what we see on each poll (see poll.py) into a small SQLite file so charts
 can eventually show real season-long trends instead of just "the last
 handful of matches EA still has lying around".
 
-Plain stdlib sqlite3 -- no new dependency, and isolated from ValorLink's
-own databases (its own file, its own schema, never touched by anything
-else in this repo).
+Plain stdlib sqlite3 -- no new dependency, and its own file and schema,
+separate from the site's content database (see database.py).
 """
 
 import sqlite3
@@ -365,8 +364,10 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
     known_opponents), capped at max_teams -- no manual roster to maintain.
     Our own club is always present and pinned (protected from eviction).
     Once full, a newly-discovered opponent replaces whichever non-pinned
-    member currently has the fewest points in their latest snapshot, ties
-    broken by whichever has been sitting in the table longest. A club with
+    member currently has the lowest skill rating in their latest snapshot
+    (the same ranking league_table() displays by, so the club dropped is
+    the one shown at the bottom), ties broken by whichever has been sitting
+    in the table longest. A club with
     no snapshot yet counts as the lowest possible, so an unpolled/unproven
     member is the first to go if nothing else ranks lower -- except one
     just added in this same call, which won't have had a chance to be
@@ -399,17 +400,20 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
 
         def _latest_snapshot(club_id):
             return conn.execute(
-                """SELECT division, points FROM club_snapshots WHERE platform=? AND club_id=?
+                """SELECT division, points, skill_rating FROM club_snapshots WHERE platform=? AND club_id=?
                    ORDER BY captured_at DESC, id DESC LIMIT 1""",
                 (platform, club_id),
             ).fetchone()
 
-        def _points_for(club_id):
+        def _rating_for(club_id):
+            """Ranks a member for eviction the same way league_table() ranks
+            it for display -- otherwise the club we drop when the table is
+            full isn't the one the table shows at the bottom."""
             row = _latest_snapshot(club_id)
-            if not row or row["points"] is None:
+            if not row or row["skill_rating"] is None:
                 return -1
             try:
-                return int(float(row["points"]))
+                return int(float(row["skill_rating"]))
             except (TypeError, ValueError):
                 return -1
 
@@ -460,7 +464,7 @@ def sync_league_roster(platform, our_club_id, our_label, max_teams=25):
                 ).fetchall()
                 if not candidates:
                     continue  # everyone left is pinned -- no room to make
-                evict = min(candidates, key=lambda r: (_points_for(r["club_id"]), r["added_at"]))
+                evict = min(candidates, key=lambda r: (_rating_for(r["club_id"]), r["added_at"]))
                 conn.execute(
                     "DELETE FROM league_clubs WHERE platform=? AND club_id=?",
                     (platform, evict["club_id"]),
@@ -485,13 +489,22 @@ def recent_form(platform, club_id, limit=5):
 
 def league_table(platform, our_club_id):
     """The auto-built league table: every club in league_clubs with its
-    current division/points/record from its latest snapshot, filtered to
+    current division/rating/record from its latest snapshot, filtered to
     clubs currently in the SAME division as us. Division numbers are a
     skill tier that moves independently per club (see ea_client.py) --
     not a real league/region grouping, EA doesn't expose one -- so "same
     division right now" is the closest available proxy for "who's
-    actually in our bracket." Sorted by points, highest first. A club
-    that's never been polled sorts last (unknown standing, not zero)."""
+    actually in our bracket."
+
+    Ranked by skill rating, highest first. Points measure how much a club
+    has played as much as how well -- they only accumulate, so a club that
+    grinds twice as many matches outranks a better one that played fewer.
+    Skill rating is EA's own strength number and moves both ways, which
+    makes it the fairer sort for a table whose members have wildly
+    different match counts. Points are still recorded and still decide
+    ties. A club that's never been polled sorts last (unknown strength,
+    not zero).
+    """
     our_club_id = str(our_club_id)
     rows = []
     our_division = None
@@ -506,6 +519,7 @@ def league_table(platform, our_club_id):
             "label": entry["label"] or entry["club_id"],
             "is_us": is_us,
             "division": snap.get("division"),
+            "skill_rating": _num(snap.get("skill_rating")),
             "points": _num(snap.get("points")),
             "played": wins + losses + ties,
             "team_size": _num(snap.get("team_size")),
@@ -519,7 +533,13 @@ def league_table(platform, our_club_id):
     if our_division is not None:
         rows = [r for r in rows if r["division"] == our_division]
 
-    rows.sort(key=lambda r: r["points"] if r["points"] is not None else -1, reverse=True)
+    rows.sort(
+        key=lambda r: (
+            r["skill_rating"] if r["skill_rating"] is not None else -1,
+            r["points"] if r["points"] is not None else -1,
+        ),
+        reverse=True,
+    )
     return rows
 
 
@@ -539,12 +559,56 @@ def player_names(platform, club_id):
 def player_trend(platform, club_id, player_name):
     conn = _connect()
     rows = conn.execute(
-        """SELECT mp.*, m.played_at, m.match_type, m.opp_name
+        """SELECT mp.*, m.played_at, m.match_type, m.opp_name, m.us_score, m.opp_score,
+                  m.outcome
            FROM match_players mp
            JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
            WHERE m.platform=? AND m.club_id=? AND mp.player_name=?
            ORDER BY m.played_at""",
         (platform, club_id, player_name),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def career_totals(platform, club_id):
+    """Career totals per player for our club, keyed by casefolded gamertag:
+    {name, apps, goals, assists, mom, clean_sheets} -- what milestones are
+    judged against."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT mp.player_name AS name, COUNT(*) AS apps,
+                  COALESCE(SUM(mp.goals), 0) AS goals, COALESCE(SUM(mp.assists), 0) AS assists,
+                  COALESCE(SUM(mp.mom), 0) AS mom, COALESCE(SUM(mp.clean_sheet), 0) AS clean_sheets
+           FROM match_players mp
+           JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
+           WHERE m.platform=? AND m.club_id=?
+           GROUP BY mp.player_name""",
+        (platform, club_id),
+    ).fetchall()
+    conn.close()
+    totals = {}
+    for r in rows:
+        key = r["name"].casefold()
+        if key in totals:  # same gamertag in different casing
+            for k in ("apps", "goals", "assists", "mom", "clean_sheets"):
+                totals[key][k] += r[k]
+        else:
+            totals[key] = dict(r)
+    return totals
+
+
+def match_player_ratings(club_id, match_ids):
+    """[{match_id, player_name, rating, goals, assists, mom}] for the given
+    matches of our club -- for a match report's "top rated"."""
+    if not match_ids:
+        return []
+    conn = _connect()
+    marks = ",".join("?" * len(match_ids))
+    rows = conn.execute(
+        f"""SELECT match_id, player_name, rating, goals, assists, mom FROM match_players
+            WHERE club_id=? AND match_id IN ({marks})""",
+        [club_id, *match_ids],
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -605,6 +669,68 @@ def squad_moves(platform, club_id, since):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
+    """Who has been playing, from the matches recorded for our club.
+
+    Returns {"window": n, "players": {gamertag_casefolded: {...}}} where n
+    is how many of the club's most recent matches the window actually
+    covers (fewer than `window` early in a season), and each player has:
+
+      name          gamertag as EA spells it
+      apps_window   matches played among those n
+      apps_total    every recorded appearance
+      goals, assists, mom   totals across every recorded appearance
+      form          average rating over their last `form_games`
+                    appearances, or None with fewer than `min_form_apps`
+      positions     {pos: count} as EA recorded where they played
+
+    Keyed case-insensitively because gamertag links are matched that way
+    (see services.set_player_link).
+    """
+    conn = _connect()
+    recent = [r["match_id"] for r in conn.execute(
+        """SELECT match_id FROM matches WHERE platform=? AND club_id=?
+           ORDER BY played_at DESC, match_id DESC LIMIT ?""",
+        (platform, club_id, window),
+    ).fetchall()]
+    rows = conn.execute(
+        """SELECT mp.player_name, mp.match_id, mp.pos, mp.rating, mp.goals,
+                  mp.assists, mp.mom
+           FROM match_players mp
+           JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
+           WHERE m.platform=? AND m.club_id=?
+           ORDER BY m.played_at DESC, m.match_id DESC""",
+        (platform, club_id),
+    ).fetchall()
+    conn.close()
+
+    in_window = set(recent)
+    players = {}
+    for r in rows:
+        key = r["player_name"].casefold()
+        p = players.setdefault(key, {
+            "name": r["player_name"], "apps_window": 0, "apps_total": 0,
+            "goals": 0, "assists": 0, "mom": 0, "ratings": [], "positions": {},
+        })
+        p["apps_total"] += 1
+        if r["match_id"] in in_window:
+            p["apps_window"] += 1
+        p["goals"] += r["goals"] or 0
+        p["assists"] += r["assists"] or 0
+        p["mom"] += r["mom"] or 0
+        # Rows arrive newest first, so the first ratings seen are the
+        # most recent ones.
+        if r["rating"] is not None and len(p["ratings"]) < form_games:
+            p["ratings"].append(r["rating"])
+        if r["pos"]:
+            p["positions"][r["pos"]] = p["positions"].get(r["pos"], 0) + 1
+    for p in players.values():
+        ratings = p.pop("ratings")
+        p["form"] = (round(sum(ratings) / len(ratings), 2)
+                     if len(ratings) >= min_form_apps else None)
+    return {"window": len(recent), "players": players}
 
 
 def snapshot_at(platform, club_id, ts):

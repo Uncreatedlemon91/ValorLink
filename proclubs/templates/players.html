@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Players{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Players</h1>
+      <p class="page-lede">
+        {{ squad_size }} under contract{% if staff %} · {{ staff | length }} staff{% endif %}.
+        Open anyone's file for their profile and match stats.
+      </p>
+    </div>
+    {% if user %}<a class="btn secondary" href="/players/me">My file</a>{% endif %}
+  </div>
+
+  {% if potm %}
+    <div class="potm-banner">
+      <span class="kicker">Player of the Month · {{ potm_label }}</span>
+      <strong>{{ potm.names }}</strong>
+      <span class="muted">{{ potm.votes }} Man of the Match vote{{ 's' if potm.votes != 1 }} from the squad</span>
+    </div>
+  {% endif %}
+
+  {% if boards | selectattr('rows') | list %}
+    <div class="board-grid">
+      {% for b in boards if b.rows %}
+        <section class="panel board">
+          <header class="panel-head"><h2>{{ b.title }}</h2><span>{{ b.unit }}</span></header>
+          <ol class="board-list">
+            {% for r in b.rows %}
+              <li><a href="/players/{{ r.id }}">{{ r.name }}</a>
+                <span class="board-value">{{ ('%.1f' % r.value) if b.title == 'Form' else (r.value ~ ('%' if b.title == 'Turns up' else '')) }}</span></li>
+            {% endfor %}
+          </ol>
+        </section>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if staff %}
+    <section class="panel people-panel">
+      <header class="panel-head panel-staff"><h2>Staff</h2></header>
+      <ul class="people-grid">
+        {% for p in staff %}
+          <li>
+            <a class="person-card" href="/players/{{ p.discord_id }}">
+              {% if p.avatar_url %}
+                <img class="roster-avatar" src="{{ p.avatar_url }}" alt="" width="40" height="40" loading="lazy" decoding="async" />
+              {% else %}
+                <span class="roster-avatar move-avatar-fallback">{{ initials(p.display_name) }}</span>
+              {% endif %}
+              <span class="person-text">
+                <span class="squad-name">{{ p.display_name }}</span>
+                <span class="role-pill">{{ p.club_role }}</span>
+              </span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if not squad_size %}
+    <div class="card empty-state">
+      Nobody is under contract yet.
+      {% if is_management %}Sign players, or record contracts for the squad you already have, on
+        <a href="/roster">Moves &amp; contracts</a>.{% endif %}
+    </div>
+  {% endif %}
+
+  {% for status, rows in groups.items() if rows %}
+    <section class="panel people-panel">
+      <header class="panel-head"><h2>{{ status_label(status) }}s</h2><span class="muted">{{ rows | length }}</span></header>
+      <div class="table-scroll">
+        <table class="league-table squad-table">
+          <thead>
+            <tr>
+              <th scope="col">Player</th>
+              <th scope="col">Positions</th>
+              <th scope="col" class="lt-num" title="Matches played among the club's last {{ window }}">
+                Played{% if window %} <span class="th-sub">/{{ window }}</span>{% endif %}</th>
+              <th scope="col" class="lt-num" title="Average rating, last few appearances">Form</th>
+              <th scope="col" class="lt-num">Goals</th>
+              <th scope="col" class="lt-num">Assists</th>
+              <th scope="col" class="lt-num" title="Man of the Match">MOTM</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              {% set c = r.contract %}{% set u = r.usage %}
+              <tr>
+                <td>
+                  <a class="squad-player" href="/players/{{ c.discord_id }}">
+                    {% if c.avatar_url %}
+                      <img class="roster-avatar" src="{{ c.avatar_url }}" alt="" width="36" height="36" loading="lazy" decoding="async" />
+                    {% else %}
+                      <span class="roster-avatar move-avatar-fallback">{{ initials(c.display_name) }}</span>
+                    {% endif %}
+                    <span class="squad-player-text">
+                      <span class="squad-name">{{ c.display_name }}</span>
+                      {% if r.gamertag %}<span class="squad-gamertag">{{ r.gamertag }}</span>{% endif %}
+                    </span>
+                  </a>
+                </td>
+                <td class="squad-positions">
+                  {{ c.position or '—' }}{% if c.secondary_position %}<span class="squad-sec">/ {{ c.secondary_position }}</span>{% endif %}
+                </td>
+                <td class="lt-num">{{ u.apps_window if u else '—' }}</td>
+                <td class="lt-num"><span class="lt-rating">{{ form_label(u.form if u else None) }}</span></td>
+                <td class="lt-num">{{ u.goals if u else '—' }}</td>
+                <td class="lt-num">{{ u.assists if u else '—' }}</td>
+                <td class="lt-num">{{ u.mom if u else '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -15,12 +15,21 @@
         <h1>League table</h1>
         <p class="page-lede">
           {% if our_division %}
-            Every club we've faced currently in Division {{ our_division }}, built automatically from real matches --
+            Every club we've faced that EA's leaderboard currently groups in the same tier as us, built
+            automatically from real matches --
           {% else %}
             Every club we've faced --
           {% endif %}
-          not a manually curated list, and not EA's own leaderboard (it doesn't expose one). Up to
-          {{ max_teams }} teams; the lowest-ranked drops off to make room for a newly-played opponent once full.
+          not a manually curated list, and not EA's own league table (it doesn't expose one). Ranked by
+          <strong>skill rating</strong> rather than points: points only ever go up, so they reward playing a
+          lot as much as playing well, and clubs here have wildly different match counts. Up to
+          {{ max_teams }} teams; the lowest-rated drops off to make room for a newly-played opponent once full.
+        </p>
+        <p class="page-lede">
+          The tier used for that grouping comes from EA's all-time leaderboard, which lags a long way behind
+          live play &mdash; it is not the division any of these clubs is actually sitting in right now. It's
+          used only to keep the table to a comparable set of opponents; every number in the table itself is
+          current.
         </p>
       </div>
     </div>
@@ -37,7 +46,7 @@
             <tr>
               <th class="lt-club">Club</th>
               <th class="lt-num">P</th>
-              <th class="lt-num">Pts</th>
+              <th class="lt-num" title="EA's own club strength rating">SR</th>
               <th class="lt-num">Squad</th>
               <th class="lt-form">Last 5</th>
             </tr>
@@ -50,7 +59,7 @@
                   <span class="lt-name">{{ row.label }}{% if row.is_us %} <span class="lt-us-pill">Us</span>{% endif %}</span>
                 </td>
                 <td class="lt-num">{{ row.played if row.has_data else '—' }}</td>
-                <td class="lt-num lt-points">{{ row.points if row.points is not none else '—' }}</td>
+                <td class="lt-num lt-rating">{{ row.skill_rating if row.skill_rating is not none else '—' }}</td>
                 <td class="lt-num">{{ row.team_size if row.team_size is not none else '—' }}</td>
                 <td class="lt-form">
                   {% if row.form %}
@@ -75,11 +84,11 @@
       <div class="league-excluded">
         <p class="league-excluded-head">
           {{ excluded | length }} more tracked club{{ 's' if excluded | length != 1 else '' }}
-          not shown above (different division, or not polled yet):
+          not shown above (grouped into a different tier, or not polled yet):
         </p>
         <ul class="league-excluded-list">
           {% for e in excluded %}
-            <li>{{ e.label }} &middot; {% if e.division %}Division {{ e.division }}{% else %}not polled yet{% endif %}</li>
+            <li>{{ e.label }} &middot; {% if e.division %}different tier{% else %}not polled yet{% endif %}</li>
           {% endfor %}
         </ul>
       </div>

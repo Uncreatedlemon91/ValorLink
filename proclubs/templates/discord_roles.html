@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Discord roles{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Discord roles</h1>
+      <p class="page-lede">The site manages these roles in Discord. When a squad status, club role or trial
+        changes here, the role follows straight away. This page brings the whole server in line.</p>
+    </div>
+  </div>
+
+  {% if not enabled %}
+    <div class="card empty-state">
+      No managed roles are active. They need <code>DISCORD_BOT_TOKEN</code> and <code>DISCORD_GUILD_ID</code>,
+      plus at least one role ID below in <code>.env</code>.
+    </div>
+  {% elif error %}
+    <div class="flash error">Couldn't read the server's members: {{ error }}. The bot needs the Server Members
+      Intent (Developer Portal → Bot).</div>
+  {% endif %}
+
+  <div class="dash-grid">
+    <div class="dash-main">
+      <section class="panel">
+        <header class="panel-head panel-amber"><h2>Out of step</h2>
+          <span>{{ plan | length }} member{{ 's' if plan | length != 1 }}</span></header>
+        {% if plan %}
+          <div class="table-scroll">
+            <table class="league-table">
+              <thead><tr><th scope="col">Member</th><th scope="col">Will get</th><th scope="col">Will lose</th></tr></thead>
+              <tbody>
+                {% for r in plan %}
+                  <tr>
+                    <td class="squad-name">{{ r.name }}</td>
+                    <td class="role-add">{% for k in r.add %}<span class="role-chip add">+ {{ labels.get(k, k) }}</span>{% endfor %}</td>
+                    <td class="role-remove">{% for k in r.remove %}<span class="role-chip remove">− {{ labels.get(k, k) }}</span>{% endfor %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <form method="post" action="/discord-roles/apply" class="panel-body"
+                onsubmit="return confirm('Add and remove these Discord roles now?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="btn">Apply all</button>
+            <p class="field-hint">Only the roles listed on the right are ever touched. Somebody losing a role here
+              holds it in Discord without the site saying they should — record their contract, club role or
+              trial first if they ought to keep it.</p>
+          </form>
+        {% elif enabled and not error %}
+          <div class="panel-body"><p class="muted panel-empty">Discord matches the site for all {{ member_count }} members.</p></div>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="dash-side">
+      <section class="panel">
+        <header class="panel-head"><h2>Managed roles</h2></header>
+        <ul class="plain-list managed-roles">
+          {% for key, label in labels.items() %}
+            <li class="{{ '' if key in managed else 'is-off' }}">
+              <span class="squad-name">{{ label }}</span>
+              {% if key in managed %}
+                <span class="squad-sub">{{ managed[key] }} · {{ holders.get(key, []) | length }} hold it</span>
+              {% else %}
+                <span class="squad-sub">Not set — {{ 'ROSTER_SQUAD_ROLE_ID' if key == 'Squad' else 'ROLE_' ~ key | upper | replace(' ', '_') ~ '_ID' }}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <div class="panel-body"><p class="field-hint">The bot needs Manage Roles, and its own role must sit above
+          every role here in Server Settings → Roles. The Discord staff role is never managed.</p></div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

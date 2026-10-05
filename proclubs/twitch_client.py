@@ -3,8 +3,9 @@
 Uses the client-credentials grant (an app access token, not a user token --
 we're only ever reading public stream state, never acting as a Twitch user).
 The token is cached in memory until shortly before it expires; stream
-lookups are cached briefly too so a page of streamer cards doesn't fan out
-into one Twitch call per card on every request.
+lookups are cached too, so a page of streamer cards doesn't fan out into
+one Twitch call per card, and a cache that's gone stale refreshes behind
+the request rather than inside it (see cache.py).
 """
 from __future__ import annotations
 
@@ -12,16 +13,20 @@ import time
 
 import httpx
 
+import cache
 import config
 
 _TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 _STREAMS_URL = "https://api.twitch.tv/helix/streams"
 _TIMEOUT = 10
 
-_STREAMS_CACHE_TTL = 30  # seconds
-
+# Live status wants to be current, but never at the cost of a visitor
+# waiting on Twitch mid-render: past the fresh window the last known answer
+# is served straight away and refreshed on a background thread (see
+# cache.py). max_stale is the point where "who's live" is too old to show at
+# all, so a caller waits for a real lookup instead.
 _token_cache: dict = {"value": None, "expires_at": 0.0}
-_streams_cache: dict = {"key": None, "value": None, "expires_at": 0.0}
+_streams_cache = cache.SwrCache(fresh_for=30, max_stale=600)
 
 
 class TwitchApiError(Exception):
@@ -67,10 +72,10 @@ def live_streams(logins: list[str]) -> dict[str, dict]:
         return {}
 
     key = tuple(sorted(login.lower() for login in logins))
-    now = time.monotonic()
-    if _streams_cache["key"] == key and now < _streams_cache["expires_at"]:
-        return _streams_cache["value"]
+    return _streams_cache.get(key, lambda: _fetch_streams(key))
 
+
+def _fetch_streams(key: tuple[str, ...]) -> dict[str, dict]:
     try:
         token = _app_token()
         resp = httpx.get(
@@ -101,7 +106,4 @@ def live_streams(logins: list[str]) -> dict[str, dict]:
     except (httpx.HTTPError, TwitchApiError, KeyError):
         return {}
 
-    _streams_cache["key"] = key
-    _streams_cache["value"] = result
-    _streams_cache["expires_at"] = now + _STREAMS_CACHE_TTL
     return result

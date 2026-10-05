@@ -18,10 +18,10 @@
       <div class="featured-stream-player">
         <iframe
           src="https://player.twitch.tv/?channel={{ featured_streamer.twitch_login }}&parent={{ request.url.hostname }}&muted=true"
-          allowfullscreen frameborder="0" scrolling="no"></iframe>
+          allowfullscreen frameborder="0" scrolling="no" loading="lazy"></iframe>
       </div>
       <div class="featured-stream-info">
-        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ featured_streamer.avatar }}" alt="" />{% endif %}
+        {% if featured_streamer.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', featured_streamer) }}" alt="" loading="lazy" decoding="async" />{% endif %}
         <div class="featured-stream-text">
           <div class="streamer-name">{{ featured_streamer.display_name }} <span class="featured-pill">Featured</span></div>
           <div class="streamer-status {{ 'is-live' if featured_streamer_live else '' }}">
@@ -46,7 +46,7 @@
             </div>
           </a>
           <div class="streamer-info">
-            {% if s.avatar %}<img class="streamer-avatar" src="{{ s.avatar }}" alt="" />{% endif %}
+            {% if s.avatar %}<img class="streamer-avatar" src="{{ media_url('streamer', s) }}" alt="" loading="lazy" decoding="async" />{% endif %}
             <div>
               <div class="streamer-name">{{ s.display_name }}</div>
               <div class="streamer-status {{ 'is-live' if info else '' }}">

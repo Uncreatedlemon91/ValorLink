@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Training{% endblock %}
+{% block content %}
+<div class="page page-wide">
+  <div class="page-head">
+    <div>
+      <h1>Training</h1>
+      <p class="page-lede">In-game practice and theory sessions. Read your role brief before you log on;
+        the talk happens in each session's Discord thread.</p>
+    </div>
+    {% if is_staff %}<a class="btn" href="/events/new?type=Training">Plan a session</a>{% endif %}
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-main">
+      <section class="panel">
+        <header class="panel-head"><h2>Coming up</h2></header>
+        {% if upcoming %}
+          <ul class="session-list">
+            {% for e in upcoming %}
+              <li>
+                <a class="session-row" href="/events/{{ e.id }}#session-plan">
+                  <span class="session-when">{{ localtime(e.scheduled_at, 'daymonth') }}<small>{{ localtime(e.scheduled_at, 'time') }}</small></span>
+                  <span class="session-text">
+                    <span class="kicker kicker-dim">{{ e.event_type }}{% if e.formation %} · {{ e.formation }}{% endif %}</span>
+                    <span class="session-title">{{ e.title }}</span>
+                    <span class="session-objective">{{ e.session_objective or 'Plan to follow.' }}</span>
+                  </span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="panel-body"><p class="muted panel-empty">No sessions scheduled.{% if is_staff %} Create an event of type Training or Theory.{% endif %}</p></div>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <header class="panel-head"><h2>Recent sessions</h2></header>
+        {% if recent %}
+          <ul class="session-list">
+            {% for e in recent %}
+              <li>
+                <a class="session-row" href="/events/{{ e.id }}#session-plan">
+                  <span class="session-when">{{ localtime(e.scheduled_at, 'daymonth') }}</span>
+                  <span class="session-text">
+                    <span class="session-title">{{ e.title }}</span>
+                    {% if e.session_objective %}<span class="session-objective">{{ e.session_objective }}</span>{% endif %}
+                    <span class="session-review">{{ e.session_review | truncate(220) if e.session_review else 'No review written yet.' }}</span>
+                  </span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="panel-body"><p class="muted panel-empty">Nothing yet.</p></div>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="dash-side">
+      <section class="panel" id="suggestions">
+        <header class="panel-head"><h2>What should we work on?</h2></header>
+        <form method="post" action="/training/suggestions" class="panel-body stack-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <label class="visually-hidden" for="suggestion">Your suggestion</label>
+          <textarea id="suggestion" name="body" rows="3" maxlength="500" required
+                    placeholder="e.g. Defending crosses — we keep losing the far post."></textarea>
+          <div class="form-actions"><button type="submit" class="btn">Suggest</button></div>
+          <p class="field-hint">Only the coaches see suggestions, and you see your own.</p>
+        </form>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head{{ ' panel-staff' if is_staff }}"><h2>{{ 'Suggestions' if is_staff else 'Your suggestions' }}</h2>{% if is_staff %}<span>Staff</span>{% endif %}</header>
+        {% if suggestions %}
+          <ul class="suggestion-list">
+            {% for s in suggestions %}
+              <li class="suggestion s-{{ s.status }}">
+                <p>{{ s.body }}</p>
+                <div class="suggestion-meta">
+                  <span>{% if is_staff %}{{ s.display_name }} · {% endif %}{{ localtime(s.created_at, 'date') }}</span>
+                  <span class="suggestion-status">{{ status_labels[s.status] }}</span>
+                </div>
+                {% if s.staff_note %}<p class="suggestion-note">“{{ s.staff_note }}”{% if s.handled_by %} — {{ s.handled_by }}{% endif %}</p>{% endif %}
+                {% if is_staff %}
+                  <form method="post" action="/training/suggestions/{{ s.id }}" class="suggestion-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <select name="status" aria-label="Status">
+                      {% for st in statuses %}<option value="{{ st }}"{% if s.status == st %} selected{% endif %}>{{ status_labels[st] }}</option>{% endfor %}
+                    </select>
+                    <input name="staff_note" maxlength="300" value="{{ s.staff_note or '' }}" placeholder="Reply (they'll see it)" aria-label="Reply" />
+                    <button type="submit" class="btn secondary btn-sm">Save</button>
+                  </form>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="panel-body"><p class="muted panel-empty">No suggestions yet.</p></div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

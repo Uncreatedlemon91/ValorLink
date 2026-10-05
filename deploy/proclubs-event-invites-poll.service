@@ -1,0 +1,13 @@
+[Unit]
+Description=Pro Clubs staged event thread invites
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valorlink
+Group=valorlink
+WorkingDirectory=/opt/valorlink/proclubs
+# Needs proclubs/.env (DISCORD_BOT_TOKEN, DISCORD_GUILD_ID,
+# EVENT_THREAD_CHANNEL_ID, EVENT_INVITE_TIERS, SITE_BASE_URL) -- config.py
+# loads it itself via python-dotenv, same as valorlink-proclubs.service.
+ExecStart=/opt/valorlink/proclubs/.venv/bin/python3 event_invites_poll.py
