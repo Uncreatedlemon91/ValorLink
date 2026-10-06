@@ -40,7 +40,68 @@
     </div>
   </section>
 
-  <div class="dash-grid">
+  <div class="dash-grid player-grid">
+    <div class="dash-left">
+      {% if honours or potm_months %}
+        <section class="panel">
+          <header class="panel-head"><h2>Honors</h2></header>
+          <ul class="honours">
+            {% for m in potm_months %}<li class="honour is-potm"><span class="kicker">Player of the Month</span>{{ m }}</li>{% endfor %}
+            {% for h in honours %}<li class="honour"><span class="kicker kicker-dim">{{ localtime(h.achieved_at, 'date') }}</span>{{ h.label }}</li>{% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      {% if see_private %}{% include "_development.html" %}{% endif %}
+
+      {# --- About: theirs to write ---------------------------------------- #}
+      <section class="panel">
+        <header class="panel-head"><h2>About</h2></header>
+        <div class="panel-body">
+          {% if player.bio %}<p class="profile-bio">{{ player.bio }}</p>
+          {% elif not is_self %}<p class="muted panel-empty">Nothing written yet.</p>{% endif %}
+          {% if is_self %}
+            <details class="profile-edit"{% if not player.bio %} open{% endif %}>
+              <summary>Edit your profile</summary>
+              <form method="post" action="/players/{{ player.discord_id }}/profile" class="stack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <div class="field-row">
+                  <div class="field">
+                    <label for="preferred-foot">Preferred foot</label>
+                    <select id="preferred-foot" name="preferred_foot">
+                      <option value="">—</option>
+                      {% for f in preferred_feet %}<option value="{{ f }}"{% if player.preferred_foot == f %} selected{% endif %}>{{ f }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="archetype">Build / archetype</label>
+                    <input id="archetype" name="archetype" maxlength="40" value="{{ player.archetype or '' }}" placeholder="e.g. Box-to-box" />
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="bio">About you</label>
+                  <textarea id="bio" name="bio" rows="3" maxlength="500" placeholder="Where you like to play, what you're working on.">{{ player.bio or '' }}</textarea>
+                </div>
+                <div class="form-actions"><button type="submit" class="btn">Save profile</button></div>
+              </form>
+            </details>
+            {% if not gamertag %}
+              <form method="post" action="/me/gamertag" class="inline-form profile-gamertag">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="hidden" name="redirect_to" value="/players/{{ player.discord_id }}" />
+                <label for="my-gamertag">EA gamertag</label>
+                <input id="my-gamertag" name="player_name" list="gamertag-options" maxlength="64" autocomplete="off" required placeholder="As it shows in game" />
+                <button type="submit" class="btn secondary">Link</button>
+                <datalist id="gamertag-options">
+                  {% for g in gamertag_options %}<option value="{{ g }}"></option>{% endfor %}
+                </datalist>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
     <div class="dash-main">
       {# --- Stats: everyone can see these --------------------------------- #}
       <section class="panel" id="season">
@@ -116,16 +177,6 @@
         {% endif %}
       </section>
 
-      {% if honours or potm_months %}
-        <section class="panel">
-          <header class="panel-head"><h2>Honours</h2></header>
-          <ul class="honours">
-            {% for m in potm_months %}<li class="honour is-potm"><span class="kicker">Player of the Month</span>{{ m }}</li>{% endfor %}
-            {% for h in honours %}<li class="honour"><span class="kicker kicker-dim">{{ localtime(h.achieved_at, 'date') }}</span>{{ h.label }}</li>{% endfor %}
-          </ul>
-        </section>
-      {% endif %}
-
       {% if match_ratings %}
         <section class="panel">
           <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
@@ -148,55 +199,6 @@
           </div>
         </section>
       {% endif %}
-
-      {# --- About: theirs to write ---------------------------------------- #}
-      <section class="panel">
-        <header class="panel-head"><h2>About</h2></header>
-        <div class="panel-body">
-          {% if player.bio %}<p class="profile-bio">{{ player.bio }}</p>
-          {% elif not is_self %}<p class="muted panel-empty">Nothing written yet.</p>{% endif %}
-          {% if is_self %}
-            <details class="profile-edit"{% if not player.bio %} open{% endif %}>
-              <summary>Edit your profile</summary>
-              <form method="post" action="/players/{{ player.discord_id }}/profile" class="stack-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                <div class="field-row">
-                  <div class="field">
-                    <label for="preferred-foot">Preferred foot</label>
-                    <select id="preferred-foot" name="preferred_foot">
-                      <option value="">—</option>
-                      {% for f in preferred_feet %}<option value="{{ f }}"{% if player.preferred_foot == f %} selected{% endif %}>{{ f }}</option>{% endfor %}
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="archetype">Build / archetype</label>
-                    <input id="archetype" name="archetype" maxlength="40" value="{{ player.archetype or '' }}" placeholder="e.g. Box-to-box" />
-                  </div>
-                </div>
-                <div class="field">
-                  <label for="bio">About you</label>
-                  <textarea id="bio" name="bio" rows="3" maxlength="500" placeholder="Where you like to play, what you're working on.">{{ player.bio or '' }}</textarea>
-                </div>
-                <div class="form-actions"><button type="submit" class="btn">Save profile</button></div>
-              </form>
-            </details>
-            {% if not gamertag %}
-              <form method="post" action="/me/gamertag" class="inline-form profile-gamertag">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-                <input type="hidden" name="redirect_to" value="/players/{{ player.discord_id }}" />
-                <label for="my-gamertag">EA gamertag</label>
-                <input id="my-gamertag" name="player_name" list="gamertag-options" maxlength="64" autocomplete="off" required placeholder="As it shows in game" />
-                <button type="submit" class="btn secondary">Link</button>
-                <datalist id="gamertag-options">
-                  {% for g in gamertag_options %}<option value="{{ g }}"></option>{% endfor %}
-                </datalist>
-              </form>
-            {% endif %}
-          {% endif %}
-        </div>
-      </section>
-
-      {% if see_private %}{% include "_development.html" %}{% endif %}
 
       {# --- Coach notes: staff only, never the player ---------------------- #}
       {% if notes_visible %}

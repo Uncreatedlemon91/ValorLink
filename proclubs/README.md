@@ -573,7 +573,7 @@ DMs, vote or match report.
 - **Leaderboards** on the Players page: form, goals, assists, squad Man of
   the Match awards and attendance, top five each, with the latest Player
   of the Month above them.
-- **Honours** on each player file: their milestones and months won.
+- **Honors** on each player file: their milestones and months won.
 
 ## Development goals and reviews
 
