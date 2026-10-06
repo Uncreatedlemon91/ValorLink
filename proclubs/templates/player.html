@@ -58,6 +58,23 @@
               <div class="tile"><span class="tile-value">{{ motm_total }}</span><span class="tile-label">Squad's MOTM</span></div>
               <div class="tile"><span class="tile-value">{{ usage.apps_total }}</span><span class="tile-label">Apps</span></div>
             </div>
+            {% set d = usage.detail %}
+            {% if d and (d.passes is not none or d.tackles is not none or d.shots is not none or d.shot_success is not none) %}
+              <h3 class="form-subhead">Passing, defending and shooting
+                <span class="muted">{{ "EA's season figures" if d.source == 'ea' else 'from the recorded matches' }}</span></h3>
+              <div class="tile-row">
+                <div class="tile"><span class="tile-value">{{ (d.pass_pct ~ '%') if d.pass_pct is not none else '—' }}</span><span class="tile-label">Pass success</span></div>
+                <div class="tile"><span class="tile-value">{{ '{:,}'.format(d.passes) if d.passes is not none else '—' }}</span><span class="tile-label">Passes</span></div>
+                <div class="tile"><span class="tile-value">{{ (d.tackle_pct ~ '%') if d.tackle_pct is not none else '—' }}</span><span class="tile-label">Tackle success</span></div>
+                <div class="tile"><span class="tile-value">{{ d.tackles if d.tackles is not none else '—' }}</span><span class="tile-label">Tackles won</span></div>
+                {% if d.source == 'ea' %}
+                  <div class="tile"><span class="tile-value">{{ (d.shot_success ~ '%') if d.shot_success is not none else '—' }}</span><span class="tile-label">Shot success</span></div>
+                {% else %}
+                  <div class="tile"><span class="tile-value">{{ d.shots if d.shots is not none else '—' }}</span><span class="tile-label">Shots</span></div>
+                  <div class="tile"><span class="tile-value">{{ (d.conversion ~ '%') if d.conversion is not none else '—' }}</span><span class="tile-label">Conversion</span></div>
+                {% endif %}
+              </div>
+            {% endif %}
           {% elif gamertag %}
             <p class="muted panel-empty">No recorded matches for {{ gamertag }} yet. They appear after the hourly poll picks up a match they played in.</p>
           {% else %}
@@ -69,11 +86,14 @@
         </div>
         {% if recent %}
           <div class="table-scroll">
-            <table class="league-table">
+            <table class="league-table player-matches">
               <thead><tr>
                 <th scope="col">Date</th><th scope="col">Opponent</th><th scope="col" class="lt-num">Score</th>
                 <th scope="col">Pos</th><th scope="col" class="lt-num">Rating</th>
                 <th scope="col" class="lt-num">G</th><th scope="col" class="lt-num">A</th>
+                <th scope="col" class="lt-num" title="Passes completed / attempted">Passes</th>
+                <th scope="col" class="lt-num" title="Tackles won / attempted">Tackles</th>
+                <th scope="col" class="lt-num">Shots</th>
               </tr></thead>
               <tbody>
                 {% for m in recent %}
@@ -85,6 +105,9 @@
                     <td class="lt-num"><span class="lt-rating">{{ '%.1f' % m.rating if m.rating is not none else '—' }}</span></td>
                     <td class="lt-num">{{ m.goals or 0 }}</td>
                     <td class="lt-num">{{ m.assists or 0 }}</td>
+                    <td class="lt-num">{% if m.pass_attempts %}{{ m.passes_made or 0 }}/{{ m.pass_attempts }} <span class="th-sub">{{ (100 * (m.passes_made or 0) / m.pass_attempts) | round | int }}%</span>{% else %}—{% endif %}</td>
+                    <td class="lt-num">{% if m.tackle_attempts %}{{ m.tackles_made or 0 }}/{{ m.tackle_attempts }}{% else %}—{% endif %}</td>
+                    <td class="lt-num">{{ m.shots if m.shots is not none else '—' }}</td>
                   </tr>
                 {% endfor %}
               </tbody>

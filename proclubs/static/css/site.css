@@ -1872,7 +1872,7 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 /* The players table. A wider minimum than the league table -- eight
    columns -- and it scrolls inside its card at phone width rather than
    pushing the page sideways. */
-.squad-table { min-width: 860px; }
+.squad-table { min-width: 980px; }
 .squad-table th, .squad-table td { padding: 0.6rem 0.75rem; vertical-align: middle; }
 .th-sub { color: var(--faint); font-weight: 600; letter-spacing: 0; }
 .squad-player { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
@@ -3183,3 +3183,6 @@ a.discord-sync-badge { text-decoration: none; }
 .window-picker a + a { border-left: 1px solid var(--line, rgba(255,255,255,0.14)); }
 .window-picker a.is-active { background: var(--accent); color: #fff; }
 .panel-body > .window-picker { margin-bottom: 0.8rem; }
+.player-matches td, .player-matches th { white-space: nowrap; }
+.player-matches td:nth-child(2) { white-space: normal; min-width: 8rem; }
+.form-subhead .muted { font-weight: 400; font-size: 0.8em; margin-left: 0.4rem; }
