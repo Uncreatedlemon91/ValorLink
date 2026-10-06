@@ -25,6 +25,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 import auth
+import coach_notes
 import config
 import db
 import discord_announce
@@ -2114,6 +2115,7 @@ def player_page(request: Request, discord_id: str):
         usage=_usage_for(usage, gamertag), window=usage["window"], recent=recent,
         history=history, moves=moves, attendance=attendance, notes=notes,
         is_self=is_self, see_private=see_private, notes_visible=notes_visible,
+        coach_notes_discord=config.COACH_NOTES_DISCORD_ENABLED,
         match_ratings=match_ratings, motm_total=motm_total, honours=honours,
         potm_months=potm_months, goals=goals, reviews=dev_reviews,
         progress_steps=development.PROGRESS_STEPS, goal_areas=development.GOAL_AREAS,
@@ -2177,8 +2179,15 @@ def player_add_note(request: Request, discord_id: str, body: str = Form(""),
     with get_session() as session:
         if services.get_player(session, discord_id) is None:
             raise services.ServiceError("There's no player file for that person.")
-        services.add_coach_note(session, discord_id=discord_id, body=body, author=staff)
-    _flash(request, "Note added. Only staff can see it.")
+        note = services.add_coach_note(session, discord_id=discord_id, body=body, author=staff)
+        failure = coach_notes.post(session, note)
+    if failure:
+        _flash(request, "Note saved (only staff can see it), but it couldn't be posted to the "
+                        f"staff channel: {failure}", "warn")
+    elif config.COACH_NOTES_DISCORD_ENABLED:
+        _flash(request, "Note added and posted to the staff channel. Only staff can see it.")
+    else:
+        _flash(request, "Note added. Only staff can see it.")
     return RedirectResponse(f"/players/{discord_id}#coach-notes", status_code=303)
 
 
@@ -2193,8 +2202,12 @@ def player_delete_note(request: Request, discord_id: str, note_id: int,
             raise services.ServiceError("That note no longer exists.")
         if not (auth.is_management(staff) or note.author_discord_id == str(staff["id"])):
             raise services.ServiceError("Only the note's author or management can delete it.")
+        failure = coach_notes.unpost(note)
         services.delete_coach_note(session, note)
-    _flash(request, "Note deleted.")
+    if failure:
+        _flash(request, f"Note deleted, but its copy in Discord couldn't be removed: {failure}", "warn")
+    else:
+        _flash(request, "Note deleted.")
     return RedirectResponse(f"/players/{discord_id}#coach-notes", status_code=303)
 
 
