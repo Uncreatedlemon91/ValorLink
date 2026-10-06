@@ -2013,8 +2013,18 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
 .dash-main, .dash-side, .dash-left { display: grid; gap: 1rem; min-width: 0; }
 /* A player file: honors, goals and about on the left, so the match history in
    the middle can run long without pushing them down. */
-.player-grid { grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr) minmax(220px, 0.9fr); }
-@media (max-width: 1180px) {
+.player-grid { grid-template-columns: 17rem minmax(0, 1fr) 15rem; }
+.page-wide.player-page { max-width: 1760px; }
+/* Where the three columns would squeeze the stats table, the staff and contract
+   panels drop under the other two instead. */
+@media (max-width: 1560px) {
+  .player-grid { grid-template-columns: 17rem minmax(0, 1fr); }
+  .player-grid .dash-side {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); align-items: start;
+  }
+}
+@media (max-width: 1000px) {
   .player-grid { grid-template-columns: minmax(0, 1fr); }
   .player-grid .dash-main { order: -1; }
 }
@@ -3191,6 +3201,6 @@ a.discord-sync-badge { text-decoration: none; }
 .window-picker a + a { border-left: 1px solid var(--line, rgba(255,255,255,0.14)); }
 .window-picker a.is-active { background: var(--accent); color: #fff; }
 .panel-body > .window-picker { margin-bottom: 0.8rem; }
-.player-matches td, .player-matches th { white-space: nowrap; }
+.player-matches td, .player-matches th { white-space: nowrap; padding-left: 0.6rem; padding-right: 0.6rem; }
 .player-matches td:nth-child(2) { white-space: normal; min-width: 8rem; }
 .form-subhead .muted { font-weight: 400; font-size: 0.8em; margin-left: 0.4rem; }

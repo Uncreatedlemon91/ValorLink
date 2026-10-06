@@ -2,7 +2,7 @@
 {% block title %}{{ player.display_name }}{% endblock %}
 {% from "_window_picker.html" import window_picker, span_text, coverage_note %}
 {% block content %}
-<div class="page page-wide">
+<div class="page page-wide player-page">
   {# --- Who they are: the file's cover sheet --------------------------------- #}
   {% set photo = (player.avatar_url or '') | replace('size=128', 'size=512') %}
   <section class="file-hero">
