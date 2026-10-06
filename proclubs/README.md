@@ -1055,6 +1055,18 @@ season totals, and attendance always counts every marked event. The team
 sheet's appearance counts stay on the last 10, as recent form for picking a
 side.
 
+**When the history is short of EA's count.** EA only ever lists a club's
+latest ~10 matches, so any played before tracking began, or while the poll
+was down, never reach `matches` -- the history might hold 64 of a season's
+94. The poll also stores EA's own per-player season totals
+(`members/stats` -> `member_totals`), and EA's club record gives the
+season's real total (wins + draws + losses on the latest snapshot). So in
+the **This season** view, when the history is short, Played, goals,
+assists and MOTM come from EA's totals out of EA's match count
+(`squad.with_ea_totals`), and the page says so. Form and the match lists
+still come from the recorded matches, since EA keeps no per-match detail
+beyond the last few. The Last 20 / Last 10 views are always fully recorded.
+
 **Players.** One row per player under contract: squad status, primary /
 secondary position, appearances over the picked span, form
 (average rating over their last 5 appearances, shown once they have 3),

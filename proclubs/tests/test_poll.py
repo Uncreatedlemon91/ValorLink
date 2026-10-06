@@ -200,3 +200,16 @@ def test_poll_club_tracks_squad_only_when_asked(monkeypatch):
 
     assert [(m["player_name"], m["move"]) for m in db.squad_moves("common-gen5", "c1", 0)] == [("B", "joined")]
     assert db.record_squad("common-gen5", "opp", ["X"]) == ([], [])  # still no baseline for it
+
+
+def test_poll_club_stores_eas_season_totals_for_our_club(monkeypatch):
+    monkeypatch.setattr(ea_client, "overall_stats", lambda p, c: None)
+    monkeypatch.setattr(ea_client, "division_stats", lambda p, c: None)
+    monkeypatch.setattr(ea_client, "member_stats", lambda p, c: {"members": [
+        {"name": "Cap_GT", "gamesPlayed": "80", "goals": "41", "assists": "12", "manOfTheMatch": "9"}]})
+    monkeypatch.setattr(ea_client, "matches_stats", lambda p, c, mt, max_results=30: [])
+    poll.poll_club("common-gen5", "c1", "Our Club", track_squad=True)
+    poll.poll_club("common-gen5", "opp", "Opponent")
+    assert db.member_totals("common-gen5", "c1") == {"cap_gt": {
+        "name": "Cap_GT", "games_played": 80, "goals": 41, "assists": 12, "mom": 9}}
+    assert db.member_totals("common-gen5", "opp") == {}

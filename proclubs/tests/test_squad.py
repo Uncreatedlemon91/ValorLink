@@ -336,3 +336,48 @@ def test_a_line_the_formation_doesnt_use_is_said_so():
     cards = {c["key"]: c for c in squad.line_cards(slots, squad.squad_depth(slots, []))}
     assert cards["goalkeeping"]["used"] and cards["goalkeeping"]["open"] == ["Goalkeeper"]
     assert not cards["attack"]["used"] and cards["attack"]["band"] is None
+
+
+# --- The season, completed from EA's own counts ----------------------------------- #
+def _snapshot(wins, ties, losses):
+    db.record_snapshot("common-gen5", "c1", {"wins": str(wins), "ties": str(ties), "losses": str(losses)}, None)
+
+
+def test_eas_match_total_is_wins_draws_and_losses(history):
+    assert db.ea_match_total("common-gen5", "c1") is None
+    _snapshot(60, 14, 20)
+    assert db.ea_match_total("common-gen5", "c1") == 94
+
+
+def test_member_totals_keep_the_latest_and_survive_a_departure(history):
+    db.record_member_totals("common-gen5", "c1", [{"name": "A", "gamesPlayed": "10"}, {"name": "B", "gamesPlayed": "4"}])
+    db.record_member_totals("common-gen5", "c1", [{"name": "A", "gamesPlayed": "12"}])
+    totals = db.member_totals("common-gen5", "c1")
+    assert totals["a"]["games_played"] == 12 and totals["b"]["games_played"] == 4
+
+
+def test_a_short_history_is_completed_from_ea(history):
+    for i in range(64):
+        _record(f"m{i}", 1_700_000_000 + i * 1000, {"Cap_GT": (7.0, 1, "forward")})
+    _snapshot(60, 14, 20)
+    db.record_member_totals("common-gen5", "c1", [
+        {"name": "Cap_GT", "gamesPlayed": "80", "goals": "90", "assists": "5", "manOfTheMatch": "3"},
+        {"name": "Early_GT", "gamesPlayed": "12", "goals": "2"}])      # only played before tracking
+    usage = squad.with_ea_totals(
+        {**db.squad_usage("common-gen5", "c1", window=None), "recorded": 64},
+        db.member_totals("common-gen5", "c1"), db.ea_match_total("common-gen5", "c1"))
+    assert (usage["window"], usage["recorded"], usage["from_ea"]) == (94, 64, True)
+    cap = usage["players"]["cap_gt"]
+    assert (cap["apps_window"], cap["apps_recorded"], cap["goals"]) == (80, 64, 90)
+    assert cap["form"] == 7.0                                          # still from recorded matches
+    assert usage["players"]["early_gt"]["apps_window"] == 12
+
+
+def test_a_complete_history_is_left_alone(history):
+    for i in range(10):
+        _record(f"m{i}", 1_700_000_000 + i * 1000, {"Cap_GT": (7.0, 1, "forward")})
+    _snapshot(7, 1, 2)
+    db.record_member_totals("common-gen5", "c1", [{"name": "Cap_GT", "gamesPlayed": "10"}])
+    usage = squad.with_ea_totals({**db.squad_usage("common-gen5", "c1", window=None), "recorded": 10},
+                                 db.member_totals("common-gen5", "c1"), 10)
+    assert usage["from_ea"] is False and usage["window"] == 10

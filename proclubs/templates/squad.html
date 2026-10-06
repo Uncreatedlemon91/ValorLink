@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Squad{% endblock %}
-{% from "_window_picker.html" import window_picker, span_text %}
+{% from "_window_picker.html" import window_picker, span_text, coverage_note %}
 {% block content %}
 <div class="page">
   <div class="page-head">
@@ -10,6 +10,7 @@
     </div>
     {{ window_picker('/squad', usage_meta, windows) }}
   </div>
+  {{ coverage_note(usage_meta) }}
 
   {# Why numbers are missing, said once at the top rather than as a column
      of dashes nobody can explain. #}
