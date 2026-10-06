@@ -86,6 +86,22 @@ CREATE TABLE IF NOT EXISTS match_players (
     UNIQUE(match_id, club_id, player_name)
 );
 
+-- EA's own season totals per player (members/stats), latest poll wins.
+-- Complete where the matches table isn't: EA only ever lists the last ~10
+-- matches, so any played before tracking began or while the poll was down
+-- are missing there, but still counted here.
+CREATE TABLE IF NOT EXISTS member_totals (
+    platform TEXT NOT NULL,
+    club_id TEXT NOT NULL,
+    player_name TEXT NOT NULL,
+    games_played INTEGER,
+    goals INTEGER,
+    assists INTEGER,
+    mom INTEGER,
+    captured_at INTEGER NOT NULL,
+    PRIMARY KEY (platform, club_id, player_name)
+);
+
 -- Who's currently in the squad, per EA's member list (see record_squad) --
 -- the baseline that squad_moves below is diffed against.
 CREATE TABLE IF NOT EXISTS squad_members (
@@ -612,6 +628,52 @@ def match_player_ratings(club_id, match_ids):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def record_member_totals(platform, club_id, members):
+    """Stores EA's season totals for each current member (members/stats).
+    Someone who has left keeps their last totals."""
+    now = int(time.time())
+    conn = _connect()
+    with conn:
+        for m in members or []:
+            name = (m.get("name") or "").strip()
+            if not name:
+                continue
+            conn.execute(
+                """INSERT INTO member_totals (platform, club_id, player_name, games_played,
+                                              goals, assists, mom, captured_at)
+                   VALUES (?,?,?,?,?,?,?,?)
+                   ON CONFLICT (platform, club_id, player_name) DO UPDATE SET
+                     games_played=excluded.games_played, goals=excluded.goals,
+                     assists=excluded.assists, mom=excluded.mom, captured_at=excluded.captured_at""",
+                (platform, club_id, name, _num(m.get("gamesPlayed")), _num(m.get("goals")),
+                 _num(m.get("assists")), _num(m.get("manOfTheMatch")), now),
+            )
+    conn.close()
+
+
+def member_totals(platform, club_id):
+    """gamertag (casefolded) -> {name, games_played, goals, assists, mom}."""
+    conn = _connect()
+    rows = conn.execute(
+        """SELECT player_name, games_played, goals, assists, mom FROM member_totals
+           WHERE platform=? AND club_id=?""", (platform, club_id)).fetchall()
+    conn.close()
+    return {r["player_name"].casefold(): {"name": r["player_name"], **{k: r[k] or 0 for k in (
+        "games_played", "goals", "assists", "mom")}} for r in rows}
+
+
+def ea_match_total(platform, club_id):
+    """How many matches EA says the club has played (wins + draws + losses
+    on the latest snapshot), or None before the first snapshot."""
+    snap = latest_snapshot(platform, club_id)
+    if not snap:
+        return None
+    parts = [_num(snap.get(k)) for k in ("wins", "ties", "losses")]
+    if all(p is None for p in parts):
+        return None
+    return sum(p or 0 for p in parts)
 
 
 def record_squad(platform, club_id, member_names):

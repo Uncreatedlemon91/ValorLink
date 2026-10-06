@@ -78,6 +78,8 @@ def poll_club(platform, club_id, label, track_squad=False):
             # Signings/departures feed the weekly article (weekly_article.py).
             # Only our own tracked clubs -- league opponents' rosters aren't news.
             joined, left = db.record_squad(platform, club_id, [m.get("name") for m in members])
+            # EA's season totals: complete even for matches the history missed.
+            db.record_member_totals(platform, club_id, members)
             if joined or left:
                 print(f"[{label}] squad: joined {joined or '-'}, left {left or '-'}")
     except ea_client.EAApiError as exc:

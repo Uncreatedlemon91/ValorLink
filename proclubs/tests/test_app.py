@@ -2743,6 +2743,24 @@ def test_playing_time_can_look_past_the_last_10(client, roster_ready, history_db
     assert '<span class="th-sub">/20</span>' in client.get("/players?window=20").text
 
 
+def test_the_season_counts_matches_the_history_missed(client, roster_ready, history_db):
+    """EA only lists the last ~10 matches, so the history misses any played
+    before tracking began; EA's own totals fill the season view in."""
+    _login_staff(client)
+    _record_contract(client, discord_id="42", status="Starter")
+    _link(client, "42", "Cap_GT")
+    history_db(64, {"Cap_GT": 7.0})
+    appmod.db.record_snapshot("common-gen5", "c1", {"wins": "60", "ties": "14", "losses": "20"}, None)
+    html = client.get("/squad").text
+    assert "EA counts <strong>94</strong> matches" in html and "after the next hourly poll" in html
+    appmod.db.record_member_totals("common-gen5", "c1", [{"name": "Cap_GT", "gamesPlayed": "80"}])
+    html = client.get("/squad").text
+    assert '<span class="th-sub">/94</span>' in html and "cover all" in html
+    assert "80<small>/94</small>" in client.get("/players/42").text
+    html = client.get("/squad?window=10").text                       # recent spans stay recorded-only
+    assert '<span class="th-sub">/10</span>' in html and "EA counts" not in html
+
+
 def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
     _login_staff(client)
     _record_contract(client, discord_id="43", status="Substitute")

@@ -10,3 +10,18 @@
 {% macro span_text(meta, window) -%}
   {%- if meta.season %}this season's {{ window }} match{{ 'es' if window != 1 }}{% else %}the club's last {{ window }}{% endif -%}
 {%- endmacro %}
+
+{# When the season view is short of EA's own count, say so -- and where the
+   numbers come from. See squad.with_ea_totals. #}
+{% macro coverage_note(meta) -%}
+  {%- if meta.season and meta.ea_total and meta.ea_total > meta.recorded %}
+    <p class="roster-disclaimer coverage-note">
+      EA counts <strong>{{ meta.ea_total }}</strong> matches this season; the site holds full match records for
+      {{ meta.recorded }} of them. EA only ever lists the latest 10, so matches played before tracking began or
+      while the hourly poll was down can't be fetched.
+      {% if meta.from_ea %}Played, goals, assists and MOTM here use EA's own season totals, so they cover all
+        {{ meta.ea_total }}; form and match lists cover the {{ meta.recorded }} recorded.
+      {% else %}Played switches to EA's own season totals after the next hourly poll.{% endif %}
+    </p>
+  {%- endif %}
+{%- endmacro %}

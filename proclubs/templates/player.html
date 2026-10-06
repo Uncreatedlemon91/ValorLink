@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ player.display_name }}{% endblock %}
-{% from "_window_picker.html" import window_picker, span_text %}
+{% from "_window_picker.html" import window_picker, span_text, coverage_note %}
 {% block content %}
 <div class="page page-wide">
   {# --- Who they are: the file's cover sheet --------------------------------- #}
@@ -47,6 +47,7 @@
         <header class="panel-head"><h2>Season</h2>{% if window %}<span class="muted">played out of {{ span_text(usage_meta, window) }}</span>{% endif %}</header>
         <div class="panel-body">
           {{ window_picker('/players/' ~ player.discord_id, usage_meta, windows, '#season') }}
+          {{ coverage_note(usage_meta) }}
           {% if usage %}
             <div class="tile-row">
               <div class="tile"><span class="tile-value">{{ usage.apps_window }}{% if window %}<small>/{{ window }}</small>{% endif %}</span><span class="tile-label">Played</span></div>

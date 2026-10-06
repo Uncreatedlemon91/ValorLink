@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Players{% endblock %}
-{% from "_window_picker.html" import window_picker, span_text %}
+{% from "_window_picker.html" import window_picker, span_text, coverage_note %}
 {% block content %}
 <div class="page page-wide">
   <div class="page-head">
@@ -16,6 +16,7 @@
       {% if user %}<a class="btn secondary" href="/players/me">My file</a>{% endif %}
     </div>
   </div>
+  {{ coverage_note(usage_meta) }}
 
   {% if potm %}
     <div class="potm-banner">

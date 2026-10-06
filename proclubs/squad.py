@@ -310,7 +310,36 @@ def current_usage(window: str | None = None) -> dict:
     meta = {"window_key": key, "window_label": label, "season": size is None}
     if not config.CLUB_ID:
         return {"window": 0, "players": {}, **meta}
-    usage = db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
-                           window=size, form_games=FORM_GAMES,
+    platform, club = config.CLUB_PLATFORM, str(config.CLUB_ID)
+    usage = db.squad_usage(platform, club, window=size, form_games=FORM_GAMES,
                            min_form_apps=MIN_APPS_FOR_FORM)
-    return {**usage, **meta}
+    usage = {**usage, **meta, "recorded": usage["window"], "ea_total": None, "from_ea": False}
+    if size is None:
+        usage = with_ea_totals(usage, db.member_totals(platform, club), db.ea_match_total(platform, club))
+    return usage
+
+
+def with_ea_totals(usage: dict, totals: dict, ea_total: int | None) -> dict:
+    """The season view, made complete from EA's own counts.
+
+    The match history only holds what the hourly poll caught -- EA lists
+    just the last ~10 matches, so anything played before tracking began or
+    while the poll was down is missing. EA's club record (ea_total) and
+    each player's season totals (db.member_totals) still count those, so
+    when the history is short the season's "Played", goals, assists and
+    MOTM come from EA instead, out of EA's total. Form still comes from the
+    recorded matches: EA keeps no per-match ratings beyond the last few.
+    """
+    usage = {"from_ea": False, **usage, "ea_total": ea_total}
+    if not ea_total or ea_total <= usage["recorded"] or not totals:
+        return usage
+    players = {k: dict(v) for k, v in usage["players"].items()}
+    for key, t in totals.items():
+        p = players.setdefault(key, {"name": t["name"], "apps_window": 0, "apps_total": 0, "goals": 0,
+                                     "assists": 0, "mom": 0, "form": None, "positions": {}})
+        p["apps_recorded"] = p["apps_window"]
+        p["apps_window"] = max(p["apps_window"], t["games_played"])
+        p["apps_total"] = max(p["apps_total"], t["games_played"])
+        for k in ("goals", "assists", "mom"):
+            p[k] = max(p[k], t[k])
+    return {**usage, "players": players, "window": ea_total, "from_ea": True}
