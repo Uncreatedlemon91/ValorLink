@@ -2991,6 +2991,19 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 .report-team:first-child { text-align: right; }
 .report-figure { font-size: 3.2rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
 .report-dash { color: var(--faint); margin: 0 0.35rem; }
+.report-night { padding: 0.4rem 0 1.2rem; }
+.report-night-head { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: center; padding-bottom: 1rem; }
+.report-night-stat { display: grid; gap: 0.35rem; justify-items: center; }
+.report-figure.is-up { color: var(--status-good); }
+.report-figure.is-down { color: var(--status-critical); }
+.report-matches { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border-soft); }
+.report-matches li { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr auto; align-items: center; gap: 0.6rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border-soft); }
+.report-matches .role-pill { text-align: center; padding: 0.05rem 0; }
+.report-matches .rm-w .role-pill { color: var(--status-good); }
+.report-matches .rm-l .role-pill { color: var(--status-critical); }
+.report-matches .rm-d .role-pill { color: var(--status-neutral); }
+.rm-score { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rm-time { font-size: 0.8rem; }
 .report-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); }
 .report-fact { display: grid; gap: 0.35rem; align-content: start; }
 .report-motm { font-size: 1.35rem; font-weight: 500; color: var(--accent-text); }

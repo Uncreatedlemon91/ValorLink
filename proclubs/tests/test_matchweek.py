@@ -318,7 +318,7 @@ def test_the_discord_pickers_vote_and_rate_privately(client):
     assert "Only players who were in the squad" in r["data"]["content"]
 
 
-def test_ea_matches_from_the_night_prefill_the_score():
+def test_ea_matches_from_the_night_are_found():
     event = Event(title="x", event_type="Match", scheduled_at=datetime(2027, 3, 1, 20, 0))
     stamp = lambda h, m=0: int(datetime(2027, 3, 1, h, m).timestamp() - datetime(1970, 1, 1).timestamp())
     history = [{"played_at": stamp(18), "us_score": 9, "opp_score": 9},
@@ -327,6 +327,36 @@ def test_ea_matches_from_the_night_prefill_the_score():
     near = mw.ea_matches_near(event, history)
     assert [(m["us_score"], m["opp_score"]) for m in near] == [(2, 0), (1, 1)]
     assert mw.result_text(2, 0) == "W 2-0" and mw.result_text(1, 1) == "D 1-1"
+
+
+def test_the_night_is_a_record_and_a_goal_difference():
+    assert mw.night_summary([]) is None
+    night = mw.night_summary([{"us_score": 2, "opp_score": 0}, {"us_score": 1, "opp_score": 1},
+                              {"us_score": 0, "opp_score": 3}, {"us_score": None, "opp_score": None}])
+    assert (night["wins"], night["draws"], night["losses"]) == (1, 1, 1)
+    assert night["gd"] == -1 and night["gd_text"] == "\u22121" and night["record"] == "1W 1D 1L"
+    assert [g["letter"] for g in night["games"]] == ["W", "D", "L"]
+    assert mw.night_summary([{"us_score": 4, "opp_score": 1}])["gd_text"] == "+3"
+
+
+def test_the_report_shows_the_night_instead_of_prefilling_a_score(client, bot, monkeypatch):
+    eid = _played_match(("1", "Ann"))
+    played = datetime.utcnow()
+    near = [{"match_id": "a", "played": played, "us_score": 3, "opp_score": 0, "opp_name": "Rovers"},
+            {"match_id": "b", "played": played, "us_score": 1, "opp_score": 2, "opp_name": "United"}]
+    monkeypatch.setattr(matchweek_routes, "_ea_night", lambda event: (near, []))
+    _login(client, "Coach", staff=True)
+    html = client.get(f"/events/{eid}/report").text
+    assert "Goal difference" in html and "+2" in html and "1W 1L" in html
+    assert "vs Rovers" in html and "vs United" in html
+    assert 'id="us" name="us_score" type="number" min="0" max="99" inputmode="numeric"\n                       value=""' in html
+
+
+def test_the_discord_report_carries_the_night():
+    event = Event(id=1, title="League Night", event_type="Match", scheduled_at=datetime(2027, 3, 1, 20, 0))
+    night = mw.night_summary([{"us_score": 2, "opp_score": 0}, {"us_score": 0, "opp_score": 1}])
+    embed = discord_notify.report_embed(event, motm_names=[], motm_votes=0, top_rated=[], clips=[], night=night)
+    assert {"name": "Match night", "inline": True, "value": "1W 1L · GD +1"} in embed["fields"]
 
 
 # --- The scheduled messages ------------------------------------------------------------- #

@@ -168,7 +168,7 @@ def parse_picker(custom_id: str) -> tuple[str, int]:
 
 
 def report_embed(event, *, motm_names: list[str], motm_votes: int, top_rated: list[tuple[str, float]],
-                 clips: list[str]) -> dict:
+                 clips: list[str], night: dict | None = None) -> dict:
     opponent = f" vs {event.opponent}" if event.opponent else ""
     score = (f"**{event.us_score}–{event.opp_score}**"
              if event.us_score is not None and event.opp_score is not None else "")
@@ -182,6 +182,9 @@ def report_embed(event, *, motm_names: list[str], motm_votes: int, top_rated: li
     if motm_names:
         embed["fields"].append({"name": "Man of the Match", "inline": True,
                                 "value": f"{' & '.join(motm_names)} ({motm_votes} vote{'s' if motm_votes != 1 else ''})"})
+    if night:
+        embed["fields"].append({"name": "Match night", "inline": True,
+                                "value": f"{night['record']} · GD {night['gd_text']}"})
     if top_rated:
         embed["fields"].append({"name": "Top rated (EA)", "inline": True,
                                 "value": "\n".join(f"{n} · {r:.1f}" for n, r in top_rated)[:1024]})
