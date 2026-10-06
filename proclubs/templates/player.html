@@ -177,7 +177,8 @@
         <section class="panel" id="coach-notes">
           <header class="panel-head panel-staff"><h2>Coach notes</h2><span class="muted">Staff only</span></header>
           <div class="panel-body">
-            <p class="field-hint">Only the Club President, Head Coach and Coaches can see these, never {{ player.display_name }}.</p>
+            <p class="field-hint">Only the Club President, Head Coach and Coaches can see these, never {{ player.display_name }}.
+              {% if coach_notes_discord %}Every note is also posted to the staff channel on Discord, and deleting it here deletes it there.{% endif %}</p>
             <form method="post" action="/players/{{ player.discord_id }}/notes" class="stack-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <label class="visually-hidden" for="note-body">New note</label>

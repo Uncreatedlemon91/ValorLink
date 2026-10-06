@@ -231,7 +231,11 @@ player's file and `/players/me` is your own.
 Players write their own preferred foot, build and bio, and link their own
 gamertag. **Coach notes** are kept by staff, deleted by their author or
 management, and never shown to the player they're about -- including a
-coach who also plays, on their own file.
+coach who also plays, on their own file. Like trial notes, each one is also
+posted to the staff channel in Discord (`coach_notes.py`; the recruitment
+channel unless `COACH_NOTES_CHANNEL_ID` names another, `off` to stop),
+pinging nobody, and deleting a note on the site deletes its Discord copy.
+That channel has to be staff-only.
 
 Squad statuses are **Starter**, **Rotation** and **Substitute**, shown as
 Starting / Rotation / Substitute Player. Contracts stored with the old

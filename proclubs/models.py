@@ -531,6 +531,10 @@ class CoachNote(Base):
     author_name = Column(String, nullable=False)
     author_discord_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+    # The copy posted to the staff channel (coach_notes.py), null when it
+    # wasn't posted.
+    discord_channel_id = Column(String, nullable=True)
+    discord_message_id = Column(String, nullable=True)
 
 
 class ClubSetting(Base):

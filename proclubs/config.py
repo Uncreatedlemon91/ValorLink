@@ -236,6 +236,18 @@ ROSTER_MOVES_ENABLED = not roster_moves_missing()
 RECRUITMENT_CHANNEL_ID = os.getenv("RECRUITMENT_CHANNEL_ID", "1546267802791452772").strip()
 RECRUITMENT_FEEDBACK_ENABLED = bool(DISCORD_BOT_TOKEN and RECRUITMENT_CHANNEL_ID)
 
+# Coach notes on a player's file are posted the same way (coach_notes.py),
+# to the recruitment channel unless this names another. It MUST be
+# staff-only too: players never see the notes written about them. Set it
+# to "off" to keep coach notes on the site only.
+def coach_notes_channel(setting: str, recruitment_channel: str) -> str:
+    setting = (setting or "").strip()
+    return "" if setting.lower() == "off" else setting or recruitment_channel
+
+
+COACH_NOTES_CHANNEL_ID = coach_notes_channel(os.getenv("COACH_NOTES_CHANNEL_ID", ""), RECRUITMENT_CHANNEL_ID)
+COACH_NOTES_DISCORD_ENABLED = bool(DISCORD_BOT_TOKEN and COACH_NOTES_CHANNEL_ID)
+
 # When a player ACCEPTS an offer, they're given the "Squad" role set on the
 # site's Discord roles page (role_settings.squad_role_id) -- triggered by
 # the player themselves, and add-only. Leave that role unset and accepting
