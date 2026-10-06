@@ -515,21 +515,7 @@ def result_text(us: int | None, opp: int | None) -> str | None:
     return f"{letter} {us}-{opp}"
 
 
-def _parse_score(value) -> int | None:
-    if value in (None, ""):
-        return None
-    try:
-        n = int(value)
-    except (TypeError, ValueError):
-        raise ServiceError("Scores are whole numbers.")
-    if not 0 <= n <= 99:
-        raise ServiceError("Scores are whole numbers from 0 to 99.")
-    return n
-
-
-def save_review(session: Session, event: Event, *, us_score, opp_score, notes: str,
-                clips: str) -> Event:
-    event.us_score, event.opp_score = _parse_score(us_score), _parse_score(opp_score)
+def save_review(session: Session, event: Event, *, notes: str, clips: str) -> Event:
     notes = (notes or "").strip()
     if len(notes) > 3000:
         raise ServiceError("Keep the key moments under 3,000 characters.")
@@ -537,7 +523,6 @@ def save_review(session: Session, event: Event, *, us_score, opp_score, notes: s
     if any(not line.startswith(("https://", "http://")) for line in lines):
         raise ServiceError("Clips are links, one per line.")
     event.review_notes, event.review_clips = notes or None, "\n".join(lines[:10]) or None
-    event.result = result_text(event.us_score, event.opp_score) or event.result
     session.commit()
     return event
 

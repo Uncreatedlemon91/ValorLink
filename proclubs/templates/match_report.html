@@ -27,13 +27,12 @@
         <header class="panel-head"><h2>Full time</h2>
           {% if event.review_published_by %}<span>by {{ event.review_published_by }}</span>{% endif %}</header>
         <div class="panel-body">
-          {% if event.us_score is not none and event.opp_score is not none or not night %}
+          {# The night's goals for and against, summed over EA's matches. #}
           <div class="report-score">
             <span class="report-team">{{ SITE_NAME }}</span>
-            <span class="report-figure">{{ event.us_score if event.us_score is not none else '–' }}<span class="report-dash">:</span>{{ event.opp_score if event.opp_score is not none else '–' }}</span>
-            <span class="report-team">{{ event.opponent or 'Opponent' }}</span>
+            <span class="report-figure">{{ night.gf if night else '–' }}<span class="report-dash">:</span>{{ night.ga if night else '–' }}</span>
+            <span class="report-team">{{ event.opponent or 'Opposition' }}</span>
           </div>
-          {% endif %}
 
           {# The night in EA's matches: record and goal difference, then each game. #}
           {% if night %}
@@ -95,18 +94,9 @@
           <header class="panel-head panel-staff"><h2>Write the report</h2><span>Staff</span></header>
           <form method="post" action="/events/{{ event.id }}/report" class="panel-body stack-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-            <div class="field-row">
-              <div class="field"><label for="us">{{ SITE_NAME }}</label>
-                <input id="us" name="us_score" type="number" min="0" max="99" inputmode="numeric"
-                       value="{{ event.us_score if event.us_score is not none else '' }}" /></div>
-              <div class="field"><label for="opp">{{ event.opponent or 'Opponent' }}</label>
-                <input id="opp" name="opp_score" type="number" min="0" max="99" inputmode="numeric"
-                       value="{{ event.opp_score if event.opp_score is not none else '' }}" /></div>
-            </div>
             {% if night %}
               <p class="field-hint">EA recorded {{ night.games | length }} match{{ 'es' if night.games | length != 1 }} that night
-                ({{ night.record }}, goal difference {{ night.gd_text }}); the report shows them on its own.
-                Only fill in a score here to put one on the report as well.</p>
+                ({{ night.record }}, goal difference {{ night.gd_text }}); the report adds them up on its own.</p>
             {% endif %}
             <div class="field"><label for="notes">Key moments</label>
               <textarea id="notes" name="notes" rows="5" maxlength="3000" placeholder="What decided it, what worked, what to fix.">{{ event.review_notes or '' }}</textarea></div>
