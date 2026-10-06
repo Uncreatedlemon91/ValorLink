@@ -1,0 +1,12 @@
+{# How far back playing time looks: ?window=season|20|10 (squad.WINDOWS). #}
+{% macro window_picker(path, meta, windows, anchor='') %}
+  <nav class="window-picker" aria-label="How far back playing time looks">
+    {% for key, choice in windows.items() %}
+      <a href="{{ path }}?window={{ key }}{{ anchor }}"{% if meta.window_key == key %} class="is-active" aria-current="true"{% endif %}>{{ choice[0] }}</a>
+    {% endfor %}
+  </nav>
+{% endmacro %}
+
+{% macro span_text(meta, window) -%}
+  {%- if meta.season %}this season's {{ window }} match{{ 'es' if window != 1 }}{% else %}the club's last {{ window }}{% endif -%}
+{%- endmacro %}

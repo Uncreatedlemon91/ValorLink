@@ -142,7 +142,7 @@ def event_page_extras(session, event, user) -> dict:
 # --------------------------------------------------------------------------- #
 @router.get("/events/{event_id}/teamsheet")
 def teamsheet_page(request: Request, event_id: int, _staff=Depends(auth.require_staff)):
-    usage = squad.current_usage()
+    usage = squad.current_usage("10")
     with get_session() as session:
         event, missing = _event_or_404(session, request, event_id)
         if missing:

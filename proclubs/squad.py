@@ -28,8 +28,11 @@ import discord_roster
 # --------------------------------------------------------------------------- #
 # Tuning. Named so the thresholds behind every flag are in one place.
 # --------------------------------------------------------------------------- #
-# How many of the club's most recent matches "playing time" looks at.
-USAGE_WINDOW = 10
+# How far back "playing time" looks. The pages offer these; None means
+# every match recorded -- the whole season, since season.py clears the
+# history at the start of a new one.
+WINDOWS = {"season": ("This season", None), "20": ("Last 20", 20), "10": ("Last 10", 10)}
+DEFAULT_WINDOW = "season"
 # Below this many club matches in the window, playing time isn't judged at
 # all -- "played 1 of 2" says nothing about whether a promise is being kept.
 MIN_WINDOW_TO_JUDGE = 5
@@ -184,13 +187,13 @@ def _flag(kind: str, text: str) -> dict:
     return {"kind": kind, "text": text}
 
 
-def _apps_phrase(apps: int, window: int) -> str:
-    return f"played {apps} of the last {window}"
+def apps_phrase(apps: int, window: int, season: bool = False) -> str:
+    return f"played {apps} of this season's {window}" if season else f"played {apps} of the last {window}"
 
 
 def player_flags(*, status: str, linked: bool, usage: dict | None, window: int,
                  attendance: dict | None, contract_state: str,
-                 time_left: str) -> list[dict]:
+                 time_left: str, season: bool = False) -> list[dict]:
     """The things about one player a manager would want pointed out.
 
     Every flag is grounded in something recorded -- a contract term, an EA
@@ -207,7 +210,7 @@ def player_flags(*, status: str, linked: bool, usage: dict | None, window: int,
         expected = EXPECTED_SHARE.get(status, 0.0)
         if expected and apps / window < expected:
             flags.append(_flag(
-                "warn", f"{status}, but has {_apps_phrase(apps, window)} matches."))
+                "warn", f"{status}, but has {apps_phrase(apps, window, season)} matches."))
         if status in ("Rotation", "Substitute") and form is not None and form >= IN_FORM_RATING:
             flags.append(_flag(
                 "good", f"{status}, averaging {form:.1f} — worth a promotion?"))
@@ -256,6 +259,7 @@ def squad_rows(*, contracts: list, links: dict[int, str], usage: dict,
             "time_left": left,
             "flags": player_flags(status=c.squad_status, linked=bool(gamertag), usage=u,
                                   window=window, attendance=att,
+                                  season=bool(usage.get("season")),
                                   contract_state=state, time_left=left),
         })
     rows.sort(key=lambda r: (STATUS_ORDER.get(r["contract"].squad_status, 9),
@@ -290,14 +294,23 @@ def form_label(form: float | None) -> str:
     return "—" if form is None else f"{form:.1f}"
 
 
-def current_usage() -> dict:
-    """Our club's usage from the stats history, or an empty one when no
-    club is configured."""
+def window_key(value: str | None) -> str:
+    return value if value in WINDOWS else DEFAULT_WINDOW
+
+
+def current_usage(window: str | None = None) -> dict:
+    """Our club's usage from the stats history over one of WINDOWS, or an
+    empty one when no club is configured. Also says which window it is:
+    window_key, window_label, and season (True for the whole season)."""
     import config
     import db
 
+    key = window_key(window)
+    label, size = WINDOWS[key]
+    meta = {"window_key": key, "window_label": label, "season": size is None}
     if not config.CLUB_ID:
-        return {"window": 0, "players": {}}
-    return db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
-                          window=USAGE_WINDOW, form_games=FORM_GAMES,
-                          min_form_apps=MIN_APPS_FOR_FORM)
+        return {"window": 0, "players": {}, **meta}
+    usage = db.squad_usage(config.CLUB_PLATFORM, str(config.CLUB_ID),
+                           window=size, form_games=FORM_GAMES,
+                           min_form_apps=MIN_APPS_FOR_FORM)
+    return {**usage, **meta}

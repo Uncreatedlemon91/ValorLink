@@ -1045,15 +1045,26 @@ Football Manager's squad view built from data the site already has. It
 joins each contract to what EA recorded through the player's linked
 gamertag. See `squad.py` for the rules and `db.squad_usage` for the query.
 
+**How far back.** The hourly poll keeps every match it sees in
+`data/history.db` for the whole season (`season.py` clears it at the next
+one), so nothing is capped at EA's 10. Squad, Players and each player file
+have a **This season / Last 20 / Last 10** picker (`?window=`,
+`squad.WINDOWS`) for "Played", the flags below and the matches a file
+lists; it defaults to the whole season. Goals, assists and MOTM are always
+season totals, and attendance always counts every marked event. The team
+sheet's appearance counts stay on the last 10, as recent form for picking a
+side.
+
 **Players.** One row per player under contract: squad status, primary /
-secondary position, appearances in the club's last 10 matches, form
+secondary position, appearances over the picked span, form
 (average rating over their last 5 appearances, shown once they have 3),
 goals · assists · Man of the Match, attendance, and time left on the
 contract. Under a row go the things worth acting on, each naming the
 evidence it's based on:
 
 - **Playing time against squad status.** A *Starter* who has played in
-  fewer than half of the last 10, or a *Rotation* player in fewer than 2.
+  fewer than half of the picked span's matches, or a *Rotation* player in
+  fewer than a fifth.
   A *Substitute* is promised nothing. Not judged until the club has 5
   recorded matches.
 - **Promotion candidates.** A Rotation or Substitute player averaging 7.5 or
@@ -1067,6 +1078,7 @@ Thresholds are named constants at the top of `squad.py`.
 
 **"Played" means appearances, not starts.** EA doesn't record who started
 and who came off the bench, so the page says "played 2 of the last 10"
+(or "of this season's 26")
 and never claims to count starts. Only league and playoff matches count,
 since those are all `poll.py` records.
 

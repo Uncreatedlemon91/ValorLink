@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Players{% endblock %}
+{% from "_window_picker.html" import window_picker, span_text %}
 {% block content %}
 <div class="page page-wide">
   <div class="page-head">
@@ -10,7 +11,10 @@
         Open anyone's file for their profile and match stats.
       </p>
     </div>
-    {% if user %}<a class="btn secondary" href="/players/me">My file</a>{% endif %}
+    <div class="head-actions">
+      {{ window_picker('/players', usage_meta, windows) }}
+      {% if user %}<a class="btn secondary" href="/players/me">My file</a>{% endif %}
+    </div>
   </div>
 
   {% if potm %}
@@ -77,7 +81,7 @@
             <tr>
               <th scope="col">Player</th>
               <th scope="col">Positions</th>
-              <th scope="col" class="lt-num" title="Matches played among the club's last {{ window }}">
+              <th scope="col" class="lt-num" title="Matches played among {{ span_text(usage_meta, window) }}">
                 Played{% if window %} <span class="th-sub">/{{ window }}</span>{% endif %}</th>
               <th scope="col" class="lt-num" title="Average rating, last few appearances">Form</th>
               <th scope="col" class="lt-num">Goals</th>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Squad{% endblock %}
+{% from "_window_picker.html" import window_picker, span_text %}
 {% block content %}
 <div class="page">
   <div class="page-head">
@@ -7,6 +8,7 @@
       <h1>Squad overview</h1>
       <p class="page-lede">Every contract beside what EA says actually happened.</p>
     </div>
+    {{ window_picker('/squad', usage_meta, windows) }}
   </div>
 
   {# Why numbers are missing, said once at the top rather than as a column
@@ -104,7 +106,7 @@
             <th scope="col">Player</th>
             <th scope="col">Status</th>
             <th scope="col">Positions</th>
-            <th scope="col" class="lt-num" title="Matches played among the club's last {{ window }}">
+            <th scope="col" class="lt-num" title="Matches played among {{ span_text(usage_meta, window) }}">
               Played{% if window %} <span class="th-sub">/{{ window }}</span>{% endif %}</th>
             <th scope="col" class="lt-num" title="Average rating, last few appearances">Form</th>
             <th scope="col" class="lt-num" title="Goals · assists · Man of the Match, all recorded matches">G · A · MOTM</th>
@@ -176,9 +178,9 @@
       </table>
     </div>
     <p class="league-table-footnote">
-      "Played" counts the club's last {{ window or usage_window }} league and playoff matches
-      that EA lists the player in. EA doesn't say who started and who came off the bench,
-      so this is appearances, not starts.
+      "Played" counts the league and playoff matches EA lists the player in, out of
+      {{ span_text(usage_meta, window) }}. EA doesn't say who started and who came off the
+      bench, so this is appearances, not starts.
     </p>
   {% endif %}
 
@@ -193,7 +195,7 @@
       {% for u in regulars %}
         <div class="regular-row">
           <span class="squad-name">{{ u.name }}</span>
-          <span class="squad-sub">played {{ u.apps_window }} of the last {{ window }}
+          <span class="squad-sub">played {{ u.apps_window }} of {{ span_text(usage_meta, window) }}
             · form {{ form_label(u.form) }} · {{ u.goals }} goals</span>
         </div>
       {% endfor %}

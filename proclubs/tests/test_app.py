@@ -2721,7 +2721,26 @@ def test_a_starter_who_isnt_playing_is_flagged_on_the_squad_page(client, roster_
     history_db(10, {"SomebodyElse": 7.0})        # Cap_GT never appears
     html = client.get("/squad").text
     assert "Cap_GT" in html
-    assert "Starter, but has played 0 of the last 10 matches." in html
+    assert "Starter, but has played 0 of this season&#39;s 10 matches." in html \
+        or "Starter, but has played 0 of this season's 10 matches." in html
+    assert "Starter, but has played 0 of the last 10 matches." in client.get("/squad?window=10").text
+
+
+def test_playing_time_can_look_past_the_last_10(client, roster_ready, history_db):
+    """The history keeps every match; the pages default to the whole season
+    and can be narrowed."""
+    _login_staff(client)
+    _record_contract(client, discord_id="42", status="Starter")
+    _link(client, "42", "Cap_GT")
+    history_db(25, {"Cap_GT": 7.0})
+    assert '<span class="th-sub">/25</span>' in client.get("/squad").text
+    assert '<span class="th-sub">/20</span>' in client.get("/squad?window=20").text
+    assert '<span class="th-sub">/10</span>' in client.get("/squad?window=10").text
+    assert '<span class="th-sub">/25</span>' in client.get("/squad?window=nonsense").text
+    html = client.get("/players/42").text
+    assert "25<small>/25</small>" in html and "this season" in html
+    assert "10<small>/10</small>" in client.get("/players/42?window=10").text
+    assert '<span class="th-sub">/20</span>' in client.get("/players?window=20").text
 
 
 def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
