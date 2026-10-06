@@ -177,29 +177,6 @@
         {% endif %}
       </section>
 
-      {% if match_ratings %}
-        <section class="panel">
-          <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
-          <div class="table-scroll">
-            <table class="league-table">
-              <thead><tr><th scope="col">Match</th><th scope="col" class="lt-num">Self</th>
-                <th scope="col" class="lt-num">Coach</th><th scope="col">Comment</th></tr></thead>
-              <tbody>
-                {% for m in match_ratings %}
-                  <tr>
-                    <td><a href="/events/{{ m.event.id }}/report">{{ m.event.title }}</a>
-                      <span class="squad-sub">{{ localtime(m.event.scheduled_at, 'date') }}{% if m.event.result %} · {{ m.event.result }}{% endif %}</span></td>
-                    <td class="lt-num">{{ m.rating.self_rating or '—' }}</td>
-                    <td class="lt-num"><span class="lt-rating">{{ m.rating.coach_rating or '—' }}</span></td>
-                    <td class="ts-prefs">{{ m.rating.coach_comment or '' }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      {% endif %}
-
       {# --- Coach notes: staff only, never the player ---------------------- #}
       {% if notes_visible %}
         <section class="panel" id="coach-notes">
@@ -238,6 +215,29 @@
     </div>
 
     <div class="dash-side">
+      {% if match_ratings %}
+        <section class="panel">
+          <header class="panel-head"><h2>Match ratings</h2><span>{{ 'Yours' if is_self else 'Player & staff' }}</span></header>
+          <div class="table-scroll">
+            <table class="league-table">
+              <thead><tr><th scope="col">Match</th><th scope="col" class="lt-num">Self</th>
+                <th scope="col" class="lt-num">Coach</th></tr></thead>
+              <tbody>
+                {% for m in match_ratings %}
+                  <tr>
+                    <td><a href="/events/{{ m.event.id }}/report">{{ m.event.title }}</a>
+                      <span class="squad-sub">{{ localtime(m.event.scheduled_at, 'date') }}{% if m.event.result %} · {{ m.event.result }}{% endif %}</span>
+                      {% if m.rating.coach_comment %}<span class="squad-sub">{{ m.rating.coach_comment }}</span>{% endif %}</td>
+                    <td class="lt-num">{{ m.rating.self_rating or '—' }}</td>
+                    <td class="lt-num"><span class="lt-rating">{{ m.rating.coach_rating or '—' }}</span></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endif %}
+
       {% if see_private %}
         <section class="panel">
           <header class="panel-head"><h2>Contract</h2>{% if not is_self %}<span class="muted">Player &amp; staff</span>{% endif %}</header>
