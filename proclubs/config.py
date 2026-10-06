@@ -227,6 +227,15 @@ def roster_moves_missing() -> list[str]:
 
 ROSTER_MOVES_ENABLED = not roster_moves_missing()
 
+# --- Recruitment ----------------------------------------------------------- #
+# Every trial note a coach writes on a prospect's file is also posted here,
+# so the rest of the staff see the feedback without opening the site. A
+# staff-only channel: these are frank assessments of people who aren't in
+# the club yet. The bot needs View Channel, Send Messages and Embed Links.
+# Set it empty to keep feedback on the site only.
+RECRUITMENT_CHANNEL_ID = os.getenv("RECRUITMENT_CHANNEL_ID", "1546267802791452772").strip()
+RECRUITMENT_FEEDBACK_ENABLED = bool(DISCORD_BOT_TOKEN and RECRUITMENT_CHANNEL_ID)
+
 # When a player ACCEPTS an offer, they're given the "Squad" role set on the
 # site's Discord roles page (role_settings.squad_role_id) -- triggered by
 # the player themselves, and add-only. Leave that role unset and accepting

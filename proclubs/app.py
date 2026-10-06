@@ -36,6 +36,7 @@ import matchweek_routes
 import development
 import development_routes
 import recognition
+import recruitment
 import role_settings
 import role_sync
 import staff_routes
@@ -1630,6 +1631,10 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
             if player is not None and player.club_role:
                 services.set_club_role(session, player, "")
 
+    if kind == discord_roster.MOVE_OFFER and not failure:
+        with get_session() as session:
+            recruitment.mark_offered(session, member["id"])
+
     if failure:
         _flash(request, f"The announcement didn't send: {failure}", level="error")
     elif kind == discord_roster.MOVE_OFFER:
@@ -1646,7 +1651,8 @@ def roster_announce(request: Request, discord_id: str = Form(""), kind: str = Fo
 
 @app.post("/roster/{move_id}/confirm")
 def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
-                   player_name: str = Form(""), staff=Depends(auth.require_management)):
+                   player_name: str = Form(""), next: str = Form(""),
+                   staff=Depends(auth.require_management)):
     """Publishes the signing announcement for an offer the player accepted
     -- or, for a staff offer, the appointment announcement.
 
@@ -1654,6 +1660,10 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
     acceptance triggers by itself: the player accepting is them agreeing,
     and the club announcing a signing is the club's own act. It also
     leaves room for the paperwork between the two.
+
+    Confirming a player's signing moves their recruitment file (if they
+    have one) to Signed, which starts its settling-in checklist. `next`
+    sends staff back to that file when they confirmed from it.
 
     A signing can carry the player's gamertag (`player_name`), linked
     here so the squad screen can track their playing time from day one.
@@ -1736,6 +1746,8 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
                                             avatar_url=move.avatar_url)
             services.set_club_role(session, player, move.position)
             role_given = True
+        if not appointment:
+            recruitment.mark_signed(session, move.discord_id)
         name, role, confirmed_id = move.display_name, move.position, move.discord_id
         unlinked = (not appointment and linked_as is None
                     and services.get_player_link(session, int(move.discord_id)) is None)
@@ -1754,7 +1766,45 @@ def roster_confirm(request: Request, move_id: int, csrf_token: str = Form(...),
         _flash(request, f"{name} has no gamertag linked yet — link it on the Squad page "
                         f"so their playing time is tracked.", "warn")
     _sync_roles(request, confirmed_id)
-    return RedirectResponse("/roster", status_code=303)
+    back = next if re.fullmatch(r"/recruitment/\d+", next or "") else "/roster"
+    return RedirectResponse(back, status_code=303)
+
+
+@app.post("/recruitment/{prospect_id}/offer")
+def recruitment_offer(request: Request, prospect_id: int, position: str = Form(""),
+                      secondary_position: str = Form(""), contract_weeks: str = Form(""),
+                      squad_status: str = Form(""), note: str = Form(""),
+                      csrf_token: str = Form(...), staff=Depends(auth.require_management)):
+    """Sends a prospect a contract offer straight from their file -- the
+    same offer, post and buttons as Offer Contract on /roster, without
+    having to find them again in the member list."""
+    _check_csrf(request, csrf_token)
+    _require_roster_configured()
+    weeks, status = services.parse_contract_terms(contract_weeks, squad_status)
+    position, secondary = services.parse_positions(position, secondary_position)
+    with get_session() as session:
+        prospect = recruitment.get_prospect(session, prospect_id)
+        if prospect is None:
+            raise services.ServiceError("That prospect is no longer in the pipeline.")
+        if not prospect.discord_id:
+            raise services.ServiceError("Link their Discord account first — the offer is answered there.")
+        if services.live_contract_for(session, prospect.discord_id) is not None:
+            raise services.ServiceError(f"{prospect.name} is already under contract.")
+        if recruitment.offer_state(recruitment.latest_offer(session, prospect)) in ("waiting", "accepted"):
+            raise services.ServiceError(f"{prospect.name} already has an offer in progress.")
+        discord_id = prospect.discord_id
+    member = _resolve_member(discord_id)
+    failure = _publish_move(staff, member, kind=discord_roster.MOVE_OFFER, position=position,
+                            note=note.strip()[:300] or None, contract_weeks=weeks, squad_status=status,
+                            secondary_position=secondary)
+    if failure:
+        _flash(request, f"The offer didn't send: {failure}", level="error")
+    else:
+        with get_session() as session:
+            recruitment.mark_offered(session, discord_id)
+        _flash(request, f"Contract offered to {member['name']} — waiting on their answer in Discord.")
+    _sync_roles(request, discord_id)
+    return RedirectResponse(f"/recruitment/{prospect_id}", status_code=303)
 
 
 # --------------------------------------------------------------------------- #

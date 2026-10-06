@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 import discord_roster
 import matchweek as mw
+import recruitment
 import roles
 import squad
 from models import Event, PlayerLink, RosterMove
@@ -77,6 +78,16 @@ def action_items(session: Session, *, management: bool, now: datetime | None = N
     for e in recent:
         if mw.is_match(e):
             items.append(_item("info", f"No match report for {e.title} yet.", f"/events/{e.id}/report"))
+
+    settling = recruitment.settling_in(session)
+    if settling:
+        names = ", ".join(p.name for p, _ in settling[:3])
+        items.append(_item("info", f"Still settling in: {names}{' and more' if len(settling) > 3 else ''} "
+                                   f"— finish their checklist.", "/recruitment", len(settling)))
+    unrated = recruitment.trialists_without_notes(session)
+    if unrated:
+        items.append(_item("info", f"{len(unrated)} trialist{'s have' if len(unrated) != 1 else ' has'} "
+                                   f"no feedback yet.", "/recruitment", len(unrated)))
 
     linked = {str(i) for i in session.execute(select(PlayerLink.discord_user_id)).scalars()}
     unlinked = [c for c in contracts if c.discord_id not in linked]

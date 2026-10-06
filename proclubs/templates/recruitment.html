@@ -5,10 +5,60 @@
   <div class="page-head">
     <div>
       <h1>Recruitment</h1>
-      <p class="page-lede">Prospect → trial → offer. Notes from each trial build up on the prospect's file.
-        Staff only.</p>
+      <p class="page-lede">From joining the Discord server to settled in the squad. Staff only.</p>
     </div>
   </div>
+
+  {# The process, said once, so every coach runs it the same way. #}
+  <ol class="intake-steps">
+    <li><strong>Joins the server</strong><span>New members show up below. Start a file, or dismiss
+      anyone who isn't here to play.</span></li>
+    <li><strong>Prospect</strong><span>Add their positions and gamertag, and invite them to a
+      training or match.</span></li>
+    <li><strong>On trial</strong><span>Write a note after every session they play{% if feedback_enabled %} —
+      each one is posted to the recruitment channel on Discord{% endif %}.</span></li>
+    <li><strong>Offer</strong><span>Management sends the contract from their file. They accept in
+      Discord.</span></li>
+    <li><strong>Signed</strong><span>Confirm the signing: the contract starts and it's announced.</span></li>
+    <li><strong>Settling in</strong><span>Work through the checklist on their file: gamertag, EA club
+      invite, welcome, usual nights, a first goal.</span></li>
+  </ol>
+
+  <section class="panel arrivals-panel">
+    <header class="panel-head"><h2>New in the server</h2>
+      {% if arrivals %}<span>{{ arrivals | length }} in the last {{ arrival_days }} days</span>{% endif %}</header>
+    {% if not members_ready %}
+      <p class="panel-body muted">Needs the Discord bot (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID) to read the
+        member list. Until then, add prospects by hand below.</p>
+    {% elif members_error %}
+      <p class="panel-body field-hint is-warn">Couldn't read the server's member list: {{ members_error }}</p>
+    {% elif not arrivals %}
+      <p class="panel-body muted">Nobody new to deal with — everyone who joined in the last {{ arrival_days }}
+        days has a file, a contract or has been dismissed.</p>
+    {% else %}
+      <ul class="arrival-list">
+        {% for a in arrivals %}
+          <li class="arrival">
+            <img class="roster-avatar" src="{{ a.avatar_url }}" alt="" width="36" height="36" loading="lazy" />
+            <span class="arrival-who">
+              <span class="squad-name">{{ a.name }}</span>
+              <span class="squad-sub">{% if a.username %}@{{ a.username }} · {% endif %}joined {{ localtime(a.joined_at, 'date') }}</span>
+            </span>
+            <span class="arrival-actions">
+              <form method="post" action="/recruitment/arrivals/{{ a.id }}/start" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn staff btn-sm">Start a file</button>
+              </form>
+              <form method="post" action="/recruitment/arrivals/{{ a.id }}/dismiss" class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn secondary btn-sm" title="A friend, an opponent, not here to play">Not a recruit</button>
+              </form>
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
 
   <div class="pipeline">
     {% for stage in stages %}
@@ -16,9 +66,18 @@
         <header class="panel-head"><h2>{{ labels[stage] }}</h2><span>{{ board[stage] | length }}</span></header>
         <ul class="pipeline-list">
           {% for p in board[stage] %}
+            {% set s = summaries.get(p.id) %}
             <li><a href="/recruitment/{{ p.id }}">
               <span class="squad-name">{{ p.name }}</span>
               <span class="squad-sub">{{ p.position or 'Position not set' }}{% if p.secondary_position %} / {{ p.secondary_position }}{% endif %}</span>
+              {% if stage == 'signed' and progress.get(p.id) %}
+                {% set done, total = progress[p.id] %}
+                <span class="squad-sub{{ '' if done == total else ' is-warn' }}">{{ 'Settled in' if done == total else 'Settling in ' ~ done ~ '/' ~ total }}</span>
+              {% elif s %}
+                <span class="squad-sub">{{ s.notes }} note{{ 's' if s.notes != 1 }}{% if s.avg %} · avg {{ s.avg }}/10{% endif %}</span>
+              {% elif stage == 'trial' %}
+                <span class="squad-sub is-warn">No feedback yet</span>
+              {% endif %}
             </a></li>
           {% else %}
             <li class="muted pipeline-empty">—</li>
@@ -32,6 +91,7 @@
     <header class="panel-head panel-staff"><h2>Add a prospect</h2></header>
     <form method="post" action="/recruitment" class="panel-body stack-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <p class="field-hint">For somebody who isn't in the Discord server yet, or was missed above.</p>
       <div class="field-row">
         <div class="field"><label for="pr-name">Name</label><input id="pr-name" name="name" maxlength="60" required /></div>
         <div class="field"><label for="pr-gt">Gamertag <span class="muted">(optional)</span></label><input id="pr-gt" name="gamertag" maxlength="64" /></div>
