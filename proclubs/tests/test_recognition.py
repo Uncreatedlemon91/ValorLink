@@ -129,7 +129,7 @@ def test_honours_show_on_the_player_file(client):
         recognition.evaluate(session, {"1": _metrics(apps=10)})
     client.post("/auth/dev", data={"name": "Fan", "member": "1"})
     html = client.get("/players/1").text
-    assert "Honours" in html and "10 appearances" in html and "Debut" in html
+    assert "Honors" in html and "10 appearances" in html and "Debut" in html
 
 
 def test_month_helpers():

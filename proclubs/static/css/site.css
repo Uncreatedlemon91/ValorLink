@@ -2010,7 +2010,14 @@ th.is-sorted.asc .sort-caret::before { content: "▴"; }
   display: grid; gap: 1rem; align-items: start;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
 }
-.dash-main, .dash-side { display: grid; gap: 1rem; min-width: 0; }
+.dash-main, .dash-side, .dash-left { display: grid; gap: 1rem; min-width: 0; }
+/* A player file: honors, goals and about on the left, so the match history in
+   the middle can run long without pushing them down. */
+.player-grid { grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr) minmax(220px, 0.9fr); }
+@media (max-width: 1180px) {
+  .player-grid { grid-template-columns: minmax(0, 1fr); }
+  .player-grid .dash-main { order: -1; }
+}
 
 .mc-matchup { justify-content: space-between; gap: 0.75rem; min-width: 0; }
 .mc-team { flex: 1 1 0; min-width: 0; }
@@ -3084,6 +3091,7 @@ td.avail-cell span[aria-hidden], .avail-key .avail-cell {
 .review-month { font-weight: 600; }
 .review p { margin: 0.3rem 0; white-space: pre-line; }
 @media (max-width: 600px) { .goal-form { grid-template-columns: 1fr; } }
+.dash-left .goal-form { grid-template-columns: 1fr; }
 
 /* --- Staff tools -------------------------------------------------------------------- */
 .inbox-list { list-style: none; margin: 0; padding: 0; }
