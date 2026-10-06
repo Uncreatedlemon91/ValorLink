@@ -293,6 +293,19 @@ def test_usage_records_where_people_actually_played(history):
         {"defender": 1, "midfielder": 2}
 
 
+def test_no_window_counts_every_recorded_match(history):
+    for i in range(30):
+        _record(f"m{i}", 1_700_000_000 + i * 1000, {"Regular": (7.0, 0, "midfielder")})
+    usage = db.squad_usage("common-gen5", "c1", window=None)
+    assert usage["window"] == 30
+    assert usage["players"]["regular"]["apps_window"] == 30
+
+
+def test_the_flag_says_which_span_it_counted():
+    assert squad.apps_phrase(3, 25, season=True) == "played 3 of this season's 25"
+    assert squad.apps_phrase(3, 10) == "played 3 of the last 10"
+
+
 def test_a_short_season_reports_the_real_window(history):
     _record("m1", 1_700_000_000, {"A": (7.0, 0, "forward")})
     assert db.squad_usage("common-gen5", "c1", window=10)["window"] == 1

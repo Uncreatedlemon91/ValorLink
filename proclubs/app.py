@@ -1933,8 +1933,9 @@ def roster_release_contract(request: Request, contract_id: int,
 # --------------------------------------------------------------------------- #
 # Squad screen: contracts against what EA says actually happened
 # --------------------------------------------------------------------------- #
-def _squad_usage() -> dict:
-    return squad.current_usage()
+def _squad_usage(request: Request) -> dict:
+    """Playing time over the span picked on the page (?window=season|20|10)."""
+    return squad.current_usage(request.query_params.get("window"))
 
 
 def _gamertag_options(history_names) -> list[str]:
@@ -1967,7 +1968,7 @@ def squad_page(request: Request, _staff=Depends(auth.require_staff)):
         links = services.player_links_for(session, ids)
         attendance = services.attendance_records_for(session, ids)
         formation = services.get_active_formation(session)
-    usage = _squad_usage()
+    usage = _squad_usage(request)
     states = {c.id: services.contract_state(c, now) for c in contracts}
     rows = squad.squad_rows(
         contracts=contracts, links=links, usage=usage, attendance=attendance,
@@ -1978,7 +1979,7 @@ def squad_page(request: Request, _staff=Depends(auth.require_staff)):
         request, rows=rows, summary=squad.summarize(rows),
         depth=squad.squad_depth(slots, contracts), formation=formation,
         regulars=squad.uncontracted_regulars(usage, links, contracts),
-        window=usage["window"], usage_window=squad.USAGE_WINDOW,
+        window=usage["window"], usage_meta=usage, windows=squad.WINDOWS,
         min_window=squad.MIN_WINDOW_TO_JUDGE,
         gamertag_options=_gamertag_options(u["name"] for u in usage["players"].values()),
         has_history=bool(usage["players"]), club_configured=bool(config.CLUB_ID),
@@ -2021,8 +2022,6 @@ def squad_link_gamertag(request: Request, discord_id: str = Form(""),
 # --------------------------------------------------------------------------- #
 # Players: the personnel file
 # --------------------------------------------------------------------------- #
-# How many of a player's latest matches their file lists.
-RECENT_MATCHES = 10
 
 
 def _usage_for(usage: dict, gamertag: str | None) -> dict | None:
@@ -2039,7 +2038,7 @@ def players_page(request: Request):
         ids = {c.discord_id for c in contracts} | {p.discord_id for p in staff}
         people = services.players_by_id(session, list(ids))
         links = services.player_links_for(session, [int(i) for i in ids if i.isdigit()])
-    usage = _squad_usage()
+    usage = _squad_usage(request)
     groups = {status: [] for status in roles.SQUAD_STATUSES}
     for c in contracts:
         gamertag = links.get(int(c.discord_id)) if c.discord_id.isdigit() else None
@@ -2057,6 +2056,7 @@ def players_page(request: Request):
         potm = recognition.latest_award(session)
     return templates.TemplateResponse(request, "players.html", _ctx(
         request, staff=staff, groups=groups, window=usage["window"],
+        usage_meta=usage, windows=squad.WINDOWS,
         squad_size=len(contracts), form_label=squad.form_label, boards=boards,
         potm=potm, potm_label=recognition.month_label(potm.month) if potm else None,
     ))
@@ -2102,17 +2102,21 @@ def player_page(request: Request, discord_id: str):
         potm_months = [recognition.month_label(a.month)
                        for a in recognition.months_won(session, discord_id)]
     gamertag = link.player_name if link else None
-    usage = _squad_usage()
+    usage = _squad_usage(request)
     recent = []
     if gamertag and config.CLUB_ID:
         trend = db.player_trend(config.CLUB_PLATFORM, str(config.CLUB_ID), gamertag)
-        for m in reversed(trend[-RECENT_MATCHES:]):
+        # The matches listed follow the span picked for playing time.
+        if not usage["season"]:
+            trend = trend[-int(squad.WINDOWS[usage["window_key"]][1]):]
+        for m in reversed(trend):
             m["played"] = (datetime.fromtimestamp(m["played_at"], tz=timezone.utc).replace(tzinfo=None)
                            if m.get("played_at") else None)
             recent.append(m)
     return templates.TemplateResponse(request, "player.html", _ctx(
         request, player=player, contract=contract, gamertag=gamertag,
         usage=_usage_for(usage, gamertag), window=usage["window"], recent=recent,
+        usage_meta=usage, windows=squad.WINDOWS,
         history=history, moves=moves, attendance=attendance, notes=notes,
         is_self=is_self, see_private=see_private, notes_visible=notes_visible,
         coach_notes_discord=config.COACH_NOTES_DISCORD_ENABLED,

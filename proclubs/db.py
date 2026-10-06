@@ -676,7 +676,8 @@ def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
 
     Returns {"window": n, "players": {gamertag_casefolded: {...}}} where n
     is how many of the club's most recent matches the window actually
-    covers (fewer than `window` early in a season), and each player has:
+    covers (fewer than `window` early in a season; window=None means every
+    recorded match), and each player has:
 
       name          gamertag as EA spells it
       apps_window   matches played among those n
@@ -693,7 +694,7 @@ def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
     recent = [r["match_id"] for r in conn.execute(
         """SELECT match_id FROM matches WHERE platform=? AND club_id=?
            ORDER BY played_at DESC, match_id DESC LIMIT ?""",
-        (platform, club_id, window),
+        (platform, club_id, -1 if window is None else window),
     ).fetchall()]
     rows = conn.execute(
         """SELECT mp.player_name, mp.match_id, mp.pos, mp.rating, mp.goals,
