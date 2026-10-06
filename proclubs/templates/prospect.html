@@ -6,7 +6,8 @@
     <div>
       <h1>{{ p.name }}</h1>
       <p class="page-lede">{{ p.position or 'Position not set' }}{% if p.secondary_position %} / {{ p.secondary_position }}{% endif %}
-        {% if p.gamertag %} · {{ p.gamertag }}{% endif %}{% if p.source %} · {{ p.source }}{% endif %}</p>
+        {% if p.gamertag %} · {{ p.gamertag }}{% endif %}{% if p.source %} · {{ p.source }}{% endif %}
+        {% if p.discord_id %} · <a href="/players/{{ p.discord_id }}">Player file</a>{% endif %}</p>
     </div>
     <div class="head-actions">
       <span class="contract-status">{{ labels[p.stage] }}</span>
@@ -16,8 +17,51 @@
 
   <div class="dash-grid">
     <div class="dash-main">
+      {% if p.stage == 'signed' %}
+        {% set done, total = step_progress %}
+        <section class="panel" id="settling-in">
+          <header class="panel-head panel-staff"><h2>Settling in</h2><span>{{ done }}/{{ total }}</span></header>
+          <div class="panel-body">
+            {% if not p.discord_id %}
+              <p class="field-hint is-warn">Link their Discord account below — most of this checklist is read from it.</p>
+            {% endif %}
+            <ul class="onboarding-list">
+              {% for s in steps %}
+                <li class="onboarding-step{{ ' is-done' if s.done }}">
+                  {% if s.auto %}
+                    <span class="onboarding-mark" aria-hidden="true">{{ '✓' if s.done else '' }}</span>
+                  {% else %}
+                    <form method="post" action="/recruitment/{{ p.id }}/onboarding" class="inline-form">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                      <input type="hidden" name="step" value="{{ s.key }}" />
+                      <input type="hidden" name="done" value="{{ '0' if s.done else '1' }}" />
+                      <button type="submit" class="onboarding-mark is-button" aria-pressed="{{ 'true' if s.done else 'false' }}"
+                              title="{{ 'Untick' if s.done else 'Tick off' }}">{{ '✓' if s.done else '' }}</button>
+                    </form>
+                  {% endif %}
+                  <span class="onboarding-text">
+                    <strong>{{ s.label }}</strong>
+                    <span class="squad-sub">{{ s.hint }}{% if s.auto and not s.done %} · ticks itself{% endif %}
+                      {% if s.href and not s.done %} · <a href="{{ s.href }}">Go</a>{% endif %}</span>
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+            {% if p.discord_id and dms_enabled %}
+              <form method="post" action="/recruitment/{{ p.id }}/welcome" class="form-actions">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <button type="submit" class="btn staff btn-sm">{{ 'Send the welcome DM again' if (steps | selectattr('key', 'equalto', 'welcome') | first).done else 'Send the welcome DM' }}</button>
+                <span class="field-hint">Links to their player file, availability, fixtures and tactics.</span>
+              </form>
+            {% endif %}
+            {% if done == total %}<p class="field-hint">All done — {{ p.name }} is settled in.</p>{% endif %}
+          </div>
+        </section>
+      {% endif %}
+
       <section class="panel">
-        <header class="panel-head"><h2>Trial notes</h2>{% if avg %}<span>Average {{ avg }}/10</span>{% endif %}</header>
+        <header class="panel-head"><h2>Trial notes</h2>
+          <span>{% if trial_matches %}{{ trial_matches }} session{{ 's' if trial_matches != 1 }}{% endif %}{% if trial_matches and avg %} · {% endif %}{% if avg %}Average {{ avg }}/10{% endif %}</span></header>
         <div class="panel-body">
           <form method="post" action="/recruitment/{{ p.id }}/notes" class="stack-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -32,14 +76,16 @@
             <div class="field"><label for="pn-body">Note</label>
               <textarea id="pn-body" name="body" rows="3" maxlength="2000" required placeholder="What they did well, what worried you."></textarea></div>
             <div class="form-actions"><button type="submit" class="btn staff">Add note</button></div>
-            <p class="field-hint">A note from a match moves a prospect to "On trial".</p>
+            <p class="field-hint">A note from a match moves a prospect to "On trial".
+              {% if feedback_enabled %}Every note is also posted to the recruitment channel on Discord.{% endif %}</p>
           </form>
           {% if notes %}
             <ul class="note-list">
               {% for n, ev in notes %}
                 <li class="note">
                   <p>{% if n.rating %}<strong>{{ n.rating }}/10</strong> · {% endif %}{{ n.body }}</p>
-                  <div class="note-meta"><span>{{ n.author }} · {{ localtime(n.created_at, 'date') }}{% if ev %} · <a href="/events/{{ ev.id }}">{{ ev.title }}</a>{% endif %}</span></div>
+                  <div class="note-meta"><span>{{ n.author }} · {{ localtime(n.created_at, 'date') }}{% if ev %} · <a href="/events/{{ ev.id }}">{{ ev.title }}</a>{% endif %}</span>
+                    {% if n.discord_message_id %}<span>Posted to Discord</span>{% endif %}</div>
                 </li>
               {% endfor %}
             </ul>
@@ -47,6 +93,7 @@
         </div>
       </section>
     </div>
+
     <div class="dash-side">
       <section class="panel">
         <header class="panel-head panel-staff"><h2>Stage</h2></header>
@@ -56,9 +103,89 @@
             <button type="submit" name="stage" value="{{ s }}" class="btn {{ 'staff' if s == p.stage else 'secondary' }} btn-sm"{% if s == p.stage %} aria-pressed="true"{% endif %}>{{ labels[s] }}</button>
           {% endfor %}
         </form>
-        {% if is_management and p.stage in ('trial', 'offered') %}
-          <div class="panel-body"><p class="field-hint">Ready to offer? Send a contract from <a href="/roster">Moves &amp; contracts</a> — pick them from the Discord member list there.</p></div>
-        {% endif %}
+        <p class="panel-body field-hint">Offers and signings move the stage for you.</p>
+      </section>
+
+      {# --- The contract offer -------------------------------------------- #}
+      <section class="panel">
+        <header class="panel-head panel-staff"><h2>Contract</h2></header>
+        <div class="panel-body stack-form">
+          {% if contract %}
+            <p>Under contract: <strong>{{ contract.squad_status }}</strong>, {{ contract.position }}{% if contract.secondary_position %} / {{ contract.secondary_position }}{% endif %}.
+              <a href="/roster">Moves &amp; contracts</a></p>
+          {% elif offer_state == 'waiting' %}
+            <p>Offered {{ localtime(offer.announced_at, 'date') }}{% if offer.announced_by_name %} by {{ offer.announced_by_name }}{% endif %}:
+              {{ offer.squad_status }}, {{ offer.position }}, {{ offer.contract_weeks }} weeks.
+              Waiting on their answer in Discord.</p>
+          {% elif offer_state == 'accepted' %}
+            <p><strong>Accepted</strong> {{ localtime(offer.responded_at, 'date') }} — confirm the signing to start the
+              contract and announce it.</p>
+            {% if is_management %}
+              <form method="post" action="/roster/{{ offer.id }}/confirm" class="stack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <input type="hidden" name="next" value="/recruitment/{{ p.id }}" />
+                <div class="field"><label for="cf-gt">Gamertag <span class="muted">{{ '(linked)' if linked_gamertag else '(so playing time is tracked)' }}</span></label>
+                  <input id="cf-gt" name="player_name" maxlength="64" autocomplete="off"
+                         value="{{ linked_gamertag or p.gamertag or '' }}" placeholder="Their EA gamertag" /></div>
+                <div class="form-actions"><button type="submit" class="btn">Confirm signing</button></div>
+              </form>
+            {% endif %}
+          {% else %}
+            {% if offer_state == 'declined' %}
+              <p class="field-hint is-warn">They declined the offer of {{ localtime(offer.responded_at, 'date') }}.</p>
+            {% elif offer_state == 'undelivered' %}
+              <p class="field-hint is-warn">The last offer didn't reach Discord — send it again.</p>
+            {% endif %}
+            {% if not is_management %}
+              <p class="field-hint">Management send contract offers. Ready? Tell them.</p>
+            {% elif not p.discord_id %}
+              <p class="field-hint">Link their Discord account below to send an offer — they answer it there.</p>
+            {% elif not roster_enabled %}
+              <p class="field-hint">Squad announcements aren't configured, so offers can't be sent yet.</p>
+            {% else %}
+              <form method="post" action="/recruitment/{{ p.id }}/offer" class="stack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                <div class="field"><label for="of-pos">Position</label>
+                  <select id="of-pos" name="position" required><option value="">—</option>{% for pos in positions %}<option{% if pos == p.position %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
+                <div class="field"><label for="of-sec">Also plays <span class="muted">(optional)</span></label>
+                  <select id="of-sec" name="secondary_position"><option value="">—</option>{% for pos in positions %}<option{% if pos == p.secondary_position %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
+                <div class="field-row">
+                  <div class="field"><label for="of-weeks">Weeks</label>
+                    <input id="of-weeks" name="contract_weeks" type="number" min="{{ min_weeks }}" max="{{ max_weeks }}" value="8" required /></div>
+                  <div class="field"><label for="of-status">Squad status</label>
+                    <select id="of-status" name="squad_status">{% for st in squad_statuses %}<option{% if st == 'Rotation' %} selected{% endif %}>{{ st }}</option>{% endfor %}</select></div>
+                </div>
+                <div class="form-actions"><button type="submit" class="btn staff">Offer a contract</button></div>
+                <p class="field-hint">Posted to Discord with Accept / Decline buttons only they can press.</p>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      </section>
+
+      {# --- Their details --------------------------------------------------- #}
+      <section class="panel">
+        <header class="panel-head panel-staff"><h2>Details</h2></header>
+        <form method="post" action="/recruitment/{{ p.id }}/edit" class="panel-body stack-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <div class="field"><label for="pe-name">Name</label><input id="pe-name" name="name" maxlength="60" value="{{ p.name }}" required /></div>
+          <div class="field"><label for="pe-did">Discord account</label>
+            {% if member_choices %}
+              <select id="pe-did" name="discord_id"><option value="">Not linked</option>
+                {% for m in member_choices %}<option value="{{ m.id }}">{{ m.name }}{% if m.username %} (@{{ m.username }}){% endif %}</option>{% endfor %}
+              </select>
+            {% else %}
+              <input id="pe-did" name="discord_id" inputmode="numeric" value="{{ p.discord_id or '' }}" placeholder="Discord user ID" />
+            {% endif %}</div>
+          <div class="field"><label for="pe-gt">Gamertag</label><input id="pe-gt" name="gamertag" maxlength="64" value="{{ p.gamertag or '' }}" /></div>
+          <div class="field"><label for="pe-pos">Position</label>
+            <select id="pe-pos" name="position"><option value="">—</option>{% for pos in positions %}<option{% if pos == p.position %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="pe-sec">Also plays</label>
+            <select id="pe-sec" name="secondary"><option value="">—</option>{% for pos in positions %}<option{% if pos == p.secondary_position %} selected{% endif %}>{{ pos }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="pe-src">Where from</label><input id="pe-src" name="source" maxlength="120" value="{{ p.source or '' }}" /></div>
+          <div class="form-actions"><button type="submit" class="btn secondary btn-sm">Save details</button></div>
+          {% if p.added_by %}<p class="field-hint">File started by {{ p.added_by }} · {{ localtime(p.created_at, 'date') }}</p>{% endif %}
+        </form>
       </section>
     </div>
   </div>

@@ -734,7 +734,7 @@ class DevReview(Base):
 # --- Staff tools: recruitment and set pieces ---------------------------------------- #
 class Prospect(Base):
     """Somebody the club is looking at: Prospect -> Trial -> Offered ->
-    Signed (or Not for us). Staff only."""
+    Signed (or Not for us), then settling in. Staff only."""
 
     __tablename__ = "prospects"
 
@@ -747,6 +747,12 @@ class Prospect(Base):
     stage = Column(String, nullable=False, default="prospect")   # see recruitment.STAGES
     source = Column(String, nullable=True)
     added_by = Column(String, nullable=True)
+    # When the club confirmed their signing; the settling-in checklist
+    # (recruitment.ONBOARDING) runs from here.
+    signed_at = Column(DateTime, nullable=True)
+    # The checklist steps staff have ticked by hand, comma-separated keys.
+    # The rest are worked out from the data (contract, gamertag, nights).
+    onboarding = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -763,6 +769,9 @@ class ProspectNote(Base):
     body = Column(Text, nullable=False)
     author = Column(String, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
+    # The copy posted to the recruitment channel (config.RECRUITMENT_CHANNEL_ID),
+    # null when it wasn't posted.
+    discord_message_id = Column(String, nullable=True)
 
 
 class SetPiece(Base):

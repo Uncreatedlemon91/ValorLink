@@ -604,11 +604,32 @@ player's development they're meant to see and work on:
   the status balance, whether the starters alone can field the
   formation, and the depth chart that would leave. It saves nothing;
   contracts still change through offers and renewals.
-- **Recruitment** (`/recruitment`) -- the trials pipeline: Prospect, On
-  trial, Offered, Signed, Not for us. Each prospect has a file of notes
-  with an optional rating out of ten, tied to the match or session they
-  trialled in (a note from a match moves a prospect to "On trial"), and
-  an average. Offers themselves still go out from Moves & contracts.
+- **Recruitment** (`/recruitment`) -- how somebody goes from joining the
+  Discord server to settled in the squad:
+  1. **Joins the server.** "New in the server" lists members who joined
+     in the last 30 days and nobody has dealt with yet (no file, contract,
+     offer or club role). Staff start a file in one click, or dismiss
+     somebody who isn't here to play. Needs the bot and its Server
+     Members intent, like the `/roster` picker.
+  2. **Prospect.** One file per Discord account: positions, gamertag,
+     where they came from -- editable on the file.
+  3. **On trial.** A note after each session, with an optional rating
+     out of ten, tied to the match or session (a note from a match moves
+     a prospect to "On trial"). **Every note is posted to the recruitment
+     channel** (`RECRUITMENT_CHANNEL_ID`, by default `1546267802791452772`)
+     as an embed linking back to the file; nobody is pinged. A failed post
+     is flashed and the note still saves.
+  4. **Offered.** Management send the contract offer from the file (or
+     from Moves & contracts -- the file follows either way) and the file
+     shows whether it's waiting, accepted or declined.
+  5. **Signed.** Confirming the signing (on the file or on `/roster`)
+     starts the contract and moves the file to Signed.
+  6. **Settling in.** A checklist on the file: contract started, gamertag
+     linked, usual nights set and a first goal tick themselves from the
+     data; the EA club invite and the welcome message are ticked by hand,
+     and a button DMs the newcomer the links they'll need (which ticks
+     the welcome). Unfinished checklists, and trialists with no feedback,
+     show in the staff inbox.
 - **Set pieces** (`/set-pieces`, Matchday tab) -- the club's routines by
   kind (corner, free kick, penalty, throw-in, kick-off): name, side,
   taker, the routine and its targets. Every member reads it; staff write

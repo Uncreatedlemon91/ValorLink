@@ -9,6 +9,8 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
 import auth
+import config
+import discord_notify
 import discord_roster
 import matchweek as mw
 import recruitment
@@ -60,14 +62,54 @@ def _sync(request: Request, discord_id: str | None) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Recruitment: the trials pipeline
+# Recruitment: from joining the server to settling in (recruitment.py)
 # --------------------------------------------------------------------------- #
+def _members_ready() -> bool:
+    return bool(config.DISCORD_BOT_TOKEN and config.DISCORD_GUILD_ID)
+
+
+def _guild_members() -> tuple[list[dict], str | None]:
+    """The raw member list (cached), or why it couldn't be read."""
+    if not _members_ready():
+        return [], None
+    try:
+        return discord_roster.guild_members(), None
+    except discord_roster.DiscordApiError as exc:
+        return [], str(exc)
+
+
+def _member(discord_id: str) -> dict:
+    """Somebody picked out of the server, re-resolved against the live list."""
+    try:
+        member = discord_roster.find_member(discord_roster.roster_choices(), discord_id)
+    except discord_roster.DiscordApiError as exc:
+        raise services.ServiceError(f"Couldn't read Discord's member list: {exc}") from exc
+    if member is None:
+        raise services.ServiceError("They're no longer in the Discord server.")
+    return member
+
+
+def _prospect_or_404(session, request: Request, prospect_id: int):
+    p = recruitment.get_prospect(session, prospect_id)
+    if p is None:
+        return None, not_found(request, "That prospect is no longer in the pipeline.")
+    return p, None
+
+
 @router.get("/recruitment")
 def recruitment_page(request: Request, _staff=Depends(auth.require_staff)):
+    members, members_error = _guild_members()
     with get_session() as session:
         board = recruitment.board(session)
+        summaries = recruitment.summaries(session)
+        arrivals = recruitment.new_arrivals(session, members) if members else []
+        progress = {p.id: recruitment.progress(recruitment.onboarding(session, p)) for p in board["signed"]}
     return render(request, "recruitment.html", board=board, stages=recruitment.STAGES,
-                  labels=recruitment.STAGE_LABELS, positions=discord_roster.PITCH_POSITIONS)
+                  labels=recruitment.STAGE_LABELS, positions=discord_roster.PITCH_POSITIONS,
+                  summaries=summaries, arrivals=arrivals, members_ready=_members_ready(),
+                  members_error=members_error, progress=progress,
+                  arrival_days=recruitment.ARRIVAL_WINDOW.days,
+                  feedback_enabled=config.RECRUITMENT_FEEDBACK_ENABLED)
 
 
 @router.post("/recruitment")
@@ -85,20 +127,81 @@ def recruitment_add(request: Request, name: str = Form(""), discord_id: str = Fo
     return RedirectResponse(f"/recruitment/{pid}", status_code=303)
 
 
+@router.post("/recruitment/arrivals/{discord_id}/start")
+def recruitment_start_file(request: Request, discord_id: str, csrf_token: str = Form(...),
+                           staff=Depends(auth.require_staff)):
+    check_csrf(request, csrf_token)
+    member = _member(discord_id)
+    with get_session() as session:
+        p = recruitment.start_file(session, member, added_by=staff.get("name") or "Staff")
+        pid = p.id
+    flash(request, f"File started for {member['name']}. Add their positions and gamertag.")
+    return RedirectResponse(f"/recruitment/{pid}", status_code=303)
+
+
+@router.post("/recruitment/arrivals/{discord_id}/dismiss")
+def recruitment_dismiss(request: Request, discord_id: str, csrf_token: str = Form(...),
+                        staff=Depends(auth.require_staff)):
+    check_csrf(request, csrf_token)
+    with get_session() as session:
+        recruitment.dismiss_arrival(session, discord_id, staff.get("name") or "Staff")
+    flash(request, "Dismissed — they won't show as a new arrival again.")
+    return RedirectResponse("/recruitment", status_code=303)
+
+
 @router.get("/recruitment/{prospect_id}")
 def prospect_page(request: Request, prospect_id: int, _staff=Depends(auth.require_staff)):
     now = datetime.utcnow()
     with get_session() as session:
-        p = recruitment.get_prospect(session, prospect_id)
-        if p is None:
-            return not_found(request, "That prospect is no longer in the pipeline.")
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
         notes = recruitment.notes_for(session, p.id)
         matches = list(session.execute(select(Event).where(
             Event.scheduled_at <= now + timedelta(days=14), Event.scheduled_at >= now - timedelta(days=30))
             .order_by(Event.scheduled_at.desc())).scalars())
+        offer = recruitment.latest_offer(session, p)
+        steps = recruitment.onboarding(session, p) if p.stage == "signed" else []
+        contract = services.live_contract_for(session, p.discord_id) if p.discord_id else None
+        link = services.get_player_link(session, int(p.discord_id)) if p.discord_id else None
+    choices = []
+    if not p.discord_id and _members_ready():
+        try:
+            choices = discord_roster.roster_choices()
+        except discord_roster.DiscordApiError:
+            choices = []
+    trial_matches = sum(1 for _, ev in notes if ev is not None)
     return render(request, "prospect.html", p=p, notes=notes, avg=recruitment.average_rating(notes),
                   stages=recruitment.STAGES, labels=recruitment.STAGE_LABELS,
-                  matches=[m for m in matches if mw.is_match(m) or m.event_type in ("Training", "Theory")])
+                  positions=discord_roster.PITCH_POSITIONS, trial_matches=trial_matches,
+                  matches=[m for m in matches if mw.is_match(m) or m.event_type in ("Training", "Theory")],
+                  offer=offer, offer_state=recruitment.offer_state(offer), contract=contract,
+                  linked_gamertag=link.player_name if link else None,
+                  steps=steps, step_progress=recruitment.progress(steps) if steps else None,
+                  member_choices=choices, roster_enabled=config.ROSTER_MOVES_ENABLED,
+                  squad_statuses=discord_roster.SQUAD_STATUSES,
+                  min_weeks=discord_roster.CONTRACT_MIN_WEEKS, max_weeks=discord_roster.CONTRACT_MAX_WEEKS,
+                  feedback_enabled=config.RECRUITMENT_FEEDBACK_ENABLED, dms_enabled=config.NOTIFY_ENABLED)
+
+
+@router.post("/recruitment/{prospect_id}/edit")
+def prospect_edit(request: Request, prospect_id: int, name: str = Form(""), discord_id: str = Form(""),
+                  gamertag: str = Form(""), position: str = Form(""), secondary: str = Form(""),
+                  source: str = Form(""), csrf_token: str = Form(...), _staff=Depends(auth.require_staff)):
+    check_csrf(request, csrf_token)
+    with get_session() as session:
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
+        before = p.discord_id
+        recruitment.update_prospect(session, p, name=name, discord_id=discord_id, gamertag=gamertag,
+                                    position=position, secondary=secondary, source=source)
+        after = p.discord_id
+    flash(request, "Details saved.")
+    if before != after:
+        _sync(request, before)
+        _sync(request, after)
+    return RedirectResponse(f"/recruitment/{prospect_id}", status_code=303)
 
 
 @router.post("/recruitment/{prospect_id}/stage")
@@ -106,9 +209,9 @@ def prospect_stage(request: Request, prospect_id: int, stage: str = Form(""),
                    csrf_token: str = Form(...), _staff=Depends(auth.require_staff)):
     check_csrf(request, csrf_token)
     with get_session() as session:
-        p = recruitment.get_prospect(session, prospect_id)
-        if p is None:
-            return not_found(request, "That prospect is no longer in the pipeline.")
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
         recruitment.set_stage(session, p, stage)
         did = p.discord_id
     flash(request, f"Moved to {recruitment.STAGE_LABELS[stage]}.")
@@ -122,15 +225,57 @@ def prospect_note(request: Request, prospect_id: int, body: str = Form(""), rati
                   staff=Depends(auth.require_staff)):
     check_csrf(request, csrf_token)
     with get_session() as session:
-        p = recruitment.get_prospect(session, prospect_id)
-        if p is None:
-            return not_found(request, "That prospect is no longer in the pipeline.")
-        recruitment.add_note(session, p, body=body, rating=rating, event_id=event_id,
-                             author=staff.get("name") or "Staff")
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
+        note = recruitment.add_note(session, p, body=body, rating=rating, event_id=event_id,
+                                    author=staff.get("name") or "Staff")
+        failure = recruitment.post_feedback(session, p, note)
         did = p.discord_id
-    flash(request, "Note added.")
+    if failure:
+        flash(request, f"Note saved, but it couldn't be posted to the recruitment channel: {failure}", "warn")
+    elif config.RECRUITMENT_FEEDBACK_ENABLED:
+        flash(request, "Note added and posted to the recruitment channel.")
+    else:
+        flash(request, "Note added.")
     _sync(request, did)  # a trial note can move them onto trial
     return RedirectResponse(f"/recruitment/{prospect_id}", status_code=303)
+
+
+@router.post("/recruitment/{prospect_id}/onboarding")
+def prospect_onboarding(request: Request, prospect_id: int, step: str = Form(""), done: str = Form(""),
+                        csrf_token: str = Form(...), _staff=Depends(auth.require_staff)):
+    check_csrf(request, csrf_token)
+    with get_session() as session:
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
+        recruitment.tick(session, p, step, done == "1")
+    return RedirectResponse(f"/recruitment/{prospect_id}#settling-in", status_code=303)
+
+
+@router.post("/recruitment/{prospect_id}/welcome")
+def prospect_welcome(request: Request, prospect_id: int, csrf_token: str = Form(...),
+                     _staff=Depends(auth.require_staff)):
+    check_csrf(request, csrf_token)
+    with get_session() as session:
+        p, missing = _prospect_or_404(session, request, prospect_id)
+        if missing:
+            return missing
+        if not p.discord_id:
+            raise services.ServiceError("Link their Discord account first.")
+        if not config.NOTIFY_ENABLED:
+            raise services.ServiceError("The bot isn't set up (DISCORD_BOT_TOKEN), so it can't send DMs.")
+        try:
+            discord_notify.send_dm(p.discord_id, recruitment.welcome_dm(p))
+        except discord_notify.DiscordApiError as exc:
+            flash(request, f"The welcome DM didn't send — they may have DMs from server members "
+                           f"turned off ({exc}). Message them yourself and tick it off.", "warn")
+            return RedirectResponse(f"/recruitment/{prospect_id}#settling-in", status_code=303)
+        recruitment.tick(session, p, "welcome", True)
+        name = p.name
+    flash(request, f"Welcome message sent to {name}.")
+    return RedirectResponse(f"/recruitment/{prospect_id}#settling-in", status_code=303)
 
 
 # --------------------------------------------------------------------------- #
