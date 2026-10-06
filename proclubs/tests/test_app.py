@@ -2761,6 +2761,23 @@ def test_the_season_counts_matches_the_history_missed(client, roster_ready, hist
     assert '<span class="th-sub">/10</span>' in html and "EA counts" not in html
 
 
+def test_passing_and_tackling_show_on_the_squad_page_and_player_file(client, roster_ready, history_db):
+    _login_staff(client)
+    _record_contract(client, discord_id="42", status="Starter")
+    _link(client, "42", "Cap_GT")
+    appmod.db.record_matches("common-gen5", "c1", "leagueMatch", [{
+        "matchId": "p1", "timestamp": 1_700_000_000,
+        "clubs": {"c1": {"goals": "1", "details": {"name": "Us"}}, "c2": {"goals": "0", "details": {"name": "Them"}}},
+        "players": {"c1": {"0": {"playername": "Cap_GT", "rating": "7.5", "goals": "1", "assists": "0", "mom": "0",
+                                 "pos": "midfielder", "shots": "4", "passesmade": "36", "passattempts": "40",
+                                 "tacklesmade": "3", "tackleattempts": "4"}}}}])
+    html = client.get("/squad").text
+    assert "Pass %" in html and ">90%<" in html and ">75%<" in html
+    html = client.get("/players/42").text
+    assert "Passing, defending and shooting" in html and "from the recorded matches" in html
+    assert "36/40" in html and "Conversion" in html
+
+
 def test_a_reserve_in_form_is_suggested_for_promotion(client, roster_ready, history_db):
     _login_staff(client)
     _record_contract(client, discord_id="43", status="Substitute")

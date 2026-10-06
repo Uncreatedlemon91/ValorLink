@@ -110,6 +110,8 @@
             <th scope="col" class="lt-num" title="Matches played among {{ span_text(usage_meta, window) }}">
               Played{% if window %} <span class="th-sub">/{{ window }}</span>{% endif %}</th>
             <th scope="col" class="lt-num" title="Average rating, last few appearances">Form</th>
+            <th scope="col" class="lt-num" title="Passes completed, as a share of passes attempted{{ ' (EA season figure)' if usage_meta.from_ea }}">Pass %</th>
+            <th scope="col" class="lt-num" title="Tackles won, as a share of tackles attempted{{ ' (EA season figure)' if usage_meta.from_ea }}">Tkl %</th>
             <th scope="col" class="lt-num" title="Goals · assists · Man of the Match, all recorded matches">G · A · MOTM</th>
             <th scope="col" class="lt-num" title="Of events where staff marked attendance">Attended</th>
             <th scope="col">Contract</th>
@@ -154,6 +156,8 @@
               </td>
               <td class="lt-num">{{ u.apps_window if u else '—' }}</td>
               <td class="lt-num"><span class="lt-rating">{{ form_label(u.form if u else None) }}</span></td>
+              <td class="lt-num">{{ (u.detail.pass_pct ~ '%') if u and u.detail.pass_pct is not none else '—' }}</td>
+              <td class="lt-num">{{ (u.detail.tackle_pct ~ '%') if u and u.detail.tackle_pct is not none else '—' }}</td>
               <td class="lt-num">{% if u %}{{ u.goals }} · {{ u.assists }} · {{ u.mom }}{% else %}—{% endif %}</td>
               <td class="lt-num">
                 {% if r.attendance and r.attendance.rate is not none %}{{ r.attendance.rate }}%
@@ -167,7 +171,7 @@
             </tr>
             {% if r.flags %}
               <tr class="squad-flags-row">
-                <td colspan="8">
+                <td colspan="10">
                   <ul class="squad-flags">
                     {% for f in r.flags %}<li class="squad-flag flag-{{ f.kind }}">{{ f.text }}</li>{% endfor %}
                   </ul>

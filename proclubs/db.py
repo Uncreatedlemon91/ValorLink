@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS member_totals (
     goals INTEGER,
     assists INTEGER,
     mom INTEGER,
+    passes_made INTEGER,
+    pass_success REAL,
+    tackles_made INTEGER,
+    tackle_success REAL,
+    shot_success REAL,
+    rating_avg REAL,
+    clean_sheets INTEGER,
+    red_cards INTEGER,
     captured_at INTEGER NOT NULL,
     PRIMARY KEY (platform, club_id, player_name)
 );
@@ -132,6 +140,14 @@ CREATE TABLE IF NOT EXISTS squad_moves (
 _MIGRATIONS = [
     ("matches", "opp_club_id", "TEXT"),
     ("club_snapshots", "team_size", "INTEGER"),
+    ("member_totals", "passes_made", "INTEGER"),
+    ("member_totals", "pass_success", "REAL"),
+    ("member_totals", "tackles_made", "INTEGER"),
+    ("member_totals", "tackle_success", "REAL"),
+    ("member_totals", "shot_success", "REAL"),
+    ("member_totals", "rating_avg", "REAL"),
+    ("member_totals", "clean_sheets", "INTEGER"),
+    ("member_totals", "red_cards", "INTEGER"),
 ]
 
 
@@ -640,28 +656,48 @@ def record_member_totals(platform, club_id, members):
             name = (m.get("name") or "").strip()
             if not name:
                 continue
+            sheets = [_num(m.get(k)) for k in ("cleanSheetsDef", "cleanSheetsGK")]
+            row = {
+                "games_played": _num(m.get("gamesPlayed")), "goals": _num(m.get("goals")),
+                "assists": _num(m.get("assists")), "mom": _num(m.get("manOfTheMatch")),
+                "passes_made": _num(m.get("passesMade")),
+                "pass_success": _num(m.get("passSuccessRate"), float),
+                "tackles_made": _num(m.get("tacklesMade")),
+                "tackle_success": _num(m.get("tackleSuccessRate"), float),
+                "shot_success": _num(m.get("shotSuccessRate"), float),
+                "rating_avg": _num(m.get("ratingAve"), float),
+                "clean_sheets": None if all(s is None for s in sheets) else max(s or 0 for s in sheets),
+                "red_cards": _num(m.get("redCards")),
+            }
+            cols = ", ".join(row)
             conn.execute(
-                """INSERT INTO member_totals (platform, club_id, player_name, games_played,
-                                              goals, assists, mom, captured_at)
-                   VALUES (?,?,?,?,?,?,?,?)
-                   ON CONFLICT (platform, club_id, player_name) DO UPDATE SET
-                     games_played=excluded.games_played, goals=excluded.goals,
-                     assists=excluded.assists, mom=excluded.mom, captured_at=excluded.captured_at""",
-                (platform, club_id, name, _num(m.get("gamesPlayed")), _num(m.get("goals")),
-                 _num(m.get("assists")), _num(m.get("manOfTheMatch")), now),
+                f"""INSERT INTO member_totals (platform, club_id, player_name, {cols}, captured_at)
+                    VALUES (?,?,?,{", ".join("?" for _ in row)},?)
+                    ON CONFLICT (platform, club_id, player_name) DO UPDATE SET
+                      {", ".join(f"{c}=excluded.{c}" for c in row)}, captured_at=excluded.captured_at""",
+                (platform, club_id, name, *row.values(), now),
             )
     conn.close()
 
 
+_TOTAL_COUNTS = ("games_played", "goals", "assists", "mom")
+_TOTAL_DETAIL = ("passes_made", "pass_success", "tackles_made", "tackle_success",
+                 "shot_success", "rating_avg", "clean_sheets", "red_cards")
+
+
 def member_totals(platform, club_id):
-    """gamertag (casefolded) -> {name, games_played, goals, assists, mom}."""
+    """gamertag (casefolded) -> {name, games_played, goals, assists, mom,
+    and the detail EA keeps: passes_made, pass_success (%), tackles_made,
+    tackle_success (%), shot_success (%), rating_avg, clean_sheets,
+    red_cards}. Detail EA didn't report is None."""
     conn = _connect()
     rows = conn.execute(
-        """SELECT player_name, games_played, goals, assists, mom FROM member_totals
-           WHERE platform=? AND club_id=?""", (platform, club_id)).fetchall()
+        f"""SELECT player_name, {", ".join(_TOTAL_COUNTS + _TOTAL_DETAIL)} FROM member_totals
+            WHERE platform=? AND club_id=?""", (platform, club_id)).fetchall()
     conn.close()
-    return {r["player_name"].casefold(): {"name": r["player_name"], **{k: r[k] or 0 for k in (
-        "games_played", "goals", "assists", "mom")}} for r in rows}
+    return {r["player_name"].casefold(): {"name": r["player_name"],
+                                          **{k: r[k] or 0 for k in _TOTAL_COUNTS},
+                                          **{k: r[k] for k in _TOTAL_DETAIL}} for r in rows}
 
 
 def ea_match_total(platform, club_id):
@@ -733,6 +769,9 @@ def squad_moves(platform, club_id, since):
     return [dict(r) for r in rows]
 
 
+_WINDOW_DETAIL = ("passes_made", "pass_attempts", "tackles_made", "tackle_attempts", "shots")
+
+
 def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
     """Who has been playing, from the matches recorded for our club.
 
@@ -748,6 +787,10 @@ def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
       form          average rating over their last `form_games`
                     appearances, or None with fewer than `min_form_apps`
       positions     {pos: count} as EA recorded where they played
+      passes_made, pass_attempts, tackles_made, tackle_attempts, shots,
+      window_goals  summed over the window's appearances (None when EA
+                    recorded none of it), for pass/tackle success and
+                    shot conversion -- see squad.detail_stats
 
     Keyed case-insensitively because gamertag links are matched that way
     (see services.set_player_link).
@@ -760,7 +803,8 @@ def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
     ).fetchall()]
     rows = conn.execute(
         """SELECT mp.player_name, mp.match_id, mp.pos, mp.rating, mp.goals,
-                  mp.assists, mp.mom
+                  mp.assists, mp.mom, mp.shots, mp.passes_made, mp.pass_attempts,
+                  mp.tackles_made, mp.tackle_attempts
            FROM match_players mp
            JOIN matches m ON m.match_id = mp.match_id AND m.club_id = mp.club_id
            WHERE m.platform=? AND m.club_id=?
@@ -776,10 +820,15 @@ def squad_usage(platform, club_id, window=10, form_games=5, min_form_apps=3):
         p = players.setdefault(key, {
             "name": r["player_name"], "apps_window": 0, "apps_total": 0,
             "goals": 0, "assists": 0, "mom": 0, "ratings": [], "positions": {},
+            **{k: None for k in _WINDOW_DETAIL}, "window_goals": 0,
         })
         p["apps_total"] += 1
         if r["match_id"] in in_window:
             p["apps_window"] += 1
+            p["window_goals"] += r["goals"] or 0
+            for k in _WINDOW_DETAIL:
+                if r[k] is not None:
+                    p[k] = (p[k] or 0) + r[k]
         p["goals"] += r["goals"] or 0
         p["assists"] += r["assists"] or 0
         p["mom"] += r["mom"] or 0

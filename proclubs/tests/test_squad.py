@@ -381,3 +381,44 @@ def test_a_complete_history_is_left_alone(history):
     usage = squad.with_ea_totals({**db.squad_usage("common-gen5", "c1", window=None), "recorded": 10},
                                  db.member_totals("common-gen5", "c1"), 10)
     assert usage["from_ea"] is False and usage["window"] == 10
+
+
+# --- Passing, tackling and shooting ------------------------------------------------ #
+def _record_detail(match_id, ts, name, *, passes, attempts, tackles, tackle_attempts, shots, goals):
+    db.record_matches("common-gen5", "c1", "leagueMatch", [{
+        "matchId": match_id, "timestamp": ts,
+        "clubs": {"c1": {"goals": str(goals)}, "c2": {"goals": "0"}},
+        "players": {"c1": {"0": {"playername": name, "rating": "7.0", "goals": str(goals), "assists": "0",
+                                 "mom": "0", "pos": "midfielder", "shots": str(shots),
+                                 "passesmade": str(passes), "passattempts": str(attempts),
+                                 "tacklesmade": str(tackles), "tackleattempts": str(tackle_attempts)}}},
+    }])
+
+
+def test_detail_is_summed_over_the_window(history):
+    _record_detail("m1", 1_700_000_000, "Mid", passes=30, attempts=40, tackles=2, tackle_attempts=5, shots=3, goals=1)
+    _record_detail("m2", 1_700_001_000, "Mid", passes=50, attempts=60, tackles=4, tackle_attempts=5, shots=1, goals=1)
+    _record_detail("m3", 1_700_002_000, "Mid", passes=10, attempts=50, tackles=0, tackle_attempts=0, shots=0, goals=0)
+    p = db.squad_usage("common-gen5", "c1", window=2)["players"]["mid"]      # m2, m3 only
+    d = squad.detail_stats(p)
+    assert (d["passes"], d["pass_pct"], d["tackles"], d["tackle_pct"]) == (60, 55, 4, 80)
+    assert (d["shots"], d["conversion"], d["source"]) == (1, 100, "recorded")
+
+
+def test_detail_is_none_when_ea_recorded_none_of_it(history):
+    _record("m1", 1_700_000_000, {"Old": (7.0, 0, "forward")})
+    d = squad.detail_stats(db.squad_usage("common-gen5", "c1")["players"]["old"])
+    assert d["pass_pct"] is None and d["passes"] is None and d["conversion"] is None
+
+
+def test_the_season_view_uses_eas_season_detail(history):
+    _record_detail("m1", 1_700_000_000, "Mid", passes=30, attempts=40, tackles=2, tackle_attempts=5, shots=3, goals=1)
+    db.record_snapshot("common-gen5", "c1", {"wins": "60", "ties": "14", "losses": "20"}, None)
+    db.record_member_totals("common-gen5", "c1", [{"name": "Mid", "gamesPlayed": "80", "passesMade": "2104",
+                                                   "passSuccessRate": "81.4", "tacklesMade": "95",
+                                                   "tackleSuccessRate": "37", "shotSuccessRate": "58"}])
+    usage = squad.with_ea_totals({**db.squad_usage("common-gen5", "c1", window=None), "recorded": 1},
+                                 db.member_totals("common-gen5", "c1"), 94)
+    d = squad.detail_stats(usage["players"]["mid"], use_ea=usage["from_ea"])
+    assert (d["passes"], d["pass_pct"], d["tackles"], d["tackle_pct"], d["shot_success"]) == (2104, 81, 95, 37, 58)
+    assert d["source"] == "ea" and d["shots"] is None

@@ -206,10 +206,35 @@ def test_poll_club_stores_eas_season_totals_for_our_club(monkeypatch):
     monkeypatch.setattr(ea_client, "overall_stats", lambda p, c: None)
     monkeypatch.setattr(ea_client, "division_stats", lambda p, c: None)
     monkeypatch.setattr(ea_client, "member_stats", lambda p, c: {"members": [
-        {"name": "Cap_GT", "gamesPlayed": "80", "goals": "41", "assists": "12", "manOfTheMatch": "9"}]})
+        {"name": "Cap_GT", "gamesPlayed": "80", "goals": "41", "assists": "12", "manOfTheMatch": "9",
+         "passesMade": "2104", "passSuccessRate": "81", "tacklesMade": "95", "tackleSuccessRate": "37",
+         "shotSuccessRate": "58", "ratingAve": "7.4", "cleanSheetsDef": "3", "cleanSheetsGK": "0",
+         "redCards": "1"}]})
     monkeypatch.setattr(ea_client, "matches_stats", lambda p, c, mt, max_results=30: [])
     poll.poll_club("common-gen5", "c1", "Our Club", track_squad=True)
     poll.poll_club("common-gen5", "opp", "Opponent")
     assert db.member_totals("common-gen5", "c1") == {"cap_gt": {
-        "name": "Cap_GT", "games_played": 80, "goals": 41, "assists": 12, "mom": 9}}
+        "name": "Cap_GT", "games_played": 80, "goals": 41, "assists": 12, "mom": 9,
+        "passes_made": 2104, "pass_success": 81.0, "tackles_made": 95, "tackle_success": 37.0,
+        "shot_success": 58.0, "rating_avg": 7.4, "clean_sheets": 3, "red_cards": 1}}
+    assert db.member_totals("common-gen5", "opp") == {}
+
+
+def test_member_totals_gain_the_detail_columns_on_an_existing_db(tmp_path, monkeypatch):
+    """A droplet that already has member_totals from the last release gets
+    the new columns added, not an error."""
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("""CREATE TABLE member_totals (platform TEXT NOT NULL, club_id TEXT NOT NULL,
+                    player_name TEXT NOT NULL, games_played INTEGER, goals INTEGER, assists INTEGER,
+                    mom INTEGER, captured_at INTEGER NOT NULL,
+                    PRIMARY KEY (platform, club_id, player_name))""")
+    conn.execute("INSERT INTO member_totals VALUES ('common-gen5','c1','A',5,1,0,0,1)")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(db, "DB_PATH", path)
+    assert db.member_totals("common-gen5", "c1")["a"]["pass_success"] is None
+    db.record_member_totals("common-gen5", "c1", [{"name": "A", "gamesPlayed": "6", "passSuccessRate": "77"}])
+    assert db.member_totals("common-gen5", "c1")["a"]["pass_success"] == 77.0
     assert db.member_totals("common-gen5", "opp") == {}

@@ -316,7 +316,44 @@ def current_usage(window: str | None = None) -> dict:
     usage = {**usage, **meta, "recorded": usage["window"], "ea_total": None, "from_ea": False}
     if size is None:
         usage = with_ea_totals(usage, db.member_totals(platform, club), db.ea_match_total(platform, club))
+    for p in usage["players"].values():
+        p["detail"] = detail_stats(p, use_ea=usage["from_ea"])
     return usage
+
+
+def _pct(made, attempts) -> int | None:
+    return round(100 * made / attempts) if made is not None and attempts else None
+
+
+def detail_stats(p: dict, *, use_ea: bool = False) -> dict:
+    """Passing, tackling and shooting for one player, as the pages show it:
+    {passes, pass_pct, tackles, tackle_pct, shots, conversion, shot_success,
+    source}. Values are None where nothing was recorded.
+
+    From the recorded matches in the window by default: pass and tackle
+    success are made / attempted, conversion is goals / shots. When the
+    season view uses EA's totals (with_ea_totals), EA's own season figures
+    replace them -- they cover the matches the history missed. EA keeps a
+    shot success rate rather than a shot count, so that view has
+    shot_success instead of shots and conversion."""
+    out = {
+        "passes": p.get("passes_made"), "pass_pct": _pct(p.get("passes_made"), p.get("pass_attempts")),
+        "tackles": p.get("tackles_made"), "tackle_pct": _pct(p.get("tackles_made"), p.get("tackle_attempts")),
+        "shots": p.get("shots"), "conversion": _pct(p.get("window_goals"), p.get("shots")),
+        "shot_success": None, "source": "recorded",
+    }
+    ea = p.get("ea") if use_ea else None
+    if not ea:
+        return out
+    out.update(source="ea", shots=None, conversion=None)
+    for key, field in (("passes", "passes_made"), ("tackles", "tackles_made")):
+        if ea.get(field) is not None:
+            out[key] = ea[field]
+    for key, field in (("pass_pct", "pass_success"), ("tackle_pct", "tackle_success"),
+                       ("shot_success", "shot_success")):
+        if ea.get(field) is not None:
+            out[key] = round(ea[field])
+    return out
 
 
 def with_ea_totals(usage: dict, totals: dict, ea_total: int | None) -> dict:
@@ -337,6 +374,7 @@ def with_ea_totals(usage: dict, totals: dict, ea_total: int | None) -> dict:
     for key, t in totals.items():
         p = players.setdefault(key, {"name": t["name"], "apps_window": 0, "apps_total": 0, "goals": 0,
                                      "assists": 0, "mom": 0, "form": None, "positions": {}})
+        p["ea"] = t
         p["apps_recorded"] = p["apps_window"]
         p["apps_window"] = max(p["apps_window"], t["games_played"])
         p["apps_total"] = max(p["apps_total"], t["games_played"])

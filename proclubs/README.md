@@ -1067,6 +1067,19 @@ assists and MOTM come from EA's totals out of EA's match count
 still come from the recorded matches, since EA keeps no per-match detail
 beyond the last few. The Last 20 / Last 10 views are always fully recorded.
 
+**Passing, defending and shooting.** Every recorded match keeps each
+player's passes made / attempted, tackles won / attempted and shots
+(`match_players`), and the poll stores EA's season figures alongside
+(`member_totals`: passes, pass success %, tackles, tackle success %, shot
+success %, average rating, clean sheets, red cards). The Squad overview
+has Pass % and Tkl % columns, and each player file a row of passing,
+tackling and shooting tiles plus Passes / Tackles / Shots in its match
+list (`squad.detail_stats`). Over Last 20 / Last 10 they're summed from the
+recorded matches (conversion = goals / shots); in the season view with
+EA's totals in use they're EA's own season figures, which count the
+matches the history missed. EA's API has nothing finer -- no key passes,
+interceptions, crosses, dribbles, distance or xG.
+
 **Players.** One row per player under contract: squad status, primary /
 secondary position, appearances over the picked span, form
 (average rating over their last 5 appearances, shown once they have 3),
