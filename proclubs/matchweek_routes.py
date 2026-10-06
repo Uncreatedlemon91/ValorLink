@@ -271,7 +271,7 @@ def report_page(request: Request, event_id: int):
         my_vote = mw.my_vote(session, event.id, me)
     return render(
         request, "match_report.html", event=event, players=players, ratings=ratings,
-        result=result, names=names, near=near, top=top, mine=mine, my_vote=my_vote,
+        result=result, names=names, near=near, night=mw.night_summary(near), top=top, mine=mine, my_vote=my_vote,
         is_participant=any(p["id"] == me for p in players), vote_state=mw.vote_state(event),
         is_past=event.scheduled_at <= datetime.utcnow(), is_match=mw.is_match(event),
         clips=mw.clip_links(event), rating_words=mw.RATING_WORDS, me=me,
@@ -330,14 +330,14 @@ def _post_report(session, event) -> str | None:
         return None
     result = mw.motm_result(session, event.id)
     names = {p["id"]: p["name"] for p in mw.participants(session, event)}
-    _, ea_ratings = _ea_night(event)
+    near, ea_ratings = _ea_night(event)
     top = _top_rated(ea_ratings, _gamertag_names(session))
     winners = [names.get(w, "A teammate") for w in result["winners"]]
     try:
         discord_notify.post(discord_notify.channel_for(event), embeds=[discord_notify.report_embed(
             event, motm_names=winners,
             motm_votes=max(result["votes"].values(), default=0), top_rated=top,
-            clips=mw.clip_links(event))])
+            clips=mw.clip_links(event), night=mw.night_summary(near))])
     except discord_notify.DiscordApiError as exc:
         return str(exc)
     return None

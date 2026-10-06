@@ -474,7 +474,7 @@ def motm_result(session: Session, event_id: int) -> dict:
 
 def ea_matches_near(event: Event, history: list[dict]) -> list[dict]:
     """EA's recorded matches from around kick-off to five hours after --
-    the games of this match night -- for prefilling the score."""
+    the games of this match night -- for the night's record (night_summary)."""
     start = event.scheduled_at - timedelta(minutes=30)
     end = event.scheduled_at + timedelta(hours=5)
     out = []
@@ -485,6 +485,27 @@ def ea_matches_near(event: Event, history: list[dict]) -> list[dict]:
         if start <= played <= end:
             out.append({**m, "played": played})
     return sorted(out, key=lambda m: m["played"])
+
+
+def night_summary(near: list[dict]) -> dict | None:
+    """The match night in one line: wins, draws and losses, and the goal
+    difference, from EA's matches (see ea_matches_near). None when EA
+    recorded nothing; matches without both scores are left out."""
+    games = []
+    for m in near:
+        us, opp = m.get("us_score"), m.get("opp_score")
+        if us is None or opp is None:
+            continue
+        games.append({**m, "letter": "W" if us > opp else "L" if us < opp else "D"})
+    if not games:
+        return None
+    wins, draws, losses = (sum(g["letter"] == k for g in games) for k in "WDL")
+    gf, ga = sum(g["us_score"] for g in games), sum(g["opp_score"] for g in games)
+    gd = gf - ga
+    record = " ".join(f"{n}{k}" for n, k in ((wins, "W"), (draws, "D"), (losses, "L")) if n)
+    return {"games": games, "wins": wins, "draws": draws, "losses": losses, "gf": gf, "ga": ga,
+            "gd": gd, "gd_text": f"+{gd}" if gd > 0 else f"{gd}".replace("-", "\u2212"),
+            "record": record}
 
 
 def result_text(us: int | None, opp: int | None) -> str | None:

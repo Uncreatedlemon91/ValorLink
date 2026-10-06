@@ -27,11 +27,39 @@
         <header class="panel-head"><h2>Full time</h2>
           {% if event.review_published_by %}<span>by {{ event.review_published_by }}</span>{% endif %}</header>
         <div class="panel-body">
+          {% if event.us_score is not none and event.opp_score is not none or not night %}
           <div class="report-score">
             <span class="report-team">{{ SITE_NAME }}</span>
             <span class="report-figure">{{ event.us_score if event.us_score is not none else '–' }}<span class="report-dash">:</span>{{ event.opp_score if event.opp_score is not none else '–' }}</span>
             <span class="report-team">{{ event.opponent or 'Opponent' }}</span>
           </div>
+          {% endif %}
+
+          {# The night in EA's matches: record and goal difference, then each game. #}
+          {% if night %}
+            <div class="report-night">
+              <div class="report-night-head">
+                <div class="report-night-stat">
+                  <span class="report-figure {{ 'is-up' if night.gd > 0 else 'is-down' if night.gd < 0 }}">{{ night.gd_text }}</span>
+                  <span class="kicker kicker-dim">Goal difference</span>
+                </div>
+                <div class="report-night-stat">
+                  <span class="report-figure">{{ night.record }}</span>
+                  <span class="kicker kicker-dim">{{ night.games | length }} match{{ 'es' if night.games | length != 1 }} that night</span>
+                </div>
+              </div>
+              <ol class="report-matches">
+                {% for g in night.games %}
+                  <li class="rm-{{ g.letter | lower }}">
+                    <span class="role-pill">{{ g.letter }}</span>
+                    <span class="rm-score">{{ g.us_score }}–{{ g.opp_score }}</span>
+                    <span class="rm-opp">vs {{ g.opp_name or '?' }}</span>
+                    <span class="muted rm-time">{{ localtime(g.played, 'short') }}</span>
+                  </li>
+                {% endfor %}
+              </ol>
+            </div>
+          {% endif %}
 
           <div class="report-facts">
             <div class="report-fact">
@@ -70,15 +98,15 @@
             <div class="field-row">
               <div class="field"><label for="us">{{ SITE_NAME }}</label>
                 <input id="us" name="us_score" type="number" min="0" max="99" inputmode="numeric"
-                       value="{{ event.us_score if event.us_score is not none else (near[0].us_score if near else '') }}" /></div>
+                       value="{{ event.us_score if event.us_score is not none else '' }}" /></div>
               <div class="field"><label for="opp">{{ event.opponent or 'Opponent' }}</label>
                 <input id="opp" name="opp_score" type="number" min="0" max="99" inputmode="numeric"
-                       value="{{ event.opp_score if event.opp_score is not none else (near[0].opp_score if near else '') }}" /></div>
+                       value="{{ event.opp_score if event.opp_score is not none else '' }}" /></div>
             </div>
-            {% if near %}
-              <p class="field-hint">EA recorded {{ near | length }} match{{ 'es' if near | length != 1 }} that night:
-                {% for m in near %}{{ m.us_score }}–{{ m.opp_score }} vs {{ m.opp_name or '?' }}{% if not loop.last %}; {% endif %}{% endfor %}.
-                The first is filled in.</p>
+            {% if night %}
+              <p class="field-hint">EA recorded {{ night.games | length }} match{{ 'es' if night.games | length != 1 }} that night
+                ({{ night.record }}, goal difference {{ night.gd_text }}); the report shows them on its own.
+                Only fill in a score here to put one on the report as well.</p>
             {% endif %}
             <div class="field"><label for="notes">Key moments</label>
               <textarea id="notes" name="notes" rows="5" maxlength="3000" placeholder="What decided it, what worked, what to fix.">{{ event.review_notes or '' }}</textarea></div>
