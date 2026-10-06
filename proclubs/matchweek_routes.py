@@ -305,8 +305,7 @@ async def report_save(request: Request, event_id: int, staff=Depends(auth.requir
         event, missing = _event_or_404(session, request, event_id)
         if missing:
             return missing
-        mw.save_review(session, event, us_score=form.get("us_score"), opp_score=form.get("opp_score"),
-                       notes=str(form.get("notes") or ""), clips=str(form.get("clips") or ""))
+        mw.save_review(session, event, notes=str(form.get("notes") or ""), clips=str(form.get("clips") or ""))
         players = mw.participants(session, event)
         names = {p["id"]: p["name"] for p in players}
         ratings = {p["id"]: (str(form.get(f"rating__{p['id']}") or ""),

@@ -170,8 +170,8 @@ def parse_picker(custom_id: str) -> tuple[str, int]:
 def report_embed(event, *, motm_names: list[str], motm_votes: int, top_rated: list[tuple[str, float]],
                  clips: list[str], night: dict | None = None) -> dict:
     opponent = f" vs {event.opponent}" if event.opponent else ""
-    score = (f"**{event.us_score}–{event.opp_score}**"
-             if event.us_score is not None and event.opp_score is not None else "")
+    # The night's goals for and against, as on the site's report.
+    score = f"**{night['gf']}–{night['ga']}**" if night else ""
     embed = {
         "title": f"Match report — {event.title}{opponent}",
         "url": _site(f"/events/{event.id}/report"),

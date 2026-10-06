@@ -267,17 +267,17 @@ def test_publishing_the_report_closes_the_vote_and_posts_it(client, bot):
     _login(client, "Coach", staff=True)
     token = _csrf(client, f"/events/{eid}/report")
     r = client.post(f"/events/{eid}/report", data={
-        "us_score": "3", "opp_score": "1", "notes": "Pressed high and it worked.",
+        "notes": "Pressed high and it worked.",
         "clips": "https://example.com/goal", "rating__2": "8", "comment__2": "Ran the midfield.",
         "action": "publish", "csrf_token": token})
     assert "Report published and posted to Discord." in r.text
     with database.get_session() as session:
         event = services.get_event(session, eid)
-        assert event.result == "W 3-1" and mw.vote_state(event) == "closed"
+        assert mw.vote_state(event) == "closed"
     embed = bot["posts"][-1][1]["embeds"][0]
     fields = {f["name"]: f["value"] for f in embed["fields"]}
     assert fields["Man of the Match"] == "Ben (1 vote)"
-    assert "3–1" in embed["description"]
+    assert "Pressed high and it worked." in embed["description"]
 
 
 def test_a_coach_rating_is_seen_by_its_player_and_nobody_else(client, bot):
@@ -339,7 +339,7 @@ def test_the_night_is_a_record_and_a_goal_difference():
     assert mw.night_summary([{"us_score": 4, "opp_score": 1}])["gd_text"] == "+3"
 
 
-def test_the_report_shows_the_night_instead_of_prefilling_a_score(client, bot, monkeypatch):
+def test_the_report_adds_up_the_night_and_asks_for_no_score(client, bot, monkeypatch):
     eid = _played_match(("1", "Ann"))
     played = datetime.utcnow()
     near = [{"match_id": "a", "played": played, "us_score": 3, "opp_score": 0, "opp_name": "Rovers"},
@@ -349,13 +349,15 @@ def test_the_report_shows_the_night_instead_of_prefilling_a_score(client, bot, m
     html = client.get(f"/events/{eid}/report").text
     assert "Goal difference" in html and "+2" in html and "1W 1L" in html
     assert "vs Rovers" in html and "vs United" in html
-    assert 'id="us" name="us_score" type="number" min="0" max="99" inputmode="numeric"\n                       value=""' in html
+    assert re.search(r'report-figure">4<span class="report-dash">:</span>2<', html)
+    assert 'name="us_score"' not in html and "name=\"opp_score\"" not in html
 
 
 def test_the_discord_report_carries_the_night():
     event = Event(id=1, title="League Night", event_type="Match", scheduled_at=datetime(2027, 3, 1, 20, 0))
     night = mw.night_summary([{"us_score": 2, "opp_score": 0}, {"us_score": 0, "opp_score": 1}])
     embed = discord_notify.report_embed(event, motm_names=[], motm_votes=0, top_rated=[], clips=[], night=night)
+    assert embed["description"].startswith("**2–1**")
     assert {"name": "Match night", "inline": True, "value": "1W 1L · GD +1"} in embed["fields"]
 
 
