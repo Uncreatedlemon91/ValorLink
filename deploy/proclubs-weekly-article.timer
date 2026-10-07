@@ -6,7 +6,9 @@ Description=Publish the AI-written roundup (every ROUNDUP_DAYS days)
 # games; weekly_article.py skips the days in between (ROUNDUP_DAYS, default
 # every 2 days). A daily timer rather than "every other day" in systemd,
 # which restarts its count each month and would post on the 31st and the 1st.
-OnCalendar=*-*-* 09:15:00
+# Eastern time (follows EST/EDT), not the server's UTC clock -- keep in
+# step with ARTICLE_TIMEZONE in proclubs/.env.
+OnCalendar=*-*-* 09:15:00 America/New_York
 Persistent=true
 RandomizedDelaySec=300
 

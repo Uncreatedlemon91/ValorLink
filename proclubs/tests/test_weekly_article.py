@@ -1,5 +1,6 @@
 """Tests for weekly_article.py and the squad tracking it reads
-(db.record_squad / db.squad_moves). The Claude CLI is never actually run --
+(db.record_squad / db.squad_moves) and Squad Moves (services.public_roster_moves),
+which the article's transfer news comes from. The Claude CLI is never actually run --
 subprocess.run is faked.
 
 Run with: pytest proclubs/tests/test_weekly_article.py
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,12 +100,32 @@ def test_player_who_leaves_and_returns_is_a_new_signing():
     assert db.record_squad(PLATFORM, CLUB, ["A", "B"]) == (["A"], [])
 
 
+def _squad_move(kind, name, *, position=None, response=None, confirmed=False, days_ago=0):
+    """A Squad Moves row, as the staff page would leave it."""
+    with database.get_session() as session:
+        move = services.record_roster_move(
+            session, discord_id=name, display_name=name, avatar_url=None, kind=kind,
+            position=position, note=None, announced_by_name="Coach",
+            announced_by_discord_id=1, discord_message_id="m",
+        )
+        if response:
+            services.record_offer_response(session, move, response=response,
+                                           role_granted=False, role_error=None)
+        if confirmed:
+            services.confirm_roster_move(session, move, confirmed_by_name="Coach",
+                                         confirm_message_id="c")
+        when = datetime.utcnow() - timedelta(days=days_ago)
+        move.announced_at = when
+        if confirmed:
+            move.confirmed_at = when
+        session.commit()
+
+
 # --- Gathering facts ------------------------------------------------------------ #
 def test_gather_period_covers_results_players_and_signings(monkeypatch):
     monkeypatch.setattr(config, "ROUNDUP_DAYS", 2)
     db.record_matches(PLATFORM, CLUB, "leagueMatch", [_match("m1"), _match("old", ts=int(time.time()) - 3 * 86400)])
-    db.record_squad(PLATFORM, CLUB, ["Striker9"])
-    db.record_squad(PLATFORM, CLUB, ["Striker9", "NewGuy"])
+    _squad_move("offer", "NewGuy", position="ST", response="accepted", confirmed=True)
 
     facts = weekly_article.gather_period(PLATFORM, CLUB, int(time.time()))
 
@@ -112,15 +134,44 @@ def test_gather_period_covers_results_players_and_signings(monkeypatch):
     assert facts["record"] == {"played": 1, "won": 1, "drawn": 0, "lost": 0, "goals_for": 3, "goals_against": 1}
     top = facts["players"][0]
     assert (top["player_name"], top["goals"], top["mom"]) == ("Striker9", 2, 1)
-    assert facts["signings"] == ["NewGuy"]
+    assert [(m["name"], m["position"]) for m in facts["signings"]] == [("NewGuy", "ST")]
     assert weekly_article.has_news(facts)
     assert weekly_article.category_for(facts) == "Match Highlight"
     json.dumps(facts)  # must be serializable for the prompt
 
 
-def test_squad_news_alone_is_a_transfer_article():
+def test_transfer_news_comes_from_squad_moves_not_ea_member_diffs(monkeypatch):
+    monkeypatch.setattr(config, "ROUNDUP_DAYS", 2)
+    _squad_move("offer", "Signed", response="accepted", confirmed=True)
+    _squad_move("staff_offer", "Coach2", position="Coach", response="accepted", confirmed=True)
+    _squad_move("release", "Gone")
+    _squad_move("release", "LongGone", days_ago=5)  # before the period
+    # Not news yet / never news -- the same rules as the home page's band.
+    _squad_move("offer", "Pending")
+    _squad_move("offer", "Unconfirmed", response="accepted")
+    _squad_move("offer", "Declined", response="declined")
+    # EA's member list changing is no longer a source.
     db.record_squad(PLATFORM, CLUB, ["A"])
-    db.record_squad(PLATFORM, CLUB, ["A", "B"])
+    db.record_squad(PLATFORM, CLUB, ["A", "EaOnly"])
+
+    facts = weekly_article.gather_period(PLATFORM, CLUB, int(time.time()))
+
+    assert [m["name"] for m in facts["signings"]] == ["Signed"]
+    assert [m["name"] for m in facts["staff_appointments"]] == ["Coach2"]
+    assert [m["name"] for m in facts["departures"]] == ["Gone"]
+
+
+def test_dates_are_in_the_article_timezone_not_utc(monkeypatch):
+    # Sat 2026-10-03 01:30 UTC is Fri 2026-10-02 21:30 EDT.
+    friday_night = 1790991000
+    monkeypatch.setattr(config, "ARTICLE_TIMEZONE", "America/New_York")
+    assert weekly_article._iso(friday_night) == "Fri 02 Oct 2026"
+    monkeypatch.setattr(config, "ARTICLE_TIMEZONE", "UTC")
+    assert weekly_article._iso(friday_night) == "Sat 03 Oct 2026"
+
+
+def test_squad_news_alone_is_a_transfer_article():
+    _squad_move("release", "B")
     facts = weekly_article.gather_period(PLATFORM, CLUB, int(time.time()))
     assert weekly_article.has_news(facts)
     assert weekly_article.category_for(facts) == "Transfer"

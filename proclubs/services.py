@@ -1090,7 +1090,8 @@ def confirm_roster_move(session: Session, move: RosterMove, *,
     return move
 
 
-def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
+def public_roster_moves(session: Session, limit: int | None = 6,
+                        since: datetime | None = None) -> list[RosterMove]:
     """The squad moves that may be shown on the public home page.
 
     ONLY two things qualify, and the exclusions matter more than the
@@ -1113,10 +1114,12 @@ def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
 
     Ordered by when each became public: a signing confirmed today belongs
     at the top even if the offer went out last week, so the sort is on
-    confirmed_at where there is one and announced_at otherwise.
+    confirmed_at where there is one and announced_at otherwise -- and
+    `since` (naive UTC) filters on that same moment, which is how the AI
+    roundup (weekly_article.py) takes just the period's transfer news.
     """
     became_public = func.coalesce(RosterMove.confirmed_at, RosterMove.announced_at)
-    return list(session.execute(
+    query = (
         select(RosterMove)
         .where(
             (RosterMove.kind == discord_roster.MOVE_RELEASE)
@@ -1125,7 +1128,10 @@ def public_roster_moves(session: Session, limit: int = 6) -> list[RosterMove]:
         )
         .order_by(became_public.desc(), RosterMove.id.desc())
         .limit(limit)
-    ).scalars())
+    )
+    if since is not None:
+        query = query.where(became_public >= since)
+    return list(session.execute(query).scalars())
 
 
 def offer_is_open(move: RosterMove) -> bool:

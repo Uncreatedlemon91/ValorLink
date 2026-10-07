@@ -249,14 +249,13 @@ interactions, which needs `DISCORD_PUBLIC_KEY` (Developer Portal → General
 Information → Public Key) and either `EVENTS_ANNOUNCE_CHANNEL_ID` or
 `EVENT_THREAD_CHANNEL_ID`.
 
-**AI-written roundup (optional).** Every 2 days at about 09:15 (server
-time) -- `ROUNDUP_DAYS` in `proclubs/.env` changes how often -- the
+**AI-written roundup (optional).** Every 2 days at about 09:15 US Eastern
+time (`ARTICLE_TIMEZONE`) -- `ROUNDUP_DAYS` in `proclubs/.env` changes how often -- the
 `proclubs-weekly-article.timer` (already installed by `install.sh`; it fires
 daily and the script skips the days in between) runs `weekly_article.py`:
 it gathers the last `ROUNDUP_DAYS` days from
 `data/history.db` -- results, player totals, division/points movement,
-league position, and signings/departures (the hourly poll diffs EA's member
-list to spot those) -- has Claude write it up, and **publishes it live**
+league position -- plus transfer news from the site's Squad Moves, has Claude write it up, and **publishes it live**
 under the byline `WEEKLY_ARTICLE_AUTHOR`, announcing it to Discord like any
 other article. A stretch with no matches and no squad changes is skipped.
 

@@ -1149,14 +1149,16 @@ roundup of those days and publishes it live -- no staff review step -- under the
 like any other article. Staff can edit or unpublish it afterwards like any
 other post.
 
-- **What it's written from:** only what `data/history.db` holds for the last
-  `ROUNDUP_DAYS` days -- results, per-player totals, division/points movement, league
-  table position, form, and signings/departures. Claude is told to use those
+- **What it's written from:** only the last `ROUNDUP_DAYS` days -- results,
+  per-player totals, division/points movement, league table position and form
+  from `data/history.db`, and transfer news from Squad Moves. Claude is told to use those
   facts and nothing else, and runs with every tool disabled.
-- **Signings** come from `poll.py` diffing EA's member list for our own club
-  each hour (`squad_members` / `squad_moves` in `db.py`). The first poll only
-  records a baseline, so tracking starts from deploy day; an empty member
-  list from EA is ignored rather than read as the whole squad leaving.
+- **Transfer news** comes from Squad Moves -- exactly what the home page's
+  Squad Moves band shows (`services.public_roster_moves`): confirmed
+  signings and staff appointments, and departures. A pending, unconfirmed or
+  declined offer never reaches the article.
+- **Dates and timing** are in `ARTICLE_TIMEZONE` (default
+  `America/New_York`, so EST/EDT), not UTC; the timer fires at 09:15 Eastern.
 - **Category:** "Match Highlight" if there were matches, otherwise
   "Transfer". A stretch with neither is skipped (and the next run tries
   again the following morning).

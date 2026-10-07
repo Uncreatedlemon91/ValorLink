@@ -4,9 +4,9 @@ The roundup goes out every config.ROUNDUP_DAYS days (2 by default). The
 systemd timer (deploy/proclubs-weekly-article.service + .timer) fires every
 morning and this skips the days in between, which keeps the rhythm through
 month ends and downtime where a calendar rule wouldn't. Gathers the
-period's facts from data/history.db -- results, player
-totals, division/points movement, league position, signings and departures
-(see db.record_squad) -- hands them to the Claude Code CLI in headless mode,
+period's facts -- results, player totals, division/points movement and
+league position from data/history.db, and transfer news from the site's
+Squad Moves (services.public_roster_moves) -- hands them to the Claude Code CLI in headless mode,
 and publishes what comes back as a live article, announced to Discord the
 same way a staff-written one is.
 
@@ -33,12 +33,14 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 import config
 import db
 import discord_announce
+import discord_roster
 import services
 from database import get_session, init_db
 from models import Article
@@ -67,8 +69,8 @@ Rules:
 quotes, opponents, fixtures or events. If a number isn't there, don't state one.
 - Player and club names are gamertags; reproduce them exactly.
 - Cover, where the data has them: the results and the story of those days, \
-standout players, league/division standing and how it moved, and squad news \
-(signings and departures). Skip any section the data has nothing for.
+standout players, league/division standing and how it moved, and transfer news \
+(signings, staff appointments and departures). Skip any section the data has nothing for.
 - 250-500 words. Don't call it a weekly roundup.
 
 Reply with a single JSON object and nothing else -- no code fences, no commentary:
@@ -83,7 +85,28 @@ class ArticleError(Exception):
 
 
 def _iso(ts):
-    return datetime.fromtimestamp(ts, timezone.utc).strftime("%a %d %b %Y") if ts else None
+    """A day as the club lives it -- in config.ARTICLE_TIMEZONE, not UTC,
+    so a late-evening game isn't dated the next day."""
+    return datetime.fromtimestamp(ts, ZoneInfo(config.ARTICLE_TIMEZONE)).strftime("%a %d %b %Y") if ts else None
+
+
+def _squad_moves(since: int) -> dict:
+    """The period's transfer news, from the same Squad Moves the home page
+    shows -- so only confirmed signings/appointments and departures, never
+    a pending or declined offer (see services.public_roster_moves)."""
+    since_utc = datetime.fromtimestamp(since, timezone.utc).replace(tzinfo=None)
+    with get_session() as session:
+        moves = services.public_roster_moves(session, limit=None, since=since_utc)
+    out = {"signings": [], "staff_appointments": [], "departures": []}
+    key = {discord_roster.MOVE_OFFER: "signings", discord_roster.MOVE_STAFF_OFFER: "staff_appointments"}
+    for m in reversed(moves):  # oldest first, as the story happened
+        when = (m.confirmed_at or m.announced_at).replace(tzinfo=timezone.utc).timestamp()
+        out[key.get(m.kind, "departures")].append({
+            "name": m.display_name,
+            "position": " / ".join(p for p in (m.position, m.secondary_position) if p) or None,
+            "date": _iso(when),
+        })
+    return out
 
 
 def gather_period(platform: str, club_id: str, now: int) -> dict:
@@ -108,10 +131,10 @@ def gather_period(platform: str, club_id: str, now: int) -> dict:
         ({"position": i + 1, "of": len(table)} for i, row in enumerate(table) if row["is_us"]), None,
     )
 
-    moves = db.squad_moves(platform, club_id, since)
     return {
         "club": config.SITE_NAME,
-        "period": {"from": _iso(since), "to": _iso(now), "days": config.ROUNDUP_DAYS},
+        "period": {"from": _iso(since), "to": _iso(now), "days": config.ROUNDUP_DAYS,
+                   "timezone": config.ARTICLE_TIMEZONE},
         "record": {
             "played": len(counted),
             "won": sum(m["outcome"] == "W" for m in counted),
@@ -130,13 +153,12 @@ def gather_period(platform: str, club_id: str, now: int) -> dict:
         "standing": standing,
         "league_table_position": league_position,
         "form_last_5": db.recent_form(platform, club_id),
-        "signings": [m["player_name"] for m in moves if m["move"] == "joined"],
-        "departures": [m["player_name"] for m in moves if m["move"] == "left"],
+        **_squad_moves(since),
     }
 
 
 def has_news(facts: dict) -> bool:
-    return bool(facts["matches"] or facts["signings"] or facts["departures"])
+    return bool(facts["matches"] or facts["signings"] or facts["staff_appointments"] or facts["departures"])
 
 
 def category_for(facts: dict) -> str:

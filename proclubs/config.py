@@ -310,6 +310,11 @@ try:
     ROUNDUP_DAYS = max(1, int(os.getenv("ROUNDUP_DAYS", "2") or 2))
 except ValueError:
     ROUNDUP_DAYS = 2
+# The IANA zone the roundup is written in -- match and transfer dates, and
+# (see deploy/proclubs-weekly-article.timer) when it fires. DST-aware, so
+# the default is EST/EDT. Stored timestamps are UTC; dated in UTC, a
+# Friday-night game reads as Saturday.
+ARTICLE_TIMEZONE = os.getenv("ARTICLE_TIMEZONE") or "America/New_York"
 
 # --- Public site URL ---------------------------------------------------------
 # The absolute https URL this site is reachable at. Only needed where an
